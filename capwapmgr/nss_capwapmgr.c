@@ -585,7 +585,7 @@ static nss_tx_status_t nss_capwapmgr_destroy_ipv4_rule(void *ctx, struct nss_ipv
 		&unid->src_ip, ntohs(unid->src_port), &unid->dest_ip, ntohs(unid->dest_port), unid->protocol);
 
 	nss_ipv4_msg_init(&nim, NSS_IPV4_RX_INTERFACE, NSS_IPV4_TX_DESTROY_RULE_MSG,
-			sizeof(struct nss_ipv4_rule_destroy_msg), (nss_ipv4_msg_callback_t *)nss_capwapmgr_ipv4_handler, NULL);
+			sizeof(struct nss_ipv4_rule_destroy_msg), nss_capwapmgr_ipv4_handler, NULL);
 
 	nirdm = &nim.msg.rule_destroy;
 
@@ -654,7 +654,7 @@ static nss_tx_status_t nss_capwapmgr_unconfigure_ipv6_rule(struct nss_ipv6_destr
 		unid->src_ip[0], ntohs(unid->src_port), unid->dest_ip[0], ntohs(unid->dest_port), unid->protocol);
 
 	nss_ipv6_msg_init(&nim, NSS_IPV6_RX_INTERFACE, NSS_IPV6_TX_DESTROY_RULE_MSG,
-			sizeof(struct nss_ipv6_rule_destroy_msg), (nss_ipv6_msg_callback_t *)nss_capwapmgr_ipv6_handler, NULL);
+			sizeof(struct nss_ipv6_rule_destroy_msg), nss_capwapmgr_ipv6_handler, NULL);
 
 	nirdm = &nim.msg.rule_destroy;
 
@@ -710,7 +710,7 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
 
 	memset(&nim, 0, sizeof (struct nss_ipv4_msg));
 	nss_ipv4_msg_init(&nim, NSS_IPV4_RX_INTERFACE, NSS_IPV4_TX_CREATE_RULE_MSG,
-			sizeof(struct nss_ipv4_rule_create_msg), (nss_ipv4_msg_callback_t *)nss_capwapmgr_ipv4_handler, NULL);
+			sizeof(struct nss_ipv4_rule_create_msg), nss_capwapmgr_ipv4_handler, NULL);
 
 	nircm = &nim.msg.rule_create;
 	nircm->valid_flags = 0;
@@ -842,7 +842,7 @@ static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6
 
 	memset(&nim, 0, sizeof (struct nss_ipv6_msg));
 	nss_ipv6_msg_init(&nim, NSS_IPV6_RX_INTERFACE, NSS_IPV6_TX_CREATE_RULE_MSG,
-			sizeof(struct nss_ipv6_rule_create_msg), (nss_ipv6_msg_callback_t *)nss_capwapmgr_ipv6_handler, NULL);
+			sizeof(struct nss_ipv6_rule_create_msg), nss_capwapmgr_ipv6_handler, NULL);
 
 	nircm = &nim.msg.rule_create;
 
@@ -1129,7 +1129,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device
 	 */
 	nss_capwap_msg_init(&capwapmsg, if_num, NSS_CAPWAP_MSG_TYPE_CFG_RULE,
 			sizeof(struct nss_capwap_rule_msg),
-			(nss_capwap_msg_callback_t *)nss_capwapmgr_msg_event_receive, dev);
+			nss_capwapmgr_msg_event_receive, dev);
 
 	status = nss_capwapmgr_tx_msg_sync(ctx, dev, &capwapmsg);
 	if (status != NSS_TX_SUCCESS) {
@@ -1174,7 +1174,7 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 	 * Send CAPWAP data tunnel command to NSS
 	 */
 	nss_capwap_msg_init(&capwapmsg, t->if_num, NSS_CAPWAP_MSG_TYPE_UPDATE_PATH_MTU,
-		0, (nss_capwap_msg_callback_t *)nss_capwapmgr_msg_event_receive, dev);
+		0, nss_capwapmgr_msg_event_receive, dev);
 	capwapmsg.msg.mtu.path_mtu = htonl(mtu);
 	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
@@ -1257,7 +1257,7 @@ nss_capwapmgr_status_t nss_capwapmgr_change_version(struct net_device *dev, uint
 	 * Send CAPWAP data tunnel command to NSS
 	 */
 	nss_capwap_msg_init(&capwapmsg, t->if_num, NSS_CAPWAP_MSG_TYPE_VERSION,
-		0, (nss_capwap_msg_callback_t *)nss_capwapmgr_msg_event_receive, dev);
+		0, nss_capwapmgr_msg_event_receive, dev);
 	capwapmsg.msg.version.version = ver;
 	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
@@ -1289,7 +1289,7 @@ static nss_tx_status_t nss_capwapmgr_tunnel_action(struct nss_ctx_instance *ctx,
 	/*
 	 * Send CAPWAP data tunnel command to NSS
 	 */
-	nss_capwap_msg_init(&capwapmsg, if_num, cmd, 0, (nss_capwap_msg_callback_t *)nss_capwapmgr_msg_event_receive, dev);
+	nss_capwap_msg_init(&capwapmsg, if_num, cmd, 0, nss_capwapmgr_msg_event_receive, dev);
 	status = nss_capwapmgr_tx_msg_sync(ctx, dev, &capwapmsg);
 	if (status != NSS_TX_SUCCESS) {
 		nss_capwapmgr_warn("%p: ctx: CMD: %d Tunnel error : %d \n", ctx, cmd, status);

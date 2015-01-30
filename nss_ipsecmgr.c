@@ -733,7 +733,7 @@ static bool nss_ipsecmgr_op_send(struct net_device *dev, struct nss_ipsec_msg *n
 
 	nim->tunnel_id = dev->ifindex;
 
-	nss_ipsec_msg_init(nim, if_num, type, NSS_IPSEC_MSG_LEN, (nss_ipsec_msg_callback_t *)nss_ipsecmgr_op_receive, dev);
+	nss_ipsec_msg_init(nim, if_num, type, NSS_IPSEC_MSG_LEN, nss_ipsecmgr_op_receive, dev);
 
 	status = nss_ipsec_tx_msg(priv->nss_ctx, nim);
 	if (status != NSS_TX_SUCCESS) {
