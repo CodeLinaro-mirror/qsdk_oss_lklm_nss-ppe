@@ -358,6 +358,11 @@ static bool nss_ipsecmgr_verify_add(struct net_device *dev, struct nss_ipsecmgr_
 	struct nss_ipsec_rule *rule = &nim->msg.push;
 	struct nss_ipsecmgr_tbl_entry *entry;
 	uint32_t tbl_idx;
+	uint32_t sa_idx;
+
+	if (nim->cm.response != NSS_CMN_RESPONSE_ACK) {
+		return false;
+	}
 
 	tbl_idx = rule->rule_idx;
 	if (tbl_idx >= NSS_IPSEC_MAX_RULES) {
@@ -379,6 +384,12 @@ static bool nss_ipsecmgr_verify_add(struct net_device *dev, struct nss_ipsecmgr_
 	 * Table full, XXX:must increment stats
 	 */
 	if ((tbl->count + 1) >= NSS_IPSEC_MAX_RULES) {
+		return false;
+	}
+
+	sa_idx = rule->sa_idx;
+	if (sa_idx >= NSS_IPSEC_MAX_SA) {
+		nss_ipsecmgr_error("unable to add the sa_idx:%d\n", sa_idx);
 		return false;
 	}
 
@@ -451,6 +462,11 @@ static bool nss_ipsecmgr_verify_del(struct net_device *dev, struct nss_ipsecmgr_
 	struct nss_ipsec_rule *rule = &nim->msg.push;
 	struct nss_ipsecmgr_tbl_entry *entry;
 	uint32_t tbl_idx;
+	uint32_t sa_idx;
+
+	if (nim->cm.response != NSS_CMN_RESPONSE_ACK) {
+		return false;
+	}
 
 	tbl_idx = rule->rule_idx;
 	if (tbl_idx >= NSS_IPSEC_MAX_RULES) {
@@ -480,6 +496,13 @@ static bool nss_ipsecmgr_verify_del(struct net_device *dev, struct nss_ipsecmgr_
 	if (tbl->count == 0) {
 		return false;
 	}
+
+	sa_idx = rule->sa_idx;
+	if (sa_idx >= NSS_IPSEC_MAX_SA) {
+		nss_ipsecmgr_error("unable to delete the sa_idx:%d\n", sa_idx);
+		return false;
+	}
+
 
 	return true;
 }
@@ -522,7 +545,7 @@ static bool nss_ipsecmgr_commit_del(struct net_device *dev, struct nss_ipsecmgr_
  */
 static bool nss_ipsecmgr_verify_stats(struct net_device *dev, struct nss_ipsecmgr_tbl *tbl, struct nss_ipsec_msg *nim)
 {
-	struct nss_ipsec_sa_stats *msg_sa_stats = &nim->msg.stats;
+	struct nss_ipsec_sa_stats *msg_stats = &nim->msg.stats;
 
 	/*
 	 * Table empty, nothing to update
@@ -531,7 +554,7 @@ static bool nss_ipsecmgr_verify_stats(struct net_device *dev, struct nss_ipsecmg
 		return false;
 	}
 
-	if (msg_sa_stats->sa_idx > NSS_CRYPTO_MAX_IDXS) {
+	if (msg_stats->sa_idx >= NSS_CRYPTO_MAX_IDXS) {
 		return false;
 	}
 
