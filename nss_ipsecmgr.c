@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014,2015, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -312,6 +312,7 @@ static void nss_ipsecmgr_copy_encap_del(struct net_device *dev, struct nss_ipsec
 {
 	struct nss_ipsecmgr_encap_del *encap = &rule->encap_del;
 	struct nss_ipsec_rule_sel *sel = &msg->sel;
+	struct nss_ipsec_rule_data *data = &msg->data;
 
 	/*
 	 * Populate the selectors for encap direction
@@ -323,6 +324,11 @@ static void nss_ipsecmgr_copy_encap_del(struct net_device *dev, struct nss_ipsec
 	sel->dst_port = encap->inner_dst_port;
 
 	sel->ipv4_proto = encap->inner_ipv4_proto;
+
+	/*
+	 * Populate the data part
+	 */
+	data->use_pattern = encap->use_pattern;
 }
 
 /*
