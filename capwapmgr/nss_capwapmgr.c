@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -99,6 +99,17 @@
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
 /*
+ * nss_capwapmgr_ip_response
+ *	Response structure for IPv4 and IPv6 messages
+ */
+static struct nss_capwapmgr_ip_response {
+	struct semaphore sem;
+	wait_queue_head_t wq;
+	enum nss_cmn_response response;
+	bool cond;
+} ip_response;
+
+/*
  * Stats of tunnels which don't exists anymore.
  */
 static struct nss_capwap_tunnel_stats tunneld;
@@ -168,7 +179,7 @@ static netdev_tx_t nss_capwapmgr_start_xmit(struct sk_buff *skb, struct net_devi
 	priv = netdev_priv(dev);
 	pre = (struct nss_capwap_metaheader *)skb->data;
 
-	if (pre->tunnel_id > NSS_CAPWAPMGR_MAX_TUNNELS) {
+	if (unlikely(pre->tunnel_id > NSS_CAPWAPMGR_MAX_TUNNELS)) {
 		nss_capwapmgr_warn("%p: (CAPWAP packet) tunnel-id invalid: %d\n", dev, pre->tunnel_id);
 		kfree_skb(skb);
 		stats->tx_dropped++;
@@ -176,7 +187,7 @@ static netdev_tx_t nss_capwapmgr_start_xmit(struct sk_buff *skb, struct net_devi
 	}
 
 	if_num = priv->tunnel[pre->tunnel_id].if_num;
-	if (if_num == 0) {
+	if (unlikely(if_num == 0)) {
 		nss_capwapmgr_warn("%p: (CAPWAP packet) if_num in the tunnel not set\n", dev);
 		kfree_skb(skb);
 		stats->tx_dropped++;
@@ -184,7 +195,7 @@ static netdev_tx_t nss_capwapmgr_start_xmit(struct sk_buff *skb, struct net_devi
 	}
 
 	status = nss_capwap_tx_data(priv->nss_ctx, skb, if_num);
-	if (status != NSS_TX_SUCCESS) {
+	if (unlikely(status != NSS_TX_SUCCESS)) {
 		if (status == NSS_TX_FAILURE_QUEUE) {
 			nss_capwapmgr_warn("%p: netdev :%p queue is full", dev, dev);
 			if (!netif_queue_stopped(dev)) {
@@ -328,6 +339,38 @@ static void nss_capwapmgr_msg_event_receive(void *app_data, struct nss_capwap_ms
 	}
 
 	dev_put(dev);
+}
+/*
+ * nss_capwapmgr_ip_common_handler()
+ *	Common Callback handler for IPv4 and IPv6 messages
+ */
+static void nss_capwapmgr_ip_common_handler(struct nss_cmn_msg *ncm)
+{
+	if (ncm->response == NSS_CMM_RESPONSE_NOTIFY) {
+		return;
+	}
+
+	ip_response.response = ncm->response;
+	ip_response.cond = 0;
+	wake_up(&ip_response.wq);
+}
+
+/*
+ * nss_capwapmgr_ipv4_handler()
+ *	Callback handler for IPv4 messages
+ */
+static void nss_capwapmgr_ipv4_handler(void *app_data, struct nss_ipv4_msg *nim)
+{
+	nss_capwapmgr_ip_common_handler(&nim->cm);
+}
+
+/*
+ * nss_capwapmgr_ipv6_handler()
+ *	Callback handler for IPv4 messages
+ */
+static void nss_capwapmgr_ipv6_handler(void *app_data, struct nss_ipv6_msg *nim)
+{
+	nss_capwapmgr_ip_common_handler(&nim->cm);
 }
 
 /*
@@ -533,12 +576,13 @@ static nss_tx_status_t nss_capwapmgr_destroy_ipv4_rule(void *ctx, struct nss_ipv
 	struct nss_ctx_instance *nss_ctx = (struct nss_ctx_instance *) ctx;
 	struct nss_ipv4_msg nim;
 	struct nss_ipv4_rule_destroy_msg *nirdm;
+	nss_tx_status_t status;
 
 	nss_capwapmgr_info("%p: ctx: Destroy IPv4: %pI4h:%d, %pI4h:%d, p: %d\n", nss_ctx,
 		&unid->src_ip, ntohs(unid->src_port), &unid->dest_ip, ntohs(unid->dest_port), unid->protocol);
 
 	nss_ipv4_msg_init(&nim, NSS_IPV4_RX_INTERFACE, NSS_IPV4_TX_DESTROY_RULE_MSG,
-			sizeof(struct nss_ipv4_rule_destroy_msg), NULL, NULL);
+			sizeof(struct nss_ipv4_rule_destroy_msg), (nss_ipv4_msg_callback_t *)nss_capwapmgr_ipv4_handler, NULL);
 
 	nirdm = &nim.msg.rule_destroy;
 
@@ -547,7 +591,26 @@ static nss_tx_status_t nss_capwapmgr_destroy_ipv4_rule(void *ctx, struct nss_ipv
 	nirdm->tuple.flow_ident = (uint32_t)unid->src_port;
 	nirdm->tuple.return_ip = unid->dest_ip;
 	nirdm->tuple.return_ident = (uint32_t)unid->dest_port;
-	return nss_ipv4_tx(nss_ctx, &nim);
+
+	down(&ip_response.sem);
+	status = nss_ipv4_tx(nss_ctx, &nim);
+	if (status != NSS_TX_SUCCESS) {
+		up(&ip_response.sem);
+		nss_capwapmgr_warn("%p: Destroy IPv4 message failed %d\n", ctx, status);
+		return status;
+	}
+
+	ip_response.cond = 1;
+	if (!wait_event_timeout(ip_response.wq, ip_response.cond == 0, 5 * HZ)) {
+		nss_capwapmgr_warn("%p: Destroy IPv4 command msg response timeout\n", ctx);
+		status = NSS_TX_FAILURE;
+	} else if (ip_response.response != NSS_CMN_RESPONSE_ACK) {
+		nss_capwapmgr_warn("%p: Destroy IPv4 command msg failed with response : %d\n", ctx, ip_response.response);
+		status = NSS_TX_FAILURE;
+	}
+
+	up(&ip_response.sem);
+	return status;
 }
 
 /*
@@ -568,6 +631,65 @@ static nss_tx_status_t nss_capwapmgr_unconfigure_ipv4_rule(struct nss_ipv4_destr
 }
 
 /*
+ * nss_capwapmgr_unconfigure_ipv6_rule()
+ *	Internal function to unconfigure IPv6 rule.
+ */
+static nss_tx_status_t nss_capwapmgr_unconfigure_ipv6_rule(struct nss_ipv6_destroy *unid)
+{
+	struct nss_ctx_instance *nss_ctx;
+	struct nss_ipv6_msg nim;
+	struct nss_ipv6_rule_destroy_msg *nirdm;
+	nss_tx_status_t status;
+
+	nss_ctx = nss_ipv6_get_mgr();
+	if (!nss_ctx) {
+		nss_capwapmgr_warn("%s: couldn't get IPv6 ctx\n", "CAPWAP");
+		return NSS_TX_FAILURE_NOT_READY;
+	}
+
+	nss_capwapmgr_info("%p: ctx: Destroy IPv4: %x:%d, %x:%d, p: %d\n", nss_ctx,
+		unid->src_ip[0], ntohs(unid->src_port), unid->dest_ip[0], ntohs(unid->dest_port), unid->protocol);
+
+	nss_ipv6_msg_init(&nim, NSS_IPV6_RX_INTERFACE, NSS_IPV6_TX_DESTROY_RULE_MSG,
+			sizeof(struct nss_ipv6_rule_destroy_msg), (nss_ipv6_msg_callback_t *)nss_capwapmgr_ipv6_handler, NULL);
+
+	nirdm = &nim.msg.rule_destroy;
+
+	nirdm->tuple.protocol = (uint8_t)unid->protocol;
+	nirdm->tuple.flow_ident = (uint32_t)unid->src_port;
+	nirdm->tuple.flow_ip[0] = unid->src_ip[0];
+	nirdm->tuple.flow_ip[1] = unid->src_ip[1];
+	nirdm->tuple.flow_ip[2] = unid->src_ip[2];
+	nirdm->tuple.flow_ip[3] = unid->src_ip[3];
+
+	nirdm->tuple.return_ident = (uint32_t)unid->dest_port;
+	nirdm->tuple.return_ip[0] = unid->dest_ip[0];
+	nirdm->tuple.return_ip[1] = unid->dest_ip[1];
+	nirdm->tuple.return_ip[2] = unid->dest_ip[2];
+	nirdm->tuple.return_ip[3] = unid->dest_ip[3];
+
+	down(&ip_response.sem);
+	status = nss_ipv6_tx(nss_ctx, &nim);
+	if (status != NSS_TX_SUCCESS) {
+		up(&ip_response.sem);
+		nss_capwapmgr_warn("%p: Destroy IPv6 message failed %d\n", nss_ctx, status);
+		return status;
+	}
+
+	ip_response.cond = 1;
+	if (!wait_event_timeout(ip_response.wq, ip_response.cond == 0, 5 * HZ)) {
+		nss_capwapmgr_warn("%p: Destroy IPv6 command msg response timeout\n", nss_ctx);
+		status = NSS_TX_FAILURE;
+	} else if (ip_response.response != NSS_CMN_RESPONSE_ACK) {
+		nss_capwapmgr_warn("%p: Destroy IPv6 command msg failed with response : %d\n", nss_ctx, ip_response.response);
+		status = NSS_TX_FAILURE;
+	}
+
+	up(&ip_response.sem);
+	return status;
+}
+
+/*
  * nss_capwapmgr_create_ipv4_rule()
  *	Create a nss entry to accelerate the given connection
  */
@@ -576,14 +698,16 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
 	struct nss_ctx_instance *nss_ctx = (struct nss_ctx_instance *) ctx;
 	struct nss_ipv4_msg nim;
 	struct nss_ipv4_rule_create_msg *nircm;
+	nss_tx_status_t status;
 
 	nss_capwapmgr_info("%p: ctx: Create IPv4: %pI4h:%d (%pI4h:%d), %pI4h:%d (%pI4h:%d), p: %d\n", nss_ctx,
-		&unic->src_ip, ntohs(unic->src_port), &unic->src_ip_xlate, ntohs(unic->src_port_xlate),
-		&unic->dest_ip, ntohs(unic->dest_port), &unic->dest_ip_xlate, ntohs(unic->dest_port_xlate),
+		&unic->src_ip, unic->src_port, &unic->src_ip_xlate, unic->src_port_xlate,
+		&unic->dest_ip, unic->dest_port, &unic->dest_ip_xlate, unic->dest_port_xlate,
 		unic->protocol);
 
+	memset(&nim, 0, sizeof (struct nss_ipv4_msg));
 	nss_ipv4_msg_init(&nim, NSS_IPV4_RX_INTERFACE, NSS_IPV4_TX_CREATE_RULE_MSG,
-			sizeof(struct nss_ipv4_rule_create_msg), NULL, NULL);
+			sizeof(struct nss_ipv4_rule_create_msg), (nss_ipv4_msg_callback_t *)nss_capwapmgr_ipv4_handler, NULL);
 
 	nircm = &nim.msg.rule_create;
 	nircm->valid_flags = 0;
@@ -620,9 +744,9 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
 	/*
 	 * Copy over the DSCP rule parameters
 	 */
-	nircm->dscp_rule.flow_dscp = unic->flow_dscp;
-	nircm->dscp_rule.return_dscp = unic->return_dscp;
 	if (unic->flags & NSS_IPV4_CREATE_FLAG_DSCP_MARKING) {
+		nircm->dscp_rule.flow_dscp = unic->flow_dscp;
+		nircm->dscp_rule.return_dscp = unic->return_dscp;
 		nircm->rule_flags |= NSS_IPV4_RULE_CREATE_FLAG_DSCP_MARKING;
 		nircm->valid_flags |= NSS_IPV4_RULE_CREATE_DSCP_MARKING_VALID;
 	}
@@ -652,7 +776,6 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
 	 */
 	nircm->qos_rule.flow_qos_tag = unic->flow_qos_tag;
 	nircm->qos_rule.return_qos_tag = unic->return_qos_tag;
-
 	nircm->valid_flags |= NSS_IPV4_RULE_CREATE_QOS_VALID;
 
 	if (unic->flags & NSS_IPV4_CREATE_FLAG_NO_SEQ_CHECK) {
@@ -673,7 +796,161 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
 	 */
 	nircm->rule_flags |= NSS_IPV4_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH;
 
-	return nss_ipv4_tx(nss_ctx, &nim);
+	down(&ip_response.sem);
+	status = nss_ipv4_tx(nss_ctx, &nim);
+	if (status != NSS_TX_SUCCESS) {
+		up(&ip_response.sem);
+		nss_capwapmgr_warn("%p: Create IPv4 message failed %d\n", ctx, status);
+		return status;
+	}
+
+	ip_response.cond = 1;
+	if (!wait_event_timeout(ip_response.wq, ip_response.cond == 0, 5 * HZ)) {
+		nss_capwapmgr_warn("%p: Create IPv4 command msg response timeout\n", ctx);
+		status = NSS_TX_FAILURE;
+	} else if (ip_response.response != NSS_CMN_RESPONSE_ACK) {
+		nss_capwapmgr_warn("%p: Create IPv4 command msg failed with response : %d\n", ctx, ip_response.response);
+		status = NSS_TX_FAILURE;
+	}
+
+	up(&ip_response.sem);
+	return status;
+}
+
+/*
+ * nss_capwapmgr_create_ipv6_rule()
+ *	Create a nss entry to accelerate the given connection
+ */
+static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6_create *unic)
+{
+	struct nss_ctx_instance *nss_ctx = (struct nss_ctx_instance *) ctx;
+	struct nss_ipv6_msg nim;
+	struct nss_ipv6_rule_create_msg *nircm;
+	nss_tx_status_t status;
+
+	nss_capwapmgr_info("%p: Create IPv6: %pI6:%d, %pI6:%d, p: %d\n", nss_ctx,
+		unic->src_ip, unic->src_port, unic->dest_ip, unic->dest_port, unic->protocol);
+
+	memset(&nim, 0, sizeof (struct nss_ipv6_msg));
+	nss_ipv6_msg_init(&nim, NSS_IPV6_RX_INTERFACE, NSS_IPV6_TX_CREATE_RULE_MSG,
+			sizeof(struct nss_ipv6_rule_create_msg), (nss_ipv6_msg_callback_t *)nss_capwapmgr_ipv6_handler, NULL);
+
+	nircm = &nim.msg.rule_create;
+
+	nircm->rule_flags = 0;
+	nircm->valid_flags = 0;
+
+	/*
+	 * Copy over the 5 tuple information.
+	 */
+	nircm->tuple.protocol = (uint8_t)unic->protocol;
+	nircm->tuple.flow_ip[0] = unic->src_ip[0];
+	nircm->tuple.flow_ip[1] = unic->src_ip[1];
+	nircm->tuple.flow_ip[2] = unic->src_ip[2];
+	nircm->tuple.flow_ip[3] = unic->src_ip[3];
+	nircm->tuple.flow_ident = (uint32_t)unic->src_port;
+
+	nircm->tuple.return_ip[0] = unic->dest_ip[0];
+	nircm->tuple.return_ip[1] = unic->dest_ip[1];
+	nircm->tuple.return_ip[2] = unic->dest_ip[2];
+	nircm->tuple.return_ip[3] = unic->dest_ip[3];
+	nircm->tuple.return_ident = (uint32_t)unic->dest_port;
+
+	/*
+	 * Copy over the connection rules and set CONN_VALID flag
+	 */
+	nircm->conn_rule.flow_interface_num = unic->src_interface_num;
+	nircm->conn_rule.flow_mtu = unic->from_mtu;
+	nircm->conn_rule.return_interface_num = unic->dest_interface_num;
+	nircm->conn_rule.return_mtu = unic->to_mtu;
+	memcpy(nircm->conn_rule.flow_mac, unic->src_mac, 6);
+	memcpy(nircm->conn_rule.return_mac, unic->dest_mac, 6);
+	nircm->valid_flags |= NSS_IPV6_RULE_CREATE_CONN_VALID;
+
+	/*
+	 * Copy over the DSCP rule parameters
+	 */
+	if (unic->flags & NSS_IPV6_CREATE_FLAG_DSCP_MARKING) {
+		nircm->dscp_rule.flow_dscp = unic->flow_dscp;
+		nircm->dscp_rule.return_dscp = unic->return_dscp;
+		nircm->rule_flags |= NSS_IPV6_RULE_CREATE_FLAG_DSCP_MARKING;
+		nircm->valid_flags |= NSS_IPV6_RULE_CREATE_DSCP_MARKING_VALID;
+	}
+
+	/*
+	 * Copy over the pppoe rules and set PPPOE_VALID flag
+	 */
+	nircm->pppoe_rule.flow_pppoe_session_id = unic->flow_pppoe_session_id;
+	memcpy(nircm->pppoe_rule.flow_pppoe_remote_mac, unic->flow_pppoe_remote_mac, ETH_ALEN);
+	nircm->pppoe_rule.return_pppoe_session_id = unic->return_pppoe_session_id;
+	memcpy(nircm->pppoe_rule.return_pppoe_remote_mac, unic->return_pppoe_remote_mac, ETH_ALEN);
+	nircm->valid_flags |= NSS_IPV6_RULE_CREATE_PPPOE_VALID;
+
+	/*
+	 * Copy over the tcp rules and set TCP_VALID flag
+	 */
+	nircm->tcp_rule.flow_window_scale = unic->flow_window_scale;
+	nircm->tcp_rule.flow_max_window = unic->flow_max_window;
+	nircm->tcp_rule.flow_end = unic->flow_end;
+	nircm->tcp_rule.flow_max_end = unic->flow_max_end;
+	nircm->tcp_rule.return_window_scale = unic->return_window_scale;
+	nircm->tcp_rule.return_max_window = unic->return_max_window;
+	nircm->tcp_rule.return_end = unic->return_end;
+	nircm->tcp_rule.return_max_end = unic->return_max_end;
+	nircm->valid_flags |= NSS_IPV6_RULE_CREATE_TCP_VALID;
+
+	/*
+	 * Copy over the vlan rules and set the VLAN_VALID flag
+	 */
+	nircm->vlan_primary_rule.egress_vlan_tag = unic->out_vlan_tag[0];
+	nircm->vlan_primary_rule.ingress_vlan_tag = unic->in_vlan_tag[0];
+	nircm->vlan_secondary_rule.egress_vlan_tag = unic->out_vlan_tag[1];
+	nircm->vlan_secondary_rule.ingress_vlan_tag = unic->in_vlan_tag[1];
+	nircm->valid_flags |= NSS_IPV6_RULE_CREATE_VLAN_VALID;
+
+	/*
+	 * Copy over the qos rules and set the QOS_VALID flag
+	 */
+	nircm->qos_rule.flow_qos_tag = unic->flow_qos_tag;
+	nircm->qos_rule.return_qos_tag = unic->return_qos_tag;
+	nircm->valid_flags |= NSS_IPV6_RULE_CREATE_QOS_VALID;
+
+	if (unic->flags & NSS_IPV6_CREATE_FLAG_NO_SEQ_CHECK) {
+		nircm->rule_flags |= NSS_IPV6_RULE_CREATE_FLAG_NO_SEQ_CHECK;
+	}
+
+	if (unic->flags & NSS_IPV6_CREATE_FLAG_BRIDGE_FLOW) {
+		nircm->rule_flags |= NSS_IPV6_RULE_CREATE_FLAG_BRIDGE_FLOW;
+	}
+
+	if (unic->flags & NSS_IPV6_CREATE_FLAG_ROUTED) {
+		nircm->rule_flags |= NSS_IPV6_RULE_CREATE_FLAG_ROUTED;
+	}
+
+	/*
+	 * Set the flag NSS_IPV4_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH so that
+	 * rule is not flushed when NSS FW receives ICMP errors/packets.
+	 */
+	nircm->rule_flags |= NSS_IPV4_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH;
+
+	status = nss_ipv6_tx(nss_ctx, &nim);
+	if (status != NSS_TX_SUCCESS) {
+		up(&ip_response.sem);
+		nss_capwapmgr_warn("%p: Create IPv6 message failed %d\n", ctx, status);
+		return status;
+	}
+
+	ip_response.cond = 1;
+	if (!wait_event_timeout(ip_response.wq, ip_response.cond == 0, 5 * HZ)) {
+		nss_capwapmgr_warn("%p: Create IPv6 command msg response timeout\n", ctx);
+		status = NSS_TX_FAILURE;
+	} else if (ip_response.response != NSS_CMN_RESPONSE_ACK) {
+		nss_capwapmgr_warn("%p: Create IPv6 command msg failed with response : %d\n", ctx, ip_response.response);
+		status = NSS_TX_FAILURE;
+	}
+
+	up(&ip_response.sem);
+	return status;
 }
 
 /*
@@ -688,12 +965,36 @@ static nss_tx_status_t nss_capwapmgr_configure_ipv4(struct nss_ipv4_create *pcre
 	ctx = nss_ipv4_get_mgr();
 	if (!ctx) {
 		nss_capwapmgr_warn("%s couldn't get IPv4 ctx\n", "CAPWAP");
-		return -1;
+		return NSS_TX_FAILURE_NOT_READY;
 	}
 
 	status = nss_capwapmgr_create_ipv4_rule(ctx, pcreate);
 	if (status != NSS_TX_SUCCESS) {
 		nss_capwapmgr_warn("%p: ctx: nss_ipv4_tx() failed with %d\n", ctx, status);
+		return status;
+	}
+
+	return NSS_TX_SUCCESS;
+}
+
+/*
+ * nss_capwapmgr_configure_ipv6()
+ *	Internal function for configuring IPv4 connection
+ */
+static nss_tx_status_t nss_capwapmgr_configure_ipv6(struct nss_ipv6_create *pcreate)
+{
+	nss_tx_status_t status;
+	void *ctx;
+
+	ctx = nss_ipv6_get_mgr();
+	if (!ctx) {
+		nss_capwapmgr_warn("%s couldn't get IPv6 ctx\n", "CAPWAP");
+		return NSS_TX_FAILURE_NOT_READY;
+	}
+
+	status = nss_capwapmgr_create_ipv6_rule(ctx, pcreate);
+	if (status != NSS_TX_SUCCESS) {
+		nss_capwapmgr_warn("%p: ctx: nss_ipv6_tx() failed with %d\n", ctx, status);
 		return status;
 	}
 
@@ -753,8 +1054,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_msg_sync(struct nss_ctx_instance 
  * nss_capwapmgr_create_capwap_rule()
  *	Internal function to create a CAPWAP rule
  */
-static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device *dev, uint32_t if_num,
-					struct nss_capwap_rule_msg *msg, struct nss_ipv4_create *ip_rule)
+static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device *dev,
+	uint32_t if_num, struct nss_capwap_rule_msg *msg, uint16_t type_flags)
 {
 	struct nss_ctx_instance *ctx = nss_capwap_get_ctx();
 	struct nss_capwap_msg capwapmsg;
@@ -799,19 +1100,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device
 		msg->encap.path_mtu = htonl(NSS_CAPWAPMGR_NORMAL_FRAME_MTU);
 	}
 
-	/*
-	 * We use type_flags to determine the correct header sizes
-	 * for a frame when encaping. CAPWAP processing node in the
-	 * NSS FW does not know anything about IP rule information.
-	 */
-	msg->type_flags = 0;
-	if ((ip_rule->out_vlan_tag[0] & 0xFFF) != 0xFFF) {
-		msg->type_flags |= NSS_CAPWAPMGR_RULE_CREATE_VLAN_CONFIGURED;
-	}
+	msg->type_flags = type_flags;
 
-	if (ip_rule->flow_pppoe_session_id) {
-		msg->type_flags |= NSS_CAPWAPMGR_RULE_CREATE_PPPOE_CONFIGURED;
-	}
 	/*
 	 * Prepare the tunnel configuration parameter to send to NSS FW
 	 */
@@ -869,7 +1159,7 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 	 */
 	nss_capwap_msg_init(&capwapmsg, t->if_num, NSS_CAPWAP_MSG_TYPE_UPDATE_PATH_MTU,
 		0, (nss_capwap_msg_callback_t *)nss_capwapmgr_msg_event_receive, dev);
-	capwapmsg.msg.mtu.path_mtu = mtu;
+	capwapmsg.msg.mtu.path_mtu = htonl(mtu);
 	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%p: Update Path MTU Tunnel error : %d \n", dev, status);
@@ -1020,19 +1310,36 @@ nss_capwapmgr_status_t nss_capwapmgr_disable_tunnel(struct net_device *dev, uint
 EXPORT_SYMBOL(nss_capwapmgr_disable_tunnel);
 
 /*
- * nss_capwapmgr_ipv4_tunnel_create()
- *	API for creating IPv4 and CAPWAP rule.
+ * nss_capwapmgr_tunnel_create_common()
+ *	Common handling for creating IPv4 or IPv6 tunnel
  */
-nss_capwapmgr_status_t nss_capwapmgr_ipv4_tunnel_create(struct net_device *dev, uint8_t tunnel_id,
-			struct nss_ipv4_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule)
+static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_device *dev, uint8_t tunnel_id,
+	struct nss_ipv4_create *v4, struct nss_ipv6_create *v6, struct nss_capwap_rule_msg *capwap_rule)
 {
 	struct nss_capwapmgr_priv *priv;
 	struct nss_capwapmgr_tunnel *t;
-	nss_capwapmgr_status_t status;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
 	int32_t if_num;
-	nss_tx_status_t nss_status;
+	uint16_t type_flags = 0;
+	nss_tx_status_t nss_status = NSS_TX_SUCCESS;
+
+	if (!v4 && !v6) {
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
 
 	if (tunnel_id > NSS_CAPWAPMGR_MAX_TUNNELS) {
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	if (!(capwap_rule->l3_proto == NSS_CAPWAP_TUNNEL_IPV4 ||
+		capwap_rule->l3_proto == NSS_CAPWAP_TUNNEL_IPV6)) {
+		nss_capwapmgr_warn("%p: tunnel %d: wrong argument for l3_proto\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	if (!(capwap_rule->which_udp == NSS_CAPWAP_TUNNEL_UDP ||
+		capwap_rule->which_udp == NSS_CAPWAP_TUNNEL_UDPLite)) {
+		nss_capwapmgr_warn("%p: tunnel %d: wrong argument for which_udp\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
@@ -1053,7 +1360,34 @@ nss_capwapmgr_status_t nss_capwapmgr_ipv4_tunnel_create(struct net_device *dev, 
 		return NSS_CAPWAPMGR_FAILURE_REGISTER_NSS;
 	}
 
-	status = nss_capwapmgr_create_capwap_rule(dev, if_num, capwap_rule, ip_rule);
+	/*
+	 * We use type_flags to determine the correct header sizes
+	 * for a frame when encaping. CAPWAP processing node in the
+	 * NSS FW does not know anything about IP rule information.
+	 */
+	if (v4) {
+		if ((v4->out_vlan_tag[0] & 0xFFF) != 0xFFF) {
+			type_flags |= NSS_CAPWAP_RULE_CREATE_VLAN_CONFIGURED;
+		}
+
+		if (v4->flow_pppoe_session_id) {
+			type_flags |= NSS_CAPWAP_RULE_CREATE_PPPOE_CONFIGURED;
+		}
+	} else {
+		if ((v6->out_vlan_tag[0] & 0xFFF) != 0xFFF) {
+			type_flags |= NSS_CAPWAP_RULE_CREATE_VLAN_CONFIGURED;
+		}
+
+		if (v6->flow_pppoe_session_id) {
+			type_flags |= NSS_CAPWAP_RULE_CREATE_PPPOE_CONFIGURED;
+		}
+	}
+
+	if (capwap_rule->l3_proto == NSS_CAPWAP_TUNNEL_IPV6 && capwap_rule->which_udp == NSS_CAPWAP_TUNNEL_UDPLite) {
+		type_flags |= NSS_CAPWAP_ENCAP_UDPLITE_HDR_CSUM;
+	}
+
+	status = nss_capwapmgr_create_capwap_rule(dev, if_num, capwap_rule, type_flags);
 	nss_capwapmgr_info("%p: dynamic interface if_num is :%d and capwap tunnel status:%d\n", dev, if_num, status);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%p: %d: CAPWAP rule create failed with status: %d", dev, if_num, status);
@@ -1062,8 +1396,14 @@ nss_capwapmgr_status_t nss_capwapmgr_ipv4_tunnel_create(struct net_device *dev, 
 		return NSS_CAPWAPMGR_FAILURE_CAPWAP_RULE;
 	}
 
-	ip_rule->dest_interface_num = if_num;
-	nss_status = nss_capwapmgr_configure_ipv4(ip_rule);
+	if (v4) {
+		v4->dest_interface_num = if_num;
+		nss_status = nss_capwapmgr_configure_ipv4(v4);
+	} else {
+		v6->dest_interface_num = if_num;
+		nss_status = nss_capwapmgr_configure_ipv6(v6);
+	}
+
 	if (nss_status != NSS_TX_SUCCESS) {
 		nss_capwapmgr_warn("%p: %d: IPv4/IPv6 rule create failed with status: %d", dev, if_num, nss_status);
 		nss_capwapmgr_unregister_with_nss(if_num);
@@ -1079,9 +1419,13 @@ nss_capwapmgr_status_t nss_capwapmgr_ipv4_tunnel_create(struct net_device *dev, 
 	/*
 	 * Keep a copy of rule information.
 	 */
-	memcpy(&t->ip_rule.v4, ip_rule, sizeof (struct nss_ipv4_create));
-	memcpy(&t->capwap_rule, capwap_rule, sizeof (struct nss_capwap_rule_msg));
+	if (v4) {
+		memcpy(&t->ip_rule.v4, v4, sizeof (struct nss_ipv4_create));
+	} else {
+		memcpy(&t->ip_rule.v6, v6, sizeof (struct nss_ipv6_create));
+	}
 
+	memcpy(&t->capwap_rule, capwap_rule, sizeof (struct nss_capwap_rule_msg));
 
 	/*
 	 * Make it globally visible inside the netdev.
@@ -1093,7 +1437,28 @@ nss_capwapmgr_status_t nss_capwapmgr_ipv4_tunnel_create(struct net_device *dev, 
 	dev_put(dev);
 	return status;
 }
+
+/*
+ * nss_capwapmgr_ipv4_tunnel_create()
+ *	API for creating IPv4 and CAPWAP rule.
+ */
+nss_capwapmgr_status_t nss_capwapmgr_ipv4_tunnel_create(struct net_device *dev, uint8_t tunnel_id,
+			struct nss_ipv4_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule)
+{
+	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, ip_rule, NULL, capwap_rule);
+}
 EXPORT_SYMBOL(nss_capwapmgr_ipv4_tunnel_create);
+
+/*
+ * nss_capwapmgr_ipv6_tunnel_create()
+ *	API for creating IPv6 and CAPWAP rule.
+ */
+nss_capwapmgr_status_t nss_capwapmgr_ipv6_tunnel_create(struct net_device *dev, uint8_t tunnel_id,
+			struct nss_ipv6_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule)
+{
+	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, NULL, ip_rule, capwap_rule);
+}
+EXPORT_SYMBOL(nss_capwapmgr_ipv6_tunnel_create);
 
 /*
  * nss_capwapmgr_tunnel_save_stats()
@@ -1131,12 +1496,13 @@ static void nss_capwapmgr_tunnel_save_stats(struct nss_capwap_tunnel_stats *save
 nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint8_t tunnel_id)
 {
 	struct nss_capwap_tunnel_stats stats;
-	struct nss_ipv4_destroy d;
+	struct nss_ipv4_destroy v4;
+	struct nss_ipv6_destroy v6;
 	struct nss_capwapmgr_priv *priv;
 	struct nss_capwapmgr_tunnel *t;
-	nss_tx_status_t nss_status;
+	nss_tx_status_t nss_status = NSS_TX_SUCCESS;
 	uint32_t if_num;
-	nss_capwapmgr_status_t status;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
 
 	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
 	if (!t) {
@@ -1156,6 +1522,18 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 		return NSS_CAPWAPMGR_FAILURE_TUNNEL_ENABLED;
 	}
 
+	if (!(t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4 ||
+		t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV6)) {
+		nss_capwapmgr_warn("%p: tunnel %d: wrong argument for l3_proto\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	if (!(t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDP ||
+		t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDPLite)) {
+		nss_capwapmgr_warn("%p: tunnel %d: wrong argument for which_udp\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
 	dev_hold(dev);
 	priv = netdev_priv(dev);
 	nss_capwapmgr_info("%p: %d: tunnel destroy is being called\n", dev, t->if_num);
@@ -1172,23 +1550,45 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 		nss_capwapmgr_tunnel_save_stats(&tunneld, &stats);
 	}
 
-	t->if_num = 0;
-	t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED;
-	priv->if_num_to_tunnel_id[if_num] = 0;
-
 	/*
-	 * Destroy IP rule first. TODO: Add IPv6 support also
+	 * Destroy IP rule first.
 	 */
-	memset(&d, 0, sizeof (struct nss_ipv4_destroy));
-	d.protocol = IPPROTO_UDP;	/* TODO: UDP Lite */
-	d.src_ip = t->ip_rule.v4.src_ip;
-	d.dest_ip = t->ip_rule.v4.dest_ip;
-	d.src_port = t->ip_rule.v4.src_port;
-	d.dest_port = t->ip_rule.v4.dest_port;
-	nss_status = nss_capwapmgr_unconfigure_ipv4_rule(&d);
+	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
+		memset(&v4, 0, sizeof (struct nss_ipv4_destroy));
+		v4.protocol = IPPROTO_UDP;
+		v4.src_ip = t->ip_rule.v4.src_ip;
+		v4.dest_ip = t->ip_rule.v4.dest_ip;
+		v4.src_port = t->ip_rule.v4.src_port;
+		v4.dest_port = t->ip_rule.v4.dest_port;
+		nss_status = nss_capwapmgr_unconfigure_ipv4_rule(&v4);
+	} else {
+		memset(&v6, 0, sizeof (struct nss_ipv6_destroy));
+		if (t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDP) {
+			v6.protocol = IPPROTO_UDP;
+		} else {
+			v6.protocol = IPPROTO_UDPLITE;
+		}
+
+		v6.src_ip[0] = t->ip_rule.v6.src_ip[0];
+
+		v6.src_ip[1] = t->ip_rule.v6.src_ip[1];
+		v6.src_ip[2] = t->ip_rule.v6.src_ip[2];
+		v6.src_ip[3] = t->ip_rule.v6.src_ip[3];
+
+		v6.dest_ip[0] = t->ip_rule.v6.dest_ip[0];
+		v6.dest_ip[1] = t->ip_rule.v6.dest_ip[1];
+		v6.dest_ip[2] = t->ip_rule.v6.dest_ip[2];
+		v6.dest_ip[3] = t->ip_rule.v6.dest_ip[3];
+
+		v6.src_port = t->ip_rule.v6.src_port;
+		v6.dest_port = t->ip_rule.v6.dest_port;
+		nss_status = nss_capwapmgr_unconfigure_ipv6_rule(&v6);
+	}
+
 	if (nss_status != NSS_TX_SUCCESS) {
 		nss_capwapmgr_warn("%p: %d: Unconfigure IP rule failed for tunnel : %d\n",
 			dev, if_num, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
 	}
 
 	/*
@@ -1198,6 +1598,14 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%p: %d: Unconfigure CAPWAP rule failed for tunnel : %d\n",
 			dev, if_num, tunnel_id);
+
+		if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
+			nss_capwapmgr_configure_ipv4(&t->ip_rule.v4);
+		} else {
+			nss_capwapmgr_configure_ipv6(&t->ip_rule.v6);
+		}
+
+		return NSS_CAPWAPMGR_FAILURE_CAPWAP_DESTROY_RULE;
 	}
 
 	nss_capwapmgr_unregister_with_nss(if_num);
@@ -1211,11 +1619,14 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 			dev, if_num, tunnel_id);
 	}
 
+	t->if_num = 0;
+	t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED;
+	priv->if_num_to_tunnel_id[if_num] = 0;
 	memset(t, 0, sizeof (struct nss_capwapmgr_tunnel));
 
 	nss_capwapmgr_info("%p: %d: Tunnel %d is completely destroyed\n", dev, if_num, tunnel_id);
 	dev_put(dev);
-	return nss_status;
+	return NSS_CAPWAPMGR_SUCCESS;
 }
 EXPORT_SYMBOL(nss_capwapmgr_tunnel_destroy);
 
@@ -1229,7 +1640,7 @@ static void nss_capwapmgr_receive_pkt(struct net_device *dev, struct sk_buff *sk
 	struct nss_capwap_metaheader *pre = (struct nss_capwap_metaheader *)skb->data;
 	int32_t if_num;
 
-	if (skb->len < sizeof(struct nss_capwap_metaheader)) {
+	if (unlikely(skb->len < sizeof(struct nss_capwap_metaheader))) {
 		nss_capwapmgr_warn("%p: skb len is short :%d", dev, skb->len);
 		dev_kfree_skb_any(skb);
 		return;
@@ -1238,13 +1649,8 @@ static void nss_capwapmgr_receive_pkt(struct net_device *dev, struct sk_buff *sk
 	/* SKB NETIF START */
 	dev_hold(dev);
 	priv = netdev_priv(dev);
-	if (pre->version != NSS_CAPWAP_VERSION_V2) {
-		nss_capwapmgr_warn("%p: wrong version number %d expected:%d\n", dev,
-			pre->version, NSS_CAPWAP_VERSION_V2);
-	}
-
 	if_num = pre->tunnel_id;	/* NSS FW sends interface number */
-	if (if_num > NSS_MAX_NET_INTERFACES) {
+	if (unlikely(if_num > NSS_MAX_NET_INTERFACES)) {
 		nss_capwapmgr_warn("%p: if_num %d is wrong for skb\n", dev, if_num);
 		pre->tunnel_id = 0xFF;
 	} else {
@@ -1259,7 +1665,7 @@ static void nss_capwapmgr_receive_pkt(struct net_device *dev, struct sk_buff *sk
 	skb->skb_iif = dev->ifindex;
 	skb_reset_mac_header(skb);
 	skb_reset_transport_header(skb);
-	(void) netif_receive_skb(skb);
+	(void)netif_receive_skb(skb);
 	/* SKB NETIF END */
 	dev_put(dev);
 }
@@ -1297,8 +1703,10 @@ int __init nss_capwapmgr_init_module(void)
 	}
 #endif
 
-
 	memset(&tunneld, 0, sizeof (struct nss_capwap_tunnel_stats));
+
+	sema_init(&ip_response.sem, 1);
+	init_waitqueue_head(&ip_response.wq);
 	return 0;
 }
 
