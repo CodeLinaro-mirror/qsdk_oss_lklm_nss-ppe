@@ -41,6 +41,8 @@
 #include <nss_capwap.h>
 #include <nss_capwapmgr.h>
 
+#define NSS_CAPWAPMGR_NETDEV_NAME	"nsscapwap"
+
 /*
  * This file is responsible for interacting with qca-nss-drv's
  * CAPWAP API to manage CAPWAP tunnels.
@@ -225,6 +227,7 @@ static void nss_capwapmgr_fill_up_stats(struct rtnl_link_stats64 *stats, struct 
 	stats->rx_errors += (tstats->rx_mem_failure_drops + tstats->oversize_drops + tstats->frag_timeout_drops);
 	stats->rx_bytes += tstats->pnode_stats.rx_bytes;
 
+	stats->tx_dropped += tstats->tx_dropped;
 	stats->tx_packets += tstats->pnode_stats.tx_packets;
 	/* tx_fifo_errors  will appear as tx overruns in ifconfig */
 	stats->tx_fifo_errors += tstats->tx_queue_full_drops;
@@ -693,7 +696,7 @@ static nss_tx_status_t nss_capwapmgr_unconfigure_ipv6_rule(struct nss_ipv6_destr
  * nss_capwapmgr_create_ipv4_rule()
  *	Create a nss entry to accelerate the given connection
  */
-static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4_create *unic)
+static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4_create *unic, uint16_t rule_flags)
 {
 	struct nss_ctx_instance *nss_ctx = (struct nss_ctx_instance *) ctx;
 	struct nss_ipv4_msg nim;
@@ -796,6 +799,12 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
 	 */
 	nircm->rule_flags |= NSS_IPV4_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH;
 
+	/*
+	 * Add any other additional flags which caller has requested.
+	 * For example: update MTU
+	 */
+	nircm->rule_flags |= rule_flags;
+
 	down(&ip_response.sem);
 	status = nss_ipv4_tx(nss_ctx, &nim);
 	if (status != NSS_TX_SUCCESS) {
@@ -821,7 +830,7 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
  * nss_capwapmgr_create_ipv6_rule()
  *	Create a nss entry to accelerate the given connection
  */
-static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6_create *unic)
+static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6_create *unic, uint16_t rule_flags)
 {
 	struct nss_ctx_instance *nss_ctx = (struct nss_ctx_instance *) ctx;
 	struct nss_ipv6_msg nim;
@@ -933,6 +942,12 @@ static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6
 	 */
 	nircm->rule_flags |= NSS_IPV4_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH;
 
+	/*
+	 * Add any other additional flags which caller has requested.
+	 * For example: update MTU
+	 */
+	nircm->rule_flags |= rule_flags;
+
 	status = nss_ipv6_tx(nss_ctx, &nim);
 	if (status != NSS_TX_SUCCESS) {
 		up(&ip_response.sem);
@@ -957,7 +972,7 @@ static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6
  * nss_capwapmgr_configure_ipv4()
  *	Internal function for configuring IPv4 connection
  */
-static nss_tx_status_t nss_capwapmgr_configure_ipv4(struct nss_ipv4_create *pcreate)
+static nss_tx_status_t nss_capwapmgr_configure_ipv4(struct nss_ipv4_create *pcreate, uint16_t rule_flags)
 {
 	nss_tx_status_t status;
 	void *ctx;
@@ -968,7 +983,7 @@ static nss_tx_status_t nss_capwapmgr_configure_ipv4(struct nss_ipv4_create *pcre
 		return NSS_TX_FAILURE_NOT_READY;
 	}
 
-	status = nss_capwapmgr_create_ipv4_rule(ctx, pcreate);
+	status = nss_capwapmgr_create_ipv4_rule(ctx, pcreate, rule_flags);
 	if (status != NSS_TX_SUCCESS) {
 		nss_capwapmgr_warn("%p: ctx: nss_ipv4_tx() failed with %d\n", ctx, status);
 		return status;
@@ -981,7 +996,7 @@ static nss_tx_status_t nss_capwapmgr_configure_ipv4(struct nss_ipv4_create *pcre
  * nss_capwapmgr_configure_ipv6()
  *	Internal function for configuring IPv4 connection
  */
-static nss_tx_status_t nss_capwapmgr_configure_ipv6(struct nss_ipv6_create *pcreate)
+static nss_tx_status_t nss_capwapmgr_configure_ipv6(struct nss_ipv6_create *pcreate, uint16_t rule_flags)
 {
 	nss_tx_status_t status;
 	void *ctx;
@@ -992,7 +1007,7 @@ static nss_tx_status_t nss_capwapmgr_configure_ipv6(struct nss_ipv6_create *pcre
 		return NSS_TX_FAILURE_NOT_READY;
 	}
 
-	status = nss_capwapmgr_create_ipv6_rule(ctx, pcreate);
+	status = nss_capwapmgr_create_ipv6_rule(ctx, pcreate, rule_flags);
 	if (status != NSS_TX_SUCCESS) {
 		nss_capwapmgr_warn("%p: ctx: nss_ipv6_tx() failed with %d\n", ctx, status);
 		return status;
@@ -1135,6 +1150,7 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 	struct nss_capwap_msg capwapmsg;
 	struct nss_capwapmgr_tunnel *t;
 	nss_capwapmgr_status_t status;
+	nss_tx_status_t nss_status;
 
 	if (mtu > NSS_CAPWAP_MAX_MTU) {
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
@@ -1162,11 +1178,47 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 	capwapmsg.msg.mtu.path_mtu = htonl(mtu);
 	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
-		nss_capwapmgr_warn("%p: Update Path MTU Tunnel error : %d \n", dev, status);
+		nss_capwapmgr_warn("%p: Update Path MTU CAPWAP tunnel error : %d \n", dev, status);
 		dev_put(dev);
-		return status;
+		return NSS_CAPWAPMGR_FAILURE_CAPWAP_RULE;
 	}
 
+	/*
+	 * Update the IPv4/IPv6 rule with the new MTU for flow and return
+	 */
+	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
+		struct nss_ipv4_create *v4;
+
+		v4 = &t->ip_rule.v4;
+		v4->from_mtu = v4->to_mtu = mtu;
+		nss_status = nss_capwapmgr_configure_ipv4(v4, NSS_IPV4_RULE_UPDATE_FLAG_CHANGE_MTU);
+		if (nss_status != NSS_TX_SUCCESS) {
+			v4->from_mtu = v4->to_mtu = ntohl(t->capwap_rule.encap.path_mtu);
+		}
+	} else {
+		struct nss_ipv6_create *v6;
+
+		v6 = &t->ip_rule.v6;
+		v6->from_mtu = v6->to_mtu = mtu;
+		nss_status = nss_capwapmgr_configure_ipv6(v6, NSS_IPV6_RULE_UPDATE_FLAG_CHANGE_MTU);
+		if (nss_status != NSS_TX_SUCCESS) {
+			v6->from_mtu = v6->to_mtu = ntohl(t->capwap_rule.encap.path_mtu);
+		}
+	}
+
+	if (nss_status != NSS_TX_SUCCESS) {
+		nss_capwapmgr_warn("%p: Update Path MTU IP RULE tunnel error : %d \n", dev, nss_status);
+		capwapmsg.msg.mtu.path_mtu = t->capwap_rule.encap.path_mtu;
+		status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
+		if (status != NSS_CAPWAPMGR_SUCCESS) {
+			nss_capwapmgr_warn("%p: Restore Path MTU CAPWAP tunnel error : %d \n", dev, status);
+		}
+
+		dev_put(dev);
+		return NSS_CAPWAPMGR_FAILURE_IP_RULE;
+	}
+
+	t->capwap_rule.encap.path_mtu = htonl(mtu);
 	dev_put(dev);
 	return status;
 }
@@ -1387,6 +1439,31 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 		type_flags |= NSS_CAPWAP_ENCAP_UDPLITE_HDR_CSUM;
 	}
 
+	/*
+	 * Copy over the IP rule information to capwap rule for encap side.
+	 * This will avoid any confusions because IP rule direction is AC->AP and
+	 * capwap encap rule direction is AP->AC.
+	 */
+	if (v4) {
+		capwap_rule->encap.src_port = htonl(v4->dest_port);
+		capwap_rule->encap.src_ip.ip.ipv4 = htonl(v4->dest_ip);
+
+		capwap_rule->encap.dest_port = htonl(v4->src_port);
+		capwap_rule->encap.dest_ip.ip.ipv4 = htonl(v4->src_ip);
+	} else {
+		capwap_rule->encap.src_port = htonl(v6->dest_port);
+		capwap_rule->encap.src_ip.ip.ipv6[0] = htonl(v6->dest_ip[0]);
+		capwap_rule->encap.src_ip.ip.ipv6[1] = htonl(v6->dest_ip[1]);
+		capwap_rule->encap.src_ip.ip.ipv6[2] = htonl(v6->dest_ip[2]);
+		capwap_rule->encap.src_ip.ip.ipv6[3] = htonl(v6->dest_ip[3]);
+
+		capwap_rule->encap.dest_port = htonl(v6->src_port);
+		capwap_rule->encap.dest_ip.ip.ipv6[0] = htonl(v6->src_ip[0]);
+		capwap_rule->encap.dest_ip.ip.ipv6[1] = htonl(v6->src_ip[1]);
+		capwap_rule->encap.dest_ip.ip.ipv6[2] = htonl(v6->src_ip[2]);
+		capwap_rule->encap.dest_ip.ip.ipv6[3] = htonl(v6->src_ip[3]);
+	}
+
 	status = nss_capwapmgr_create_capwap_rule(dev, if_num, capwap_rule, type_flags);
 	nss_capwapmgr_info("%p: dynamic interface if_num is :%d and capwap tunnel status:%d\n", dev, if_num, status);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
@@ -1398,10 +1475,10 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 
 	if (v4) {
 		v4->dest_interface_num = if_num;
-		nss_status = nss_capwapmgr_configure_ipv4(v4);
+		nss_status = nss_capwapmgr_configure_ipv4(v4, 0);
 	} else {
 		v6->dest_interface_num = if_num;
-		nss_status = nss_capwapmgr_configure_ipv6(v6);
+		nss_status = nss_capwapmgr_configure_ipv6(v6, 0);
 	}
 
 	if (nss_status != NSS_TX_SUCCESS) {
@@ -1600,9 +1677,9 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 			dev, if_num, tunnel_id);
 
 		if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
-			nss_capwapmgr_configure_ipv4(&t->ip_rule.v4);
+			nss_capwapmgr_configure_ipv4(&t->ip_rule.v4, 0);
 		} else {
-			nss_capwapmgr_configure_ipv6(&t->ip_rule.v6);
+			nss_capwapmgr_configure_ipv6(&t->ip_rule.v6, 0);
 		}
 
 		return NSS_CAPWAPMGR_FAILURE_CAPWAP_DESTROY_RULE;
@@ -1629,6 +1706,36 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	return NSS_CAPWAPMGR_SUCCESS;
 }
 EXPORT_SYMBOL(nss_capwapmgr_tunnel_destroy);
+
+/*
+ * nss_capwapmgr_tunnel_stats()
+ *	Gets tunnel stats from netdev
+ */
+nss_capwapmgr_status_t nss_capwapmgr_tunnel_stats(struct net_device *dev,
+		uint8_t tunnel_id, struct nss_capwap_tunnel_stats *stats)
+{
+	struct nss_capwapmgr_tunnel *t;
+
+	if (!stats) {
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
+	if (!t) {
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	if (!(t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED)) {
+		return NSS_CAPWAPMGR_FAILURE_TUNNEL_NOT_CFG;
+	}
+
+	if (nss_capwap_get_stats(t->if_num, stats) == false) {
+		return NSS_CAPWAPMGR_FAILURE_NOT_READY;
+	}
+
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_tunnel_stats);
 
 /*
  * nss_capwapmgr_receive_pkt()
@@ -1683,6 +1790,81 @@ EXPORT_SYMBOL(nss_capwapmgr_get_netdev);
 #endif
 
 /*
+ * nss_capwapmgr_netdev_up()
+ *	NSS CAPWAP Tunnel device i/f up handler
+ */
+static int nss_capwapmgr_netdev_up(struct net_device *netdev)
+{
+	struct nss_capwapmgr_priv *priv;
+	uint8_t i;
+
+	priv = netdev_priv(netdev);
+	for (i = 0; i < NSS_CAPWAPMGR_MAX_TUNNELS; i++) {
+		(void)nss_capwapmgr_enable_tunnel(nss_capwapmgr_ndev, i);
+	}
+
+	return NOTIFY_DONE;
+}
+
+/*
+ * nss_capwapmgr_netdev_down()
+ *	NSS CAPWAP Tunnel device i/f up handler
+ */
+static int nss_capwapmgr_netdev_down(struct net_device *netdev)
+{
+	struct nss_capwapmgr_priv *priv;
+	uint8_t i;
+
+	priv = netdev_priv(netdev);
+	for (i = 0; i < NSS_CAPWAPMGR_MAX_TUNNELS; i++) {
+		(void)nss_capwapmgr_disable_tunnel(nss_capwapmgr_ndev, i);
+	}
+
+	return NOTIFY_DONE;
+}
+
+/*
+ * nss_capwapmgr_netdev_event()
+ *	Net device notifier for NSS CAPWAP manager module
+ */
+static int nss_capwapmgr_netdev_event(struct notifier_block  *nb, unsigned long event, void  *dev)
+{
+	struct net_device *netdev = (struct net_device *)dev;
+
+	if (strstr(netdev->name, NSS_CAPWAPMGR_NETDEV_NAME) == NULL) {
+		return NOTIFY_DONE;
+	}
+
+	switch (event) {
+	case NETDEV_UP:
+		nss_capwapmgr_trace("%p: NETDEV_UP: event %lu name %s\n", netdev, event, netdev->name);
+		return nss_capwapmgr_netdev_up(netdev);
+
+	case NETDEV_DOWN:
+		nss_capwapmgr_trace("%p: NETDEV_DOWN: event %lu name %s\n", netdev, event, netdev->name);
+		return nss_capwapmgr_netdev_down(netdev);
+
+	default:
+		nss_capwapmgr_trace("%p: Unhandled notifier event %lu name %s\n", netdev, event, netdev->name);
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+/*
+ * Linux netdev event function.
+ */
+static int nss_capwapmgr_netdev_event(struct notifier_block  *nb, unsigned long event, void  *dev);
+
+/*
+ * Linux Net device Notifier
+ */
+struct notifier_block nss_capwapmgr_netdev_notifier = {
+	.notifier_call = nss_capwapmgr_netdev_event,
+};
+
+/*
  * nss_capwapmgr_init_module()
  *	Tunnel CAPWAP module init function
  */
@@ -1690,6 +1872,8 @@ int __init nss_capwapmgr_init_module(void)
 {
 	nss_capwapmgr_info("module (platform - IPQ806x , Build - %s:%s) loaded\n",
 			__DATE__, __TIME__);
+
+	register_netdevice_notifier(&nss_capwapmgr_netdev_notifier);
 
 #if defined(NSS_CAPWAPMGR_ONE_NETDEV)
 	/*
@@ -1707,6 +1891,7 @@ int __init nss_capwapmgr_init_module(void)
 
 	sema_init(&ip_response.sem, 1);
 	init_waitqueue_head(&ip_response.wq);
+
 	return 0;
 }
 
@@ -1731,6 +1916,8 @@ void __exit nss_capwapmgr_exit_module(void)
 	unregister_netdev(nss_capwapmgr_ndev);
 	nss_capwapmgr_ndev = NULL;
 #endif
+	unregister_netdevice_notifier(&nss_capwapmgr_netdev_notifier);
+
 	nss_capwapmgr_info("module unloaded\n");
 }
 
