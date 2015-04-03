@@ -222,17 +222,20 @@ static void nss_capwapmgr_fill_up_stats(struct rtnl_link_stats64 *stats, struct 
 {
 	stats->rx_packets += tstats->pnode_stats.rx_packets;
 	stats->rx_dropped += tstats->pnode_stats.rx_dropped;
+
 	/* rx_fifo_errors will appear as rx overruns in ifconfig */
 	stats->rx_fifo_errors += (tstats->rx_queue_full_drops + tstats->rx_n2h_queue_full_drops);
-	stats->rx_errors += (tstats->rx_mem_failure_drops + tstats->oversize_drops + tstats->frag_timeout_drops);
+	stats->rx_errors += (tstats->rx_mem_failure_drops + tstats->rx_oversize_drops + tstats->rx_frag_timeout_drops);
 	stats->rx_bytes += tstats->pnode_stats.rx_bytes;
 
-	stats->tx_dropped += tstats->tx_dropped;
-	stats->tx_packets += tstats->pnode_stats.tx_packets;
 	/* tx_fifo_errors  will appear as tx overruns in ifconfig */
 	stats->tx_fifo_errors += tstats->tx_queue_full_drops;
 	stats->tx_errors += tstats->tx_mem_failure_drops;
 	stats->tx_bytes += tstats->pnode_stats.tx_bytes;
+
+	stats->tx_dropped += (tstats->tx_dropped_sg_ref + tstats->tx_dropped_ver_mis + tstats->tx_dropped_unalign
+			+ tstats->tx_dropped_hroom + tstats->tx_dropped_dtls + tstats->tx_dropped_nwireless);
+	stats->tx_packets += tstats->pnode_stats.tx_packets;
 }
 
 /*
@@ -1544,17 +1547,28 @@ EXPORT_SYMBOL(nss_capwapmgr_ipv6_tunnel_create);
  */
 static void nss_capwapmgr_tunnel_save_stats(struct nss_capwap_tunnel_stats *save, struct nss_capwap_tunnel_stats *fstats)
 {
-	save->rx_segments += fstats->rx_segments;
-	save->tx_segments += fstats->tx_segments;
 	save->dtls_pkts += fstats->dtls_pkts;
-	save->oversize_drops += fstats->oversize_drops;
-	save->frag_timeout_drops += fstats->frag_timeout_drops;
+
+	save->rx_segments += fstats->rx_segments;
+	save->rx_dup_frag += fstats->rx_dup_frag;
+	save->rx_oversize_drops += fstats->rx_oversize_drops;
+	save->rx_frag_timeout_drops += fstats->rx_frag_timeout_drops;
 	save->rx_queue_full_drops += fstats->rx_queue_full_drops;
 	save->rx_n2h_queue_full_drops += fstats->rx_n2h_queue_full_drops;
 	save->rx_mem_failure_drops += fstats->rx_mem_failure_drops;
+	save->rx_csum_drops += fstats->rx_csum_drops;
+	save->rx_malformed += fstats->rx_malformed;
+	save->rx_frag_gap_drops += fstats->rx_frag_gap_drops;
 
+	save->tx_segments += fstats->tx_segments;
 	save->tx_queue_full_drops += fstats->tx_queue_full_drops;
 	save->tx_mem_failure_drops += fstats->tx_mem_failure_drops;
+	save->tx_dropped_sg_ref += fstats->tx_dropped_sg_ref;
+	save->tx_dropped_ver_mis += fstats->tx_dropped_ver_mis;
+	save->tx_dropped_unalign += fstats->tx_dropped_unalign;
+	save->tx_dropped_hroom += fstats->tx_dropped_hroom;
+	save->tx_dropped_dtls += fstats->tx_dropped_dtls;
+	save->tx_dropped_nwireless += fstats->tx_dropped_nwireless;
 
 	/*
 	 * add pnode stats now.
