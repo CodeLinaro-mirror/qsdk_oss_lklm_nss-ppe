@@ -94,15 +94,6 @@ static struct genl_multicast_group nss_nlipv4_mcgrp = {
 };
 
 /*
- * IPv4 family command policies
- */
-static struct nla_policy nss_nlipv4_attr[NSS_IPV4_MAX_MSG_TYPES] = {
-	[NSS_IPV4_TX_CREATE_RULE_MSG] = {.type = NLA_BINARY, .len = sizeof(struct nss_nlipv4_rule)},
-	[NSS_IPV4_TX_DESTROY_RULE_MSG] = {.type = NLA_BINARY, .len = sizeof(struct nss_nlipv4_rule)},
-	[NSS_IPV4_RX_CONN_STATS_SYNC_MSG] = {.type = NLA_BINARY, .len = sizeof(struct nss_nlipv4_rule)},
-};
-
-/*
  * operation table called by the generic netlink layer based on the command
  */
 static struct genl_ops nss_nlipv4_ops[] = {
@@ -461,7 +452,7 @@ static void nss_nlipv4_process_notify(void *app_data, struct nss_ipv4_msg *nim)
 	/*
 	 * initialize the NETLINK common header
 	 */
-	nss_nlipv4_rule_init(nl_rule, nim->cm.type, 0);
+	nss_nlipv4_rule_init(nl_rule, nim->cm.type);
 
 	/*
 	 * clear NSS common message items that are not useful to uspace
@@ -718,16 +709,8 @@ done:
 bool nss_nlipv4_init(void)
 {
 	int error;
-	int i;
 
 	nss_nl_info("Init NSS netlink ipv4 handler\n");
-
-	/*
-	 * setup the policy attributes
-	 */
-	for (i = 0; i < NSS_NLIPV4_OPS_SZ; i++) {
-		nss_nlipv4_ops[i].policy = nss_nlipv4_attr;
-	}
 
 	/*
 	 * register NETLINK ops with the family

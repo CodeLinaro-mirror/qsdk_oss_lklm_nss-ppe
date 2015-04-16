@@ -43,12 +43,11 @@ struct nss_nlipv4_rule {
  *
  * @param rule[IN] NSS NETLINK IPv4 rule
  * @param type[IN] IPv4 message type
- * @param user_data[IN] user data per message
- *
  */
-static inline void nss_nlipv4_rule_init(struct nss_nlipv4_rule *rule, enum nss_ipv4_message_types type, uint32_t user_data)
+static inline void nss_nlipv4_rule_init(struct nss_nlipv4_rule *rule, enum nss_ipv4_message_types type)
 {
-	nss_nlcmn_init(&rule->cm, type, sizeof(struct nss_nlipv4_rule), user_data);
+	nss_nlcmn_set_ver(&rule->cm, NSS_NL_VER);
+	nss_nlcmn_init_cmd(&rule->cm, type, sizeof(struct nss_nlipv4_rule));
 }
 
 #endif /* __NSS_NLIPV4_IF_H */

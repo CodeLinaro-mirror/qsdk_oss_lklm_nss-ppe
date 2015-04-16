@@ -30,27 +30,37 @@ struct nss_nlcmn {
 	uint32_t pid;		/**< process ID for the message */
 	uint32_t sock_data;	/**< socket specific info, used by kernel */
 	uint32_t user_data;	/**< user specific data */
+	uint32_t user_cb;	/**< user specific callback */
 
 	uint16_t cmd_len;	/**< command len */
 	uint16_t cmd_type;	/**< command type */
 };
 
 /**
- * @brief messages senders must use this to initialize the NSS NL common header
+ * @brief messages senders must use this to initialize command
  *
  * @param cm[IN] common message
  * @param cmd[IN] command for the family
  * @param len[IN] command length
- * @param user_data[IN] user specific data stored per command
  */
-static inline void nss_nlcmn_init(struct nss_nlcmn *cm, uint16_t cmd, uint16_t len, uint32_t user_data)
+static inline void nss_nlcmn_init_cmd(struct nss_nlcmn *cm, uint16_t cmd, uint16_t len)
 {
-	cm->user_data = user_data;
-
 	cm->cmd_type = cmd;
 	cm->cmd_len = len;
 }
 
+/**
+ * @brief messages senders must use this to initialize the user fields
+ *
+ * @param cm[IN] common message
+ * @param user_data[IN] user specific data stored per command
+ * @param user_cb[IN] user specific callback per command
+ */
+static inline void nss_nlcmn_init_user(struct nss_nlcmn *cm, uint32_t user_data, uint32_t user_cb)
+{
+	cm->user_data = user_data;
+	cm->user_cb = user_cb;
+}
 /**
  * @brief check the version number of the incoming message
  *
@@ -110,6 +120,17 @@ static inline uint32_t nss_nlcmn_get_user_data(struct nss_nlcmn *cm)
 	return cm->user_data;
 }
 
+/**
+ * @brief get the user callback for the command
+ *
+ * @param cm[IN] command message
+ *
+ * @return user callback
+ */
+static inline uint32_t nss_nlcmn_get_user_cb(struct nss_nlcmn *cm)
+{
+	return cm->user_cb;
+}
 #endif /* __NSS_NLCMN_IF_H */
 
 
