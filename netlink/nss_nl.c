@@ -218,7 +218,6 @@ int nss_nl_ucast_resp(struct sk_buff *skb)
 struct nss_nlcmn *nss_nl_get_msg(struct genl_family *family, struct genl_info *info, uint16_t cmd)
 {
 	struct nss_nlcmn *cm;
-	uint16_t msg_len;
 	uint32_t pid;
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0))
@@ -226,33 +225,20 @@ struct nss_nlcmn *nss_nl_get_msg(struct genl_family *family, struct genl_info *i
 #else
 	pid =  info->snd_portid;
 #endif
-
 	/*
-	 * The info attrs is allocated based upon the maximum commands that the family
-	 * can support. Hence, there will be never a situation where on a given family
-	 * the command goes out of bounds. This ensures we can check safely if any message
-	 * exist for the specified command
+	 * validate the common message header version & magic
 	 */
-	if (info->attrs[cmd] == NULL) {
-		nss_nl_error("%d, %s: invalid command (%d)\n", pid, family->name, cmd);
+	cm = info->userhdr;
+	if (nss_nlcmn_chk_ver(cm, family->version) == false) {
+		nss_nl_error("%d, %s: version mismatch (%d)\n", pid, family->name, cm->version);
 		return NULL;
 	}
 
 	/*
 	 * check if the message len arrived matches with expected len
 	 */
-	msg_len = nla_len(info->attrs[cmd]);
-	if (msg_len != family->hdrsize) {
-		nss_nl_error("%d, %s: invalid command len (%d)\n", pid, family->name, cmd);
-		return NULL;
-	}
-
-	/*
-	 * validate the common message header version & magic
-	 */
-	cm = nla_data(info->attrs[cmd]);
-	if (nss_nlcmn_chk_ver(cm, family->version) == false) {
-		nss_nl_error("%d, %s: version mismatch (%d)\n", pid, family->name, cm->version);
+	if (nss_nlcmn_get_len(cm) != family->hdrsize) {
+		nss_nl_error("%d, %s: invalid command len (%d)\n", pid, family->name, nss_nlcmn_get_len(cm));
 		return NULL;
 	}
 
@@ -332,6 +318,5 @@ static void __exit nss_nl_exit(void)
 module_init(nss_nl_init);
 module_exit(nss_nl_exit);
 
-MODULE_DESCRIPTION("QCA NSS NETLINK");
-MODULE_AUTHOR("Qualcomm Atheros Inc");
-MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("NSS NETLINK");
+MODULE_LICENSE("Dual BSD/GPL");
