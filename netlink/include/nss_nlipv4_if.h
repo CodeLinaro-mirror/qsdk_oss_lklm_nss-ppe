@@ -21,6 +21,9 @@
 #ifndef __NSS_NLIPV4_IF_H
 #define __NSS_NLIPV4_IF_H
 
+#include "nss_cmn.h"
+#include "nss_ipv4.h"
+
 /**
  * IPv4 forwarding Family
  */
