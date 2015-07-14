@@ -24,9 +24,17 @@
 
 #include <nss_api_if.h>
 #include <nss_nl_if.h>
+#include "nss_ipsecmgr.h"
+#include "nss_nlcmn_if.h"
+#include "nss_crypto_if.h"
+#include "nss_nlipv4_if.h"
+#include "nss_nlcrypto_if.h"
+#include "nss_nlipsec_if.h"
 
 #include "nss_nl.h"
 #include "nss_nlipv4.h"
+#include "nss_nlcrypto.h"
+#include "nss_nlipsec.h"
 
 /*
  * nss_nl.c
@@ -47,7 +55,6 @@ struct nss_nl_family {
  * Family handler table
  */
 static struct nss_nl_family family_handlers[] = {
-#if 0
 	{
 		/*
 		 * NSS_NLCRYPTO
@@ -57,7 +64,6 @@ static struct nss_nl_family family_handlers[] = {
 		.exit = NSS_NLCRYPTO_EXIT,		/* exit */
 		.valid = CONFIG_NSS_NLCRYPTO		/* 1 or 0 */
 	},
-#endif
 	{
 		/*
 		 * NSS_NLIPV4
@@ -67,7 +73,6 @@ static struct nss_nl_family family_handlers[] = {
 		.exit = NSS_NLIPV4_EXIT,		/* exit */
 		.valid = CONFIG_NSS_NLIPV4		/* 1 or 0 */
 	},
-#if 0
 	{
 		/*
 		 * NSS_NLIPSEC
@@ -77,8 +82,6 @@ static struct nss_nl_family family_handlers[] = {
 		.exit = NSS_NLIPSEC_EXIT,		/* exit */
 		.valid = CONFIG_NSS_NLIPSEC		/* 1 or 0 */
 	},
-#endif
-
 };
 
 #define NSS_NL_FAMILY_HANDLER_SZ ARRAY_SIZE(family_handlers)

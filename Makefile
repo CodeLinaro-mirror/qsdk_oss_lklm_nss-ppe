@@ -25,16 +25,14 @@ ccflags-y += -DNSS_TUNIPIP6_DEBUG_LEVEL=0
 endif
 
 #IPsec manager
-ifneq ($(or $(findstring 3.10, $(KERNELVERSION)),\
-	    $(findstring 3.4, $(KERNELVERSION))),)
+ifneq ($(findstring 3.4, $(KERNELVERSION)),)
 obj-m += qca-nss-ipsecmgr.o
 qca-nss-ipsecmgr-objs := nss_ipsecmgr.o
 ccflags-y += -DNSS_IPSECMGR_DEBUG_LEVEL=3
 endif
 
 #NSS NETLINK
-ifneq ($(or $(findstring 3.10, $(KERNELVERSION)),\
-	    $(findstring 3.4, $(KERNELVERSION))),)
+ifneq ($(findstring 3.4, $(KERNELVERSION)),)
 obj-y+= netlink/
 endif
 

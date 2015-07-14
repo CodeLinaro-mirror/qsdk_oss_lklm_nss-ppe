@@ -26,10 +26,6 @@
 #define NSS_NL_VER_SHIFT 8
 
 #define NSS_NL_VER ((NSS_NL_VER_MAJOR << NSS_NL_VER_SHIFT) | NSS_NL_VER_MINOR)
-#define NSS_NL_CMD_TIMEOUT_MS 4000 /* msecs */
-
-#include "nss_nlcmn_if.h"
-#include "nss_nlipv4_if.h"
 
 #endif /* __NSS_NL_IF_H */
 
