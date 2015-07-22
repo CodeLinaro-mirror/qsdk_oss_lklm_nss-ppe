@@ -123,7 +123,7 @@ struct nss_qdisc {
 						 * state to set the qdisc in on successful
 						 * completion.
 						 */
-	void *virtual_interface_context;	/* Context provided by the NSS driver for
+	struct nss_virt_if_handle *virt_if_ctx;	/* Context provided by the NSS driver for
 						 * new interfaces that are registered.
 						 */
 	void *bounce_context;			/* Context for bounce registration. Bounce
