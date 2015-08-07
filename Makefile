@@ -11,7 +11,7 @@ obj-y+= capwapmgr/
 endif
 
 #IPv6
-ifneq ($(findstring 3.4, $(KERNELVERSION)),)
+
 #Tun6RD
 ifeq "$(CONFIG_IPV6_SIT_6RD)" "y"
 obj-m += qca-nss-tun6rd.o
@@ -22,7 +22,6 @@ endif
 obj-m += qca-nss-tunipip6.o
 qca-nss-tunipip6-objs := nss_connmgr_tunipip6.o
 ccflags-y += -DNSS_TUNIPIP6_DEBUG_LEVEL=0
-endif
 
 #IPsec manager
 ifneq ($(findstring 3.4, $(KERNELVERSION)),)

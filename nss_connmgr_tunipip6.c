@@ -22,13 +22,18 @@
  * Qualcomm Atheros	    15/sep/2013		     Created
  */
 
+#include <linux/version.h>
 #include <linux/types.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <net/ipv6.h>
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3,9,0))
 #include <net/ipip.h>
+#else
+#include <net/ip_tunnels.h>
+#endif
 #include <net/ip6_tunnel.h>
 #include <linux/if_arp.h>
 #include <nss_api_if.h>
@@ -261,7 +266,11 @@ void nss_tunipip6_dev_down( struct net_device * netdev)
 static int nss_tunipip6_dev_event(struct notifier_block  *nb,
 		unsigned long event, void  *dev)
 {
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3,10,0))
 	struct net_device *netdev = (struct net_device *)dev;
+#else
+	struct net_device *netdev = netdev_notifier_info_to_dev(dev);
+#endif
 
 	nss_tunipip6_trace("%s\n",__FUNCTION__);
 	switch (event) {
@@ -324,12 +333,25 @@ static void nss_tunipip6_update_dev_stats(struct net_device *dev,
 					struct nss_tunipip6_stats_sync_msg *sync_stats)
 {
 	void *ptr;
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
+	struct pcpu_sw_netstats stats;
+
+	u64_stats_init(&stats.syncp);
+	u64_stats_update_begin(&stats.syncp);
+	stats.rx_packets = sync_stats->node_stats.rx_packets;
+	stats.rx_bytes = sync_stats->node_stats.rx_bytes;
+	stats.tx_packets = sync_stats->node_stats.tx_packets;
+	stats.tx_bytes = sync_stats->node_stats.tx_bytes;
+	u64_stats_update_end(&stats.syncp);
+#else
 	struct nss_tunipip6_stats stats;
 
 	stats.rx_packets = sync_stats->node_stats.rx_packets;
 	stats.rx_bytes = sync_stats->node_stats.rx_bytes;
 	stats.tx_packets = sync_stats->node_stats.tx_packets;
 	stats.tx_bytes = sync_stats->node_stats.tx_bytes;
+#endif
 
 	ptr = (void *)&stats;
 	ip6_update_offload_stats(dev, ptr);
