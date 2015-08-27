@@ -380,19 +380,6 @@ nextdev:
 }
 
 /*
- * nss_qdisc_destroy_cb()
- *	callback invoked after destroying virtual interface.
- */
-static void nss_qdisc_destroy_cb(void *app_data, struct nss_cmn_msg *msg)
-{
-	if (msg->response == NSS_CMN_RESPONSE_ACK) {
-		nss_qdisc_info("nss_qdisc_destroy_cb success\n");
-	} else {
-		nss_qdisc_info("nss_qdisc_destroy_cb NACK received\n");
-	}
-}
-
-/*
  * nss_qdisc_root_cleanup_final()
  *	Performs final cleanup of a root shaper node after all other
  *	shaper node cleanup is complete.
@@ -420,7 +407,6 @@ static void nss_qdisc_root_cleanup_final(struct nss_qdisc *nq)
 	 	 */
 		nss_qdisc_info("%s: Release root bridge virtual interface: %p\n",
 				__func__, nq->virt_if_ctx);
-		nss_virt_if_destroy(nq->virt_if_ctx, nss_qdisc_destroy_cb, NULL);
 	}
 
 	/*
@@ -1477,6 +1463,7 @@ int nss_qdisc_configure(struct nss_qdisc *nq,
 void nss_qdisc_destroy(struct nss_qdisc *nq)
 {
 	int32_t state;
+	nss_tx_status_t cmd_status;
 
 	nss_qdisc_info("%s: Qdisc %p (type %d) destroy\n",
 			__func__, nq->qdisc, nq->type);
@@ -1524,7 +1511,16 @@ void nss_qdisc_destroy(struct nss_qdisc *nq)
 	}
 
 	if (nq->destroy_virtual_interface) {
-		nss_virt_if_destroy(nq->virt_if_ctx, nss_qdisc_destroy_cb, NULL);
+		/*
+		 * We are using the sync API here since qdisc operations
+		 * in Linux are expected to operate synchronously.
+		 */
+		cmd_status = nss_virt_if_destroy_sync(nq->virt_if_ctx);
+		if (cmd_status != NSS_TX_SUCCESS) {
+			nss_qdisc_error("%s: Qdisc %p virtual interface %p destroy failed: %d\n", __func__,
+						nq->qdisc, nq->virt_if_ctx, cmd_status);
+		}
+		nq->virt_if_ctx = NULL;
 	}
 
 	nss_qdisc_info("%s: Qdisc %p (type %d): destroy complete\n",
@@ -1545,6 +1541,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 	int32_t state;
 	struct nss_if_msg nim;
 	int msg_type;
+	nss_tx_status_t cmd_status;
 
 	/*
 	 * Initialize locks
@@ -1641,7 +1638,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 		nss_qdisc_error("%s: no shaping context returned for type %d\n",
 				__func__, nq->type);
 		atomic_set(&nq->state, NSS_QDISC_STATE_INIT_FAILED);
-		return -1;
+		goto init_fail;
 	}
 
 	/*
@@ -1664,7 +1661,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 				"nss driver %s\n", __func__, nq->qdisc, nq->type, dev->name);
 			nss_shaper_unregister_shaping(nq->nss_shaping_ctx);
 			atomic_set(&nq->state, NSS_QDISC_STATE_INIT_FAILED);
-			return -1;
+			goto init_fail;
 		}
 
 		/*
@@ -1696,7 +1693,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 				"failed: %d\n", __func__, nq->qdisc, nq->type, rc);
 			nq->pending_final_state = NSS_QDISC_STATE_CHILD_ALLOC_SEND_FAIL;
 			nss_qdisc_child_cleanup_final(nq);
-			return -1;
+			goto init_fail;
 		}
 
 		/*
@@ -1709,10 +1706,15 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 		}
 		nss_qdisc_info("%s: Qdisc %p (type %d): initialised with state: %d\n",
 					__func__, nq->qdisc, nq->type, state);
+
+		/*
+		 * If state is positive, return success
+		 */
 		if (state > 0) {
 			return 0;
 		}
-		return -1;
+
+		goto init_fail;
 	}
 
 	/*
@@ -1735,9 +1737,6 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 		 * As we are a root qdisc on this bridge then we have to create a
 		 * virtual interface to represent this bridge in the NSS. This will
 		 * allow us to bounce packets to the NSS for bridge shaping action.
-		 * Also set the destroy virtual interface flag so that it is destroyed
-		 * when the module goes down. If this is not done, the OS waits for
-		 * the interface to be released.
 		 */
 		nq->virt_if_ctx = nss_virt_if_create_sync(dev);
 		if (!nq->virt_if_ctx) {
@@ -1745,16 +1744,21 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 				"interface\n", __func__, nq->qdisc, nq->type);
 			nss_shaper_unregister_shaping(nq->nss_shaping_ctx);
 			atomic_set(&nq->state, NSS_QDISC_STATE_INIT_FAILED);
-			return -1;
+			goto init_fail;
 		}
 		nss_qdisc_info("%s: Qdisc %p (type %d): virtual interface registered "
 			"in NSS: %p\n", __func__, nq->qdisc, nq->type, nq->virt_if_ctx);
 
 		/*
+		 * We are the one who have created the virtual interface, so we
+		 * must ensure it is destroyed whenever we are done.
+		 */
+		nq->destroy_virtual_interface = true;
+
+		/*
 		 * Get the virtual interface number, and set the related flags
 		 */
 		nq->nss_interface_number = nss_virt_if_get_interface_num(nq->virt_if_ctx);
-		nq->destroy_virtual_interface = true;
 		nq->is_virtual = true;
 		nss_qdisc_info("%s: Qdisc %p (type %d) virtual interface number: %d\n",
 				__func__, nq->qdisc, nq->type, nq->nss_interface_number);
@@ -1769,10 +1773,9 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 		if (!nq->bounce_context) {
 			nss_qdisc_error("%s: Qdisc %p (type %d): is root but cannot register "
 					"for bridge bouncing\n", __func__, nq->qdisc, nq->type);
-			nss_virt_if_destroy(nq->virt_if_ctx, nss_qdisc_destroy_cb, NULL);
 			nss_shaper_unregister_shaping(nq->nss_shaping_ctx);
 			atomic_set(&nq->state, NSS_QDISC_STATE_INIT_FAILED);
-			return -1;
+			goto init_fail;
 		}
 
 	} else {
@@ -1790,7 +1793,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 					__func__, nq->qdisc, nq->type, dev->name);
 			nss_shaper_unregister_shaping(nq->nss_shaping_ctx);
 			atomic_set(&nq->state, NSS_QDISC_STATE_INIT_FAILED);
-			return -1;
+			goto init_fail;
 		}
 
 		/*
@@ -1815,7 +1818,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 				"to register for interface bouncing\n", __func__, nq->qdisc, nq->type);
 				nss_shaper_unregister_shaping(nq->nss_shaping_ctx);
 				atomic_set(&nq->state, NSS_QDISC_STATE_INIT_FAILED);
-				return -1;
+				goto init_fail;
 			}
 		}
 	}
@@ -1838,11 +1841,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 		nss_qdisc_error("%s: shaper assign command failed: %d\n", __func__, rc);
 		nq->pending_final_state = NSS_QDISC_STATE_ASSIGN_SHAPER_SEND_FAIL;
 		nss_qdisc_root_cleanup_final(nq);
-		/*
-		 * We dont have to clean up the virtual interface, since this is
-		 * taken care of by the nss_qdisc_root_cleanup_final() function.
-		 */
-		return -1;
+		goto init_fail;
 	}
 
 	/*
@@ -1876,17 +1875,33 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 		if (nss_qdisc_refresh_bshaper_assignment(nq->qdisc, NSS_QDISC_SCAN_AND_ASSIGN_BSHAPER) < 0) {
 			nss_qdisc_destroy(nq);
 			nss_qdisc_error("%s: bridge linking failed\n", __func__);
+
+			/*
+			 * We do not go to init_fail since nss_qdisc_destroy()
+			 * will take care of deleting the virtual interface.
+			 */
 			return -1;
 		}
 		nss_qdisc_info("%s: Bridge linking complete\n", __func__);
 		return 0;
 	}
 
+init_fail:
+
 	/*
 	 * Destroy any virtual interfaces created by us before returning a failure.
 	 */
 	if (nq->destroy_virtual_interface) {
-		nss_virt_if_destroy(nq->virt_if_ctx, nss_qdisc_destroy_cb, NULL);
+		/*
+		 * We are using the sync API here since qdisc operations
+		 * in Linux are expected to operate synchronously.
+		 */
+		cmd_status = nss_virt_if_destroy_sync(nq->virt_if_ctx);
+		if (cmd_status != NSS_TX_SUCCESS) {
+			nss_qdisc_error("%s: Qdisc %p virtual interface %p destroy failed: %d\n", __func__,
+						nq->qdisc, nq->virt_if_ctx, cmd_status);
+		}
+		nq->virt_if_ctx = NULL;
 	}
 
 	return -1;
