@@ -21,46 +21,38 @@
 #ifndef __NSS_NLCMN_IF_H
 #define __NSS_NLCMN_IF_H
 
+#define NSS_NLCMN_CB_MAX_SZ 64 /* bytes */
+
 /**
  * @brief Common message header for each NSS netlink message
  */
 struct nss_nlcmn {
-	uint32_t version;	/**< message version */
+	uint32_t version;			/**< message version */
 
-	uint32_t pid;		/**< process ID for the message */
-	uint32_t sock_data;	/**< socket specific info, used by kernel */
-	uint32_t user_data;	/**< user specific data */
-	uint32_t user_cb;	/**< user specific callback */
+	uint32_t pid;				/**< process ID for the message */
+	uint32_t sock_data;			/**< socket specific info, used by kernel */
 
-	uint16_t cmd_len;	/**< command len */
-	uint16_t cmd_type;	/**< command type */
+	uint16_t cmd_len;			/**< command len */
+	uint8_t cmd_type;			/**< command type */
+	uint8_t res;				/**< reserve for future use */
+
+	int32_t cb_owner;			/**< CB identifier */
+	uint8_t cb_data[NSS_NLCMN_CB_MAX_SZ]; 	/**< user context buffer */
 };
 
 /**
  * @brief messages senders must use this to initialize command
  *
  * @param cm[IN] common message
- * @param cmd[IN] command for the family
  * @param len[IN] command length
+ * @param cmd[IN] command for the family
  */
-static inline void nss_nlcmn_init_cmd(struct nss_nlcmn *cm, uint16_t cmd, uint16_t len)
+static inline void nss_nlcmn_init_cmd(struct nss_nlcmn *cm, uint16_t len, uint8_t cmd)
 {
 	cm->cmd_type = cmd;
 	cm->cmd_len = len;
 }
 
-/**
- * @brief messages senders must use this to initialize the user fields
- *
- * @param cm[IN] common message
- * @param user_data[IN] user specific data stored per command
- * @param user_cb[IN] user specific callback per command
- */
-static inline void nss_nlcmn_init_user(struct nss_nlcmn *cm, uint32_t user_data, uint32_t user_cb)
-{
-	cm->user_data = user_data;
-	cm->user_cb = user_cb;
-}
 /**
  * @brief check the version number of the incoming message
  *
@@ -70,7 +62,7 @@ static inline void nss_nlcmn_init_user(struct nss_nlcmn *cm, uint32_t user_data,
  */
 static inline bool nss_nlcmn_chk_ver(struct nss_nlcmn *cm, uint32_t ver)
 {
-	return (cm->version == ver);
+	return cm->version == ver;
 }
 
 /**
@@ -82,6 +74,18 @@ static inline bool nss_nlcmn_chk_ver(struct nss_nlcmn *cm, uint32_t ver)
 static inline void nss_nlcmn_set_ver(struct nss_nlcmn *cm, uint32_t ver)
 {
 	cm->version = ver;
+}
+
+/**
+ * @brief get the version number from common message header
+ *
+ * @param cm[IN] common message header
+ *
+ * @return version
+ */
+static inline uint32_t nss_nlcmn_get_ver(struct nss_nlcmn *cm)
+{
+	return cm->version;
 }
 
 /**
@@ -99,9 +103,9 @@ static inline uint8_t nss_nlcmn_get_cmd(struct nss_nlcmn *cm)
 /**
  * @brief get the NSS Family command len
  *
- * @param cm[IN] command message
+ * @param cm[IN] common message
  *
- * @return command type
+ * @return command len
  */
 static inline uint16_t nss_nlcmn_get_len(struct nss_nlcmn *cm)
 {
@@ -109,28 +113,46 @@ static inline uint16_t nss_nlcmn_get_len(struct nss_nlcmn *cm)
 }
 
 /**
- * @brief get the user data for the command
+ * @brief get the callback data
  *
- * @param cm[IN] command message
+ * @param cm[IN] common message
+ * @param cb_owner[IN] callback owner ID
  *
- * @return user data
+ * @return callback data or NULL if the owner doesn't match
  */
-static inline uint32_t nss_nlcmn_get_user_data(struct nss_nlcmn *cm)
+static inline void *nss_nlcmn_get_cb_data(struct nss_nlcmn *cm, int32_t cb_owner)
 {
-	return cm->user_data;
+	/*
+	 * if owner doesn't match then the caller is not the owner
+	 */
+	if (cm->cb_owner != cb_owner) {
+		return NULL;
+	}
+
+	return cm->cb_data;
 }
 
 /**
- * @brief get the user callback for the command
+ * @brief set the callback data ownership
  *
- * @param cm[IN] command message
- *
- * @return user callback
+ * @param cm[IN] common message
+ * @param cb_owner[IN] callback owner ID
  */
-static inline uint32_t nss_nlcmn_get_user_cb(struct nss_nlcmn *cm)
+static inline void nss_nlcmn_set_cb_owner(struct nss_nlcmn *cm, int32_t cb_owner)
 {
-	return cm->user_cb;
+	cm->cb_owner = cb_owner;
 }
+
+/**
+ * @brief clear the CB ownership (ID) after use
+ *
+ * @param cm[IN] common message
+ */
+static inline void nss_nlcmn_clr_cb_owner(struct nss_nlcmn *cm)
+{
+	nss_nlcmn_set_cb_owner(cm, -1);
+}
+
 #endif /* __NSS_NLCMN_IF_H */
 
 
