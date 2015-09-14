@@ -28,6 +28,10 @@
  * IPv4 forwarding Family
  */
 #define NSS_NLIPV4_FAMILY "nss_nlipv4"
+#define NSS_NLIPV4_MCAST_GRP "nss_nlipv4_mcast"
+
+#define NSS_NLIPV4_ARPHRD_IPSEC_TUNNEL_TYPE 0x31
+#define NSS_NLIPV4_VLAN_ID_NOT_CONFIGURED 0xFFF
 
 /**
  * @brief IPv4 rule
@@ -50,7 +54,7 @@ struct nss_nlipv4_rule {
 static inline void nss_nlipv4_rule_init(struct nss_nlipv4_rule *rule, enum nss_ipv4_message_types type)
 {
 	nss_nlcmn_set_ver(&rule->cm, NSS_NL_VER);
-	nss_nlcmn_init_cmd(&rule->cm, type, sizeof(struct nss_nlipv4_rule));
+	nss_nlcmn_init_cmd(&rule->cm, sizeof(struct nss_nlipv4_rule), type);
 }
 
 #endif /* __NSS_NLIPV4_IF_H */

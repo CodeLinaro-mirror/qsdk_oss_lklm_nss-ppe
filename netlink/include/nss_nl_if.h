@@ -27,6 +27,9 @@
 
 #define NSS_NL_VER ((NSS_NL_VER_MAJOR << NSS_NL_VER_SHIFT) | NSS_NL_VER_MINOR)
 
+#include "nss_nlcmn_if.h"
+#include "nss_nlipv4_if.h"
+
 #endif /* __NSS_NL_IF_H */
 
 

@@ -50,10 +50,6 @@
 #include "nss_nlcmn_if.h"
 #include "nss_nlipv4_if.h"
 
-
-#define NSS_NLIPV4_ARPHRD_IPSEC_TUNNEL_TYPE 0x31
-#define NSS_NLIPV4_VLAN_ID_NOT_CONFIGURED 0xFFF
-
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 #define DST_NEIGH_LOOKUP(dst, ip_addr) dst_neigh_lookup(dst, ip_addr)
 #else
@@ -93,7 +89,7 @@ static struct genl_family nss_nlipv4_family = {
  * multicast group for sending message status & events
  */
 static struct genl_multicast_group nss_nlipv4_mcgrp = {
-	.name = NSS_NLIPV4_FAMILY,
+	.name = NSS_NLIPV4_MCAST_GRP,
 };
 
 /*
