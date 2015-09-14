@@ -26,7 +26,7 @@
 #include <asm/atomic.h>
 #include <nss_api_if.h>
 #include <nss_ipsec.h>
-#include "nss_ipsecmgr.h"
+#include <nss_ipsecmgr.h>
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
 /*
@@ -638,6 +638,7 @@ static bool nss_ipsecmgr_commit_flush(struct net_device *dev, struct nss_ipsecmg
 
 	priv = netdev_priv(dev);
 
+	atomic_add(tbl->count, &gbl_drv_ctx.sa_count);
 	tbl->count = 0;
 
 	for (count = 0, sa = &priv->sa_tbl[0]; count < NSS_IPSEC_MAX_SA; count++, sa++) {
@@ -781,8 +782,20 @@ static void nss_ipsecmgr_buf_receive(struct net_device *dev, struct sk_buff *skb
 	}
 
 	ip = (struct iphdr *)skb->data;
-	if ((ip->version != IPVERSION) || (ip->ihl != 5)) {
+	if (unlikely((ip->version != IPVERSION) || (ip->ihl != 5))) {
 		nss_ipsecmgr_error("dropping packets(IP version:%x, Header len:%x)\n", ip->version, ip->ihl);
+		dev_kfree_skb_any(skb);
+		goto done;
+	}
+
+	/*
+	 * Receiving an ESP packet indicates that NSS has performed the encapsulation
+	 * but the post-routing rule is not present. This condition can't be taken care
+	 * in Host we should flush the ENCAP rules and free the packet. This will force
+	 * subsequent packets to follow the Slow path IPsec thus recreating the rules
+	 */
+	if (unlikely(ip->protocol == IPPROTO_ESP)) {
+		nss_ipsecmgr_sa_flush(dev, NSS_IPSECMGR_RULE_TYPE_ENCAP);
 		dev_kfree_skb_any(skb);
 		goto done;
 	}
@@ -1130,15 +1143,9 @@ EXPORT_SYMBOL(nss_ipsecmgr_tunnel_add);
 bool nss_ipsecmgr_tunnel_del(struct net_device *dev)
 {
 	struct nss_ipsecmgr_priv *priv;
-	struct nss_ipsecmgr_tbl *encap;
-	struct nss_ipsecmgr_tbl *decap;
-	struct nss_ipsec_msg nim;
 	bool status;
 
 	priv = netdev_priv(dev);
-
-	encap = &priv->encap;
-	decap = &priv->decap;
 
 	/*
 	 * Unregister the callbacks from the HLOS as we are no longer
@@ -1152,28 +1159,17 @@ bool nss_ipsecmgr_tunnel_del(struct net_device *dev)
 	priv->data_cb = NULL;
 	priv->event_cb = NULL;
 
-	/*
-	 * Prepare to flush all SA(s) inside a tunnel
-	 */
-	memset(&nim, 0, sizeof(struct nss_ipsec_msg));
-
-	status = nss_ipsecmgr_op_send(dev, &nim, NSS_IPSEC_ENCAP_IF_NUMBER, NSS_IPSEC_MSG_TYPE_FLUSH_TUN);
+	status = nss_ipsecmgr_sa_flush(dev, NSS_IPSECMGR_RULE_TYPE_ENCAP);
 	if (status != true) {
 		nss_ipsecmgr_error("unable complete tunnel deletion, for ingress rules\n");
 		goto fail;
 	}
 
-	/* release all SA(s) associated with the encap */
-	atomic_sub(encap->count, &gbl_drv_ctx.sa_count);
-
-	status = nss_ipsecmgr_op_send(dev, &nim, NSS_IPSEC_DECAP_IF_NUMBER, NSS_IPSEC_MSG_TYPE_FLUSH_TUN);
+	status = nss_ipsecmgr_sa_flush(dev, NSS_IPSECMGR_RULE_TYPE_DECAP);
 	if (status != true) {
 		nss_ipsecmgr_error("unable complete tunnel deletion, for egress rules\n");
 		goto fail;
 	}
-
-	/* release all SA(s) associated with the decap */
-	atomic_sub(decap->count, &gbl_drv_ctx.sa_count);
 
 	/*
 	 * The unregister should start here but the expectation is that the free would
@@ -1269,6 +1265,44 @@ bool nss_ipsecmgr_sa_del(struct net_device *dev, union nss_ipsecmgr_rule *rule, 
 	return nss_ipsecmgr_op_send(dev, &nim, if_num, NSS_IPSEC_MSG_TYPE_DEL_RULE);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_sa_del);
+
+/*
+ * nss_ipsecmgr_sa_flush()
+ *	flush NSS rules for all sa of a specific tunnel
+ */
+bool nss_ipsecmgr_sa_flush(struct net_device *dev, enum nss_ipsecmgr_rule_type type)
+{
+	struct nss_ipsec_msg nim;
+	int status;
+	uint32_t if_num;
+
+	BUG_ON(dev == NULL);
+
+	/*
+	 * prepare to flush all SA(s) associated with the tunne
+	 */
+	memset(&nim, 0, sizeof(struct nss_ipsec_msg));
+
+	switch (type) {
+	case NSS_IPSECMGR_RULE_TYPE_ENCAP:
+		if_num = NSS_IPSEC_ENCAP_IF_NUMBER;
+		break;
+	case NSS_IPSECMGR_RULE_TYPE_DECAP:
+		if_num = NSS_IPSEC_DECAP_IF_NUMBER;
+		break;
+	default:
+		nss_ipsecmgr_error("Invalid rule type!: %d\n", type);
+		return false;
+	}
+	status = nss_ipsecmgr_op_send(dev, &nim, if_num, NSS_IPSEC_MSG_TYPE_FLUSH_TUN);
+	if (status != true) {
+		nss_ipsecmgr_error("unable to flush sa rules for %d rule\n", type);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(nss_ipsecmgr_sa_flush);
 
 static int __init nss_ipsecmgr_init(void)
 {
