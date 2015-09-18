@@ -28,7 +28,7 @@
  * IPv4 forwarding Family
  */
 #define NSS_NLIPV4_FAMILY "nss_nlipv4"
-#define NSS_NLIPV4_MCAST_GRP "nss_nlipv4_mcast"
+#define NSS_NLIPV4_MCAST_GRP "nss_nlipv4_mc"
 
 #define NSS_NLIPV4_ARPHRD_IPSEC_TUNNEL_TYPE 0x31
 #define NSS_NLIPV4_VLAN_ID_NOT_CONFIGURED 0xFFF
