@@ -41,22 +41,22 @@
  * Statically compile messages at different levels
  */
 #define nss_nl_error(s, ...) {	\
-	if (NSS_NL_DEBUG_LEVEL < NSS_NL_DEBUG_LVL_ERROR) {	\
+	if (NSS_NL_DEBUG_LEVEL > NSS_NL_DEBUG_LVL_ERROR) {	\
 		pr_alert("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__);	\
 	}	\
 }
 #define nss_nl_warn(s, ...) {	\
-	if (NSS_NL_DEBUG_LEVEL < NSS_NL_DEBUG_LVL_WARN) {	\
+	if (NSS_NL_DEBUG_LEVEL > NSS_NL_DEBUG_LVL_WARN) {	\
 		pr_warn("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__);	\
 	}	\
 }
 #define nss_nl_info(s, ...) {	\
-	if (NSS_NL_DEBUG_LEVEL < NSS_NL_DEBUG_LVL_INFO) {	\
+	if (NSS_NL_DEBUG_LEVEL > NSS_NL_DEBUG_LVL_INFO) {	\
 		pr_notice("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__);	\
 	}	\
 }
 #define nss_nl_trace(s, ...) {	\
-	if (NSS_NL_DEBUG_LEVEL < NSS_NL_DEBUG_LVL_TRACE) {	\
+	if (NSS_NL_DEBUG_LEVEL > NSS_NL_DEBUG_LVL_TRACE) {	\
 		pr_info("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__);	\
 	}	\
 }

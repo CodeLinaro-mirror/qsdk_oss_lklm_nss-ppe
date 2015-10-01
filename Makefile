@@ -35,5 +35,10 @@ ifneq ($(findstring 3.4, $(KERNELVERSION)),)
 obj-y+= netlink/
 endif
 
+# L2TPv2 manager
+ifneq ($(findstring 3.4, $(KERNELVERSION)),)
+obj-y+=l2tp/l2tpv2/
+endif
+
 obj ?= .
 

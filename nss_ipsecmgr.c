@@ -19,6 +19,7 @@
  */
 #include <linux/types.h>
 #include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <linux/skbuff.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
@@ -883,14 +884,17 @@ static int nss_ipsecmgr_tunnel_stop(struct net_device *dev)
  */
 static netdev_tx_t nss_ipsecmgr_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	uint32_t if_num;
-	struct iphdr *inner_ip;
 	struct nss_ipsecmgr_priv *priv;
 	struct nss_ipsecmgr_tbl *encap;
+	int nhead, ntail;
+	uint32_t if_num;
 
 	if_num = NSS_IPSEC_ENCAP_IF_NUMBER;
 	priv = netdev_priv(dev);
 	encap = &priv->encap;
+
+	nhead = dev->needed_headroom;
+	ntail = dev->needed_tailroom;
 
 	if (skb_is_nonlinear(skb)) {
 		nss_ipsecmgr_error("%p: NSS IPSEC does not support fragments %p\n", priv->nss_ctx, skb);
@@ -906,15 +910,18 @@ static netdev_tx_t nss_ipsecmgr_tunnel_xmit(struct sk_buff *skb, struct net_devi
 	}
 
 	/*
-	 * Check the packet head room & tail room
+	 * Check and expand the packet head room and tail room
 	 */
-	if (unlikely(skb_headroom(skb) < dev->needed_headroom)) {
-		nss_ipsecmgr_error("%p: Insufficient head room :%d in skb: %p\n", priv->nss_ctx, skb_headroom(skb), skb);
+	if ((skb_headroom(skb) < nhead) && pskb_expand_head(skb, nhead, ntail, GFP_KERNEL)) {
+		nss_ipsecmgr_error("%p: unable to expand headroom & tailroom(0x%p)\n", priv->nss_ctx, skb);
 		goto fail;
 	}
 
-	if (unlikely(skb_tailroom(skb) < dev->needed_tailroom)) {
-		nss_ipsecmgr_error("%p: Insufficient tail room:%d in skb: %p\n", priv->nss_ctx, skb_tailroom(skb), skb);
+	/*
+	 * Check and expand the packet tail room only
+	 */
+	if ((skb_tailroom(skb) < ntail) && pskb_expand_head(skb, 0, ntail, GFP_KERNEL)) {
+		nss_ipsecmgr_error("%p: unable to expand tailroom(0x%p)\n", priv->nss_ctx, skb);
 		goto fail;
 	}
 
@@ -926,22 +933,16 @@ static netdev_tx_t nss_ipsecmgr_tunnel_xmit(struct sk_buff *skb, struct net_devi
 		goto fail;
 	}
 
-	inner_ip = (struct iphdr *)ip_hdr(skb);
+	switch (skb->protocol) {
+	case htons(ETH_P_IP):
+		BUG_ON(ip_hdr(skb)->ttl == 0);
+		break;
 
-	/*
-	 * Validate if packet has ip options
-	 */
-	if ((inner_ip->version != IPVERSION) || (inner_ip->ihl != 5)) {
-		nss_ipsecmgr_error("%p: Unsupported IP header ipver: 0x%x iphdr_len: 0x%x\n", priv->nss_ctx,
-						inner_ip->version, inner_ip->ihl);
-		goto fail;
-	}
+	case htons(ETH_P_IPV6):
+		BUG_ON(ipv6_hdr(skb)->hop_limit == 0);
+		break;
 
-	/*
-	 * Check the TTL value
-	 */
-	if ((inner_ip->ttl == 0)) {
-		nss_ipsecmgr_error("%p: IP TTL is zero, unabled to transmit\n", priv->nss_ctx);
+	default:
 		goto fail;
 	}
 

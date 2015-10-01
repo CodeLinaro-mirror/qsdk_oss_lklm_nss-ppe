@@ -67,7 +67,7 @@ struct nss_nlipsec_rule {
 static inline void nss_nlipsec_rule_init(struct nss_nlipsec_rule *rule, enum nss_nlipsec_cmd type)
 {
 	nss_nlcmn_set_ver(&rule->cm, NSS_NL_VER);
-	nss_nlcmn_init_cmd(&rule->cm, type, sizeof(struct nss_nlipsec_rule));
+	nss_nlcmn_init_cmd(&rule->cm, sizeof(struct nss_nlipsec_rule), type);
 }
 
 /**@}*/
