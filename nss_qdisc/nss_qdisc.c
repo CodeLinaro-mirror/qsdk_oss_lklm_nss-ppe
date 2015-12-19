@@ -1515,8 +1515,7 @@ void nss_qdisc_destroy(struct nss_qdisc *nq)
 	/*
 	 * How we begin to tidy up depends on whether we are root or child
 	 */
-	nq->pending_final_state = NSS_QDISC_STATE_READY;
-	atomic_set(&nq->state, NSS_QDISC_STATE_IDLE);
+	nq->pending_final_state = NSS_QDISC_STATE_IDLE;
 	if (nq->is_root) {
 
 		/*
@@ -1540,15 +1539,15 @@ void nss_qdisc_destroy(struct nss_qdisc *nq)
 
 	/*
 	 * Wait until cleanup operation is complete at which point the state
-	 * shall become non-idle.
+	 * shall become idle.
 	 */
-	if (!wait_event_timeout(nq->wait_queue, atomic_read(&nq->state) != NSS_QDISC_STATE_IDLE,
+	if (!wait_event_timeout(nq->wait_queue, atomic_read(&nq->state) == NSS_QDISC_STATE_IDLE,
 				NSS_QDISC_COMMAND_TIMEOUT)) {
 		nss_qdisc_error("destroy command for %x timedout!\n", nq->qos_tag);
 	}
 
 	state = atomic_read(&nq->state);
-	if (state != NSS_QDISC_STATE_READY) {
+	if (state != NSS_QDISC_STATE_IDLE) {
 		nss_qdisc_error("%s: clean up for nss qdisc %x failed with "
 					"status %d\n", __func__, nq->qos_tag, state);
 	}
