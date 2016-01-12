@@ -50,7 +50,7 @@ static inline struct nss_bf_class_data *nss_bf_find_class(u32 classid,
 	struct Qdisc_class_common *clc;
 	clc = qdisc_class_find(&q->clhash, classid);
 	if (clc == NULL) {
-		nss_qdisc_warning("%s: Cannot find class with classid %u in qdisc %p hash table %p\n", __func__, classid, sch, &q->clhash);
+		nss_qdisc_info("%s: cannot find class with classid %u in qdisc %p hash table %p\n", __func__, classid, sch, &q->clhash);
 		return NULL;
 	}
 	return container_of(clc, struct nss_bf_class_data, cl_common);
