@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -37,10 +37,10 @@
 #include <linux/etherdevice.h>
 #include <nss_api_if.h>
 #include <linux/in.h>
-#include <nss_api_if.h>
 #include <nss_cmn.h>
 #include <nss_capwap.h>
 #include <nss_capwapmgr.h>
+#include <nss_capwap_user.h>
 
 #define NSS_CAPWAPMGR_NETDEV_NAME	"nsscapwap"
 
@@ -249,6 +249,7 @@ static struct rtnl_link_stats64 *nss_capwapmgr_get_tunnel_stats(struct net_devic
 	int i;
 
 	if (!stats) {
+		nss_capwapmgr_warn("%p: invalid rtnl structure\n", dev);
 		return stats;
 	}
 
@@ -419,6 +420,15 @@ static nss_capwapmgr_status_t nss_capwap_remap_error(nss_capwap_msg_response_t e
 	case NSS_CAPWAP_ERROR_MSG_TUNNEL_NOT_CFG:
 		status = NSS_CAPWAPMGR_FAILURE_TUNNEL_NOT_CFG;
 		break;
+	case NSS_CAPWAP_ERROR_MSG_INVALID_IP_NODE:
+		status = NSS_CAPWAPMGR_FAILURE_INVALID_IP_NODE;
+		break;
+	case NSS_CAPWAP_ERROR_MSG_INVALID_TYPE_FLAG:
+		status = NSS_CAPWAPMGR_FAILURE_INVALID_TYPE_FLAG;
+		break;
+	case NSS_CAPWAP_ERROR_MSG_INVALID_DTLS_CFG:
+		status = NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+		break;
 	default:
 		status = NSS_CAPWAPMGR_FAILURE;
 	}
@@ -436,10 +446,12 @@ static struct nss_capwapmgr_tunnel *nss_capwapmgr_verify_tunnel_param(struct net
 	struct nss_capwapmgr_tunnel *t;
 
 	if (!dev) {
+		nss_capwapmgr_warn("Invalid net_device\n");
 		return NULL;
 	}
 
 	if (tunnel_id > NSS_CAPWAPMGR_MAX_TUNNELS) {
+		nss_capwapmgr_warn("%p: tunnel_id: %d out of range (%d)\n", dev, tunnel_id, NSS_CAPWAPMGR_MAX_TUNNELS);
 		return NULL;
 	}
 
@@ -485,14 +497,14 @@ struct net_device *nss_capwapmgr_netdev_create()
 	priv->nss_ctx = nss_capwap_get_ctx();
 	priv->tunnel = kmalloc(sizeof(struct nss_capwapmgr_tunnel) * NSS_CAPWAPMGR_MAX_TUNNELS, GFP_ATOMIC);
 	if (!priv->tunnel) {
-		nss_capwapmgr_warn("failed to allocate tunnel memory");
+		nss_capwapmgr_warn("%p: failed to allocate tunnel memory\n", ndev);
 		goto fail1;
 	}
 	memset(priv->tunnel, 0, sizeof(struct nss_capwapmgr_tunnel) * NSS_CAPWAPMGR_MAX_TUNNELS);
 
 	priv->resp = kmalloc(sizeof(struct nss_capwapmgr_response) * NSS_MAX_DYNAMIC_INTERFACES, GFP_ATOMIC);
 	if (!priv->resp) {
-		nss_capwapmgr_warn("failed to allocate tunnel response memory");
+		nss_capwapmgr_warn("%p: failed to allocate tunnel response memory\n", ndev);
 		goto fail2;
 	}
 	for (i = 0; i < NSS_MAX_DYNAMIC_INTERFACES; i++) {
@@ -507,13 +519,13 @@ struct net_device *nss_capwapmgr_netdev_create()
 
 	priv->if_num_to_tunnel_id = kmalloc(sizeof(uint8_t) * NSS_MAX_NET_INTERFACES, GFP_ATOMIC);
 	if (!priv->if_num_to_tunnel_id) {
-		nss_capwapmgr_warn("failed to allocate if_num to tunnel_id memory");
+		nss_capwapmgr_warn("%p: failed to allocate if_num to tunnel_id memory\n", ndev);
 		goto fail3;
 	}
 	memset(priv->if_num_to_tunnel_id, 0, sizeof(uint8_t) * NSS_MAX_NET_INTERFACES);
 
 	if (nss_cmn_register_queue_decongestion(priv->nss_ctx, nss_capwapmgr_decongestion_callback, ndev) != NSS_CB_REGISTER_SUCCESS) {
-		nss_capwapmgr_warn("failed to register decongestion callback");
+		nss_capwapmgr_warn("%p: failed to register decongestion callback\n", ndev);
 		goto fail4;
 	}
 
@@ -570,7 +582,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_register_with_nss(uint32_t interface
  */
 static void nss_capwapmgr_unregister_with_nss(uint32_t if_num)
 {
-	nss_capwapmgr_trace("%d: unregister with NSS FW", if_num);
+	nss_capwapmgr_trace("%d: unregister with NSS FW\n", if_num);
 	nss_capwap_data_unregister(if_num);
 }
 
@@ -822,7 +834,7 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
 		nss_capwapmgr_warn("%p: Create IPv4 command msg response timeout\n", ctx);
 		status = NSS_TX_FAILURE;
 	} else if (ip_response.response != NSS_CMN_RESPONSE_ACK) {
-		nss_capwapmgr_warn("%p: Create IPv4 command msg failed with response : %d\n", ctx, ip_response.response);
+		nss_capwapmgr_warn("%p: Create IPv4 command msg failed with response: %d\n", ctx, ip_response.response);
 		status = NSS_TX_FAILURE;
 	}
 
@@ -964,7 +976,7 @@ static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6
 		nss_capwapmgr_warn("%p: Create IPv6 command msg response timeout\n", ctx);
 		status = NSS_TX_FAILURE;
 	} else if (ip_response.response != NSS_CMN_RESPONSE_ACK) {
-		nss_capwapmgr_warn("%p: Create IPv6 command msg failed with response : %d\n", ctx, ip_response.response);
+		nss_capwapmgr_warn("%p: Create IPv6 command msg failed with response: %d\n", ctx, ip_response.response);
 		status = NSS_TX_FAILURE;
 	}
 
@@ -1045,6 +1057,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_msg_sync(struct nss_ctx_instance 
 	status = nss_capwap_tx_msg(ctx, msg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		up(&r->sem);
+		dev_put(dev);
 		return status;
 	}
 
@@ -1052,6 +1065,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_msg_sync(struct nss_ctx_instance 
 		atomic_set(&r->seq, 0);		/* Indicate that we are no longer waiting */
 		up(&r->sem);
 		nss_capwapmgr_warn("%p: CAPWAP command msg response timeout\n", ctx);
+		dev_put(dev);
 		return NSS_CAPWAPMGR_FAILURE_CMD_TIMEOUT;
 	}
 
@@ -1062,10 +1076,12 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_msg_sync(struct nss_ctx_instance 
 		up(&r->sem);
 		nss_capwapmgr_warn("%p: CAPWAP command msg response : %d, error:%d\n", ctx,
 				r->response, r->error);
+		dev_put(dev);
 		return nss_capwap_remap_error(r->error);
 	}
 
 	up(&r->sem);
+	dev_put(dev);
 	return status;
 }
 
@@ -1088,6 +1104,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device
 	 * Verify CAPWAP rule parameters.
 	 */
 	if (ntohl(msg->decap.reassembly_timeout) > NSS_CAPWAP_MAX_REASSEMBLY_TIMEOUT) {
+		nss_capwapmgr_warn("%p: invalid reassem timeout: %d, max: %d\n",
+			ctx, ntohl(msg->decap.reassembly_timeout), NSS_CAPWAP_MAX_REASSEMBLY_TIMEOUT);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
@@ -1096,6 +1114,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device
 	}
 
 	if (ntohl(msg->decap.max_fragments) > NSS_CAPWAP_MAX_FRAGMENTS) {
+		nss_capwapmgr_warn("%p: invalid fragment setting: %d, max: %d\n",
+			ctx, ntohl(msg->decap.max_fragments), NSS_CAPWAP_MAX_FRAGMENTS);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
@@ -1104,6 +1124,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device
 	}
 
 	if (ntohl(msg->decap.max_buffer_size) > NSS_CAPWAP_MAX_BUFFER_SIZE) {
+		nss_capwapmgr_warn("%p: invalid buffer size: %d, max: %d\n",
+			ctx, ntohl(msg->decap.max_buffer_size), NSS_CAPWAP_MAX_BUFFER_SIZE);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
@@ -1112,6 +1134,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device
 	}
 
 	if (ntohl(msg->encap.path_mtu) > NSS_CAPWAP_MAX_MTU) {
+		nss_capwapmgr_warn("%p: invalid path_mtu: %d, max: %d\n",
+			ctx, ntohl(msg->encap.path_mtu), NSS_CAPWAP_MAX_MTU);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
@@ -1157,11 +1181,13 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 	nss_tx_status_t nss_status;
 
 	if (mtu > NSS_CAPWAP_MAX_MTU) {
+		nss_capwapmgr_warn("%p: invalid path_mtu: %d, max: %d\n", dev, mtu, NSS_CAPWAP_MAX_MTU);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
 	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
 	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
@@ -1178,7 +1204,7 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 	 * Send CAPWAP data tunnel command to NSS
 	 */
 	nss_capwap_msg_init(&capwapmsg, t->if_num, NSS_CAPWAP_MSG_TYPE_UPDATE_PATH_MTU,
-		0, nss_capwapmgr_msg_event_receive, dev);
+		sizeof(struct nss_capwap_path_mtu_msg), nss_capwapmgr_msg_event_receive, dev);
 	capwapmsg.msg.mtu.path_mtu = htonl(mtu);
 	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
@@ -1229,6 +1255,289 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 EXPORT_SYMBOL(nss_capwapmgr_update_path_mtu);
 
 /*
+ * nss_capwapmgr_configure_dtls
+ *	Enable or disable DTLS of a capwap tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_configure_dtls(struct net_device *dev, uint8_t tunnel_id, uint8_t dtls_enable, struct nss_dtlsmgr_session_create_config *in_data)
+{
+	struct nss_capwapmgr_priv *priv;
+	struct nss_capwap_msg capwapmsg;
+	struct nss_capwapmgr_tunnel *t;
+	struct nss_dtlsmgr_return_data out_data;
+	struct nss_ipv4_destroy v4;
+	struct nss_ipv6_destroy v6;
+	nss_dtlsmgr_status_t dmstatus;
+	nss_tx_status_t nss_status = NSS_TX_SUCCESS;
+	nss_capwapmgr_status_t status;
+	uint32_t ip_if_num;
+
+	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
+	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	if (t->capwap_rule.dtls_enabled == dtls_enable) {
+		nss_capwapmgr_warn("%p: nothing changed for tunnel: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	/*
+	 * We don't allow configuring dtls on tunnel if it's still
+	 * enabled.
+	 */
+	if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_ENABLED) {
+		nss_capwapmgr_warn("%p: tunnel %d is already enabled\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_TUNNEL_ENABLED;
+	}
+
+	/*
+	 * Prepare DTLS configure message
+	 */
+	memset(&capwapmsg, 0, sizeof(struct nss_capwap_msg));
+	nss_capwap_msg_init(&capwapmsg, t->if_num, NSS_CAPWAP_MSG_TYPE_DTLS,
+		sizeof(struct nss_capwap_dtls_msg), nss_capwapmgr_msg_event_receive, dev);
+
+	if (!dtls_enable) {
+		nss_capwapmgr_info("%p disabling DTLS for tunnel: %d\n", dev, tunnel_id);
+
+		ip_if_num = nss_capwap_ifnum_with_core_id(t->if_num);
+		capwapmsg.msg.dtls.enable = 0;
+		capwapmsg.msg.dtls.dtls_if_num = t->capwap_rule.dtls_if_num;
+		capwapmsg.msg.dtls.mtu_adjust = 0;
+	} else {
+		nss_capwapmgr_info("%p enabling DTLS for tunnel: %d\n", dev, tunnel_id);
+
+		if (!t->capwap_rule.dtls_if_num) {
+			/*
+			 * Create a DTLS node, we only validate caller is providing a DTLS
+			 * configuration structure, the correctness of these settings are
+			 * validated by dtlsmgr
+			 */
+			if (!in_data) {
+				nss_capwapmgr_info("%p: dtls in_data required to create dtls tunnel\n", dev);
+				return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+			}
+			in_data->decap.app_if = t->if_num;
+			dmstatus = nss_dtlsmgr_session_create_with_crypto(in_data, &out_data);
+			if (dmstatus != NSS_DTLSMGR_OK) {
+				nss_capwapmgr_warn("%p: cannot create DTLS session\n", dev);
+				return NSS_CAPWAPMGR_FAILURE_DI_ALLOC_FAILED;
+			}
+			t->capwap_rule.dtls_if_num = out_data.dtls_if;
+			t->capwap_rule.mtu_adjust = out_data.mtu_adjust;
+
+			nss_capwapmgr_info("%p: created dtls node for tunnel: %d if_num: %d mtu_adjust: %d\n",
+					dev, tunnel_id, t->capwap_rule.dtls_if_num, t->capwap_rule.mtu_adjust);
+		}
+
+		ip_if_num = nss_dtls_get_ifnum_with_coreid(t->capwap_rule.dtls_if_num);
+		capwapmsg.msg.dtls.enable = 1;
+		capwapmsg.msg.dtls.dtls_if_num = t->capwap_rule.dtls_if_num;
+		capwapmsg.msg.dtls.mtu_adjust = t->capwap_rule.mtu_adjust;
+	}
+
+	dev_hold(dev);
+	priv = netdev_priv(dev);
+
+	/*
+	 * Recreate ipv4/v6 rules with the new interface number
+	 */
+	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
+		v4.protocol = IPPROTO_UDP;
+		v4.src_ip = t->ip_rule.v4.src_ip;
+		v4.dest_ip = t->ip_rule.v4.dest_ip;
+		v4.src_port = t->ip_rule.v4.src_port;
+		v4.dest_port = t->ip_rule.v4.dest_port;
+		nss_status = nss_capwapmgr_unconfigure_ipv4_rule(&v4);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: unconfigure ipv4 rule failed : %d\n", dev, nss_status);
+			dev_put(dev);
+			return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+		}
+		t->ip_rule.v4.dest_interface_num = ip_if_num;
+		nss_status = nss_capwapmgr_configure_ipv4(&t->ip_rule.v4, 0);
+	} else {
+		if (t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDP) {
+			v6.protocol = IPPROTO_UDP;
+		} else {
+			v6.protocol = IPPROTO_UDPLITE;
+		}
+
+		v6.src_ip[0] = t->ip_rule.v6.src_ip[0];
+		v6.src_ip[1] = t->ip_rule.v6.src_ip[1];
+		v6.src_ip[2] = t->ip_rule.v6.src_ip[2];
+		v6.src_ip[3] = t->ip_rule.v6.src_ip[3];
+
+		v6.dest_ip[0] = t->ip_rule.v6.dest_ip[0];
+		v6.dest_ip[1] = t->ip_rule.v6.dest_ip[1];
+		v6.dest_ip[2] = t->ip_rule.v6.dest_ip[2];
+		v6.dest_ip[3] = t->ip_rule.v6.dest_ip[3];
+
+		v6.src_port = t->ip_rule.v6.src_port;
+		v6.dest_port = t->ip_rule.v6.dest_port;
+		nss_status = nss_capwapmgr_unconfigure_ipv6_rule(&v6);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: unconfigure ipv6 rule failed : %d\n", dev, nss_status);
+			dev_put(dev);
+			return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+		}
+
+		t->ip_rule.v6.dest_interface_num = ip_if_num;
+		nss_status = nss_capwapmgr_configure_ipv6(&t->ip_rule.v6, 0);
+	}
+
+	if (nss_status != NSS_TX_SUCCESS) {
+		nss_capwapmgr_warn("%p: configure ip rule failed : %d\n", dev, nss_status);
+		dev_put(dev);
+		return NSS_CAPWAPMGR_FAILURE_IP_RULE;
+	}
+
+	/*
+	 * Now configure capwap dtls
+	 */
+	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%p: configure DTLS failed : %d\n", dev, status);
+		dev_put(dev);
+		return nss_status;
+	}
+
+	t->capwap_rule.dtls_enabled = dtls_enable;
+	dev_put(dev);
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_configure_dtls);
+
+/*
+ * nss_capwapmgr_verify_dtls_rekey_param()
+ *	Validate the rekey param for a DTLS tunnel and return the dtls_if_num
+ */
+static inline uint32_t nss_capwapmgr_verify_dtls_rekey_param(struct net_device *dev, uint8_t tunnel_id,
+								 struct nss_dtlsmgr_session_update_config *udata)
+{
+	struct nss_capwapmgr_tunnel *t;
+
+	if (!udata) {
+		nss_capwapmgr_info("%p: dtls session update data required\n", dev);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
+	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	if (!t->capwap_rule.dtls_enabled) {
+		nss_capwapmgr_warn("%p: tunnel does not enable DTLS: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	return t->capwap_rule.dtls_if_num;
+}
+
+/*
+ * nss_capwapmgr_dtls_rekey_rx_cipher_update()
+ *	Update the rx cipher key for an DTLS tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_rx_cipher_update(struct net_device *dev, uint8_t tunnel_id,
+								 struct nss_dtlsmgr_session_update_config *udata)
+{
+	uint32_t dtls_ifnum = nss_capwapmgr_verify_dtls_rekey_param(dev, tunnel_id, udata);
+
+	/*
+	 * Calling dtlsmgr for rekey
+	 */
+	if (nss_dtlsmgr_rekey_rx_cipher_update(dtls_ifnum, udata) != NSS_DTLSMGR_OK) {
+		nss_capwapmgr_warn("%p: tunnel: %d rekey rx cipher update failed for dtls if: %d\n", dev, tunnel_id, dtls_ifnum);
+		return NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+	}
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dtls_rekey_rx_cipher_update);
+
+/*
+ * nss_capwapmgr_dtls_rekey_tx_cipher_update()
+ *	Update the tx cipher key for an DTLS tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_tx_cipher_update(struct net_device *dev, uint8_t tunnel_id,
+								 struct nss_dtlsmgr_session_update_config *udata)
+{
+	uint32_t dtls_ifnum = nss_capwapmgr_verify_dtls_rekey_param(dev, tunnel_id, udata);
+
+	/*
+	 * Calling dtlsmgr for rekey
+	 */
+	if (nss_dtlsmgr_rekey_tx_cipher_update(dtls_ifnum, udata) != NSS_DTLSMGR_OK) {
+		nss_capwapmgr_warn("%p: tunnel: %d rekey tx cipher update failed for dtls if: %d\n", dev, tunnel_id, dtls_ifnum);
+		return NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+	}
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dtls_rekey_tx_cipher_update);
+
+/*
+ * nss_capwapmgr_dtls_rekey_rx_cipher_switch()
+ *	Switch the rx cipher key for an DTLS tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_rx_cipher_switch(struct net_device *dev, uint8_t tunnel_id)
+{
+	struct nss_capwapmgr_tunnel *t;
+
+	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
+	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	if (!t->capwap_rule.dtls_enabled) {
+		nss_capwapmgr_warn("%p: tunnel does not enable DTLS: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	/*
+	 * Calling dtlsmgr for rekey switch
+	 */
+	if (nss_dtlsmgr_rekey_rx_cipher_switch(t->capwap_rule.dtls_if_num) != NSS_DTLSMGR_OK) {
+		nss_capwapmgr_warn("%p: tunnel: %d rekey rx cipher switch failed for dtls if: %d\n", dev, tunnel_id, t->capwap_rule.dtls_if_num);
+		return NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+	}
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dtls_rekey_rx_cipher_switch);
+
+/*
+ * nss_capwapmgr_dtls_rekey_tx_cipher_switch()
+ *	Switch the tx cipher key for an DTLS tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_tx_cipher_switch(struct net_device *dev, uint8_t tunnel_id)
+{
+	struct nss_capwapmgr_tunnel *t;
+
+	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
+	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	if (!t->capwap_rule.dtls_enabled) {
+		nss_capwapmgr_warn("%p: tunnel does not enable DTLS: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	/*
+	 * Calling dtlsmgr for rekey switch
+	 */
+	if (nss_dtlsmgr_rekey_tx_cipher_switch(t->capwap_rule.dtls_if_num) != NSS_DTLSMGR_OK) {
+		nss_capwapmgr_warn("%p: tunnel: %d rekey tx cipher switch failed for dtls if: %d\n", dev, tunnel_id, t->capwap_rule.dtls_if_num);
+		return NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+	}
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dtls_rekey_tx_cipher_switch);
+
+/*
  * nss_capwapmgr_change_version()
  *	Change CAPWAP version
  */
@@ -1242,10 +1551,12 @@ nss_capwapmgr_status_t nss_capwapmgr_change_version(struct net_device *dev, uint
 
 	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
 	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
 	if (ver > NSS_CAPWAP_VERSION_V2) {
+		nss_capwapmgr_warn("%p: un-supported Version: %d\n", dev, ver);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
@@ -1261,7 +1572,7 @@ nss_capwapmgr_status_t nss_capwapmgr_change_version(struct net_device *dev, uint
 	 * Send CAPWAP data tunnel command to NSS
 	 */
 	nss_capwap_msg_init(&capwapmsg, t->if_num, NSS_CAPWAP_MSG_TYPE_VERSION,
-		0, nss_capwapmgr_msg_event_receive, dev);
+		sizeof(struct nss_capwap_version_msg), nss_capwapmgr_msg_event_receive, dev);
 	capwapmsg.msg.version.version = ver;
 	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
@@ -1315,10 +1626,12 @@ nss_capwapmgr_status_t nss_capwapmgr_enable_tunnel(struct net_device *dev, uint8
 
 	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
 	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
 	if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_ENABLED) {
+		nss_capwapmgr_warn("%p: tunnel %d is already enabled\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_TUNNEL_ENABLED;
 	}
 
@@ -1346,10 +1659,12 @@ nss_capwapmgr_status_t nss_capwapmgr_disable_tunnel(struct net_device *dev, uint
 
 	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
 	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
 	if (!(t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_ENABLED)) {
+		nss_capwapmgr_warn("%p: tunnel %d is already enabled\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_TUNNEL_DISABLED;
 	}
 
@@ -1370,20 +1685,24 @@ EXPORT_SYMBOL(nss_capwapmgr_disable_tunnel);
  *	Common handling for creating IPv4 or IPv6 tunnel
  */
 static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_device *dev, uint8_t tunnel_id,
-	struct nss_ipv4_create *v4, struct nss_ipv6_create *v6, struct nss_capwap_rule_msg *capwap_rule)
+	struct nss_ipv4_create *v4, struct nss_ipv6_create *v6, struct nss_capwap_rule_msg *capwap_rule, struct nss_dtlsmgr_session_create_config *in_data)
 {
 	struct nss_capwapmgr_priv *priv;
 	struct nss_capwapmgr_tunnel *t;
 	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
-	int32_t if_num;
+	int32_t capwap_if_num, forward_if_num;
 	uint16_t type_flags = 0;
+	struct nss_dtlsmgr_return_data out_data;
+	nss_dtlsmgr_status_t dmstatus;
 	nss_tx_status_t nss_status = NSS_TX_SUCCESS;
 
 	if (!v4 && !v6) {
+		nss_capwapmgr_warn("%p: invalid ip create rule for tunnel: %d\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
 	if (tunnel_id > NSS_CAPWAPMGR_MAX_TUNNELS) {
+		nss_capwapmgr_warn("%p: invalid tunnel_id: %d max: NSS_CAPWAPMGR_MAX_TUNNELS\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
@@ -1399,21 +1718,45 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
+	if (capwap_rule->dtls_enabled && !in_data) {
+		nss_capwapmgr_warn("%p: need to supply in_data if DTLS is enabled\n", dev);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
 	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
 	if (t) {
+		nss_capwapmgr_warn("%p: tunnel: %d already created\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_TUNNEL_EXISTS;
 	}
 
-	if_num = nss_dynamic_interface_alloc_node(NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
-	if (if_num < 0) {
-		nss_capwapmgr_warn("%p: di returned error : %d\n", dev, if_num);
+	capwap_if_num = nss_dynamic_interface_alloc_node(NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
+	if (capwap_if_num < 0) {
+		nss_capwapmgr_warn("%p: di returned error : %d\n", dev, capwap_if_num);
 		return NSS_CAPWAPMGR_FAILURE_DI_ALLOC_FAILED;
 	}
 
-	if (nss_capwapmgr_register_with_nss(if_num, dev) != NSS_CAPWAPMGR_SUCCESS) {
-		nss_capwapmgr_warn("%d: NSS CAPWAP register with NSS failed", if_num);
-		(void)nss_dynamic_interface_dealloc_node(if_num, NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
+	if (nss_capwapmgr_register_with_nss(capwap_if_num, dev) != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%d: NSS CAPWAP register with NSS failed", capwap_if_num);
+		(void)nss_dynamic_interface_dealloc_node(capwap_if_num, NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
 		return NSS_CAPWAPMGR_FAILURE_REGISTER_NSS;
+	}
+
+	if (!capwap_rule->dtls_enabled) {
+		capwap_rule->mtu_adjust = 0;
+		capwap_rule->dtls_if_num = 0;
+		forward_if_num = nss_capwap_ifnum_with_core_id(capwap_if_num);
+	} else {
+		in_data->decap.app_if = capwap_if_num;
+		dmstatus = nss_dtlsmgr_session_create_with_crypto(in_data, &out_data);
+		if (dmstatus != NSS_DTLSMGR_OK) {
+			nss_capwapmgr_warn("%p: NSS DTLS node alloc failed\n", dev);
+			nss_capwapmgr_unregister_with_nss(capwap_if_num);
+			(void)nss_dynamic_interface_dealloc_node(capwap_if_num, NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
+			return NSS_CAPWAPMGR_FAILURE_DI_ALLOC_FAILED;
+		}
+		capwap_rule->dtls_if_num = out_data.dtls_if;
+		capwap_rule->mtu_adjust = out_data.mtu_adjust;
+		forward_if_num = nss_dtls_get_ifnum_with_coreid(out_data.dtls_if);
 	}
 
 	/*
@@ -1468,34 +1811,32 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 		capwap_rule->encap.dest_ip.ip.ipv6[3] = htonl(v6->src_ip[3]);
 	}
 
-	status = nss_capwapmgr_create_capwap_rule(dev, if_num, capwap_rule, type_flags);
-	nss_capwapmgr_info("%p: dynamic interface if_num is :%d and capwap tunnel status:%d\n", dev, if_num, status);
+	status = nss_capwapmgr_create_capwap_rule(dev, capwap_if_num, capwap_rule, type_flags);
+	nss_capwapmgr_info("%p: dynamic interface if_num is :%d and capwap tunnel status:%d\n", dev, capwap_if_num, status);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
-		nss_capwapmgr_warn("%p: %d: CAPWAP rule create failed with status: %d", dev, if_num, status);
-		nss_capwapmgr_unregister_with_nss(if_num);
-		(void)nss_dynamic_interface_dealloc_node(if_num, NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
-		return NSS_CAPWAPMGR_FAILURE_CAPWAP_RULE;
+		nss_capwapmgr_warn("%p: %d: CAPWAP rule create failed with status: %d", dev, capwap_if_num, status);
+		status = NSS_CAPWAPMGR_FAILURE_CAPWAP_RULE;
+		goto fail;
 	}
 
 	if (v4) {
-		v4->dest_interface_num = if_num;
+		v4->dest_interface_num = forward_if_num;
 		nss_status = nss_capwapmgr_configure_ipv4(v4, 0);
 	} else {
-		v6->dest_interface_num = if_num;
+		v6->dest_interface_num = forward_if_num;
 		nss_status = nss_capwapmgr_configure_ipv6(v6, 0);
 	}
 
 	if (nss_status != NSS_TX_SUCCESS) {
-		nss_capwapmgr_warn("%p: %d: IPv4/IPv6 rule create failed with status: %d", dev, if_num, nss_status);
-		nss_capwapmgr_unregister_with_nss(if_num);
-		(void)nss_dynamic_interface_dealloc_node(if_num, NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
-		return NSS_CAPWAPMGR_FAILURE_IP_RULE;
+		nss_capwapmgr_warn("%p: %d: IPv4/IPv6 rule create failed with status: %d", dev, forward_if_num, nss_status);
+		status = NSS_CAPWAPMGR_FAILURE_IP_RULE;
+		goto fail;
 	}
 
 	dev_hold(dev);
 	priv = netdev_priv(dev);
 	t = &priv->tunnel[tunnel_id];
-	nss_capwapmgr_info("%p: %d: CAPWAP TUNNEL CREATE DONE tunnel_id:%d (%p)\n", dev, if_num, tunnel_id, t);
+	nss_capwapmgr_info("%p: %d: CAPWAP TUNNEL CREATE DONE tunnel_id:%d (%p)\n", dev, capwap_if_num, tunnel_id, t);
 
 	/*
 	 * Keep a copy of rule information.
@@ -1511,11 +1852,19 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 	/*
 	 * Make it globally visible inside the netdev.
 	 */
-	t->if_num = if_num;
-	priv->if_num_to_tunnel_id[if_num] = tunnel_id;
+	t->if_num = capwap_if_num;
+	priv->if_num_to_tunnel_id[capwap_if_num] = tunnel_id;
 	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED;
 
 	dev_put(dev);
+	return status;
+
+fail:
+	nss_capwapmgr_unregister_with_nss(capwap_if_num);
+	(void)nss_dynamic_interface_dealloc_node(capwap_if_num, NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
+	if (capwap_rule->dtls_enabled) {
+		nss_dtlsmgr_session_destroy(forward_if_num);
+	}
 	return status;
 }
 
@@ -1524,9 +1873,9 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
  *	API for creating IPv4 and CAPWAP rule.
  */
 nss_capwapmgr_status_t nss_capwapmgr_ipv4_tunnel_create(struct net_device *dev, uint8_t tunnel_id,
-			struct nss_ipv4_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule)
+			struct nss_ipv4_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule, struct nss_dtlsmgr_session_create_config *in_data)
 {
-	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, ip_rule, NULL, capwap_rule);
+	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, ip_rule, NULL, capwap_rule, in_data);
 }
 EXPORT_SYMBOL(nss_capwapmgr_ipv4_tunnel_create);
 
@@ -1535,9 +1884,9 @@ EXPORT_SYMBOL(nss_capwapmgr_ipv4_tunnel_create);
  *	API for creating IPv6 and CAPWAP rule.
  */
 nss_capwapmgr_status_t nss_capwapmgr_ipv6_tunnel_create(struct net_device *dev, uint8_t tunnel_id,
-			struct nss_ipv6_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule)
+			struct nss_ipv6_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule, struct nss_dtlsmgr_session_create_config *in_data)
 {
-	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, NULL, ip_rule, capwap_rule);
+	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, NULL, ip_rule, capwap_rule, in_data);
 }
 EXPORT_SYMBOL(nss_capwapmgr_ipv6_tunnel_create);
 
@@ -1603,6 +1952,7 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	}
 
 	if (!(t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED)) {
+		nss_capwapmgr_warn("%p: tunnel %d is not configured yet\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_TUNNEL_NOT_CFG;
 	}
 
@@ -1611,6 +1961,7 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	 * enabled.
 	 */
 	if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_ENABLED) {
+		nss_capwapmgr_warn("%p: no destroy alloed for an eanbled tunnel: %d\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_TUNNEL_ENABLED;
 	}
 
@@ -1711,10 +2062,21 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 			dev, if_num, tunnel_id);
 	}
 
+	/*
+	 * Destroy DTLS node if there is one associated to this tunnel
+	 */
+	if (t->capwap_rule.dtls_if_num) {
+		nss_status = nss_dtlsmgr_session_destroy(t->capwap_rule.dtls_if_num);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: %d: Dealloc of dynamic interface failed for dtls node : %d\n",
+				dev, if_num, t->capwap_rule.dtls_if_num);
+		}
+	}
+
 	t->if_num = 0;
 	t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED;
 	priv->if_num_to_tunnel_id[if_num] = 0;
-	memset(t, 0, sizeof (struct nss_capwapmgr_tunnel));
+	memset(t, 0, sizeof(struct nss_capwapmgr_tunnel));
 
 	nss_capwapmgr_info("%p: %d: Tunnel %d is completely destroyed\n", dev, if_num, tunnel_id);
 	dev_put(dev);
@@ -1732,19 +2094,23 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_stats(struct net_device *dev,
 	struct nss_capwapmgr_tunnel *t;
 
 	if (!stats) {
+		nss_capwapmgr_warn("%p: invalid rtnl structure\n", dev);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
 	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
 	if (!t) {
+		nss_capwapmgr_trace("%p: can't find tunnel: %d\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
 	if (!(t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED)) {
+		nss_capwapmgr_trace("%p: tunnel: %d not configured yet\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_TUNNEL_NOT_CFG;
 	}
 
 	if (nss_capwap_get_stats(t->if_num, stats) == false) {
+		nss_capwapmgr_warn("%p: tunnel %d not ready yet\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_NOT_READY;
 	}
 
