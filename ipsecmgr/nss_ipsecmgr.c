@@ -283,7 +283,6 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	default:
 		goto fail;
 	}
-
 	/*
 	 * check whether the IPsec encapsulation can be offloaded to NSS
 	 * 	if the flow matches a subnet rule, then a new flow rule is added to NSS
@@ -377,8 +376,8 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dev, struct sk_buff *skb, 
 {
 	struct nss_ipsecmgr_priv *priv;
 	nss_ipsecmgr_data_cb_t cb_fn;
+	uint16_t next_protocol;
 	void *cb_ctx;
-	struct iphdr *ip;
 
 	BUG_ON(dev == NULL);
 	BUG_ON(skb == NULL);
@@ -405,9 +404,21 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dev, struct sk_buff *skb, 
 		goto done;
 	}
 
-	ip = (struct iphdr *)skb->data;
-	if (unlikely((ip->version != IPVERSION) || (ip->ihl != 5))) {
-		nss_ipsecmgr_error("dropping packets(IP version:%x, Header len:%x)\n", ip->version, ip->ihl);
+	skb_reset_network_header(skb);
+
+	switch (ip_hdr(skb)->version) {
+	case IPVERSION:
+		skb->protocol = cpu_to_be16(ETH_P_IP);
+		next_protocol = ip_hdr(skb)->protocol;
+		break;
+
+	case 6:
+		skb->protocol = cpu_to_be16(ETH_P_IPV6);
+		next_protocol = ipv6_hdr(skb)->nexthdr;
+		break;
+
+	default:
+		nss_ipsecmgr_error("%p: Unsupported IP Version\n",  priv->nss_ctx);
 		dev_kfree_skb_any(skb);
 		goto done;
 	}
@@ -418,21 +429,17 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dev, struct sk_buff *skb, 
 	 * in Host we should flush the ENCAP rules and free the packet. This will force
 	 * subsequent packets to follow the Slow path IPsec thus recreating the rules
 	 */
-	if (unlikely(ip->protocol == IPPROTO_ESP)) {
-		/*
-		 * XXX: flush IPsec SA specific to this packet
-		 */
+	if (next_protocol == IPPROTO_ESP) {
 		dev_kfree_skb_any(skb);
 		goto done;
 	}
 
-	skb_reset_network_header(skb);
-	skb_reset_mac_header(skb);
-
 	skb->pkt_type = PACKET_HOST;
-	skb->protocol = cpu_to_be16(ETH_P_IP);
 	skb->skb_iif = dev->ifindex;
 
+	skb_reset_mac_header(skb);
+
+	/* Send the data up to Linux Stack */
 	netif_receive_skb(skb);
 done:
 	/* release the device as we are done */
@@ -446,12 +453,12 @@ done:
 static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim)
 {
 	struct net_device *tun_dev = (struct net_device *)app_data;
-	struct nss_ipsec_node_stats *node_stats;
-	struct nss_ipsecmgr_sa_pkt_stats *stats;
+	struct nss_ipsecmgr_sa_stats *sa_stats;
 	struct nss_ipsec_node_stats *drv_stats;
-	struct nss_ipsec_pkt_sa_stats *pkts;
+	struct nss_ipsecmgr_event stats_event;
 	struct nss_ipsecmgr_sa_entry *sa;
 	struct nss_ipsecmgr_priv *priv;
+	nss_ipsecmgr_event_cb_t cb_fn;
 	struct nss_ipsecmgr_ref *ref;
 	struct nss_ipsecmgr_key key;
 	struct net_device *dev;
@@ -477,42 +484,57 @@ static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim
 		/*
 		 * prepare and lookup sa based on selector sent from nss
 		 */
-		nss_ipsecmgr_v4_sa_sel2key(&nim->msg.sa_stats.sel, &key);
+		nss_ipsecmgr_sa_sel2key(&nim->msg.sa_stats.sel, &key);
+
+		write_lock(&priv->lock);
 
 		ref = nss_ipsecmgr_sa_lookup(priv, &key);
 		if (!ref) {
+			write_unlock(&priv->lock);
 			nss_ipsecmgr_error("event received on deallocated SA tunnel:(%d)\n", nim->tunnel_id);
 			goto done;
 		}
 
-		/*
-		 * update sa stats
-		 */
 		sa = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
-		pkts = &nim->msg.sa_stats.pkts;
-		stats = &sa->pkts;
 
-		stats->count += pkts->count;
-		stats->bytes += pkts->bytes;
+		/*
+		 * update sa stats in the local database
+		 */
+		nss_ipsecmgr_sa_stats_update(nim, sa);
 
-		stats->no_headroom = pkts->no_headroom;
-		stats->no_tailroom = pkts->no_tailroom;
-		stats->no_buf = pkts->no_buf;
+		sa_stats = &stats_event.data.stats;
+		memcpy(&sa_stats->sa, &sa->sa_info, sizeof(struct nss_ipsecmgr_sa));
+		sa_stats->crypto_index = sa->nim.msg.push.data.crypto_index;
 
-		stats->fail_queue = pkts->fail_queue;
-		stats->fail_hash = pkts->fail_hash;
-		stats->fail_replay = pkts->fail_replay;
+		write_unlock(&priv->lock);
+
+		/*
+		 * if event callback is available then post the statistics using the callback function
+		 */
+		cb_fn = priv->event_cb;
+		if (cb_fn) {
+			stats_event.type = NSS_IPSECMGR_EVENT_SA_STATS;
+
+			/*
+			 * copy stats and SA information
+			 */
+			sa_stats->seq_num = nim->msg.sa_stats.seq_num;
+
+			sa_stats->pkts.count = nim->msg.sa_stats.pkts.count;
+			sa_stats->pkts.bytes = nim->msg.sa_stats.pkts.bytes;
+
+			cb_fn(priv->cb_ctx, &stats_event);
+		}
 		break;
 
 	case NSS_IPSEC_MSG_TYPE_SYNC_NODE_STATS:
 
-		node_stats = &nim->msg.node_stats;
 		drv_stats = &ipsecmgr_ctx.enc_stats;
 		if (unlikely(nim->cm.interface == NSS_IPSEC_DECAP_IF_NUMBER)) {
 			drv_stats = &ipsecmgr_ctx.dec_stats;
 		}
 
-		memcpy(drv_stats, node_stats, sizeof(struct nss_ipsec_node_stats));
+		memcpy(drv_stats, &nim->msg.node_stats, sizeof(struct nss_ipsec_node_stats));
 		break;
 
 	default:

@@ -39,6 +39,7 @@ struct nss_ipsecmgr_sa_info {
 	struct nss_ipsec_msg nim;
 	struct nss_ipsecmgr_key sa_key;
 	struct nss_ipsecmgr_key child_key;
+	struct nss_ipsecmgr_sa *sa;
 
 	struct nss_ipsecmgr_ref * (*child_alloc)(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
 	struct nss_ipsecmgr_ref * (*child_lookup)(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
@@ -57,15 +58,18 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_name_lookup(struct nss_ipsecmgr_priv *p
 	uint32_t hash;
 	int idx;
 
-	sa_name = strchr(name, '@') + 1;
-	if (hex2bin((uint8_t *)&hash, sa_name, sizeof(uint32_t))) {
+	sa_name = strchr(name, '@');
+	if (!sa_name || hex2bin((uint8_t *)&hash, ++sa_name, sizeof(uint32_t))) {
 		nss_ipsecmgr_error("%p: Invalid sa_name(%s)\n", priv, sa_name);
 		return NULL;
 	}
 
 	idx = hash & (NSS_CRYPTO_MAX_IDXS - 1);
-	head = &db->entries[idx];
+	if (idx >= NSS_CRYPTO_MAX_IDXS) {
+		return NULL;
+	}
 
+	head = &db->entries[idx];
 	list_for_each_entry(entry, head, node) {
 		if (nss_ipsecmgr_key_get_hash(&entry->key) == hash) {
 			return &entry->ref;
@@ -88,6 +92,7 @@ static ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, si
 	struct nss_ipsecmgr_ref *ref;
 	struct net_device *dev;
 	char *local, *type;
+	uint32_t addr[4];
 	ssize_t ret = 0;
 	int len;
 
@@ -97,18 +102,23 @@ static ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, si
 	}
 	priv = netdev_priv(dev);
 
-	read_lock(&priv->lock);
+	local = vzalloc(NSS_IPSECMGR_MAX_BUF_SZ);
+	if (!local) {
+		nss_ipsecmgr_error("unable to allocate local buffer for tunnel-id: %d\n", (uint32_t)fp->private_data);
+		goto done;
+	}
+
+	read_lock_bh(&priv->lock);
 	ref = nss_ipsecmgr_sa_name_lookup(priv, parent->d_name.name);
 	if (!ref) {
-		read_unlock(&priv->lock);
+		read_unlock_bh(&priv->lock);
+		vfree(local);
 		nss_ipsecmgr_error("sa not found tunnel-id: %d\n", (uint32_t)fp->private_data);
 		goto done;
 	}
 
 	sa = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
 	oip = &sa->nim.msg.push.oip;
-
-	local = vmalloc(NSS_IPSECMGR_MAX_BUF_SZ);
 
 	switch (sa->nim.cm.interface) {
 	case NSS_IPSEC_ENCAP_IF_NUMBER:
@@ -125,10 +135,20 @@ static ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, si
 
 	len = 0;
 	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "type:%s\n", type);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI4h\n", &oip->ipv4_dst);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI4h\n", &oip->ipv4_src);
+	switch (oip->ip_ver) {
+	case NSS_IPSEC_IPVER_4:
+		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI4h\n", &oip->dst_addr[0]);
+		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI4h\n", &oip->src_addr[0]);
+		break;
+
+	case NSS_IPSEC_IPVER_6:
+		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI6c\n", nss_ipsecmgr_v6addr_ntohl(oip->dst_addr, addr));
+		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI6c\n", nss_ipsecmgr_v6addr_ntohl(oip->src_addr, addr));
+		break;
+
+	}
 	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "spi_idx: 0x%x\n", oip->esp_spi);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "ttl: %d\n", oip->ipv4_ttl);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "ttl: %d\n", oip->ttl_hop_limit);
 
 	/*
 	 * packet stats
@@ -141,7 +161,7 @@ static ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, si
 	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "fail_hash: %d\n", sa->pkts.fail_hash);
 	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "fail_replay: %d\n", sa->pkts.fail_replay);
 
-	read_unlock(&priv->lock);
+	read_unlock_bh(&priv->lock);
 
 	ret = simple_read_from_buffer(ubuf, sz, ppos, local, len + 1);
 
@@ -288,6 +308,11 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	memset(&sa->nim.msg.push.sel, 0, sizeof(struct nss_ipsec_rule_sel));
 
 	/*
+	 * Store the SA information to update user for stats reporting
+	 */
+	memcpy(&sa->sa_info, info->sa, sizeof(struct nss_ipsecmgr_sa));
+
+	/*
 	 * add child to parent
 	 */
 	nss_ipsecmgr_ref_add(child_ref, sa_ref);
@@ -395,10 +420,30 @@ void nss_ipsecmgr_copy_v4_sa(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v
 {
 	struct nss_ipsec_rule_oip *oip = &nim->msg.push.oip;
 
-	oip->ipv4_dst = sa->dst_ip;
-	oip->ipv4_src = sa->src_ip;
-	oip->ipv4_ttl = sa->ttl;
+	oip->dst_addr[0] = sa->dst_ip;
+	oip->src_addr[0] = sa->src_ip;
+	oip->ttl_hop_limit = sa->ttl;
 	oip->esp_spi = sa->spi_index;
+	oip->ip_ver = NSS_IPSEC_IPVER_4;
+}
+
+/*
+ * nss_ipsecmgr_copy_v6_sa()
+ * 	update the SA entry with the SA data
+ */
+void nss_ipsecmgr_copy_v6_sa(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v6 *sa)
+{
+	struct nss_ipsec_rule_oip *oip = &nim->msg.push.oip;
+
+	/*
+	 * copy outer header
+	 */
+	memcpy(oip->dst_addr, sa->dst_ip, sizeof(uint32_t) * 4);
+	memcpy(oip->src_addr, sa->src_ip, sizeof(uint32_t) * 4);
+
+	oip->esp_spi = sa->spi_index;
+	oip->ttl_hop_limit = sa->hop_limit;
+	oip->ip_ver = NSS_IPSEC_IPVER_6;
 }
 
 /*
@@ -433,26 +478,92 @@ void nss_ipsecmgr_v4_sa2key(struct nss_ipsecmgr_sa_v4 *sa, struct nss_ipsecmgr_k
 	nss_ipsecmgr_key_write_8(key, IPPROTO_ESP, NSS_IPSECMGR_KEY_POS_IP_PROTO);
 	nss_ipsecmgr_key_write_32(key, sa->dst_ip, NSS_IPSECMGR_KEY_POS_IPV4_DST);
 	nss_ipsecmgr_key_write_32(key, sa->src_ip, NSS_IPSECMGR_KEY_POS_IPV4_SRC);
-	nss_ipsecmgr_key_write_32(key, sa->spi_index, NSS_IPSECMGR_KEY_POS_ESP_SPI);
+	nss_ipsecmgr_key_write_32(key, sa->spi_index, NSS_IPSECMGR_KEY_POS_IPV4_ESP_SPI);
 
 	key->len = NSS_IPSECMGR_KEY_LEN_IPV4_SA;
 }
 
 /*
- * nss_ipsecmgr_v4_sa_sel2key()
+ * nss_ipsecmgr_sa_sel2key()
  * 	convert a SA into a key
  */
-void nss_ipsecmgr_v4_sa_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key)
+void nss_ipsecmgr_sa_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key)
 {
+	uint32_t i;
+
 	nss_ipsecmgr_key_reset(key);
 
-	nss_ipsecmgr_key_write_8(key, 4 /* v4 */, NSS_IPSECMGR_KEY_POS_IP_VER);
-	nss_ipsecmgr_key_write_8(key, IPPROTO_ESP, NSS_IPSECMGR_KEY_POS_IP_PROTO);
-	nss_ipsecmgr_key_write_32(key, sel->ipv4_dst, NSS_IPSECMGR_KEY_POS_IPV4_DST);
-	nss_ipsecmgr_key_write_32(key, sel->ipv4_src, NSS_IPSECMGR_KEY_POS_IPV4_SRC);
-	nss_ipsecmgr_key_write_32(key, sel->esp_spi, NSS_IPSECMGR_KEY_POS_ESP_SPI);
+	switch (sel->ip_ver) {
+	case NSS_IPSEC_IPVER_4:
+		nss_ipsecmgr_key_write_8(key, 4 /* v4 */, NSS_IPSECMGR_KEY_POS_IP_VER);
+		nss_ipsecmgr_key_write_8(key, IPPROTO_ESP, NSS_IPSECMGR_KEY_POS_IP_PROTO);
+		nss_ipsecmgr_key_write_32(key, nss_ipsecmgr_get_v4addr(sel->dst_addr), NSS_IPSECMGR_KEY_POS_IPV4_DST);
+		nss_ipsecmgr_key_write_32(key, nss_ipsecmgr_get_v4addr(sel->src_addr), NSS_IPSECMGR_KEY_POS_IPV4_SRC);
+		nss_ipsecmgr_key_write_32(key, sel->esp_spi, NSS_IPSECMGR_KEY_POS_IPV4_ESP_SPI);
 
-	key->len = NSS_IPSECMGR_KEY_LEN_IPV4_SA;
+		key->len = NSS_IPSECMGR_KEY_LEN_IPV4_SA;
+		break;
+
+	case NSS_IPSEC_IPVER_6:
+		nss_ipsecmgr_key_write_8(key, 6 /* v6 */, NSS_IPSECMGR_KEY_POS_IP_VER);
+		nss_ipsecmgr_key_write_8(key, IPPROTO_ESP, NSS_IPSECMGR_KEY_POS_IP_PROTO);
+
+		for (i  = 0; i < 4; i++) {
+			nss_ipsecmgr_key_write_32(key, sel->dst_addr[i], NSS_IPSECMGR_KEY_POS_IPV6_DST + (i * 32));
+			nss_ipsecmgr_key_write_32(key, sel->src_addr[i], NSS_IPSECMGR_KEY_POS_IPV6_SRC + (i * 32));
+		}
+
+		nss_ipsecmgr_key_write_32(key, sel->esp_spi, NSS_IPSECMGR_KEY_POS_IPV6_ESP_SPI);
+		key->len = NSS_IPSECMGR_KEY_LEN_IPV6_SA;
+		break;
+	}
+}
+
+/*
+ * nss_ipsecmgr_v6_sa2key()
+ * 	convert a SA into a key
+ */
+void nss_ipsecmgr_v6_sa2key(struct nss_ipsecmgr_sa_v6 *sa, struct nss_ipsecmgr_key *key)
+{
+	uint32_t i;
+
+	nss_ipsecmgr_key_reset(key);
+
+	nss_ipsecmgr_key_write_8(key, 6 /* v6 */, NSS_IPSECMGR_KEY_POS_IP_VER);
+	nss_ipsecmgr_key_write_8(key, IPPROTO_ESP, NSS_IPSECMGR_KEY_POS_IP_PROTO);
+
+	for (i  = 0; i < 4; i++) {
+		nss_ipsecmgr_key_write_32(key, sa->dst_ip[i], NSS_IPSECMGR_KEY_POS_IPV6_DST + (i * 32));
+		nss_ipsecmgr_key_write_32(key, sa->src_ip[i], NSS_IPSECMGR_KEY_POS_IPV6_SRC + (i * 32));
+	}
+
+	nss_ipsecmgr_key_write_32(key, sa->spi_index, NSS_IPSECMGR_KEY_POS_IPV6_ESP_SPI);
+
+	key->len = NSS_IPSECMGR_KEY_LEN_IPV6_SA;
+}
+
+/*
+ * nss_ipsecmgr_sa_stats_update()
+ * 	Update sa stats locally
+ */
+void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_entry *sa)
+{
+	struct nss_ipsecmgr_sa_pkt_stats *stats;
+	struct nss_ipsec_pkt_sa_stats *pkts;
+
+	pkts = &nim->msg.sa_stats.pkts;
+	stats = &sa->pkts;
+
+	stats->count += pkts->count;
+	stats->bytes += pkts->bytes;
+
+	stats->no_headroom = pkts->no_headroom;
+	stats->no_tailroom = pkts->no_tailroom;
+	stats->no_buf = pkts->no_buf;
+
+	stats->fail_queue = pkts->fail_queue;
+	stats->fail_hash = pkts->fail_hash;
+	stats->fail_replay = pkts->fail_replay;
 }
 
 /*
@@ -611,13 +722,26 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		info.child_alloc = nss_ipsecmgr_subnet_alloc;
 		info.child_lookup = nss_ipsecmgr_subnet_lookup;
 		break;
+	case NSS_IPSECMGR_FLOW_TYPE_V6_TUPLE:
+
+		nss_ipsecmgr_copy_encap_v6_flow(&info.nim, &flow->data.v6_tuple);
+		nss_ipsecmgr_copy_v6_sa(&info.nim, &sa->data.v6);
+		nss_ipsecmgr_copy_sa_data(&info.nim, data);
+
+		nss_ipsecmgr_encap_v6_flow2key(&flow->data.v6_tuple, &info.child_key);
+		nss_ipsecmgr_v6_sa2key(&sa->data.v6, &info.sa_key);
+
+		info.child_alloc = nss_ipsecmgr_flow_alloc;
+		info.child_lookup = nss_ipsecmgr_flow_lookup;
+		break;
+
 
 	default:
 		nss_ipsecmgr_warn("%p:unknown flow type(%d)\n", tun, flow->type);
 		return false;
 	}
 
-
+	info.sa = sa;
 	return nss_ipsecmgr_sa_add(priv, &info);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_encap_add);
@@ -663,6 +787,18 @@ bool nss_ipsecmgr_encap_del(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		info.child_lookup = nss_ipsecmgr_subnet_lookup;
 		break;
 
+	case NSS_IPSECMGR_FLOW_TYPE_V6_TUPLE:
+
+		nss_ipsecmgr_copy_encap_v6_flow(&info.nim, &flow->data.v6_tuple);
+		nss_ipsecmgr_copy_v6_sa(&info.nim, &sa->data.v6);
+
+		nss_ipsecmgr_encap_v6_flow2key(&flow->data.v6_tuple, &info.child_key);
+		nss_ipsecmgr_v6_sa2key(&sa->data.v6, &info.sa_key);
+
+		info.child_alloc = nss_ipsecmgr_flow_alloc;
+		info.child_lookup = nss_ipsecmgr_flow_lookup;
+		break;
+
 	default:
 		nss_ipsecmgr_warn("%p:unknown flow type(%d)\n", tun, flow->type);
 		return false;
@@ -672,7 +808,6 @@ bool nss_ipsecmgr_encap_del(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 	return nss_ipsecmgr_sa_del(priv, &info);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_encap_del);
-
 
 /*
  * nss_ipsecmgr_decap_add()
@@ -701,6 +836,16 @@ bool nss_ipsecmgr_decap_add(struct net_device *tun, struct nss_ipsecmgr_sa *sa, 
 		nss_ipsecmgr_v4_sa2key(&sa->data.v4, &info.sa_key);
 		break;
 
+	case NSS_IPSECMGR_SA_TYPE_V6:
+
+		nss_ipsecmgr_copy_decap_v6_flow(&info.nim, &sa->data.v6);
+		nss_ipsecmgr_copy_v6_sa(&info.nim, &sa->data.v6);
+		nss_ipsecmgr_copy_sa_data(&info.nim, data);
+
+		nss_ipsecmgr_decap_v6_flow2key(&sa->data.v6, &info.child_key);
+		nss_ipsecmgr_v6_sa2key(&sa->data.v6, &info.sa_key);
+		break;
+
 	default:
 		nss_ipsecmgr_warn("%p:unknown flow type(%d)\n", tun, sa->type);
 		return false;
@@ -708,6 +853,7 @@ bool nss_ipsecmgr_decap_add(struct net_device *tun, struct nss_ipsecmgr_sa *sa, 
 
 	info.child_alloc = nss_ipsecmgr_flow_alloc;
 	info.child_lookup = nss_ipsecmgr_flow_lookup;
+	info.sa = sa;
 
 	return nss_ipsecmgr_sa_add(priv, &info);
 }
@@ -726,6 +872,10 @@ bool nss_ipsecmgr_sa_flush(struct net_device *tun, struct nss_ipsecmgr_sa *sa)
 	switch (sa->type) {
 	case NSS_IPSECMGR_SA_TYPE_V4:
 		nss_ipsecmgr_v4_sa2key(&sa->data.v4, &sa_key);
+		break;
+
+	case NSS_IPSECMGR_SA_TYPE_V6:
+		nss_ipsecmgr_v6_sa2key(&sa->data.v6, &sa_key);
 		break;
 
 	default:

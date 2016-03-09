@@ -29,12 +29,14 @@
 #include "nss_nlcmn_if.h"
 #include "nss_crypto_if.h"
 #include "nss_nlipv4_if.h"
+#include "nss_nlipv6_if.h"
 #include "nss_nlcrypto_if.h"
 #include "nss_nlipsec_if.h"
 #include "nss_nloam_if.h"
 
 #include "nss_nl.h"
 #include "nss_nlipv4.h"
+#include "nss_nlipv6.h"
 #include "nss_nlcrypto.h"
 #include "nss_nlipsec.h"
 #include "nss_nloam.h"
@@ -94,6 +96,16 @@ static struct nss_nl_family family_handlers[] = {
 		.exit = NSS_NLOAM_EXIT,			/* exit */
 		.valid = CONFIG_NSS_NLOAM		/* 1 or 0 */
 	},
+	{
+		/*
+		 * NSS_NLIPV6
+		 */
+		.name = NSS_NLIPV6_FAMILY,		/* ipv6 */
+		.entry = NSS_NLIPV6_INIT,		/* init */
+		.exit = NSS_NLIPV6_EXIT,		/* exit */
+		.valid = CONFIG_NSS_NLIPV6		/* 1 or 0 */
+	},
+
 };
 
 #define NSS_NL_FAMILY_HANDLER_SZ ARRAY_SIZE(family_handlers)

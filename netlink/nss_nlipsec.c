@@ -40,6 +40,7 @@
 #include "nss_nl.h"
 #include "nss_nlcmn_if.h"
 #include "nss_nlipsec_if.h"
+#include "nss_nlipv6_if.h"
 
 
 /* remove the "%d" and the NULL terminator */
@@ -191,7 +192,9 @@ static int nss_nlipsec_verify_create_encap(struct nss_ipsecmgr_encap_flow *encap
 {
 	struct nss_ipsecmgr_encap_v4_tuple *v4_tuple;
 	struct nss_ipsecmgr_encap_v4_subnet *v4_subnet;
+	struct nss_ipsecmgr_encap_v6_tuple *v6_tuple;
 	struct nss_ipsecmgr_sa_v4 *v4;
+	struct nss_ipsecmgr_sa_v6 *v6;
 	const uint32_t encap_req_type = (NSS_CRYPTO_REQ_TYPE_AUTH | NSS_CRYPTO_REQ_TYPE_ENCRYPT);
 	uint32_t req_type;
 
@@ -216,6 +219,24 @@ static int nss_nlipsec_verify_create_encap(struct nss_ipsecmgr_encap_flow *encap
 		}
 		break;
 	case NSS_IPSECMGR_FLOW_TYPE_V6_TUPLE:
+		v6_tuple = &encap_flow->data.v6_tuple;
+
+		if (!bitmap_empty((unsigned long *)v6_tuple->src_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid v6 src_ip\n");
+			return -1;
+		}
+
+		if (!bitmap_empty((unsigned long *)v6_tuple->dst_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid v6 dst_ip\n");
+			return -1;
+		}
+
+		if (!v6_tuple->next_hdr) {
+			nss_nl_error("Invalid v6 next_hdr\n");
+			return -1;
+		}
+		break;
+
 	case NSS_IPSECMGR_FLOW_TYPE_V6_SUBNET:
 	default:
 		nss_nl_error("Invalid flow type\n");
@@ -234,7 +255,26 @@ static int nss_nlipsec_verify_create_encap(struct nss_ipsecmgr_encap_flow *encap
 			return -2;
 		}
 		break;
+
 	case NSS_IPSECMGR_SA_TYPE_V6:
+		v6 = &encap_sa->data.v6;
+
+		if (!bitmap_empty((unsigned long *)v6->src_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 src_ip\n");
+			return -2;
+		}
+
+		if (!bitmap_empty((unsigned long *)v6->dst_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 dst_ip\n");
+			return -2;
+		}
+
+		if (!v6->spi_index) {
+			nss_nl_error("Invalid V6 spi_index\n");
+			return -2;
+		}
+		break;
+
 	default:
 		nss_nl_error("Invalid SA type\n");
 		return -2;
@@ -259,6 +299,7 @@ static int nss_nlipsec_verify_create_encap(struct nss_ipsecmgr_encap_flow *encap
 static int nss_nlipsec_verify_create_decap(struct nss_ipsecmgr_sa *decap_sa, struct nss_ipsecmgr_sa_data *decap_data)
 {
 	struct nss_ipsecmgr_sa_v4 *v4;
+	struct nss_ipsecmgr_sa_v6 *v6;
 
 	const uint32_t decap_req_type = (NSS_CRYPTO_REQ_TYPE_AUTH | NSS_CRYPTO_REQ_TYPE_DECRYPT);
 	uint32_t req_type;
@@ -275,7 +316,26 @@ static int nss_nlipsec_verify_create_decap(struct nss_ipsecmgr_sa *decap_sa, str
 			return -2;
 		}
 		break;
+
 	case NSS_IPSECMGR_SA_TYPE_V6:
+		v6 = &decap_sa->data.v6;
+
+		if (!bitmap_empty((unsigned long *)v6->src_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 src_ip\n");
+			return -2;
+		}
+
+		if (!bitmap_empty((unsigned long *)v6->dst_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 dst_ip\n");
+			return -2;
+		}
+
+		if (!v6->spi_index) {
+			nss_nl_error("Invalid V6 spi_index\n");
+			return -2;
+		}
+		break;
+
 	default:
 		nss_nl_error("Invalid SA type\n");
 		return -2;
@@ -300,7 +360,10 @@ static int nss_nlipsec_verify_destroy_encap_flow(struct nss_ipsecmgr_encap_flow 
 {
 	struct nss_ipsecmgr_encap_v4_tuple *v4_tuple;
 	struct nss_ipsecmgr_encap_v4_subnet *v4_subnet;
+	struct nss_ipsecmgr_encap_v6_tuple *v6_tuple;
 	struct nss_ipsecmgr_sa_v4 *v4;
+	struct nss_ipsecmgr_sa_v6 *v6;
+
 	/*
 	 * verify flow
 	 */
@@ -313,6 +376,7 @@ static int nss_nlipsec_verify_destroy_encap_flow(struct nss_ipsecmgr_encap_flow 
 			return -1;
 		}
 		break;
+
 	case NSS_IPSECMGR_FLOW_TYPE_V4_SUBNET:
 		v4_subnet = &encap_flow->data.v4_subnet;
 
@@ -321,7 +385,26 @@ static int nss_nlipsec_verify_destroy_encap_flow(struct nss_ipsecmgr_encap_flow 
 			return -1;
 		}
 		break;
+
 	case NSS_IPSECMGR_FLOW_TYPE_V6_TUPLE:
+		v6_tuple = &encap_flow->data.v6_tuple;
+
+		if (!bitmap_empty((unsigned long *)v6_tuple->src_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid v6 src_ip\n");
+			return -1;
+		}
+
+		if (!bitmap_empty((unsigned long *)v6_tuple->dst_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid v6 dest_ip\n");
+			return -1;
+		}
+
+		if (!v6_tuple->next_hdr) {
+			nss_nl_error("Invalid v6 next_hdr\n");
+			return -1;
+		}
+		break;
+
 	case NSS_IPSECMGR_FLOW_TYPE_V6_SUBNET:
 	default:
 		nss_nl_error("Invalid flow type\n");
@@ -341,6 +424,24 @@ static int nss_nlipsec_verify_destroy_encap_flow(struct nss_ipsecmgr_encap_flow 
 		}
 		break;
 	case NSS_IPSECMGR_SA_TYPE_V6:
+		v6 = &encap_sa->data.v6;
+
+		if (!bitmap_empty((unsigned long *)v6->src_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 src_ip\n");
+			return -2;
+		}
+
+		if (!bitmap_empty((unsigned long *)v6->dst_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 dst_ip\n");
+			return -2;
+		}
+
+		if (!v6->spi_index) {
+			nss_nl_error("Invalid V6 spi_index\n");
+			return -2;
+		}
+		break;
+
 	default:
 		nss_nl_error("Invalid SA type\n");
 		return -2;
@@ -355,6 +456,7 @@ static int nss_nlipsec_verify_destroy_encap_flow(struct nss_ipsecmgr_encap_flow 
 static int nss_nlipsec_verify_destroy_encap_sa(struct nss_ipsecmgr_sa *encap_sa)
 {
 	struct nss_ipsecmgr_sa_v4 *v4;
+	struct nss_ipsecmgr_sa_v6 *v6;
 	/*
 	 * verify SA configuration
 	 */
@@ -368,6 +470,24 @@ static int nss_nlipsec_verify_destroy_encap_sa(struct nss_ipsecmgr_sa *encap_sa)
 		}
 		break;
 	case NSS_IPSECMGR_SA_TYPE_V6:
+		v6 = &encap_sa->data.v6;
+
+		if (!bitmap_empty((unsigned long *)v6->src_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 src_ip\n");
+			return -2;
+		}
+
+		if (!bitmap_empty((unsigned long *)v6->dst_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 dst_ip\n");
+			return -2;
+		}
+
+		if (!v6->spi_index) {
+			nss_nl_error("Invalid V6 spi_index\n");
+			return -2;
+		}
+		break;
+
 	default:
 		nss_nl_error("Invalid SA type\n");
 		return -2;
@@ -382,6 +502,7 @@ static int nss_nlipsec_verify_destroy_encap_sa(struct nss_ipsecmgr_sa *encap_sa)
 static int nss_nlipsec_verify_destroy_decap(struct nss_ipsecmgr_sa *decap_sa)
 {
 	struct nss_ipsecmgr_sa_v4 *v4;
+	struct nss_ipsecmgr_sa_v6 *v6;
 	/*
 	 * verify SA configuration
 	 */
@@ -395,6 +516,24 @@ static int nss_nlipsec_verify_destroy_decap(struct nss_ipsecmgr_sa *decap_sa)
 		}
 		break;
 	case NSS_IPSECMGR_SA_TYPE_V6:
+		v6 = &decap_sa->data.v6;
+
+		if (!bitmap_empty((unsigned long *)v6->src_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 src_ip\n");
+			return -2;
+		}
+
+		if (!bitmap_empty((unsigned long *)v6->dst_ip, NSS_NLIPV6_ADDR_BITS)) {
+			nss_nl_error("Invalid V6 dst_ip\n");
+			return -2;
+		}
+
+		if (!v6->spi_index) {
+			nss_nl_error("Invalid V6 spi_index\n");
+			return -2;
+		}
+		break;
+
 	default:
 		nss_nl_error("Invalid SA type\n");
 		return -2;

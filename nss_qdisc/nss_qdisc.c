@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014, 2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -136,7 +136,7 @@ static int nss_qdisc_attach_bshaper(struct Qdisc *sch, uint32_t if_num)
 	 * Populate the message and send it down
 	 */
 	nss_qdisc_msg_init(&nim, if_num, NSS_IF_BSHAPER_ASSIGN,
-				sizeof(struct nss_if_msg),
+				sizeof(struct nss_if_shaper_assign),
 				nss_qdisc_attach_bshaper_callback,
 				sch);
 	/*
@@ -229,7 +229,7 @@ static int nss_qdisc_detach_bshaper(struct Qdisc *sch, uint32_t if_num)
 	 * Create and send shaper unassign message to the NSS interface
 	 */
 	nss_qdisc_msg_init(&nim, if_num, NSS_IF_BSHAPER_UNASSIGN,
-				sizeof(struct nss_if_msg),
+				sizeof(struct nss_if_shaper_unassign),
 				nss_qdisc_detach_bshaper_callback,
 				sch);
 	nim.msg.shaper_unassign.shaper_id = nq->shaper_id;
@@ -490,7 +490,7 @@ static void nss_qdisc_root_cleanup_shaper_unassign(struct nss_qdisc *nq)
 
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_UNASSIGN);
 	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type,
-			sizeof(struct nss_if_msg),
+			sizeof(struct nss_if_shaper_unassign),
 			nss_qdisc_root_cleanup_shaper_unassign_callback,
 			nq);
 	nim.msg.shaper_unassign.shaper_id = nq->shaper_id;
@@ -552,7 +552,7 @@ static void nss_qdisc_root_cleanup_free_node(struct nss_qdisc *nq)
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
 	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type,
-				sizeof(struct nss_if_msg),
+				sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_root_cleanup_free_node_callback,
 				nq);
 	nim.msg.shaper_configure.config.request_type = NSS_SHAPER_CONFIG_TYPE_FREE_SHAPER_NODE;
@@ -631,7 +631,7 @@ static void nss_qdisc_root_init_alloc_node_callback(void *app_data,
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
 	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type,
-				sizeof(struct nss_if_msg),
+				sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_root_init_root_assign_callback,
 				nq);
 	nim->msg.shaper_configure.config.request_type = NSS_SHAPER_CONFIG_TYPE_SET_ROOT;
@@ -691,7 +691,7 @@ static void nss_qdisc_root_init_shaper_assign_callback(void *app_data,
 	 * Create and send the shaper configure message to the NSS interface
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
-	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_root_init_alloc_node_callback,
 				nq);
 	nim->msg.shaper_configure.config.request_type = NSS_SHAPER_CONFIG_TYPE_ALLOC_SHAPER_NODE;
@@ -781,7 +781,7 @@ static void nss_qdisc_child_cleanup_free_node(struct nss_qdisc *nq)
 	 * Create and send the shaper configure message to the NSS interface
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
-	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_child_cleanup_free_node_callback,
 				nq);
 	nim.msg.shaper_configure.config.request_type = NSS_SHAPER_CONFIG_TYPE_FREE_SHAPER_NODE;
@@ -1172,7 +1172,7 @@ int nss_qdisc_set_default(struct nss_qdisc *nq)
 	 * Create the shaper configure message and send it down to the NSS interface
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
-	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_set_default_callback,
 				nq);
 	nim.msg.shaper_configure.config.request_type = NSS_SHAPER_CONFIG_TYPE_SET_DEFAULT;
@@ -1264,7 +1264,7 @@ int nss_qdisc_node_attach(struct nss_qdisc *nq, struct nss_qdisc *nq_child,
 	 * Create the shaper configure message and send it down to the NSS interface
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
-	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_node_attach_callback,
 				nq);
 	nim->msg.shaper_configure.config.request_type = attach_type;
@@ -1361,7 +1361,7 @@ int nss_qdisc_node_detach(struct nss_qdisc *nq, struct nss_qdisc *nq_child,
 	 * Create and send the shaper configure message to the NSS interface
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
-	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_node_detach_callback,
 				nq);
 	nim->msg.shaper_configure.config.request_type = detach_type;
@@ -1454,7 +1454,7 @@ int nss_qdisc_configure(struct nss_qdisc *nq,
 	 * Create and send the shaper configure message to the NSS interface
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
-	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+	nss_qdisc_msg_init(nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_configure_callback,
 				nq);
 	nim->msg.shaper_configure.config.request_type = config_type;
@@ -1727,7 +1727,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 		 * Create and send the shaper configure message to the interface
 		 */
 		msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
-		nss_qdisc_msg_init(&nim_alloc, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+		nss_qdisc_msg_init(&nim_alloc, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_configure),
 					nss_qdisc_child_init_alloc_node_callback,
 					nq);
 		nim_alloc.msg.shaper_configure.config.request_type = NSS_SHAPER_CONFIG_TYPE_ALLOC_SHAPER_NODE;
@@ -1880,7 +1880,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 	 * Create and send the shaper assign message to the NSS interface
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_ASSIGN);
-	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_assign),
 				nss_qdisc_root_init_shaper_assign_callback,
 				nq);
 	nim.msg.shaper_assign.shaper_id = 0;	/* Any free shaper will do */
@@ -2058,7 +2058,7 @@ static void nss_qdisc_get_stats_timer_callback(unsigned long int data)
 	 * Create and send the shaper configure message to the NSS interface
 	 */
 	msg_type = nss_qdisc_get_interface_msg(nq->is_bridge, NSS_QDISC_IF_SHAPER_CONFIG);
-	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_msg),
+	nss_qdisc_msg_init(&nim, nq->nss_interface_number, msg_type, sizeof(struct nss_if_shaper_configure),
 				nss_qdisc_basic_stats_callback,
 				nq);
 	nim.msg.shaper_configure.config.request_type = NSS_SHAPER_CONFIG_TYPE_SHAPER_NODE_BASIC_STATS_GET;

@@ -48,23 +48,29 @@ static struct nss_ipsecmgr_ref *nss_ipsecmgr_subnet_name_lookup(struct nss_ipsec
 	uint8_t mask_bits;
 	uint32_t hash;
 	char *tmp;
-	int idx;
+	uint8_t idx;
 
-	tmp = strchr(name, '@') + 1;
-	if (hex2bin((uint8_t *)&mask_bits, tmp, sizeof(uint8_t))) {
+	tmp = strchr(name, '@');
+	if (!tmp || hex2bin((uint8_t *)&mask_bits, ++tmp, sizeof(uint8_t))) {
 		nss_ipsecmgr_error("%p: Invalid input\n", priv);
 		return NULL;
 	}
 
-	tmp = strchr(tmp, '@') + 1;
-	if (hex2bin((uint8_t *)&hash, tmp, sizeof(uint32_t))) {
+	tmp = strchr(tmp, '@');
+	if (!tmp || hex2bin((uint8_t *)&hash, ++tmp, sizeof(uint32_t))) {
 		nss_ipsecmgr_error("%p: Invalid input\n", priv);
 		return NULL;
 	}
 
 	idx = NSS_IPSECMGR_MAX_NETMASK - mask_bits;
+	if (idx  >= NSS_IPSECMGR_MAX_NETMASK) {
+		return NULL;
+	}
+
 	netmask = db->entries[idx];
-	BUG_ON(netmask->count == 0);
+	if (!netmask || !netmask->count) {
+		return NULL;
+	}
 
 	idx = hash & (NSS_IPSECMGR_MAX_SUBNET - 1);
 	head = &netmask->subnets[idx];
@@ -158,7 +164,12 @@ static ssize_t nss_ipsecmgr_subnet_stats_read(struct file *fp, char __user *ubuf
 
 	read_unlock(&priv->lock);
 
-	local = vmalloc(NSS_IPSECMGR_MAX_BUF_SZ);
+	local = vzalloc(NSS_IPSECMGR_MAX_BUF_SZ);
+	if (!local) {
+		nss_ipsecmgr_error("unable to allocate local buffer for tunnel-id: %d\n", (uint32_t)fp->private_data);
+		goto done;
+	}
+
 	/*
 	 * IPv4 Generel info
 	 */
@@ -297,8 +308,8 @@ void nss_ipsecmgr_v4_subnet_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_i
 	nss_ipsecmgr_key_reset(key);
 
 	nss_ipsecmgr_key_write_8(key, 4 /* ipv4 */, NSS_IPSECMGR_KEY_POS_IP_VER);
-	nss_ipsecmgr_key_write_8(key, sel->ipv4_proto, NSS_IPSECMGR_KEY_POS_IP_PROTO);
-	nss_ipsecmgr_key_write_32(key, sel->ipv4_dst, NSS_IPSECMGR_KEY_POS_IPV4_DST);
+	nss_ipsecmgr_key_write_8(key, sel->proto_next_hdr, NSS_IPSECMGR_KEY_POS_IP_PROTO);
+	nss_ipsecmgr_key_write_32(key, nss_ipsecmgr_get_v4addr(sel->dst_addr), NSS_IPSECMGR_KEY_POS_IPV4_DST);
 
 	key->len = NSS_IPSECMGR_KEY_LEN_IPV4_SUBNET;
 }

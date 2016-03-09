@@ -197,7 +197,7 @@ static netdev_tx_t nss_capwapmgr_start_xmit(struct sk_buff *skb, struct net_devi
 		return NETDEV_TX_OK;
 	}
 
-	status = nss_capwap_tx_data(priv->nss_ctx, skb, if_num);
+	status = nss_capwap_tx_buf(priv->nss_ctx, skb, if_num);
 	if (unlikely(status != NSS_TX_SUCCESS)) {
 		if (status == NSS_TX_FAILURE_QUEUE) {
 			nss_capwapmgr_warn("%p: netdev :%p queue is full", dev, dev);

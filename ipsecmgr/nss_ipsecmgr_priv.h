@@ -19,6 +19,7 @@
 #ifndef __NSS_IPSECMGR_PRIV_H
 #define __NSS_IPSECMGR_PRIV_H
 
+#include <net/ipv6.h>
 #include <nss_api_if.h>
 #include <nss_ipsec.h>
 #include <nss_ipsecmgr.h>
@@ -52,7 +53,8 @@
 
 #endif /* !CONFIG_DYNAMIC_DEBUG */
 #define NSS_IPSECMGR_MAX_KEY_NAME 64 /* bytes */
-#define NSS_IPSECMGR_MAX_KEY_WORDS 8 /* word */
+#define NSS_IPSECMGR_MAX_KEY_WORDS 16 /* word */
+
 #define NSS_IPSECMGR_MAX_KEY_BYTES (NSS_IPSECMGR_MAX_KEY_WORDS * sizeof(uint32_t))
 #define NSS_IPSECMGR_MAX_KEY_BITS (NSS_IPSECMGR_MAX_KEY_WORDS * sizeof(uint32_t) * BITS_PER_BYTE)
 #define NSS_IPSECMGR_CHK_POW2(x) (__builtin_constant_p(x) && !(~(x - 1) & (x >> 1)))
@@ -98,8 +100,11 @@ enum nss_ipsecmgr_key_len {
 	NSS_IPSECMGR_KEY_LEN_NONE = 0,
 	NSS_IPSECMGR_KEY_LEN_IPV4_SA = 4,		/* 16 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV4_SUBNET = 2,		/* 8 bytes */
-	NSS_IPSECMGR_KEY_LEN_ENCAP_IPV4_FLOW = 3,	/* 12 bytes */
-	NSS_IPSECMGR_KEY_LEN_DECAP_IPV4_FLOW = 4,	/* 16 bytes */
+	NSS_IPSECMGR_KEY_LEN_IPV4_ENCAP_FLOW = 3,	/* 12 bytes */
+	NSS_IPSECMGR_KEY_LEN_IPV4_DECAP_FLOW = 4,	/* 16 bytes */
+	NSS_IPSECMGR_KEY_LEN_IPV6_SA = 10,		/* 40 bytes */
+	NSS_IPSECMGR_KEY_LEN_IPV6_ENCAP_FLOW = 9,	/* 36 bytes */
+	NSS_IPSECMGR_KEY_LEN_IPV6_DECAP_FLOW = 10,	/* 40 bytes */
 	NSS_IPSECMGR_KEY_LEN_MAX = NSS_IPSECMGR_MAX_KEY_WORDS
 };
 
@@ -111,18 +116,23 @@ enum nss_ipsecmgr_key_pos {
 	NSS_IPSECMGR_KEY_POS_IP_PROTO = 8,		/* IPv4 Proto, bits[8:15] */
 	NSS_IPSECMGR_KEY_POS_IPV4_DST = 32,		/* IPv4 DST, bits[32:63] */
 	NSS_IPSECMGR_KEY_POS_IPV4_SRC = 64,		/* IPv4 SIP, bits[64:95] */
-	NSS_IPSECMGR_KEY_POS_ESP_SPI = 96,		/* ESP SPI, bits[96:127] */
+	NSS_IPSECMGR_KEY_POS_IPV4_ESP_SPI = 96,		/* IPv4 ESP SPI, bits[96:127] */
+	NSS_IPSECMGR_KEY_POS_IPV6_DST = 32,		/* IPv6 DST, bits[32:159] */
+	NSS_IPSECMGR_KEY_POS_IPV6_SRC = 160,	 	/* IPv6 SIP, bits[160:287] */
+	NSS_IPSECMGR_KEY_POS_IPV6_ESP_SPI = 288,	/* IPv6 ESP SPI, bits[288:319] */
+
+
 };
 
 /*
  * bits to mask within a key_word data, min - 0 & max - 31
  */
 enum nss_ipsecmgr_key_mask {
-	NSS_IPSECMGR_KEY_MASK_IP_VER = NSS_IPSECMGR_GENMASK(7, 0),		/* IP version, #bits - 8 */
+	NSS_IPSECMGR_KEY_MASK_IP_VER = NSS_IPSECMGR_GENMASK(7, 0),	/* IP version, #bits - 8 */
 	NSS_IPSECMGR_KEY_MASK_IP_PROTO = NSS_IPSECMGR_GENMASK(15, 8),	/* IP protocol, #bits - 8 */
 	NSS_IPSECMGR_KEY_MASK_IPV4_DST = NSS_IPSECMGR_GENMASK(31, 0),	/* IPv4 dst, #bits - 32 */
 	NSS_IPSECMGR_KEY_MASK_IPV4_SRC = NSS_IPSECMGR_GENMASK(31, 0),	/* IPv4 src, #bits - 32 */
-	NSS_IPSECMGR_KEY_MASK_ESP_SPI = NSS_IPSECMGR_GENMASK(31, 0),		/* ESP spi #bits - 32 */
+	NSS_IPSECMGR_KEY_MASK_ESP_SPI = NSS_IPSECMGR_GENMASK(31, 0),	/* ESP spi #bits - 32 */
 };
 
 struct nss_ipsecmgr_ref;
@@ -182,6 +192,7 @@ struct nss_ipsecmgr_sa_entry {
 	struct nss_ipsecmgr_sa_pkt_stats pkts;	/* packets processed per SA */
 	struct nss_ipsecmgr_priv *priv;		/* ipsecmgr private reference */
 	struct nss_ipsec_msg nim;		/* ipsec message */
+	struct nss_ipsecmgr_sa sa_info;		/* SA information */
 };
 
 /*
@@ -756,9 +767,60 @@ static inline void nss_ipsecmgr_init_flow_db(struct nss_ipsecmgr_flow_db *flow_d
  */
 static inline void nss_ipsecmgr_v4_hdr2sel(struct iphdr *iph, struct nss_ipsec_rule_sel *sel)
 {
-	sel->ipv4_dst = ntohl(iph->daddr);
-	sel->ipv4_src = ntohl(iph->saddr);
-	sel->ipv4_proto = iph->protocol;
+	sel->dst_addr[0] = ntohl(iph->daddr);
+	sel->src_addr[0] = ntohl(iph->saddr);
+	sel->proto_next_hdr = iph->protocol;
+	sel->ip_ver = NSS_IPSEC_IPVER_4;
+}
+
+/*
+ * nss_ipsecmgr_v6addr_ntohl()
+ * 	convert the v6 address to
+ */
+static inline uint32_t *nss_ipsecmgr_v6addr_ntohl(uint32_t src[], uint32_t dst[])
+{
+	int i = 4;
+
+	while (i--) {
+		dst[i] = ntohl(src[i]);
+	}
+
+	return dst;
+}
+
+/*
+ * nss_ipsecmgr_v6_hdr2sel()
+ * 	convert v6_hdr to message sel
+ */
+static inline void nss_ipsecmgr_v6_hdr2sel(struct ipv6hdr *iph, struct nss_ipsec_rule_sel *sel)
+{
+	uint8_t nexthdr = iph->nexthdr;
+	struct frag_hdr *frag;
+
+	/*
+	 * NSS IPsec module will not accelerate the flows which has ipv6 optional
+	 * headers after frag_hdr. Those flows will be descarded in ipsecmgr.
+	 * The NSS only accelerates when IP next header is L4 or fragment next header is L4.
+	 */
+	if (nexthdr == IPPROTO_FRAGMENT) {
+		frag = (struct frag_hdr *)((uint8_t *)iph + sizeof(struct ipv6hdr));
+		nexthdr = frag->nexthdr;
+	}
+
+	nss_ipsecmgr_v6addr_ntohl(iph->daddr.s6_addr32, sel->dst_addr);
+	nss_ipsecmgr_v6addr_ntohl(iph->saddr.s6_addr32, sel->src_addr);
+
+	sel->proto_next_hdr = nexthdr;
+	sel->ip_ver = NSS_IPSEC_IPVER_6;
+}
+
+/*
+ * nss_ipsecmgr_get_ipv4_addr()
+ * 	Return ipv4 part of the address.
+ */
+static inline uint32_t nss_ipsecmgr_get_v4addr(uint32_t *addr)
+{
+	return addr[0];
 }
 
 /*
@@ -774,16 +836,20 @@ bool nss_ipsecmgr_ref_is_child(struct nss_ipsecmgr_ref *child, struct nss_ipsecm
  * Encap flow API(s)
  */
 void nss_ipsecmgr_copy_encap_v4_flow(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_encap_v4_tuple *flow);
+void nss_ipsecmgr_copy_encap_v6_flow(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_encap_v6_tuple *flow);
 void nss_ipsecmgr_encap_v4_flow2key(struct nss_ipsecmgr_encap_v4_tuple *flow, struct nss_ipsecmgr_key *key);
-void nss_ipsecmgr_encap_v4_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_encap_v6_flow2key(struct nss_ipsecmgr_encap_v6_tuple *flow, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_encap_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_encap_flow_init(struct nss_ipsec_msg *nim, enum nss_ipsec_msg_type type, struct nss_ipsecmgr_priv *priv);
 
 /*
  * Decap flow API(s)
  */
 void nss_ipsecmgr_copy_decap_v4_flow(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v4 *flow);
+void nss_ipsecmgr_copy_decap_v6_flow(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v6 *flow);
 void nss_ipsecmgr_decap_v4_flow2key(struct nss_ipsecmgr_sa_v4 *flow, struct nss_ipsecmgr_key *key);
-void nss_ipsecmgr_decap_v4_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_decap_v6_flow2key(struct nss_ipsecmgr_sa_v6 *flow, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_decap_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_decap_flow_init(struct nss_ipsec_msg *nim, enum nss_ipsec_msg_type type, struct nss_ipsecmgr_priv *priv);
 
 /*
@@ -811,11 +877,13 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *
  * SA API(s)
  */
 void nss_ipsecmgr_copy_v4_sa(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v4 *sa);
+void nss_ipsecmgr_copy_v6_sa(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v6 *sa);
 void nss_ipsecmgr_copy_sa_data(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_data *data);
 void nss_ipsecmgr_v4_sa2key(struct nss_ipsecmgr_sa_v4 *sa, struct nss_ipsecmgr_key *key);
-void nss_ipsecmgr_v4_sa_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_v6_sa2key(struct nss_ipsecmgr_sa_v6 *sa, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_sa_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
 struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *priv, struct rtnl_link_stats64 *stats);
-/* void nss_ipsecmgr_sa_stats(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_ref *ref, struct nss_ipsecmgr_sa_pkt_stats *pkts); */
+void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_entry *sa);
 
 /*
  * SA alloc/lookup/flush API(s)
