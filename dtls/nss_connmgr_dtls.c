@@ -831,7 +831,7 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_rx_cipher_update(uint32_t dtls_if, struct
 
 	nss_dtls_msg_init(&dtlsmsg, (uint16_t)ds->nss_dtls_if,
 			  NSS_DTLS_MSG_REKEY_DECAP_CIPHER_UPDATE,
-			  0, NULL, NULL);
+			  sizeof(struct nss_dtls_session_cipher_update), NULL, NULL);
 
 	/*
 	 * Send DTLS session Rx cipher update command to FW
@@ -947,7 +947,7 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_tx_cipher_update(uint32_t dtls_if, struct
 
 	nss_dtls_msg_init(&dtlsmsg, (uint16_t)ds->nss_dtls_if,
 			  NSS_DTLS_MSG_REKEY_ENCAP_CIPHER_UPDATE,
-			  0, NULL, NULL);
+			  sizeof(struct nss_dtls_session_cipher_update), NULL, NULL);
 
 	/*
 	 * Send DTLS session Rx cipher update command to FW

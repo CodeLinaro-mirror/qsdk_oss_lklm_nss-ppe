@@ -29,8 +29,8 @@
 
 void *nss_qdisc_ctx;			/* Shaping context for nss_qdisc */
 
-#define NSS_QDISC_COMMAND_TIMEOUT 10*HZ	/* We set 10 secs to be the timeout value for responses to */
-					/* come back from the NSS */
+#define NSS_QDISC_COMMAND_TIMEOUT (600*HZ) /* We set 1min to be the command */
+					   /* timeout value for messages */
 
 /*
  * Defines related to root hash maintenance

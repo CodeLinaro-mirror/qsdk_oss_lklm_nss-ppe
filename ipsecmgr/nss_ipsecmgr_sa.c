@@ -818,6 +818,7 @@ EXPORT_SYMBOL(nss_ipsecmgr_encap_del);
 bool nss_ipsecmgr_decap_add(struct net_device *tun, struct nss_ipsecmgr_sa *sa, struct nss_ipsecmgr_sa_data *data)
 {
 	struct nss_ipsecmgr_priv *priv = netdev_priv(tun);
+	struct nss_ipsec_rule *ipsec_rule;
 	struct nss_ipsecmgr_sa_info info;
 
 	nss_ipsecmgr_info("%p:decap_add initiated\n", tun);
@@ -831,6 +832,16 @@ bool nss_ipsecmgr_decap_add(struct net_device *tun, struct nss_ipsecmgr_sa *sa, 
 		nss_ipsecmgr_copy_decap_v4_flow(&info.nim, &sa->data.v4);
 		nss_ipsecmgr_copy_v4_sa(&info.nim, &sa->data.v4);
 		nss_ipsecmgr_copy_sa_data(&info.nim, data);
+
+		/*
+		 * if NATT is set override the protocol and port numbers
+		 */
+		ipsec_rule = &info.nim.msg.push;
+		if (ipsec_rule->data.nat_t_req) {
+			ipsec_rule->sel.proto_next_hdr = IPPROTO_UDP;
+			ipsec_rule->sel.dst_port = NSS_IPSECMGR_NATT_PORT_DATA;
+			ipsec_rule->sel.src_port = NSS_IPSECMGR_NATT_PORT_DATA;
+		}
 
 		nss_ipsecmgr_decap_v4_flow2key(&sa->data.v4, &info.child_key);
 		nss_ipsecmgr_v4_sa2key(&sa->data.v4, &info.sa_key);

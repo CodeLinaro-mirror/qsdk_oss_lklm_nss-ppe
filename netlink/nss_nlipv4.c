@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -49,6 +49,8 @@
 #include "nss_nl.h"
 #include "nss_nlcmn_if.h"
 #include "nss_nlipv4_if.h"
+#include "nss_ipsec.h"
+#include "nss_ipsecmgr.h"
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 #define DST_NEIGH_LOOKUP(dst, ip_addr) dst_neigh_lookup(dst, ip_addr)
@@ -273,6 +275,7 @@ static int nss_nlipv4_verify_conn_rule(struct nss_ipv4_rule_create_msg *msg, str
 {
 	struct nss_ipv4_connection_rule *conn = &msg->conn_rule;
 	const size_t rule_sz = sizeof(struct nss_ipv4_connection_rule);
+	bool override_mtu;
 	bool valid;
 
 	valid = msg->valid_flags & NSS_IPV4_RULE_CREATE_CONN_VALID;
@@ -307,8 +310,29 @@ static int nss_nlipv4_verify_conn_rule(struct nss_ipv4_rule_create_msg *msg, str
 	/*
 	 * update the flow & return MTU(s)
 	 */
-	conn->flow_mtu = flow_dev->mtu;
 	conn->return_mtu = return_dev->mtu;
+
+	/*
+	 * If, flow device is IPsec tunnel and protocol is ESP or NAT-T (UDP@4500)
+	 * then the operation is Decapsulation. In this we would like to have the MTU
+	 * of the incoming physical/virtual device. This would avoid fragmenting the
+	 * packet in NSS before delivering it for IPsec decap
+	 */
+	switch (msg->tuple.protocol) {
+	case IPPROTO_UDP:
+		override_mtu = (flow_dev->type == NSS_IPSEC_ARPHRD_IPSEC) && (msg->tuple.flow_ident == NSS_IPSECMGR_NATT_PORT_DATA);
+		break;
+
+	case IPPROTO_ESP:
+		override_mtu = (flow_dev->type == NSS_IPSEC_ARPHRD_IPSEC);
+		break;
+
+	default:
+		override_mtu = false;
+		break;
+	}
+
+	conn->flow_mtu = override_mtu ? conn->return_mtu : flow_dev->mtu;
 
 	/*
 	 * update flow & return xlate info

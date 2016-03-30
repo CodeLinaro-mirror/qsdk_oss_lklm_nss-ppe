@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -32,10 +32,10 @@
   *             PPTP over GRE
   */
 
-#define NSS_PPTP_GRE_PROTO  0x880B
-#define NSS_PPTP_GRE_VER    0x1
-#define NSS_PPTP_GRE_HAS_ACK    0x80
-#define NSS_PPTP_GRE_HAS_SEQ    0x10
+#define NSS_PPTP_GRE_PROTO	0x880B
+#define NSS_PPTP_GRE_VER	0x1
+#define NSS_PPTP_GRE_HAS_ACK	0x80
+#define NSS_PPTP_GRE_HAS_SEQ	0x10
 
 /*
  * GRE Header Structure
@@ -66,6 +66,7 @@ struct nss_connmgr_pptp_session_info {
 struct nss_connmgr_pptp_session_entry {
 	struct nss_connmgr_pptp_session_info data;
 	struct net_device *dev;
+	struct net_device *phy_dev;
 	struct hlist_node hash_list;
 };
 

@@ -202,7 +202,7 @@ nss_dtlsmgr_status_t nss_dtlsmgr_netdev_create(struct nss_dtlsmgr_session *ds)
  */
 nss_dtlsmgr_status_t nss_dtlsmgr_netdev_destroy(struct nss_dtlsmgr_session *ds)
 {
-	if (!ds && !ds->netdev) {
+	if (!ds || !ds->netdev) {
 		return NSS_DTLSMGR_FAIL;
 	}
 
