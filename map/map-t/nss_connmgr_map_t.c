@@ -934,25 +934,15 @@ static int nss_connmgr_map_t_dev_up(struct net_device *dev)
 				nss_connmgr_map_t_warning("%p: Unable to dealloc the node[%d] in the NSS fw!\n", dev, if_number);
 			}
 			nss_connmgr_map_t_warning("%p: nss map-t instance configure command error %d\n", dev, status);
+
+			map_t_rule_validation_stats |= ((uint64_t)(1)) << (64 - MAPT_AE_ERR_CONFIGURE);
+			nss_connmgr_map_t_debugfs_set_rule_status(dev, i + 1, map_t_rule_validation_stats);
+
 			return NOTIFY_BAD;
 		}
 
-		/*
-		 * Process Error in configuration. Validation stats is 64 bits
-		 * in length. Use 16 MSB bits for error stats from accleration engine
-		 */
-		if (likely(!maptmsg.cm.error)) {
-			nss_connmgr_map_t_info("%p: nss_map_t_tx() rule #%d configuration successful\n", dev, i + 1);
-		} else {
-			/*
-			 * maptmsg.cm.error starts from bit positon 2 (LSB).
-			 * Lets copy this to MSB 16bits of rule status
-			 */
-			map_t_rule_validation_stats |= (uint64_t)(maptmsg.cm.error >> 1) << (64 - 16 - 1);
-			nss_connmgr_map_t_info("%p: nss_map_t_tx_sync() rule #%d configuration failed in acceleration engine\n", dev, i + 1);
-		}
-
 		nss_connmgr_map_t_debugfs_set_rule_status(dev, i + 1, map_t_rule_validation_stats);
+		nss_connmgr_map_t_info("%p: nss_map_t_tx() rule #%d configuration successful\n", dev, i + 1);
 
 	}
 
