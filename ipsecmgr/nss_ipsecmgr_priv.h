@@ -90,6 +90,9 @@
 
 #define NSS_IPSECMGR_V6_SUBNET_BITS (sizeof(uint32_t) * 2 * BITS_PER_BYTE)
 
+#define NSS_IPSECMGR_DSCP_MASK_ON 0xFF
+#define NSS_IPSECMGR_DSCP_MASK_OFF 0x00
+
 struct nss_ipsecmgr_ref;
 struct nss_ipsecmgr_key;
 struct nss_ipsecmgr_priv;
