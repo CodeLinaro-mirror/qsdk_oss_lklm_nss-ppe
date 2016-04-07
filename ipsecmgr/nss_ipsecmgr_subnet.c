@@ -205,11 +205,14 @@ static ssize_t nss_ipsecmgr_subnet_stats_read(struct file *fp, char __user *ubuf
 	}
 	priv = netdev_priv(dev);
 
-	read_lock(&priv->lock);
+	/*
+	 * Take the read lock.
+	 */
+	read_lock_bh(&priv->lock);
 
 	ref = nss_ipsecmgr_subnet_name_lookup(priv, parent->d_name.name);
 	if (!ref) {
-		read_unlock(&priv->lock);
+		read_unlock_bh(&priv->lock);
 		nss_ipsecmgr_error("subnet not found tunnel-id: %d\n", (uint32_t)fp->private_data);
 		goto done;
 	}
@@ -223,7 +226,7 @@ static ssize_t nss_ipsecmgr_subnet_stats_read(struct file *fp, char __user *ubuf
 	nss_ipsecmgr_key_read(&subnet->key, &dst, &m_dst, NSS_IPSECMGR_KEY_POS_IPV4_DST);
 	proto = nss_ipsecmgr_key_read_8(&subnet->key, NSS_IPSECMGR_KEY_POS_IP_PROTO);
 
-	read_unlock(&priv->lock);
+	read_unlock_bh(&priv->lock);
 
 	local = vzalloc(NSS_IPSECMGR_MAX_BUF_SZ);
 	if (!local) {

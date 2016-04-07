@@ -610,7 +610,7 @@ struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *pr
 	/*
 	 * trigger a stats update chain
 	 */
-	read_lock(&priv->lock);
+	read_lock_bh(&priv->lock);
 
 	/*
 	 * walk the SA database for each entry and get stats for attached SA
@@ -649,7 +649,7 @@ struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *pr
 		}
 	}
 
-	read_unlock(&priv->lock);
+	read_unlock_bh(&priv->lock);
 
 	return stats;
 }

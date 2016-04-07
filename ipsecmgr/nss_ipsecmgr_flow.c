@@ -743,9 +743,9 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		/*
 		 * flow lookup is done with read lock
 		 */
-		read_lock(&priv->lock);
+		read_lock_bh(&priv->lock);
 		flow_ref = nss_ipsecmgr_flow_lookup(priv, &flow_key);
-		read_unlock(&priv->lock);
+		read_unlock_bh(&priv->lock);
 
 		/*
 		 * if flow is found then proceed with the TX
@@ -763,11 +763,11 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		/*
 		 * write lock as it can update the flow database
 		 */
-		write_lock(&priv->lock);
+		write_lock_bh(&priv->lock);
 
 		subnet_ref = nss_ipsecmgr_v4_subnet_match(priv, &subnet_key);
 		if (!subnet_ref) {
-			write_unlock(&priv->lock);
+			write_unlock_bh(&priv->lock);
 			return false;
 		}
 
@@ -784,7 +784,7 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 
 		flow_ref = nss_ipsecmgr_flow_alloc(priv, &flow_key);
 		if (!flow_ref) {
-			write_unlock(&priv->lock);
+			write_unlock_bh(&priv->lock);
 			return false;
 		}
 
@@ -794,7 +794,7 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		nss_ipsecmgr_ref_add(flow_ref, subnet_ref);
 		nss_ipsecmgr_ref_update(priv, flow_ref, &nim);
 
-		write_unlock(&priv->lock);
+		write_unlock_bh(&priv->lock);
 
 		break;
 
@@ -807,9 +807,9 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		/*
 		 * flow lookup is done with read lock
 		 */
-		read_lock(&priv->lock);
+		read_lock_bh(&priv->lock);
 		flow_ref = nss_ipsecmgr_flow_lookup(priv, &flow_key);
-		read_unlock(&priv->lock);
+		read_unlock_bh(&priv->lock);
 
 		/*
 		 * if flow is found then proceed with the TX
