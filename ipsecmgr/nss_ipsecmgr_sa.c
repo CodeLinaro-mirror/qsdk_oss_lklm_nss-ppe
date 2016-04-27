@@ -718,11 +718,8 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 	case NSS_IPSECMGR_FLOW_TYPE_V4_TUPLE:
 
 		nss_ipsecmgr_copy_encap_v4_flow(&info.nim, &flow->data.v4_tuple);
-		nss_ipsecmgr_copy_v4_sa(&info.nim, &sa->data.v4);
-		nss_ipsecmgr_copy_sa_data(&info.nim, data);
 
 		nss_ipsecmgr_encap_v4_flow2key(&flow->data.v4_tuple, &info.child_key);
-		nss_ipsecmgr_v4_sa2key(&sa->data.v4, &info.sa_key);
 
 		info.child_alloc = nss_ipsecmgr_flow_alloc;
 		info.child_lookup = nss_ipsecmgr_flow_lookup;
@@ -735,11 +732,7 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 			return false;
 		}
 
-		nss_ipsecmgr_copy_v4_sa(&info.nim, &sa->data.v4);
-		nss_ipsecmgr_copy_sa_data(&info.nim, data);
-
 		nss_ipsecmgr_v4_subnet2key(&flow->data.v4_subnet, &info.child_key);
-		nss_ipsecmgr_v4_sa2key(&sa->data.v4, &info.sa_key);
 
 		info.child_alloc = nss_ipsecmgr_subnet_alloc;
 		info.child_lookup = nss_ipsecmgr_subnet_lookup;
@@ -748,11 +741,8 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 	case NSS_IPSECMGR_FLOW_TYPE_V6_TUPLE:
 
 		nss_ipsecmgr_copy_encap_v6_flow(&info.nim, &flow->data.v6_tuple);
-		nss_ipsecmgr_copy_v6_sa(&info.nim, &sa->data.v6);
-		nss_ipsecmgr_copy_sa_data(&info.nim, data);
 
 		nss_ipsecmgr_encap_v6_flow2key(&flow->data.v6_tuple, &info.child_key);
-		nss_ipsecmgr_v6_sa2key(&sa->data.v6, &info.sa_key);
 
 		info.child_alloc = nss_ipsecmgr_flow_alloc;
 		info.child_lookup = nss_ipsecmgr_flow_lookup;
@@ -765,11 +755,7 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 			return false;
 		}
 
-		nss_ipsecmgr_copy_v6_sa(&info.nim, &sa->data.v6);
-		nss_ipsecmgr_copy_sa_data(&info.nim, data);
-
 		nss_ipsecmgr_v6_subnet2key(&flow->data.v6_subnet, &info.child_key);
-		nss_ipsecmgr_v6_sa2key(&sa->data.v6, &info.sa_key);
 
 		info.child_alloc = nss_ipsecmgr_subnet_alloc;
 		info.child_lookup = nss_ipsecmgr_subnet_lookup;
@@ -778,6 +764,28 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 	default:
 		nss_ipsecmgr_warn("%p:unknown flow type(%d)\n", tun, flow->type);
 		return false;
+	}
+
+	switch (sa->type) {
+	case NSS_IPSECMGR_SA_TYPE_V4:
+
+		nss_ipsecmgr_copy_v4_sa(&info.nim, &sa->data.v4);
+		nss_ipsecmgr_copy_sa_data(&info.nim, data);
+		nss_ipsecmgr_v4_sa2key(&sa->data.v4, &info.sa_key);
+		break;
+
+	case NSS_IPSECMGR_SA_TYPE_V6:
+
+		nss_ipsecmgr_copy_v6_sa(&info.nim, &sa->data.v6);
+		nss_ipsecmgr_copy_sa_data(&info.nim, data);
+		nss_ipsecmgr_v6_sa2key(&sa->data.v6, &info.sa_key);
+		break;
+
+	default:
+		nss_ipsecmgr_warn("%p:unknown sa type(%d)\n", tun, sa->type);
+		return false;
+
+
 	}
 
 	info.sa = sa;

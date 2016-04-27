@@ -205,7 +205,7 @@ static ssize_t nss_ipsecmgr_subnet_stats_read(struct file *fp, char __user *ubuf
 	struct nss_ipsecmgr_subnet_entry *subnet_entry;
 	struct nss_ipsecmgr_priv *priv;
 	struct nss_ipsecmgr_ref *ref;
-	uint32_t subnet[4], mask[4];
+	uint32_t subnet[4]  = {0}, mask[4] = {0};
 	struct net_device *dev;
 	ssize_t ret = 0;
 	uint8_t ip_ver;
