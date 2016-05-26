@@ -214,11 +214,11 @@ static int nss_connmgr_map_t_ipv6_addr_prefix_cmp(void *priv, struct list_head *
 	struct list_ipv6_address_entry_t *first = list_entry(a, struct list_ipv6_address_entry_t, list);
 	struct list_ipv6_address_entry_t *second = list_entry(b, struct list_ipv6_address_entry_t, list);
 
-	if (first->prefix_len > second->prefix_len) {
+	if (first->prefix_len < second->prefix_len) {
 		return 1;
 	}
 
-	if (first->prefix_len < second->prefix_len) {
+	if (first->prefix_len > second->prefix_len) {
 		return -1;
 	}
 
@@ -241,7 +241,7 @@ static void nss_connmgr_map_t_create_ipv6_address_list(struct list_head *head)
 		struct inet6_ifaddr *ifa;
 
 		if (!dev->type || dev->type == ARPHRD_NONE || dev->type == ARPHRD_VOID ||
-			dev->type == ARPHRD_LOOPBACK) {
+			dev->type == ARPHRD_LOOPBACK || dev->type == ARPHRD_PPP) {
 			continue;
 		}
 
