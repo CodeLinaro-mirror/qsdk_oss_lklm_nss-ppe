@@ -497,8 +497,6 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *
 	struct nss_ipsecmgr_ref *ref;
 	int i;
 
-	memcpy(&tmp_key, key, sizeof(struct nss_ipsecmgr_key));
-
 	/*
 	 * cycle through the bitmap for each subnet
 	 */
@@ -506,6 +504,8 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *
 
 		BUG_ON(db->entries[i] == NULL);
 		BUG_ON(db->entries[i]->count == 0);
+
+		memcpy(&tmp_key, key, sizeof(struct nss_ipsecmgr_key));
 
 		/*
 		 * set the key with the right mask for hash index computation;
@@ -544,8 +544,6 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v6_subnet_match(struct nss_ipsecmgr_priv *
 	struct nss_ipsecmgr_ref *ref;
 	int i;
 
-	memcpy(&tmp_key, key, sizeof(struct nss_ipsecmgr_key));
-
 	/*
 	 * cycle through the bitmap for each subnet
 	 */
@@ -553,6 +551,8 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v6_subnet_match(struct nss_ipsecmgr_priv *
 
 		BUG_ON(db->entries[i] == NULL);
 		BUG_ON(db->entries[i]->count == 0);
+
+		memcpy(&tmp_key, key, sizeof(struct nss_ipsecmgr_key));
 
 		nss_ipsecmgr_key_lshift_mask64(&tmp_key, i, NSS_IPSECMGR_KEY_POS_IPV6_DST);
 
