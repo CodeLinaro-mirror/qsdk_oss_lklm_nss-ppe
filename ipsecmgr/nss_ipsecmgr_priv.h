@@ -26,8 +26,17 @@
 
 #define nss_ipsecmgr_info_always(s, ...) pr_info("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 
-#define nss_ipsecmgr_error(s, ...) pr_alert("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
-#define nss_ipsecmgr_warn(s, ...) pr_warn("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
+#define nss_ipsecmgr_error(s, ...) do {	\
+	if (net_ratelimit()) {	\
+		pr_alert("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__);	\
+	}	\
+} while (0)
+
+#define nss_ipsecmgr_warn(s, ...) do {	\
+	if (net_ratelimit()) {	\
+		pr_warn("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__);	\
+	}	\
+} while (0)
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
 /*
