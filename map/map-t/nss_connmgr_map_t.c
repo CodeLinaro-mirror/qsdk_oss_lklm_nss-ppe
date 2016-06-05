@@ -112,11 +112,6 @@ static struct dentry *map_t_debugfs;
 static LIST_HEAD(list_dev_to_map_t_rules_head);
 
 /*
- * ipv6's address linked
- */
-static LIST_HEAD(list_ipv6_address_head);
-
-/*
  * nss_connmgr_map_t_dump_rules()
  *	dumps the rule list. Should only call this func from nss_connmgr_map_t_dev_up()
  *
@@ -189,89 +184,6 @@ static void __maybe_unused nss_connmgr_map_t_dump_list(struct net_device *dev __
 }
 
 /*
- * nss_connmgr_map_t_dump_ipv6_addr_list()
- *	dump ipv6 address list. Should only call this func from nss_connmgr_map_t_dev_up()
- *
- * Client module creates a list of ipv6 address assigned on all interfaces.
- * This function may be used to dump that list. This is only for debug
- * purpose.
- */
-static void __maybe_unused nss_connmgr_map_t_dump_ipv6_addr_list(struct net_device *dev __maybe_unused, struct list_head *head)
-{
-	struct list_ipv6_address_entry_t *entry;
-	list_for_each_entry(entry, head, list) {
-		nss_connmgr_map_t_info("%p: Address %pI6c/%d\n", dev, &entry->addr, entry->prefix_len);
-
-	}
-}
-
-/*
- * nss_connmgr_map_t_ipv6_addr_prefix_cmp()
- *	Compare function for soring by end user ipv6 prefix length
- */
-static int nss_connmgr_map_t_ipv6_addr_prefix_cmp(void *priv, struct list_head *a, struct list_head *b)
-{
-	struct list_ipv6_address_entry_t *first = list_entry(a, struct list_ipv6_address_entry_t, list);
-	struct list_ipv6_address_entry_t *second = list_entry(b, struct list_ipv6_address_entry_t, list);
-
-	if (first->prefix_len < second->prefix_len) {
-		return 1;
-	}
-
-	if (first->prefix_len > second->prefix_len) {
-		return -1;
-	}
-
-	return 0;
-}
-
-/*
- * nss_connmgr_map_t_create_ipv6_address_list()
- *	Create ipv6 address list
- *
- * Create a linked list of ipv6 address' present. This
- * function skips loop back and ARPHRD_NONE netdevices
- */
-static void nss_connmgr_map_t_create_ipv6_address_list(struct list_head *head)
-{
-	struct net_device *dev;
-
-	for_each_netdev(&init_net, dev) {
-		struct inet6_dev *idev;
-		struct inet6_ifaddr *ifa;
-
-		if (!dev->type || dev->type == ARPHRD_NONE || dev->type == ARPHRD_VOID ||
-			dev->type == ARPHRD_LOOPBACK || dev->type == ARPHRD_PPP) {
-			continue;
-		}
-
-		rcu_read_lock();
-		idev = rcu_dereference_rtnl(dev->ip6_ptr);
-		if (!idev) {
-			rcu_read_unlock();
-			continue;
-		}
-
-		read_lock_bh(&idev->lock);
-		list_for_each_entry(ifa, &idev->addr_list, if_list) {
-			struct list_ipv6_address_entry_t *entry = (struct list_ipv6_address_entry_t *)
-				kmalloc(sizeof(struct list_ipv6_address_entry_t), GFP_ATOMIC);
-			if (!entry) {
-				read_unlock_bh(&idev->lock);
-				rcu_read_unlock();
-				return;
-			}
-			INIT_LIST_HEAD(&entry->list);
-			memcpy(&entry->addr, &ifa->addr, sizeof(struct in6_addr));
-			entry->prefix_len = ifa->prefix_len;
-			list_add(&entry->list, head);
-		}
-		read_unlock_bh(&idev->lock);
-		rcu_read_unlock();
-	}
-}
-
-/*
  * nss_connmgr_map_t_debugfs_set_rule_status()
  */
 static void nss_connmgr_map_t_debugfs_set_rule_status(struct net_device *dev, int rule_num, uint64_t status)
@@ -299,13 +211,7 @@ static void nss_connmgr_map_t_debugfs_set_rule_status(struct net_device *dev, in
  */
 static void nss_connmgr_map_t_free_all(struct net_device *dev)
 {
-	struct list_ipv6_address_entry_t *r_entry, *r_tmp;
 	struct list_dev_to_map_t_rules_entry_t *entry, *tmp;
-
-	list_for_each_entry_safe(r_entry, r_tmp, &list_ipv6_address_head, list) {
-		list_del(&r_entry->list);
-		kfree(r_entry);
-	}
 
 	list_for_each_entry_safe(entry, tmp, &list_dev_to_map_t_rules_head, list) {
 
@@ -327,15 +233,6 @@ static void nss_connmgr_map_t_free_all(struct net_device *dev)
 static void nss_connmgr_map_t_allocate_all(struct net_device *dev, struct nat46_xlate_rulepair *rule_pairs, int rule_pair_count)
 {
 	struct list_dev_to_map_t_rules_entry_t *entry;
-
-	/*
-	 * Find all ipv6 address and add it in a list. Sort the list
-	 * by ipv6 prefix length
-	 */
-	if (list_empty(&list_ipv6_address_head)) {
-		nss_connmgr_map_t_create_ipv6_address_list(&list_ipv6_address_head);
-		list_sort(NULL, &list_ipv6_address_head, &nss_connmgr_map_t_ipv6_addr_prefix_cmp);
-	}
 
 	entry = (struct list_dev_to_map_t_rules_entry_t *)
 					kmalloc(sizeof(struct list_dev_to_map_t_rules_entry_t), GFP_KERNEL);
@@ -372,8 +269,8 @@ static void nss_connmgr_map_t_allocate_all(struct net_device *dev, struct nat46_
  * nss_connmgr_mapt_validate_rule_style_mapt()
  *	Validate map-t style rule
  */
-static bool nss_connmgr_mapt_validate_rule_style_mapt(struct net_device *dev, struct nat46_xlate_rule *rule, int end_user_v6_pref_len, int rule_num,
-						      bool is_local_rule, uint64_t *stats)
+static bool nss_connmgr_mapt_validate_rule_style_mapt(struct net_device *dev, struct nat46_xlate_rule *rule, int rule_num,
+						       bool is_local_rule, uint64_t *stats)
 {
 	int psid_len;
 
@@ -384,15 +281,6 @@ static bool nss_connmgr_mapt_validate_rule_style_mapt(struct net_device *dev, st
 		nss_connmgr_map_t_warning("%p: mapt rule %d is invalid as ea_len < 0 or ea_len > 48\n", dev, rule_num);
 		*stats |= 1 << is_local_rule ? MAP_T_LOCAL_EA_BITS_LEN_IS_INVALID : MAP_T_REMOTE_EA_BITS_LEN_IS_INVALID;
 		return false;
-	}
-
-	if (is_local_rule) {
-		if (end_user_v6_pref_len < rule->v4_pref_len + rule->ea_len) {
-			nss_connmgr_map_t_warning("%p: mapt rule %d is invalid as end user ipv6 prefix len < v4_pref_len + ea_len\n", dev, rule_num);
-
-			*stats |= 1 << MAP_T_LOCAL_IPV4_PREFIX_LEN_PLUS_LOCAL_EA_LEN_IS_GREATER_THAN_IPV6_END_USER_PREFIX;
-			return false;
-		}
 	}
 
 	if (rule->v4_pref_len + rule->ea_len > 32) {
@@ -438,14 +326,14 @@ static bool nss_connmgr_mapt_validate_rule_style_rfc6052(struct net_device *dev,
  * allows style of rule can be anything irrespective of FMR or DMR. So
  * this check also won't fails on style mismatch.
  */
-static bool nss_connmgr_mapt_check_correctness_of_mapt_rule(struct net_device *dev, struct nat46_xlate_rulepair *rule_pair, int rule_num, int end_user_v6_pref_len, uint64_t *stats)
+static bool nss_connmgr_mapt_check_correctness_of_mapt_rule(struct net_device *dev, struct nat46_xlate_rulepair *rule_pair, int rule_num, uint64_t *stats)
 {
 	/*
 	 * Validate local rule parameters
 	 */
 	switch (rule_pair->local.style) {
 	case NSS_MAP_T_STYLES_MAP_T:
-		if (!nss_connmgr_mapt_validate_rule_style_mapt(dev, &rule_pair->local, end_user_v6_pref_len, rule_num, true, stats)) {
+		if (!nss_connmgr_mapt_validate_rule_style_mapt(dev, &rule_pair->local, rule_num, true, stats)) {
 			return false;
 		}
 		break;
@@ -466,7 +354,7 @@ static bool nss_connmgr_mapt_check_correctness_of_mapt_rule(struct net_device *d
 	 */
 	switch (rule_pair->remote.style) {
 	case NSS_MAP_T_STYLES_MAP_T:
-		if (!nss_connmgr_mapt_validate_rule_style_mapt(dev, &rule_pair->remote, end_user_v6_pref_len, rule_num, false, stats)) {
+		if (!nss_connmgr_mapt_validate_rule_style_mapt(dev, &rule_pair->remote, rule_num, false, stats)) {
 			return false;
 		}
 		break;
@@ -753,7 +641,6 @@ static int nss_connmgr_map_t_dev_up(struct net_device *dev)
 	int if_number;
 	nss_tx_status_t status;
 	uint32_t features = 0;
-	bool ipv6_end_user_prefix_associated;
 	int i, j;
 	uint64_t map_t_rule_validation_stats;
 	int num_rules;
@@ -823,7 +710,6 @@ static int nss_connmgr_map_t_dev_up(struct net_device *dev)
 	 * Send Rule configuration to acceleration engine.
 	 */
 	for (i = 0; i < rule_pair_count; i++) {
-		struct list_ipv6_address_entry_t *r_entry;
 		map_t_rule_validation_stats = 0;
 
 		memset(&maptmsg, 0, sizeof(struct nss_map_t_msg));
@@ -851,49 +737,7 @@ static int nss_connmgr_map_t_dev_up(struct net_device *dev)
 		maptcfg->local_ea_len = (rule_pairs + i)->local.ea_len;
 		maptcfg->local_psid_offset = (rule_pairs + i)->local.psid_offset;
 
-		/*
-		 * Associate a end user ipv6 prefix to this rule
-		 */
-		ipv6_end_user_prefix_associated = false;
-
-		list_for_each_entry(r_entry, &list_ipv6_address_head, list) {
-			struct in6_addr prefix_interface_addr;
-			struct in6_addr prefix_rule_addr;
-
-			if ((rule_pairs + i)->local.v6_pref_len > r_entry->prefix_len) {
-				break;
-			}
-
-			ipv6_addr_prefix(&prefix_interface_addr, &r_entry->addr, (rule_pairs + i)->local.v6_pref_len);
-			ipv6_addr_prefix(&prefix_rule_addr, &((rule_pairs + i)->local.v6_pref), (rule_pairs + i)->local.v6_pref_len);
-
-			if (!ipv6_addr_cmp(&prefix_interface_addr, &prefix_rule_addr)) {
-				for (j = 0; j < 4; j++) {
-					*((uint32_t *)(&maptcfg->end_user_ipv6_prefix) + j) = ntohl(*((uint32_t *)(&r_entry->addr) + j));
-				}
-				maptcfg->end_user_ipv6_prefix_len = r_entry->prefix_len;
-				nss_connmgr_map_t_info("%p: Associating rule no=%d to end user IPV6 prefix %pI6c/%d\n", dev, i + 1, \
-					    maptcfg->end_user_ipv6_prefix, maptcfg->end_user_ipv6_prefix_len);
-
-				ipv6_end_user_prefix_associated = true;
-				break;
-			}
-
-		}
-
 		maptcfg->valid_rule = 1;
-
-		/*
-		 * Set rule as invalid if end user prefix cannot be found
-		 * If local rule is RFC6052, we dont care about ipv6 enduser
-		 * prefix
-		 */
-		if (likely(maptcfg->local_map_style == NSS_MAP_T_STYLES_MAP_T)) {
-			if (!ipv6_end_user_prefix_associated) {
-				map_t_rule_validation_stats |= 1 << MAP_T_NO_IPV6_END_USER_PREFIX;
-			}
-			maptcfg->valid_rule &= ipv6_end_user_prefix_associated;
-		}
 
 		/*
 		 * Set remote rule params
@@ -912,9 +756,7 @@ static int nss_connmgr_map_t_dev_up(struct net_device *dev)
 		/*
 		 * check correctness of a map-t rule
 		 */
-		if (likely(maptcfg->valid_rule)) {
-			maptcfg->valid_rule &= nss_connmgr_mapt_check_correctness_of_mapt_rule(dev, rule_pairs + i, i, r_entry->prefix_len, &map_t_rule_validation_stats);
-		}
+		maptcfg->valid_rule = nss_connmgr_mapt_check_correctness_of_mapt_rule(dev, rule_pairs + i, i, &map_t_rule_validation_stats);
 
 		/*
 		 * Debugfs stats file <debug-fs-dir>/map-t helps to figure out
