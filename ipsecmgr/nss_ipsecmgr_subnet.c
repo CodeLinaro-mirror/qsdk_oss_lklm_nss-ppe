@@ -519,6 +519,8 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *
 		}
 	}
 
+	memcpy(&tmp_key, key, sizeof(struct nss_ipsecmgr_key));
+
 	/*
 	 * normal lookup failed; check default subnet entry
 	 * - clear the destination netmask before lookup
@@ -561,6 +563,8 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v6_subnet_match(struct nss_ipsecmgr_priv *
 			return ref;
 		}
 	}
+
+	memcpy(&tmp_key, key, sizeof(struct nss_ipsecmgr_key));
 
 	/*
 	 * normal lookup failed; check default subnet entry
