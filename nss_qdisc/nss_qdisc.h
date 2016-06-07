@@ -149,8 +149,6 @@ struct nss_qdisc {
 	atomic_t pending_stat_requests;		/* Number of pending stats responses */
 	struct nss_shaper_shaper_node_basic_stats_get basic_stats_latest;
 						/* Latest stats obtained */
-	struct hlist_head *hash;		/* Pointer to hash table */
-	struct hlist_node hnode;		/* Node for participating in a hlist */
 	wait_queue_head_t wait_queue;		/* Wait queue used to wait on responses from the NSS */
 	spinlock_t lock;			/* Lock to protect the nss qdisc structure */
 };
