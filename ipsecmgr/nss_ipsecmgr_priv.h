@@ -155,7 +155,6 @@ typedef void (*nss_ipsecmgr_ref_free_t)(struct nss_ipsecmgr_priv *priv, struct n
 struct nss_ipsecmgr_key {
 	uint32_t data[NSS_IPSECMGR_MAX_KEY_WORDS];	/* Value N-bits */
 	uint32_t mask[NSS_IPSECMGR_MAX_KEY_WORDS];	/* Mask N-bits */
-	uint32_t hash;					/* 32-bit hash */
 	uint32_t len;					/* Length of the key */
 };
 
@@ -167,8 +166,6 @@ struct nss_ipsecmgr_ref {
 	struct list_head node;				/* child "ref" */
 
 	uint32_t id;					/* identifier */
-	uint8_t name[NSS_IPSECMGR_MAX_NAME];		/* reference object name */
-	struct dentry *dentry;				/* debugfs entry */
 
 	nss_ipsecmgr_ref_update_t update;		/* update function */
 	nss_ipsecmgr_ref_free_t free;			/* free function */
@@ -306,15 +303,6 @@ struct nss_ipsecmgr_drv {
 };
 
 /*
- * nss_ipsecmgr_ref_get_dentry()
- * 	return the reference object's dentry
- */
-static inline struct dentry *nss_ipsecmgr_ref_get_dentry(struct nss_ipsecmgr_ref *ref)
-{
-	return ref->dentry;
-}
-
-/*
  * nss_ipsecmgr_ref_is_updated()
  * 	return true if reference objects id is updated
  */
@@ -330,44 +318,6 @@ static inline bool nss_ipsecmgr_ref_is_updated(struct nss_ipsecmgr_ref *ref)
 static inline uint32_t nss_ipsecmgr_ref_get_id(struct nss_ipsecmgr_ref *ref)
 {
 	return ref->id;
-}
-
-/*
- * nss_ipsecmgr_ref_get_name()
- * 	return the reference object name
- */
-static inline char *nss_ipsecmgr_ref_get_name(struct nss_ipsecmgr_ref *ref)
-{
-	return (char *)ref->name;
-}
-
-/*
- * nss_ipsecmgr_ref_set_dentry()
- * 	set the reference object's dentry
- */
-static inline void nss_ipsecmgr_ref_set_dentry(struct nss_ipsecmgr_ref *ref, struct dentry *dentry)
-{
-	ref->dentry = dentry;
-}
-
-/*
- * nss_ipsecmgr_ref_update_name()
- * 	set the reference name
- */
-static inline void nss_ipsecmgr_ref_update_name(struct nss_ipsecmgr_ref *ref, char *name)
-{
-	strlcat(ref->name, name, NSS_IPSECMGR_MAX_NAME);
-}
-
-/*
- * nss_ipsecmgr_ref_update_name_u8()
- * 	set the reference name
- */
-static inline void nss_ipsecmgr_ref_update_name_u8(struct nss_ipsecmgr_ref *ref, uint8_t val)
-{
-	char *str = ref->name + strlen(ref->name);
-
-	hex_byte_pack(str, val);
 }
 
 /*
@@ -833,83 +783,6 @@ static inline uint32_t nss_ipsecmgr_key_data2idx(struct nss_ipsecmgr_key *key, c
 	}
 
 	return idx & (table_sz - 1);
-}
-
-/*
- * nss_ipsecmgr_key_get_hash()
- * 	return key hash
- */
-static inline uint32_t nss_ipsecmgr_key_get_hash(struct nss_ipsecmgr_key *key)
-{
-	return key->hash;
-}
-
-/*
- * nss_ipsecmgr_key_gen_hash()
- * 	generate the hash and store inside the key
- */
-static inline void nss_ipsecmgr_key_gen_hash(struct nss_ipsecmgr_key *key, const uint32_t table_sz)
-{
-	uint32_t *data = key->data;
-	uint32_t *mask = key->mask;
-	uint32_t len = key->len;
-	uint32_t idx;
-	uint32_t val;
-
-	/*
-	 * bug on if table_sz is not
-	 * - a constant
-	 * - and a power of 2
-	 */
-	BUG_ON(!NSS_IPSECMGR_CHK_POW2(table_sz));
-
-	for (idx = 0; len; len--, mask++, data++) {
-		val = *data & *mask;
-		idx ^= val;
-	}
-
-	/*
-	 * store the hash for various usage
-	 */
-	key->hash = idx;
-}
-
-/*
- * nss_ipsecmgr_key_hash2str()
- * 	converts a 32-bit key hash into a string value
- */
-static inline char *nss_ipsecmgr_key_hash2str(struct nss_ipsecmgr_key *key, char *str)
-{
-	uint8_t *hash = (uint8_t *)&key->hash;
-	char *tmp = str;
-
-	str = hex_byte_pack(str, hash[0]);
-	str = hex_byte_pack(str, hash[1]);
-	str = hex_byte_pack(str, hash[2]);
-	str = hex_byte_pack(str, hash[3]);
-
-	return tmp;
-}
-
-/*
- * nss_ipsecmgr_key_hash2str()
- * 	converts a 32-bit key hash into a string value
- */
-static inline char *nss_ipsecmgr_key_netmask2str(struct nss_ipsecmgr_key *key, char *str, enum nss_ipsecmgr_key_pos pos)
-{
-	uint32_t mask, data;
-	char *tmp = str;
-	uint8_t *hash;
-
-	nss_ipsecmgr_key_read(key, &data, &mask, pos, 1);
-	hash = (uint8_t *)&mask;
-
-	str = hex_byte_pack(str, hash[0]);
-	str = hex_byte_pack(str, hash[1]);
-	str = hex_byte_pack(str, hash[2]);
-	str = hex_byte_pack(str, hash[3]);
-
-	return tmp;
 }
 
 /*

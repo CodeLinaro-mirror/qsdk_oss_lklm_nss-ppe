@@ -87,8 +87,6 @@ void nss_ipsecmgr_ref_init(struct nss_ipsecmgr_ref *ref, nss_ipsecmgr_ref_update
  */
 void nss_ipsecmgr_ref_add(struct nss_ipsecmgr_ref *child, struct nss_ipsecmgr_ref *parent)
 {
-	struct dentry *p_dentry = dget_parent(child->dentry);
-
 	/*
 	 * if child is already part of an existing chain then remove it before
 	 * adding it to the new one. In case this is a new entry then the list
@@ -97,11 +95,6 @@ void nss_ipsecmgr_ref_add(struct nss_ipsecmgr_ref *child, struct nss_ipsecmgr_re
 	 */
 	list_del_init(&child->node);
 	list_add(&child->node, &parent->head);
-
-	if (p_dentry != parent->dentry) {
-		debugfs_rename(p_dentry, child->dentry, parent->dentry, child->name);
-	}
-
 }
 
 /*
@@ -471,7 +464,7 @@ static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim
 	 */
 	dev = dev_get_by_index(&init_net, nim->tunnel_id);
 	if (!dev) {
-		nss_ipsecmgr_error("event received on deallocated I/F (%d)\n", nim->tunnel_id);
+		nss_ipsecmgr_info("event received on deallocated I/F (%d)\n", nim->tunnel_id);
 		return;
 	}
 
@@ -490,7 +483,7 @@ static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim
 		ref = nss_ipsecmgr_sa_lookup(priv, &key);
 		if (!ref) {
 			write_unlock(&priv->lock);
-			nss_ipsecmgr_error("event received on deallocated SA tunnel:(%d)\n", nim->tunnel_id);
+			nss_ipsecmgr_info("event received on deallocated SA tunnel:(%d)\n", nim->tunnel_id);
 			goto done;
 		}
 

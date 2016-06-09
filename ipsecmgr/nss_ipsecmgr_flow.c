@@ -33,42 +33,6 @@
 
 #include "nss_ipsecmgr_priv.h"
 
-#define NSS_IPSECMGR_SYNC_STATS_TIMEOUT 10
-
-/*
- * nss_ipsecmgr_flow_lookup()
- * 	lookup flow in flow_db
- */
-static struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_name_lookup(struct nss_ipsecmgr_priv *priv, const char *name)
-{
-	struct nss_ipsecmgr_flow_db *db = &priv->flow_db;
-	struct nss_ipsecmgr_flow_entry *entry;
-	struct list_head *head;
-	char *flow_name;
-	uint32_t hash;
-	int idx;
-
-	flow_name = strchr(name, '@');
-	if (!flow_name || hex2bin((uint8_t *)&hash, ++flow_name, sizeof(uint32_t))) {
-		nss_ipsecmgr_error("i%p: Invalid input\n", priv);
-		return NULL;
-	}
-
-	idx = hash & (NSS_IPSECMGR_MAX_FLOW - 1);
-	if (idx >= NSS_IPSECMGR_MAX_FLOW) {
-		return NULL;
-	}
-
-	head = &db->entries[idx];
-	list_for_each_entry(entry, head, node) {
-		if (nss_ipsecmgr_key_get_hash(&entry->key) == hash) {
-			return &entry->ref;
-		}
-	}
-
-	return NULL;
-}
-
 /*
  *
  * nss_ipsecmgr_flow_resp()
@@ -121,7 +85,7 @@ static void nss_ipsecmgr_flow_update(struct nss_ipsecmgr_priv *priv, struct nss_
 		 * XXX: Stop the TX queue and add this "entry"
 		 * to pending queue
 		 */
-		nss_ipsecmgr_error("%p:unable to send the flow_update message\n", ref);
+		nss_ipsecmgr_info("%p:unable to send the flow_update message\n", ref);
 		return;
 	}
 }
@@ -149,247 +113,11 @@ static void nss_ipsecmgr_flow_free(struct nss_ipsecmgr_priv *priv, struct nss_ip
 		/*
 		 * XXX: add this "entry" to pending queue
 		 */
-		nss_ipsecmgr_error("%p:unable to flow_free message\n", ref);
-		return;
+		nss_ipsecmgr_info("%p:unable to send flow_free message\n", ref);
 	}
-
-	/*
-	 * free all associated resources
-	 */
-	debugfs_remove_recursive(nss_ipsecmgr_ref_get_dentry(ref));
 
 	list_del_init(&flow->node);
 	kfree(flow);
-}
-
-/*
- * nss_ipsecmgr_flow_stats_resp()
- * 	response for the flow message
- */
-static void nss_ipsecmgr_flow_stats_resp(void *app_data, struct nss_ipsec_msg *nim)
-{
-	struct nss_ipsecmgr_priv *priv = app_data;
-	struct nss_ipsecmgr_flow_entry *flow;
-	struct nss_ipsec_rule_sel *sel;
-	struct nss_ipsecmgr_ref *ref;
-	struct nss_ipsecmgr_key key;
-	struct net_device *dev;
-	uint32_t interface;
-
-	if (nim->cm.response != NSS_CMN_RESPONSE_ACK) {
-		return;
-	}
-
-	dev = dev_get_by_index(&init_net, nim->tunnel_id);
-	if (!dev || (netdev_priv(dev) != priv)) {
-		return;
-	}
-
-	interface = nim->cm.interface;
-	sel = &nim->msg.flow_stats.sel;
-
-	/*
-	 * NSS uses a hybrid endian order for v6 addresses. Need to convert to host
-	 */
-	if (sel->ip_ver == NSS_IPSEC_IPVER_6) {
-		nss_ipsecmgr_v6addr_swap(sel->dst_addr, sel->dst_addr);
-		nss_ipsecmgr_v6addr_swap(sel->src_addr, sel->src_addr);
-	}
-
-	/*
-	 * prepare key from selector
-	 */
-	switch (interface) {
-	case NSS_IPSEC_ENCAP_IF_NUMBER:
-		nss_ipsecmgr_encap_sel2key(sel, &key);
-		break;
-
-	case NSS_IPSEC_DECAP_IF_NUMBER:
-		nss_ipsecmgr_decap_sel2key(sel, &key);
-		break;
-
-	default:
-		goto done;
-	}
-
-	/*
-	 * lookup and copy incoming stats to flow
-	 */
-	write_lock(&priv->lock);
-
-	ref = nss_ipsecmgr_flow_lookup(priv, &key);
-	if (!ref) {
-		write_unlock(&priv->lock);
-		nss_ipsecmgr_error("Flow deleted during stat update \n");
-		goto done;
-	}
-
-	flow = container_of(ref, struct nss_ipsecmgr_flow_entry, ref);
-	flow->pkts_processed = nim->msg.flow_stats.processed;
-
-	write_unlock(&priv->lock);
-
-	complete(&priv->complete);
-done:
-	dev_put(dev);
-	return;
-}
-
-/*
- * nss_ipsecmgr_flow_stats_read()
- * 	read flow statistics
- */
-static ssize_t nss_ipsecmgr_flow_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
-{
-	struct dentry *parent = dget_parent(fp->f_dentry);
-	uint32_t tunnel_id = (uint32_t)fp->private_data;
-	struct nss_ipsecmgr_flow_entry *flow;
-	struct nss_ipsec_rule_sel flow_sel;
-	struct nss_ipsecmgr_priv *priv;
-	struct nss_ipsecmgr_ref *ref;
-	struct nss_ipsecmgr_key key;
-	struct nss_ipsec_msg nim;
-	uint32_t pkts_processed;
-	struct net_device *dev;
-	uint16_t interface;
-	uint32_t addr[4];
-	ssize_t ret = 0;
-	char *local;
-	char *type;
-	int len;
-
-	dev = dev_get_by_index(&init_net, tunnel_id);
-	if (!dev) {
-		return 0;
-	}
-
-	priv = netdev_priv(dev);
-
-	read_lock_bh(&priv->lock);
-
-	ref = nss_ipsecmgr_flow_name_lookup(priv, parent->d_name.name);
-	if (!ref) {
-		read_unlock_bh(&priv->lock);
-		nss_ipsecmgr_error("flow not found tunnel-id: %d\n", tunnel_id);
-		goto done;
-	}
-
-	flow = container_of(ref, struct nss_ipsecmgr_flow_entry, ref);
-
-	/*
-	 * prepare IPsec message
-	 */
-	interface = flow->nim.cm.interface;
-	memset(&nim, 0, sizeof(struct nss_ipsec_msg));
-	nss_ipsec_msg_init(&nim, /* message */
-			   interface, /* interface no */
-			   NSS_IPSEC_MSG_TYPE_SYNC_FLOW_STATS, /* message type */
-			   NSS_IPSEC_MSG_LEN, /* message length */
-			   nss_ipsecmgr_flow_stats_resp, /* response callback */
-			   priv); /* app_data */
-
-	nim.tunnel_id = flow->nim.tunnel_id;
-
-	/*
-	 * copy selector and key
-	 */
-	memcpy(&nim.msg.flow_stats.sel, &flow->nim.msg.push.sel, sizeof(struct nss_ipsec_rule_sel));
-	memcpy(&key, &flow->key, sizeof(struct nss_ipsecmgr_key));
-
-	read_unlock_bh(&priv->lock);
-
-	if (nim.msg.flow_stats.sel.ip_ver == NSS_IPSEC_IPVER_6) {
-		/*
-		 * change the IPv6 address to NSS order before sending
-		 */
-		nss_ipsecmgr_v6addr_swap(nim.msg.flow_stats.sel.src_addr, nim.msg.flow_stats.sel.src_addr);
-		nss_ipsecmgr_v6addr_swap(nim.msg.flow_stats.sel.dst_addr, nim.msg.flow_stats.sel.dst_addr);
-	}
-
-	/*
-	 * send stats message to nss
-	 */
-	if (nss_ipsec_tx_msg(priv->nss_ctx, &nim) != NSS_TX_SUCCESS) {
-		nss_ipsecmgr_error("nss tx msg error\n");
-		goto done;
-	}
-
-	/*
-	 * Blocking call, wait till we get ACK for this msg.
-	 */
-	ret = wait_for_completion_timeout(&priv->complete, msecs_to_jiffies(NSS_IPSECMGR_SYNC_STATS_TIMEOUT));
-	if (!ret) {
-		nss_ipsecmgr_error("nss stats message timed out \n");
-		goto done;
-	}
-
-	/*
-	 * After wait_for_completion, confirm if flow still exist
-	 */
-	read_lock_bh(&priv->lock);
-	ref = nss_ipsecmgr_flow_lookup(priv, &key);
-	if (!ref) {
-		read_unlock_bh(&priv->lock);
-		nss_ipsecmgr_error("flow not found tunnel-id: %d\n", tunnel_id);
-		goto done;
-	}
-
-	flow = container_of(ref, struct nss_ipsecmgr_flow_entry, ref);
-	memcpy(&flow_sel, &flow->nim.msg.push.sel, sizeof(flow_sel));
-	pkts_processed = flow->pkts_processed;
-
-	read_unlock_bh(&priv->lock);
-
-	local = vzalloc(NSS_IPSECMGR_MAX_BUF_SZ);
-	if (!local) {
-		nss_ipsecmgr_error("unable to allocate local buffer for tunnel-id: %d\n", tunnel_id);
-		goto done;
-	}
-
-	/*
-	 * IPv4 Generel info
-	 */
-	switch (interface) {
-	case NSS_IPSEC_ENCAP_IF_NUMBER:
-		type = "encap";
-		break;
-
-	case NSS_IPSEC_DECAP_IF_NUMBER:
-		type = "decap";
-		break;
-	default:
-		type = "none";
-		break;
-	}
-
-	len = 0;
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "type:%s\n", type);
-	switch (flow_sel.ip_ver) {
-	case NSS_IPSEC_IPVER_4:
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI4h\n", flow_sel.dst_addr);
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI4h\n", flow_sel.src_addr);
-		break;
-
-	case NSS_IPSEC_IPVER_6:
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI6c\n", nss_ipsecmgr_v6addr_ntoh(flow_sel.dst_addr, addr));
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI6c\n", nss_ipsecmgr_v6addr_ntoh(flow_sel.src_addr, addr));
-		break;
-
-	}
-
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "proto: %d\n", flow_sel.proto_next_hdr);
-
-	/*
-	 * packet stats
-	 */
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "processed: %d\n", pkts_processed);
-
-
-	ret = simple_read_from_buffer(ubuf, sz, ppos, local, len + 1);
-	vfree(local);
-done:
-	dev_put(dev);
-	return ret;
 }
 
 /*
@@ -668,25 +396,14 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_lookup(struct nss_ipsecmgr_priv *priv
 }
 
 /*
- * file operation structure instance
- */
-static const struct file_operations flow_stats_op = {
-	.open = simple_open,
-	.llseek = default_llseek,
-	.read = nss_ipsecmgr_flow_stats_read,
-};
-
-/*
  * nss_ipsecmgr_flow_alloc()
  * 	allocate a flow entry
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_alloc(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
 {
-	char hash_str[NSS_IPSECMGR_MAX_KEY_NAME] = {0};
 	struct nss_ipsecmgr_flow_entry *flow;
 	struct nss_ipsecmgr_flow_db *db;
 	struct nss_ipsecmgr_ref *ref;
-	struct dentry *dentry;
 	int idx;
 
 	/*
@@ -699,7 +416,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_alloc(struct nss_ipsecmgr_priv *priv,
 
 	flow = kzalloc(sizeof(struct nss_ipsecmgr_flow_entry), GFP_ATOMIC);
 	if (!flow) {
-		nss_ipsecmgr_error("failed to alloc flow_entry\n");
+		nss_ipsecmgr_info("failed to alloc flow_entry\n");
 		return NULL;
 	}
 
@@ -713,37 +430,17 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_alloc(struct nss_ipsecmgr_priv *priv,
 	INIT_LIST_HEAD(&flow->node);
 
 	/*
-	 * update key and generate/store hash
+	 * update key
 	 */
 	idx = nss_ipsecmgr_key_data2idx(key, NSS_IPSECMGR_MAX_FLOW);
-	nss_ipsecmgr_key_gen_hash(key, NSS_IPSECMGR_MAX_FLOW);
 
 	memcpy(&flow->key, key, sizeof(struct nss_ipsecmgr_key));
 	list_add(&flow->node, &db->entries[idx]);
 
 	/*
-	 * create a string from hash
-	 */
-	nss_ipsecmgr_key_hash2str(key, hash_str);
-
-	/*
 	 * initiallize the reference object
 	 */
 	nss_ipsecmgr_ref_init(ref, nss_ipsecmgr_flow_update, nss_ipsecmgr_flow_free);
-
-	/*
-	 * setup the debugfs entries
-	 */
-	nss_ipsecmgr_ref_update_name(ref, "flow@");
-	nss_ipsecmgr_ref_update_name(ref, hash_str);
-
-	/*
-	 * we don't know the parent of this node now hence attach it to the root node
-	 */
-	dentry = debugfs_create_dir(nss_ipsecmgr_ref_get_name(ref), priv->dentry);
-	debugfs_create_file("stats", S_IRUGO, dentry, (uint32_t *)priv->dev->ifindex, &flow_stats_op);
-
-	nss_ipsecmgr_ref_set_dentry(ref, dentry);
 
 	return ref;
 }
