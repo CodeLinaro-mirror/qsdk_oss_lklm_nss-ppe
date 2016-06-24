@@ -61,13 +61,18 @@ static uint32_t nss_ipsecmgr_subnet_key_data2idx(struct nss_ipsecmgr_key *key, c
 static inline bool nss_ipsecmgr_netmask_is_default(struct nss_ipsecmgr_key *key)
 {
 	uint8_t ip_ver;
+	uint64_t mask64_low;
+	uint64_t mask64_high;
 
 	ip_ver = nss_ipsecmgr_key_read_8(key, NSS_IPSECMGR_KEY_POS_IP_VER);
 	if (likely(ip_ver == 4)) {
 		return !nss_ipsecmgr_key_read_mask32(key, NSS_IPSECMGR_KEY_POS_IPV4_DST);
 	}
 
-	return !nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST);
+	mask64_low = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST);
+	mask64_high = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST + 2);
+
+	return !(mask64_low || mask64_high);
 }
 
 /*
@@ -135,7 +140,8 @@ skip_lookup:
 static inline uint32_t nss_ipsecmgr_netmask2idx(struct nss_ipsecmgr_key *key)
 {
 	uint32_t mask32;
-	uint64_t mask64;
+	uint64_t mask64_low;
+	uint64_t mask64_high;
 	uint8_t ip_ver;
 
 	ip_ver = nss_ipsecmgr_key_read_8(key, NSS_IPSECMGR_KEY_POS_IP_VER);
@@ -146,8 +152,17 @@ static inline uint32_t nss_ipsecmgr_netmask2idx(struct nss_ipsecmgr_key *key)
 
 	BUG_ON(ip_ver != 6);
 
-	mask64 = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST);
-	return mask64 ? __ffs64(mask64) : NSS_IPSECMGR_MAX_NETMASK;
+	mask64_low = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST);
+	if (mask64_low) {
+		return __ffs64(mask64_low);
+	}
+
+	mask64_high = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST + 2);
+	if (mask64_high) {
+		return __ffs64(mask64_high) + 64;
+	}
+
+	return NSS_IPSECMGR_MAX_NETMASK;
 }
 
 /*
@@ -246,7 +261,7 @@ static ssize_t nss_ipsecmgr_subnet_stats_read(struct file *fp, char __user *ubuf
 		 * The subnet and mask bits from the key are read to the upper words of the array
 		 * later converted to network order for display.
 		 */
-		nss_ipsecmgr_key_read(&subnet_entry->key, &subnet[2], &mask[2], NSS_IPSECMGR_KEY_POS_IPV6_DST, 2);
+		nss_ipsecmgr_key_read(&subnet_entry->key, subnet, mask, NSS_IPSECMGR_KEY_POS_IPV6_DST, 4);
 
 		nss_ipsecmgr_v6addr_hton(subnet, subnet);
 		nss_ipsecmgr_v6addr_hton(mask, mask);
@@ -423,17 +438,16 @@ void nss_ipsecmgr_v4_subnet_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_i
  */
 void nss_ipsecmgr_v6_subnet_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key)
 {
+	uint32_t i;
+
 	nss_ipsecmgr_key_reset(key);
 
 	nss_ipsecmgr_key_write_8(key, 6 /* ipv6 */, NSS_IPSECMGR_KEY_POS_IP_VER);
 	nss_ipsecmgr_key_write_8(key, sel->proto_next_hdr, NSS_IPSECMGR_KEY_POS_IP_PROTO);
 
-	/*
-	 * IPv6 subnetting uses 64 most significant bits as subnet prefix.
-	 * So we store only 2 most significant worlds to the key.
-	 */
-	nss_ipsecmgr_key_write_32(key, sel->dst_addr[2], NSS_IPSECMGR_KEY_POS_IPV6_DST);
-	nss_ipsecmgr_key_write_32(key, sel->dst_addr[3], NSS_IPSECMGR_KEY_POS_IPV6_DST + 32);
+	for (i = 0; i < 4; i++) {
+		nss_ipsecmgr_key_write_32(key, sel->dst_addr[i], NSS_IPSECMGR_KEY_POS_IPV6_DST + (i * BITS_PER_LONG));
+	}
 
 	key->len = NSS_IPSECMGR_KEY_LEN_IPV6_SUBNET;
 }
@@ -472,7 +486,7 @@ void nss_ipsecmgr_v6_subnet2key(struct nss_ipsecmgr_encap_v6_subnet *net, struct
 
 	nss_ipsecmgr_key_write_8(key, 6 /* ipv6 */, NSS_IPSECMGR_KEY_POS_IP_VER);
 	nss_ipsecmgr_key_write_8(key, (uint8_t)net->next_hdr, NSS_IPSECMGR_KEY_POS_IP_PROTO);
-	nss_ipsecmgr_key_write(key, net->dst_subnet, net->dst_mask, NSS_IPSECMGR_KEY_POS_IPV6_DST, 2);
+	nss_ipsecmgr_key_write(key, net->dst_subnet, net->dst_mask, NSS_IPSECMGR_KEY_POS_IPV6_DST, 4);
 
 	/*
 	 * clear mask if caller specify protocol as any (0xff).
@@ -520,7 +534,6 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *
 	}
 
 	memcpy(&tmp_key, key, sizeof(struct nss_ipsecmgr_key));
-
 	/*
 	 * normal lookup failed; check default subnet entry
 	 * - clear the destination netmask before lookup
@@ -553,10 +566,9 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v6_subnet_match(struct nss_ipsecmgr_priv *
 
 		BUG_ON(db->entries[i] == NULL);
 		BUG_ON(db->entries[i]->count == 0);
-
 		memcpy(&tmp_key, key, sizeof(struct nss_ipsecmgr_key));
 
-		nss_ipsecmgr_key_lshift_mask64(&tmp_key, i, NSS_IPSECMGR_KEY_POS_IPV6_DST);
+		nss_ipsecmgr_key_lshift_mask128(&tmp_key, i, NSS_IPSECMGR_KEY_POS_IPV6_DST);
 
 		ref = nss_ipsecmgr_subnet_lookup(priv, &tmp_key);
 		if (ref) {
@@ -570,7 +582,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v6_subnet_match(struct nss_ipsecmgr_priv *
 	 * normal lookup failed; check default subnet entry
 	 * - clear the destination netmask before lookup
 	 */
-	nss_ipsecmgr_key_clear_64(&tmp_key, NSS_IPSECMGR_KEY_POS_IPV6_DST);
+	nss_ipsecmgr_key_clear_128(&tmp_key, NSS_IPSECMGR_KEY_POS_IPV6_DST);
 
 	ref = nss_ipsecmgr_subnet_lookup(priv, &tmp_key);
 	if (ref) {
@@ -605,7 +617,6 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_subnet_lookup(struct nss_ipsecmgr_priv *pr
 			return &entry->ref;
 		}
 	}
-
 	return NULL;
 }
 
