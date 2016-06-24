@@ -85,7 +85,7 @@
 #error "NSS_IPSECMGR_MAX_SUBNET is not a power of 2"
 #endif
 
-#define NSS_IPSECMGR_MAX_NETMASK 64 /* Max subnets */
+#define NSS_IPSECMGR_MAX_NETMASK 128 /* Max subnets */
 #if (~(NSS_IPSECMGR_MAX_NETMASK - 1) & (NSS_IPSECMGR_MAX_NETMASK >> 1))
 #error "NSS_IPSECMGR_MAX_NETMASK is not a power of 2"
 #endif
@@ -118,7 +118,7 @@ enum nss_ipsecmgr_key_len {
 	NSS_IPSECMGR_KEY_LEN_IPV4_ENCAP_FLOW = 3,	/* 12 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV4_DECAP_FLOW = 4,	/* 16 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV6_SA = 10,		/* 40 bytes */
-	NSS_IPSECMGR_KEY_LEN_IPV6_SUBNET = 3,		/* 12 bytes */
+	NSS_IPSECMGR_KEY_LEN_IPV6_SUBNET = 5,		/* 20 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV6_ENCAP_FLOW = 9,	/* 36 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV6_DECAP_FLOW = 10,	/* 40 bytes */
 	NSS_IPSECMGR_KEY_LEN_MAX = NSS_IPSECMGR_MAX_KEY_WORDS
@@ -234,7 +234,7 @@ struct nss_ipsecmgr_subnet_entry {
  * IPsec netmask entry
  */
 struct nss_ipsecmgr_netmask_entry {
-	uint64_t mask_bits;					/* no. of bits in netmask */
+	uint32_t mask_bits;					/* no. of bits in netmask */
 	uint32_t count;						/* no. of subnets entries */
 	struct list_head subnets[NSS_IPSECMGR_MAX_SUBNET];	/* subnet database */
 };
@@ -631,7 +631,7 @@ static inline void nss_ipsecmgr_key_clear_32(struct nss_ipsecmgr_key *key, enum 
 
 /*
  * nss_ipsecmgr_key_clear_64()
- * 	clear 32-bit mask from the specified position
+ * 	clear 64-bit mask from the specified position
  */
 static inline void nss_ipsecmgr_key_clear_64(struct nss_ipsecmgr_key *key, enum nss_ipsecmgr_key_pos p)
 {
@@ -640,6 +640,19 @@ static inline void nss_ipsecmgr_key_clear_64(struct nss_ipsecmgr_key *key, enum 
 	idx = BIT_WORD(p) % NSS_IPSECMGR_MAX_KEY_WORDS;
 	key->mask[idx] = 0;
 	key->mask[idx + 1] = 0;
+}
+
+/*
+ * nss_ipsecmgr_key_clear_128()
+ * 	clear 128-bit mask from the specified position
+ */
+static inline void nss_ipsecmgr_key_clear_128(struct nss_ipsecmgr_key *key, enum nss_ipsecmgr_key_pos p)
+{
+	uint16_t idx;
+
+	idx = BIT_WORD(p) % NSS_IPSECMGR_MAX_KEY_WORDS;
+
+	memset(&key->mask[idx], 0, sizeof(uint32_t) * 4);
 }
 
 /*
@@ -756,6 +769,22 @@ static inline void nss_ipsecmgr_key_lshift_mask64(struct nss_ipsecmgr_key *key, 
 
 	mask = (uint64_t *)&key->mask[idx];
 	*mask <<= s;
+}
+
+/*
+ * nss_ipsecmgr_key_lshift_mask128()
+ * 	left shift mask by an amount 's'
+ */
+static inline void nss_ipsecmgr_key_lshift_mask128(struct nss_ipsecmgr_key *key, uint32_t s, enum nss_ipsecmgr_key_pos p)
+{
+	uint16_t idx;
+	uint32_t mask[4];
+
+	idx = BIT_WORD(p) % NSS_IPSECMGR_MAX_KEY_WORDS;
+
+	memcpy(mask, &key->mask[idx], sizeof(uint32_t) * 4);
+
+	bitmap_shift_left((unsigned long *)&key->mask[idx], (unsigned long *)mask, s, 128);
 }
 
 /*
