@@ -48,12 +48,128 @@ struct nss_ipsecmgr_sa_info {
 };
 
 /*
+ * nss_ipsecmgr_sa_dump()
+ *	dump sa statistics
+ */
+static ssize_t nss_ipsecmgr_sa_dump(struct nss_ipsecmgr_sa_entry *sa, char *buf, ssize_t max_len)
+{
+	struct nss_ipsec_rule_data *data;
+	struct nss_ipsec_rule_oip *oip;
+	uint32_t addr[4];
+	ssize_t len;
+	char *type;
+
+	oip = &sa->nim.msg.push.oip;
+	data = &sa->nim.msg.push.data;
+
+	switch (sa->nim.cm.interface) {
+	case NSS_IPSEC_ENCAP_IF_NUMBER:
+		type = "encap";
+		break;
+
+	case NSS_IPSEC_DECAP_IF_NUMBER:
+		type = "decap";
+		break;
+
+	default:
+		return 0;
+	}
+
+	len = snprintf(buf, max_len, "Type:%s\n", type);
+
+	switch (oip->ip_ver) {
+	case NSS_IPSEC_IPVER_4:
+		len += snprintf(buf + len, max_len - len, "dst_ip: %pI4h\n", &oip->dst_addr[0]);
+		len += snprintf(buf + len, max_len - len, "src_ip: %pI4h\n", &oip->src_addr[0]);
+		break;
+
+	case NSS_IPSEC_IPVER_6:
+		len += snprintf(buf + len, max_len - len, "dst_ip: %pI6c\n", nss_ipsecmgr_v6addr_ntoh(oip->dst_addr, addr));
+		len += snprintf(buf + len, max_len - len, "src_ip: %pI6c\n", nss_ipsecmgr_v6addr_ntoh(oip->src_addr, addr));
+		break;
+	}
+
+	len += snprintf(buf + len, max_len - len, "spi_idx: 0x%x\n", oip->esp_spi);
+	len += snprintf(buf + len, max_len - len, "ttl: %d\n", oip->ttl_hop_limit);
+	len += snprintf(buf + len, max_len - len, "crypto session: %d\n", data->crypto_index);
+
+	/*
+	 * packet stats
+	 */
+	len += snprintf(buf + len, max_len - len, "processed: %llu\n", sa->pkts.count);
+	len += snprintf(buf + len, max_len - len, "no_headroom: %d\n", sa->pkts.no_headroom);
+	len += snprintf(buf + len, max_len - len, "no_tailroom: %d\n", sa->pkts.no_tailroom);
+	len += snprintf(buf + len, max_len - len, "no_buf: %d\n", sa->pkts.no_buf);
+	len += snprintf(buf + len, max_len - len, "fail_queue: %d\n", sa->pkts.fail_queue);
+	len += snprintf(buf + len, max_len - len, "fail_hash: %d\n", sa->pkts.fail_hash);
+	len += snprintf(buf + len, max_len - len, "fail_replay: %d\n\n\n", sa->pkts.fail_replay);
+
+	return len;
+}
+
+/*
+ * nss_ipsecmgr_sa_stats_read()
+ * 	read sa statistics
+ */
+ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
+{
+	struct nss_ipsecmgr_sa_db *sa_db;
+	struct nss_ipsecmgr_sa_entry *sa;
+	ssize_t len, max_len, ret;
+	struct list_head *head;
+	uint32_t num_entries;
+	char *buf;
+	int i;
+
+	sa_db = &ipsecmgr_ctx->sa_db;
+
+	num_entries = atomic_read(&sa_db->num_entries);
+	if (!num_entries) {
+		return 0;
+	}
+
+	len = 0;
+	max_len = num_entries * NSS_IPSECMGR_SA_STATS_SIZE;
+
+	buf = vzalloc(max_len);
+	if (!buf) {
+		nss_ipsecmgr_error("unable to allocate local buffer for SA stats\n");
+		return 0;
+	}
+
+	/*
+	 * walk the SA database for each entry and retrieve the stats
+	 */
+	read_lock_bh(&ipsecmgr_ctx->lock);
+
+	head = sa_db->entries;
+	for (i = NSS_IPSECMGR_MAX_SA; (max_len > 0) && i--; head++) {
+		list_for_each_entry(sa, head, node) {
+			if (unlikely(max_len <= 0)) {
+				break;
+			}
+
+			len += nss_ipsecmgr_sa_dump(sa, buf + len, max_len);
+			max_len = max_len - len;
+		}
+	}
+
+	read_unlock_bh(&ipsecmgr_ctx->lock);
+
+	ret = simple_read_from_buffer(ubuf, sz, ppos, buf, len);
+	vfree(buf);
+
+	return ret;
+}
+
+/*
  * nss_ipsecmgr_sa_free()
  * 	deallocate the SA if there are no references
  */
 static void nss_ipsecmgr_sa_free(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_ref *ref)
 {
 	struct nss_ipsecmgr_sa_entry *entry = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
+	struct nss_ipsecmgr_sa_db *db = &ipsecmgr_ctx->sa_db;
 
 	if (!nss_ipsecmgr_ref_is_empty(ref)) {
 		return;
@@ -64,6 +180,7 @@ static void nss_ipsecmgr_sa_free(struct nss_ipsecmgr_priv *priv, struct nss_ipse
 	 * the sa_db and free the entry
 	 */
 	list_del_init(&entry->node);
+	atomic_dec(&db->num_entries);
 	kfree(entry);
 }
 
@@ -248,6 +365,8 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, s
 
 	memcpy(&sa->key, key, sizeof(struct nss_ipsecmgr_key));
 	list_add(&sa->node, &db->entries[idx]);
+
+	atomic_inc(&db->num_entries);
 
 	/*
 	 * initiallize the reference object
