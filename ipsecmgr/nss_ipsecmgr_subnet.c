@@ -155,6 +155,131 @@ free:
 }
 
 /*
+ * nss_ipsecmgr_subnet_dump()
+ *	Dump single subnet stats
+ */
+static ssize_t nss_ipsecmgr_subnet_dump(struct nss_ipsecmgr_key *key, struct nss_ipsec_msg *nim, char *buf, ssize_t max_len)
+{
+	uint32_t subnet[4] = {0}, mask[4] = {0};
+	ssize_t len = 0;
+	uint8_t ip_ver;
+	uint8_t proto;
+
+	proto = nss_ipsecmgr_key_read_8(key, NSS_IPSECMGR_KEY_POS_IP_PROTO);
+	ip_ver = nss_ipsecmgr_key_read_8(key, NSS_IPSECMGR_KEY_POS_IP_VER);
+
+	switch (ip_ver) {
+	case 4:
+		nss_ipsecmgr_key_read(key, subnet, mask, NSS_IPSECMGR_KEY_POS_IPV4_DST, 1);
+		len += snprintf(buf + len, max_len - len, "dst_ip: %pI4h\n", subnet);
+		len += snprintf(buf + len, max_len - len, "dst_mask: %pI4h\n", mask);
+		break;
+
+	case 6:
+		/*
+		 * The subnet and mask bits from the key are read to the upper words of the array
+		 * later converted to network order for display.
+		 */
+		nss_ipsecmgr_key_read(key, &subnet[0], &mask[0], NSS_IPSECMGR_KEY_POS_IPV6_DST, 4);
+		nss_ipsecmgr_v6addr_hton(subnet, subnet);
+		nss_ipsecmgr_v6addr_hton(mask, mask);
+
+		len += snprintf(buf + len, max_len - len, "dst_ip: %pI6c\n", subnet);
+		len += snprintf(buf + len, max_len - len, "dst_mask: %pI6c\n", mask);
+		break;
+
+	}
+
+	len += snprintf(buf + len, max_len - len, "proto: %d\n", proto);
+	return len;
+}
+
+/*
+ * nss_ipsecmgr_subnet_read_stats()
+ * 	retreive subnet stats
+ */
+static ssize_t nss_ipsecmgr_subnet_read_stats(struct nss_ipsecmgr_netmask_entry *netmask, char *buf, uint32_t max_len)
+{
+	struct nss_ipsecmgr_subnet_entry *entry;
+	struct list_head *head;
+	ssize_t len = 0;
+	int idx;
+
+	/*
+	 * Check if we have valid entries in the netmask db
+	 */
+	if (!netmask || (netmask->count == 0)) {
+		return 0;
+	}
+
+	head = &netmask->subnets[0];
+	for (idx = NSS_IPSECMGR_MAX_SUBNET; (max_len > 0) && idx--; head++) {
+		list_for_each_entry(entry, head, node) {
+			if (unlikely(max_len <= 0)) {
+				break;
+			}
+
+			len += nss_ipsecmgr_subnet_dump(&entry->key, &entry->nim, buf + len, max_len);
+			max_len = max_len - len;
+		}
+	}
+
+	return len;
+}
+
+/*
+ * nss_ipsecmgr_netmask_stats_read()
+ * 	read subnet statistics
+ */
+ssize_t nss_ipsecmgr_netmask_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
+{
+	struct nss_ipsecmgr_netmask_db *net_db;
+	ssize_t len, max_len;
+	uint32_t num_entries;
+	ssize_t ret;
+	char *buf;
+	int i;
+
+	net_db = &ipsecmgr_ctx->net_db;
+
+	num_entries = atomic_read(&net_db->num_entries);
+	if (!num_entries) {
+		return 0;
+	}
+
+	max_len = num_entries * NSS_IPSECMGR_SUBNET_STATS_SIZE;
+
+	buf = vzalloc(max_len);
+	if (!buf) {
+		nss_ipsecmgr_error("unable to allocate local buffer for subnet stats\n");
+		return 0;
+	}
+
+	/*
+	 * Take the read lock.
+	 */
+	read_lock_bh(&ipsecmgr_ctx->lock);
+
+	/*
+	 * retreive the default subnet entry stats
+	 */
+	len = nss_ipsecmgr_subnet_read_stats(net_db->default_entry, buf, max_len);
+
+	/*
+	 * retreive the netmask entry db
+	 */
+	for (i = 0; i < NSS_IPSECMGR_MAX_NETMASK; i++) {
+		len += nss_ipsecmgr_subnet_read_stats(net_db->entries[i], buf + len, max_len - len);
+	}
+
+	read_unlock_bh(&ipsecmgr_ctx->lock);
+
+	ret = simple_read_from_buffer(ubuf, sz, ppos, buf, len);
+	vfree(buf);
+	return ret;
+}
+
+/*
  * nss_ipsecmgr_subnet_update()
  * 	update the subnet with its associated data
  */
@@ -174,6 +299,7 @@ static void nss_ipsecmgr_subnet_update(struct nss_ipsecmgr_priv *priv, struct ns
 static void nss_ipsecmgr_subnet_free(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_ref *ref)
 {
 	struct nss_ipsecmgr_subnet_entry *subnet;
+	struct nss_ipsecmgr_netmask_db *db = &ipsecmgr_ctx->net_db;
 
 	subnet = container_of(ref, struct nss_ipsecmgr_subnet_entry, ref);
 
@@ -186,6 +312,7 @@ static void nss_ipsecmgr_subnet_free(struct nss_ipsecmgr_priv *priv, struct nss_
 	 * available
 	 */
 	list_del(&subnet->node);
+	atomic_dec(&db->num_entries);
 
 	nss_ipsecmgr_netmask_free(&ipsecmgr_ctx->net_db, &subnet->key);
 	kfree(subnet);
@@ -480,6 +607,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_subnet_alloc(struct nss_ipsecmgr_priv *pri
 {
 	struct nss_ipsecmgr_netmask_entry *netmask;
 	struct nss_ipsecmgr_subnet_entry *subnet;
+	struct nss_ipsecmgr_netmask_db *db;
 	struct nss_ipsecmgr_ref *ref;
 	uint32_t idx;
 
@@ -530,6 +658,9 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_subnet_alloc(struct nss_ipsecmgr_priv *pri
 	memcpy(&subnet->key, key, sizeof(struct nss_ipsecmgr_key));
 	list_add(&subnet->node, &netmask->subnets[idx]);
 	netmask->count++;
+
+	db = &ipsecmgr_ctx->net_db;
+	atomic_inc(&db->num_entries);
 
 	/*
 	 * initiallize the reference object

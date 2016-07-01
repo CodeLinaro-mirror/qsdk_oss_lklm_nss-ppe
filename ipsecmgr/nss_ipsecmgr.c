@@ -701,6 +701,77 @@ static void nss_ipsecmgr_dummy_netdevice_setup(struct net_device *dev)
 }
 
 /*
+ * flow file operation structure instance
+ */
+static const struct file_operations flow_stats_op = {
+	.open = simple_open,
+	.llseek = default_llseek,
+	.read = nss_ipsecmgr_flow_stats_read,
+};
+
+/*
+ * per flow file operation structure instance
+ */
+static const struct file_operations per_flow_stats_op = {
+	.open = simple_open,
+	.llseek = default_llseek,
+	.read = nss_ipsecmgr_per_flow_stats_read,
+	.write = nss_ipsecmgr_per_flow_stats_write,
+};
+
+/*
+ * SA file operation structure instance
+ */
+static const struct file_operations sa_stats_op = {
+	.open = simple_open,
+	.llseek = default_llseek,
+	.read = nss_ipsecmgr_sa_stats_read,
+};
+
+/*
+ * subnet file operation structure instance
+ */
+static const struct file_operations subnet_stats_op = {
+	.open = simple_open,
+	.llseek = default_llseek,
+	.read = nss_ipsecmgr_netmask_stats_read,
+};
+
+/*
+ * nss_ipsecmgr_init_stats_debugfs()
+ *	Initialize the debugfs tree.
+ */
+static int nss_ipsecmgr_init_stats_debugfs(struct dentry *stats_root)
+{
+	if (!debugfs_create_file("subnet", S_IRUGO, stats_root, (uint32_t *)NULL, &subnet_stats_op)) {
+		nss_ipsecmgr_error("Debugfs file creation failed for subnet\n");
+		return -1;
+	}
+
+	if (!debugfs_create_file("sa", S_IRUGO, stats_root, NULL, &sa_stats_op)) {
+		nss_ipsecmgr_error("Debugfs file creation failed for SA\n");
+		return -1;
+	}
+
+	if (!debugfs_create_file("flow", S_IRUGO, stats_root, NULL, &flow_stats_op)) {
+		nss_ipsecmgr_error("Debugfs file creation failed for flow\n");
+		return -1;
+	}
+
+	if (!debugfs_create_file("per_flow", S_IRWXUGO, stats_root, NULL, &per_flow_stats_op)) {
+		nss_ipsecmgr_error("Debugfs file creation failed for per flow\n");
+		return -1;
+	}
+
+	if (!debugfs_create_file("node", S_IRUGO, stats_root, NULL, &node_stats_op)) {
+		nss_ipsecmgr_error("Debugfs file creation failed for per node\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
  * nss_ipsecmgr_init()
  *	module init
  */
@@ -765,7 +836,27 @@ static int __init nss_ipsecmgr_init(void)
 
 	}
 
-	debugfs_create_file("stats", S_IRUGO, ipsecmgr_ctx->dentry, NULL, &node_stats_op);
+	ipsecmgr_ctx->stats_dentry = debugfs_create_dir("stats", ipsecmgr_ctx->dentry);
+	if (!ipsecmgr_ctx->stats_dentry) {
+		debugfs_remove_recursive(ipsecmgr_ctx->dentry);
+		nss_ipsecmgr_info("Creating debug directory failed\n");
+		goto unregister_dev;
+
+	}
+
+	/*
+	 * Create debugfs entries for SA, flow and subnet
+	 */
+	if (nss_ipsecmgr_init_stats_debugfs(ipsecmgr_ctx->stats_dentry)) {
+		nss_ipsecmgr_info("Creating debug tree failed\n");
+		debugfs_remove_recursive(ipsecmgr_ctx->dentry);
+		goto unregister_dev;
+
+	}
+
+	init_completion(&ipsecmgr_ctx->complete);
+	sema_init(&ipsecmgr_ctx->sem, 1);
+	atomic_set(&ipsecmgr_ctx->seq_num, 0);
 
 	nss_ipsecmgr_info_always("NSS IPsec manager loaded: %s\n", NSS_CLIENT_BUILD_ID);
 	return 0;
