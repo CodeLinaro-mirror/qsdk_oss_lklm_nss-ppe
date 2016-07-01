@@ -302,10 +302,19 @@ static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, str
 	}
 
 	/*
-	 * update flow and return interface numbers
+	 * update flow and return interface numbers. Handle Ipsec interfaces seperately.
 	 */
-	conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(flow_dev);
-	conn->return_interface_num = nss_cmn_get_interface_number_by_dev(return_dev);
+	if (flow_dev->type == NSS_IPSEC_ARPHRD_IPSEC) {
+		conn->flow_interface_num = nss_ipsec_get_interface(nss_ipsec_get_context());
+	} else {
+		conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(flow_dev);
+	}
+
+	if (return_dev->type == NSS_IPSEC_ARPHRD_IPSEC) {
+		conn->flow_interface_num = nss_ipsec_get_interface(nss_ipsec_get_context());
+	} else {
+		conn->return_interface_num = nss_cmn_get_interface_number_by_dev(return_dev);
+	}
 
 	/*
 	 * update the flow & return MTU(s)

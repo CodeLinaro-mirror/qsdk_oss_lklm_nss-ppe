@@ -35,6 +35,8 @@
 
 #include "nss_ipsecmgr_priv.h"
 
+extern struct nss_ipsecmgr_drv *ipsecmgr_ctx;
+
 /*
  * nss_ipsecmgr_subnet_key_data2idx()
  * 	subnet specific api for converting word stream to index
@@ -185,7 +187,7 @@ static void nss_ipsecmgr_subnet_free(struct nss_ipsecmgr_priv *priv, struct nss_
 	 */
 	list_del(&subnet->node);
 
-	nss_ipsecmgr_netmask_free(&priv->net_db, &subnet->key);
+	nss_ipsecmgr_netmask_free(&ipsecmgr_ctx->net_db, &subnet->key);
 	kfree(subnet);
 }
 
@@ -195,7 +197,7 @@ static void nss_ipsecmgr_subnet_free(struct nss_ipsecmgr_priv *priv, struct nss_
  */
 static inline struct nss_ipsecmgr_netmask_entry *nss_ipsecmgr_netmask_lookup(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
 {
-	struct nss_ipsecmgr_netmask_db *db = &priv->net_db;
+	struct nss_ipsecmgr_netmask_db *db = &ipsecmgr_ctx->net_db;
 	uint32_t idx;
 
 	if (nss_ipsecmgr_netmask_is_default(key)) {
@@ -212,7 +214,7 @@ static inline struct nss_ipsecmgr_netmask_entry *nss_ipsecmgr_netmask_lookup(str
  */
 static struct nss_ipsecmgr_netmask_entry *nss_ipsecmgr_netmask_alloc(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
 {
-	struct nss_ipsecmgr_netmask_db *db = &priv->net_db;
+	struct nss_ipsecmgr_netmask_db *db = &ipsecmgr_ctx->net_db;
 	struct nss_ipsecmgr_netmask_entry *entry;
 	int idx;
 
@@ -356,7 +358,7 @@ void nss_ipsecmgr_v6_subnet2key(struct nss_ipsecmgr_encap_v6_subnet *net, struct
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
 {
-	struct nss_ipsecmgr_netmask_db *db = &priv->net_db;
+	struct nss_ipsecmgr_netmask_db *db = &ipsecmgr_ctx->net_db;
 	struct nss_ipsecmgr_key tmp_key;
 	struct nss_ipsecmgr_ref *ref;
 	int i;
@@ -404,7 +406,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_v6_subnet_match(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
 {
-	struct nss_ipsecmgr_netmask_db *db = &priv->net_db;
+	struct nss_ipsecmgr_netmask_db *db = &ipsecmgr_ctx->net_db;
 	struct nss_ipsecmgr_key tmp_key;
 	struct nss_ipsecmgr_ref *ref;
 	int i;
@@ -502,7 +504,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_subnet_alloc(struct nss_ipsecmgr_priv *pri
 	 */
 	subnet = kzalloc(sizeof(struct nss_ipsecmgr_subnet_entry), GFP_ATOMIC);
 	if (!subnet) {
-		nss_ipsecmgr_netmask_free(&priv->net_db, key);
+		nss_ipsecmgr_netmask_free(&ipsecmgr_ctx->net_db, key);
 		return NULL;
 	}
 

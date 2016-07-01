@@ -33,6 +33,8 @@
 
 #include "nss_ipsecmgr_priv.h"
 
+extern struct nss_ipsecmgr_drv *ipsecmgr_ctx;
+
 /*
  *
  * nss_ipsecmgr_flow_resp()
@@ -80,7 +82,7 @@ static void nss_ipsecmgr_flow_update(struct nss_ipsecmgr_priv *priv, struct nss_
 	 */
 	nss_ipsecmgr_copy_nim(&flow->nim, &nss_nim);
 
-	if (nss_ipsec_tx_msg(priv->nss_ctx, &nss_nim) != NSS_TX_SUCCESS) {
+	if (nss_ipsec_tx_msg(ipsecmgr_ctx->nss_ctx, &nss_nim) != NSS_TX_SUCCESS) {
 		/*
 		 * XXX: Stop the TX queue and add this "entry"
 		 * to pending queue
@@ -109,7 +111,7 @@ static void nss_ipsecmgr_flow_free(struct nss_ipsecmgr_priv *priv, struct nss_ip
 	 */
 	nss_ipsecmgr_copy_nim(&flow->nim, &nss_nim);
 
-	if (nss_ipsec_tx_msg(priv->nss_ctx, &nss_nim) != NSS_TX_SUCCESS) {
+	if (nss_ipsec_tx_msg(ipsecmgr_ctx->nss_ctx, &nss_nim) != NSS_TX_SUCCESS) {
 		/*
 		 * XXX: add this "entry" to pending queue
 		 */
@@ -378,7 +380,7 @@ void nss_ipsecmgr_decap_v6_flow2key(struct nss_ipsecmgr_sa_v6 *flow, struct nss_
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_lookup(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
 {
-	struct nss_ipsecmgr_flow_db *db = &priv->flow_db;
+	struct nss_ipsecmgr_flow_db *db = &ipsecmgr_ctx->flow_db;
 	struct nss_ipsecmgr_flow_entry *entry;
 	struct list_head *head;
 	int idx;
@@ -426,7 +428,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_alloc(struct nss_ipsecmgr_priv *priv,
 	/*
 	 * add flow to the database
 	 */
-	db = &priv->flow_db;
+	db = &ipsecmgr_ctx->flow_db;
 	INIT_LIST_HEAD(&flow->node);
 
 	/*
@@ -468,9 +470,9 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		/*
 		 * flow lookup is done with read lock
 		 */
-		read_lock_bh(&priv->lock);
+		read_lock_bh(&ipsecmgr_ctx->lock);
 		flow_ref = nss_ipsecmgr_flow_lookup(priv, &flow_key);
-		read_unlock_bh(&priv->lock);
+		read_unlock_bh(&ipsecmgr_ctx->lock);
 
 		/*
 		 * if flow is found then proceed with the TX
@@ -488,11 +490,11 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		/*
 		 * write lock as it can update the flow database
 		 */
-		write_lock_bh(&priv->lock);
+		write_lock_bh(&ipsecmgr_ctx->lock);
 
 		subnet_ref = nss_ipsecmgr_v4_subnet_match(priv, &subnet_key);
 		if (!subnet_ref) {
-			write_unlock_bh(&priv->lock);
+			write_unlock_bh(&ipsecmgr_ctx->lock);
 			return false;
 		}
 
@@ -509,7 +511,7 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 
 		flow_ref = nss_ipsecmgr_flow_alloc(priv, &flow_key);
 		if (!flow_ref) {
-			write_unlock_bh(&priv->lock);
+			write_unlock_bh(&ipsecmgr_ctx->lock);
 			return false;
 		}
 
@@ -519,7 +521,7 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		nss_ipsecmgr_ref_add(flow_ref, subnet_ref);
 		nss_ipsecmgr_ref_update(priv, flow_ref, &nim);
 
-		write_unlock_bh(&priv->lock);
+		write_unlock_bh(&ipsecmgr_ctx->lock);
 
 		break;
 
@@ -532,9 +534,9 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		/*
 		 * flow lookup is done with read lock
 		 */
-		read_lock_bh(&priv->lock);
+		read_lock_bh(&ipsecmgr_ctx->lock);
 		flow_ref = nss_ipsecmgr_flow_lookup(priv, &flow_key);
-		read_unlock_bh(&priv->lock);
+		read_unlock_bh(&ipsecmgr_ctx->lock);
 
 		/*
 		 * if flow is found then proceed with the TX
@@ -553,11 +555,11 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		/*
 		 * write lock as it can update the flow database
 		 */
-		write_lock(&priv->lock);
+		write_lock(&ipsecmgr_ctx->lock);
 
 		subnet_ref = nss_ipsecmgr_v6_subnet_match(priv, &subnet_key);
 		if (!subnet_ref) {
-			write_unlock(&priv->lock);
+			write_unlock(&ipsecmgr_ctx->lock);
 			return false;
 		}
 
@@ -573,7 +575,7 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		 */
 		flow_ref = nss_ipsecmgr_flow_alloc(priv, &flow_key);
 		if (!flow_ref) {
-			write_unlock(&priv->lock);
+			write_unlock(&ipsecmgr_ctx->lock);
 			return false;
 		}
 
@@ -583,7 +585,7 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		nss_ipsecmgr_ref_add(flow_ref, subnet_ref);
 		nss_ipsecmgr_ref_update(priv, flow_ref, &nim);
 
-		write_unlock(&priv->lock);
+		write_unlock(&ipsecmgr_ctx->lock);
 		break;
 
 	default:

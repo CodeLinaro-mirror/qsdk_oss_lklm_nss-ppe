@@ -275,21 +275,11 @@ struct nss_ipsecmgr_flow_db {
  */
 struct nss_ipsecmgr_priv {
 	struct net_device *dev;			/* back pointer to tunnel device */
-	rwlock_t lock;				/* lock for all DB operations */
-
-	struct nss_ipsecmgr_sa_db sa_db;	/* SA database */
-	struct nss_ipsecmgr_netmask_db net_db;	/* Subnet mask database */
-	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
 
 	void *cb_ctx;				/* callback context */
 	nss_ipsecmgr_data_cb_t data_cb;		/* data callback function */
 	nss_ipsecmgr_event_cb_t event_cb;	/* event callback function */
 
-	uint32_t nss_ifnum;			/* NSS interface for sending data */
-	struct nss_ctx_instance *nss_ctx;	/* NSS context */
-
-	struct dentry *dentry;			/* Tunnel device debugfs entry */
-	struct completion complete;		/* completion for flow stats nss msg */
 };
 
 /*
@@ -297,6 +287,17 @@ struct nss_ipsecmgr_priv {
  */
 struct nss_ipsecmgr_drv {
 	struct dentry *dentry;			/* Debugfs entry per ipsecmgr module */
+	struct net_device *ndev;		/* IPsec dummy net device */
+
+	rwlock_t lock;				/* lock for all DB operations */
+
+	struct nss_ipsecmgr_sa_db sa_db;	/* SA database */
+	struct nss_ipsecmgr_netmask_db net_db;	/* Subnet mask database */
+	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
+
+	uint32_t nss_ifnum;			/* NSS interface for sending data */
+
+	struct nss_ctx_instance *nss_ctx;	/* NSS context */
 
 	struct nss_ipsec_node_stats enc_stats;	/* Encap node stats */
 	struct nss_ipsec_node_stats dec_stats;	/* Decap node stats */
@@ -1063,7 +1064,7 @@ void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr
  * SA alloc/lookup/flush API(s)
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
-struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
+struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_sa_flush_all(struct nss_ipsecmgr_priv *priv);
 
 #endif /* __NSS_IPSECMGR_PRIV_H */
