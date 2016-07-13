@@ -46,136 +46,6 @@ struct nss_ipsecmgr_sa_info {
 };
 
 /*
- * nss_ipsecmgr_sa_name_lookup()
- * 	lookup the SA in the sa_db
- */
-struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_name_lookup(struct nss_ipsecmgr_priv *priv, const char *name)
-{
-	struct nss_ipsecmgr_sa_db *db = &priv->sa_db;
-	struct nss_ipsecmgr_sa_entry *entry;
-	struct list_head *head;
-	char *sa_name;
-	uint32_t hash;
-	int idx;
-
-	sa_name = strchr(name, '@');
-	if (!sa_name || hex2bin((uint8_t *)&hash, ++sa_name, sizeof(uint32_t))) {
-		nss_ipsecmgr_error("%p: Invalid sa_name(%s)\n", priv, sa_name);
-		return NULL;
-	}
-
-	idx = hash & (NSS_CRYPTO_MAX_IDXS - 1);
-	if (idx >= NSS_CRYPTO_MAX_IDXS) {
-		return NULL;
-	}
-
-	head = &db->entries[idx];
-	list_for_each_entry(entry, head, node) {
-		if (nss_ipsecmgr_key_get_hash(&entry->key) == hash) {
-			return &entry->ref;
-		}
-	}
-
-	return NULL;
-}
-
-/*
- * nss_ipsecmgr_sa_stats_read()
- * 	read sa statistics
- */
-static ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
-{
-	struct dentry *parent = dget_parent(fp->f_dentry);
-	struct nss_ipsecmgr_sa_entry *sa;
-	struct nss_ipsec_rule_data *data;
-	struct nss_ipsec_rule_oip *oip;
-	struct nss_ipsecmgr_priv *priv;
-	struct nss_ipsecmgr_ref *ref;
-	struct net_device *dev;
-	char *local, *type;
-	uint32_t addr[4];
-	ssize_t ret = 0;
-	int len;
-
-	dev = dev_get_by_index(&init_net, (uint32_t)fp->private_data);
-	if (!dev) {
-		return 0;
-	}
-	priv = netdev_priv(dev);
-
-	local = vzalloc(NSS_IPSECMGR_MAX_BUF_SZ);
-	if (!local) {
-		nss_ipsecmgr_error("unable to allocate local buffer for tunnel-id: %d\n", (uint32_t)fp->private_data);
-		goto done;
-	}
-
-	read_lock_bh(&priv->lock);
-	ref = nss_ipsecmgr_sa_name_lookup(priv, parent->d_name.name);
-	if (!ref) {
-		read_unlock_bh(&priv->lock);
-		vfree(local);
-		nss_ipsecmgr_error("sa not found tunnel-id: %d\n", (uint32_t)fp->private_data);
-		goto done;
-	}
-
-	sa = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
-	oip = &sa->nim.msg.push.oip;
-	data = &sa->nim.msg.push.data;
-
-	switch (sa->nim.cm.interface) {
-	case NSS_IPSEC_ENCAP_IF_NUMBER:
-		type = "encap";
-		break;
-
-	case NSS_IPSEC_DECAP_IF_NUMBER:
-		type = "decap";
-		break;
-	default:
-		type = "none";
-		break;
-	}
-
-	len = 0;
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "type:%s\n", type);
-	switch (oip->ip_ver) {
-	case NSS_IPSEC_IPVER_4:
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI4h\n", &oip->dst_addr[0]);
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI4h\n", &oip->src_addr[0]);
-		break;
-
-	case NSS_IPSEC_IPVER_6:
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI6c\n", nss_ipsecmgr_v6addr_hton(oip->dst_addr, addr));
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI6c\n", nss_ipsecmgr_v6addr_hton(oip->src_addr, addr));
-		break;
-
-	}
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "spi_idx: 0x%x\n", oip->esp_spi);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "ttl: %d\n", oip->ttl_hop_limit);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "crypto session: %d\n", data->crypto_index);
-
-	/*
-	 * packet stats
-	 */
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "processed: %llu\n", sa->pkts.count);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "no_headroom: %d\n", sa->pkts.no_headroom);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "no_tailroom: %d\n", sa->pkts.no_tailroom);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "no_buf: %d\n", sa->pkts.no_buf);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "fail_queue: %d\n", sa->pkts.fail_queue);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "fail_hash: %d\n", sa->pkts.fail_hash);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "fail_replay: %d\n", sa->pkts.fail_replay);
-
-	read_unlock_bh(&priv->lock);
-
-	ret = simple_read_from_buffer(ubuf, sz, ppos, local, len + 1);
-
-	vfree(local);
-
-done:
-	dev_put(dev);
-	return ret;
-}
-
-/*
  * nss_ipsecmgr_sa_free()
  * 	deallocate the SA if there are no references
  */
@@ -186,8 +56,6 @@ static void nss_ipsecmgr_sa_free(struct nss_ipsecmgr_priv *priv, struct nss_ipse
 	if (!nss_ipsecmgr_ref_is_empty(ref)) {
 		return;
 	}
-
-	debugfs_remove_recursive(nss_ipsecmgr_ref_get_dentry(ref));
 
 	/*
 	 * there should be no references remove it from
@@ -332,25 +200,14 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 }
 
 /*
- * file operation structure instance
- */
-static const struct file_operations sa_stats_op = {
-	.open = simple_open,
-	.llseek = default_llseek,
-	.read = nss_ipsecmgr_sa_stats_read,
-};
-
-/*
  * nss_ipsecmgr_sa_alloc()
  * 	allocate the SA if there is none in the DB
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
 {
-	char hash_str[NSS_IPSECMGR_MAX_KEY_NAME] = {0};
 	struct nss_ipsecmgr_sa_entry *sa;
 	struct nss_ipsecmgr_sa_db *db;
 	struct nss_ipsecmgr_ref *ref;
-	struct dentry *dentry;
 	int idx;
 
 	/*
@@ -366,7 +223,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, s
 	 */
 	sa = kzalloc(sizeof(struct nss_ipsecmgr_sa_entry), GFP_ATOMIC);
 	if (!sa) {
-		nss_ipsecmgr_error("failed to alloc sa_entry\n");
+		nss_ipsecmgr_info("failed to alloc sa_entry\n");
 		return NULL;
 	}
 
@@ -383,37 +240,18 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, s
 	INIT_LIST_HEAD(&sa->node);
 
 	/*
-	 * update key and generate/store hash
+	 * update key
 	 */
 	idx = nss_ipsecmgr_key_data2idx(key, NSS_CRYPTO_MAX_IDXS);
-	nss_ipsecmgr_key_gen_hash(key, NSS_CRYPTO_MAX_IDXS);
 
 	memcpy(&sa->key, key, sizeof(struct nss_ipsecmgr_key));
 	list_add(&sa->node, &db->entries[idx]);
-
-	/*
-	 * create a string from hash
-	 */
-	nss_ipsecmgr_key_hash2str(key, hash_str);
 
 	/*
 	 * initiallize the reference object
 	 */
 	nss_ipsecmgr_ref_init(&sa->ref, NULL, nss_ipsecmgr_sa_free);
 
-	/*
-	 * setup the debugfs entries
-	 */
-	nss_ipsecmgr_ref_update_name(ref, "sa@");
-	nss_ipsecmgr_ref_update_name(ref, hash_str);
-
-	/*
-	 * we don't know the parent of this node now hence attach it to the root node
-	 */
-	dentry = debugfs_create_dir(nss_ipsecmgr_ref_get_name(ref), priv->dentry);
-	debugfs_create_file("stats", S_IRUGO, dentry, (uint32_t *)priv->dev->ifindex, &sa_stats_op);
-
-	nss_ipsecmgr_ref_set_dentry(ref, dentry);
 	return ref;
 }
 
