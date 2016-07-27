@@ -32,6 +32,8 @@
 
 #include "nss_ipsecmgr_priv.h"
 
+extern struct nss_ipsecmgr_drv *ipsecmgr_ctx;
+
 /*
  * SA operation info
  */
@@ -46,136 +48,6 @@ struct nss_ipsecmgr_sa_info {
 };
 
 /*
- * nss_ipsecmgr_sa_name_lookup()
- * 	lookup the SA in the sa_db
- */
-struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_name_lookup(struct nss_ipsecmgr_priv *priv, const char *name)
-{
-	struct nss_ipsecmgr_sa_db *db = &priv->sa_db;
-	struct nss_ipsecmgr_sa_entry *entry;
-	struct list_head *head;
-	char *sa_name;
-	uint32_t hash;
-	int idx;
-
-	sa_name = strchr(name, '@');
-	if (!sa_name || hex2bin((uint8_t *)&hash, ++sa_name, sizeof(uint32_t))) {
-		nss_ipsecmgr_error("%p: Invalid sa_name(%s)\n", priv, sa_name);
-		return NULL;
-	}
-
-	idx = hash & (NSS_CRYPTO_MAX_IDXS - 1);
-	if (idx >= NSS_CRYPTO_MAX_IDXS) {
-		return NULL;
-	}
-
-	head = &db->entries[idx];
-	list_for_each_entry(entry, head, node) {
-		if (nss_ipsecmgr_key_get_hash(&entry->key) == hash) {
-			return &entry->ref;
-		}
-	}
-
-	return NULL;
-}
-
-/*
- * nss_ipsecmgr_sa_stats_read()
- * 	read sa statistics
- */
-static ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
-{
-	struct dentry *parent = dget_parent(fp->f_dentry);
-	struct nss_ipsecmgr_sa_entry *sa;
-	struct nss_ipsec_rule_data *data;
-	struct nss_ipsec_rule_oip *oip;
-	struct nss_ipsecmgr_priv *priv;
-	struct nss_ipsecmgr_ref *ref;
-	struct net_device *dev;
-	char *local, *type;
-	uint32_t addr[4];
-	ssize_t ret = 0;
-	int len;
-
-	dev = dev_get_by_index(&init_net, (uint32_t)fp->private_data);
-	if (!dev) {
-		return 0;
-	}
-	priv = netdev_priv(dev);
-
-	local = vzalloc(NSS_IPSECMGR_MAX_BUF_SZ);
-	if (!local) {
-		nss_ipsecmgr_error("unable to allocate local buffer for tunnel-id: %d\n", (uint32_t)fp->private_data);
-		goto done;
-	}
-
-	read_lock_bh(&priv->lock);
-	ref = nss_ipsecmgr_sa_name_lookup(priv, parent->d_name.name);
-	if (!ref) {
-		read_unlock_bh(&priv->lock);
-		vfree(local);
-		nss_ipsecmgr_error("sa not found tunnel-id: %d\n", (uint32_t)fp->private_data);
-		goto done;
-	}
-
-	sa = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
-	oip = &sa->nim.msg.push.oip;
-	data = &sa->nim.msg.push.data;
-
-	switch (sa->nim.cm.interface) {
-	case NSS_IPSEC_ENCAP_IF_NUMBER:
-		type = "encap";
-		break;
-
-	case NSS_IPSEC_DECAP_IF_NUMBER:
-		type = "decap";
-		break;
-	default:
-		type = "none";
-		break;
-	}
-
-	len = 0;
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "type:%s\n", type);
-	switch (oip->ip_ver) {
-	case NSS_IPSEC_IPVER_4:
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI4h\n", &oip->dst_addr[0]);
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI4h\n", &oip->src_addr[0]);
-		break;
-
-	case NSS_IPSEC_IPVER_6:
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "dst_ip: %pI6c\n", nss_ipsecmgr_v6addr_hton(oip->dst_addr, addr));
-		len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "src_ip: %pI6c\n", nss_ipsecmgr_v6addr_hton(oip->src_addr, addr));
-		break;
-
-	}
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "spi_idx: 0x%x\n", oip->esp_spi);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "ttl: %d\n", oip->ttl_hop_limit);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "crypto session: %d\n", data->crypto_index);
-
-	/*
-	 * packet stats
-	 */
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "processed: %llu\n", sa->pkts.count);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "no_headroom: %d\n", sa->pkts.no_headroom);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "no_tailroom: %d\n", sa->pkts.no_tailroom);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "no_buf: %d\n", sa->pkts.no_buf);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "fail_queue: %d\n", sa->pkts.fail_queue);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "fail_hash: %d\n", sa->pkts.fail_hash);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "fail_replay: %d\n", sa->pkts.fail_replay);
-
-	read_unlock_bh(&priv->lock);
-
-	ret = simple_read_from_buffer(ubuf, sz, ppos, local, len + 1);
-
-	vfree(local);
-
-done:
-	dev_put(dev);
-	return ret;
-}
-
-/*
  * nss_ipsecmgr_sa_free()
  * 	deallocate the SA if there are no references
  */
@@ -186,8 +58,6 @@ static void nss_ipsecmgr_sa_free(struct nss_ipsecmgr_priv *priv, struct nss_ipse
 	if (!nss_ipsecmgr_ref_is_empty(ref)) {
 		return;
 	}
-
-	debugfs_remove_recursive(nss_ipsecmgr_ref_get_dentry(ref));
 
 	/*
 	 * there should be no references remove it from
@@ -208,7 +78,7 @@ static bool nss_ipsecmgr_sa_del(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	/*
 	 * lock database
 	 */
-	write_lock_bh(&priv->lock);
+	write_lock_bh(&ipsecmgr_ctx->lock);
 
 	/*
 	 * search the flow for deletion
@@ -218,7 +88,7 @@ static bool nss_ipsecmgr_sa_del(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 		/*
 		 * unlock device
 		 */
-		write_unlock_bh(&priv->lock);
+		write_unlock_bh(&ipsecmgr_ctx->lock);
 
 		nss_ipsecmgr_warn("%p:failed to lookup child_entry\n", priv->dev);
 		nss_ipsecmgr_trace("%p:child_lookup(%p)\n", priv, info->child_lookup);
@@ -228,9 +98,9 @@ static bool nss_ipsecmgr_sa_del(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	/*
 	 * search the SA in sa_db
 	 */
-	sa_ref = nss_ipsecmgr_sa_lookup(priv, &info->sa_key);
+	sa_ref = nss_ipsecmgr_sa_lookup(&info->sa_key);
 	if (!sa_ref) {
-		write_unlock_bh(&priv->lock);
+		write_unlock_bh(&ipsecmgr_ctx->lock);
 
 		nss_ipsecmgr_warn("%p:failed to lookup sa_entry\n", priv->dev);
 		return false;
@@ -248,7 +118,7 @@ static bool nss_ipsecmgr_sa_del(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	 */
 	nss_ipsecmgr_sa_free(priv, sa_ref);
 
-	write_unlock_bh(&priv->lock);
+	write_unlock_bh(&ipsecmgr_ctx->lock);
 	return true;
 }
 
@@ -267,7 +137,7 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	/*
 	 * lock database
 	 */
-	write_lock_bh(&priv->lock);
+	write_lock_bh(&ipsecmgr_ctx->lock);
 
 	/*
 	 * allocate a flow, this returns either a new flow or an existing
@@ -278,7 +148,7 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 		/*
 		 * unlock device
 		 */
-		write_unlock_bh(&priv->lock);
+		write_unlock_bh(&ipsecmgr_ctx->lock);
 
 		nss_ipsecmgr_warn("%p:failed to alloc child_entry\n", priv->dev);
 		nss_ipsecmgr_trace("%p:child_alloc(%p)\n", priv, info->child_alloc);
@@ -295,7 +165,7 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 		 * release the flow and unlock device
 		 */
 		nss_ipsecmgr_ref_free(priv, child_ref);
-		write_unlock_bh(&priv->lock);
+		write_unlock_bh(&ipsecmgr_ctx->lock);
 
 		nss_ipsecmgr_warn("%p:failed to alloc sa_entry\n", priv->dev);
 		return false;
@@ -327,18 +197,9 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	 */
 	nss_ipsecmgr_ref_update(priv, child_ref, &info->nim);
 
-	write_unlock_bh(&priv->lock);
+	write_unlock_bh(&ipsecmgr_ctx->lock);
 	return true;
 }
-
-/*
- * file operation structure instance
- */
-static const struct file_operations sa_stats_op = {
-	.open = simple_open,
-	.llseek = default_llseek,
-	.read = nss_ipsecmgr_sa_stats_read,
-};
 
 /*
  * nss_ipsecmgr_sa_alloc()
@@ -346,17 +207,15 @@ static const struct file_operations sa_stats_op = {
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
 {
-	char hash_str[NSS_IPSECMGR_MAX_KEY_NAME] = {0};
 	struct nss_ipsecmgr_sa_entry *sa;
 	struct nss_ipsecmgr_sa_db *db;
 	struct nss_ipsecmgr_ref *ref;
-	struct dentry *dentry;
 	int idx;
 
 	/*
 	 * Search the object in the database first
 	 */
-	ref = nss_ipsecmgr_sa_lookup(priv, key);
+	ref = nss_ipsecmgr_sa_lookup(key);
 	if (ref) {
 		return ref;
 	}
@@ -366,7 +225,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, s
 	 */
 	sa = kzalloc(sizeof(struct nss_ipsecmgr_sa_entry), GFP_ATOMIC);
 	if (!sa) {
-		nss_ipsecmgr_error("failed to alloc sa_entry\n");
+		nss_ipsecmgr_info("failed to alloc sa_entry\n");
 		return NULL;
 	}
 
@@ -379,41 +238,22 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, s
 	 * initialize sa list node
 	 */
 	ref = &sa->ref;
-	db = &priv->sa_db;
+	db = &ipsecmgr_ctx->sa_db;
 	INIT_LIST_HEAD(&sa->node);
 
 	/*
-	 * update key and generate/store hash
+	 * update key
 	 */
 	idx = nss_ipsecmgr_key_data2idx(key, NSS_CRYPTO_MAX_IDXS);
-	nss_ipsecmgr_key_gen_hash(key, NSS_CRYPTO_MAX_IDXS);
 
 	memcpy(&sa->key, key, sizeof(struct nss_ipsecmgr_key));
 	list_add(&sa->node, &db->entries[idx]);
-
-	/*
-	 * create a string from hash
-	 */
-	nss_ipsecmgr_key_hash2str(key, hash_str);
 
 	/*
 	 * initiallize the reference object
 	 */
 	nss_ipsecmgr_ref_init(&sa->ref, NULL, nss_ipsecmgr_sa_free);
 
-	/*
-	 * setup the debugfs entries
-	 */
-	nss_ipsecmgr_ref_update_name(ref, "sa@");
-	nss_ipsecmgr_ref_update_name(ref, hash_str);
-
-	/*
-	 * we don't know the parent of this node now hence attach it to the root node
-	 */
-	dentry = debugfs_create_dir(nss_ipsecmgr_ref_get_name(ref), priv->dentry);
-	debugfs_create_file("stats", S_IRUGO, dentry, (uint32_t *)priv->dev->ifindex, &sa_stats_op);
-
-	nss_ipsecmgr_ref_set_dentry(ref, dentry);
 	return ref;
 }
 
@@ -587,9 +427,9 @@ void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr
  * nss_ipsecmgr_sa_lookup()
  * 	lookup the SA in the sa_db
  */
-struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key)
+struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_key *key)
 {
-	struct nss_ipsecmgr_sa_db *db = &priv->sa_db;
+	struct nss_ipsecmgr_sa_db *db = &ipsecmgr_ctx->sa_db;
 	struct nss_ipsecmgr_sa_entry *entry;
 	struct list_head *head;
 	int idx;
@@ -612,8 +452,9 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_priv *priv, 
  */
 struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *priv, struct rtnl_link_stats64 *stats)
 {
-	struct nss_ipsecmgr_sa_db *sa_db = &priv->sa_db;
+	struct nss_ipsecmgr_sa_db *sa_db = &ipsecmgr_ctx->sa_db;
 	struct nss_ipsecmgr_sa_entry *sa;
+	int ifindex = priv->dev->ifindex;
 	struct list_head *head;
 	int i;
 
@@ -622,13 +463,18 @@ struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *pr
 	/*
 	 * trigger a stats update chain
 	 */
-	read_lock_bh(&priv->lock);
+	read_lock_bh(&ipsecmgr_ctx->lock);
 
 	/*
 	 * walk the SA database for each entry and get stats for attached SA
 	 */
 	for (i = 0, head = sa_db->entries; i < NSS_IPSECMGR_MAX_SA; i++, head++) {
 		list_for_each_entry(sa, head, node) {
+
+			if (sa->nim.tunnel_id != ifindex) {
+				continue;
+			}
+
 			/*
 			 * Check the SA type (ENCAP or DECAP)
 			 */
@@ -661,7 +507,7 @@ struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *pr
 		}
 	}
 
-	read_unlock_bh(&priv->lock);
+	read_unlock_bh(&ipsecmgr_ctx->lock);
 
 	return stats;
 }
@@ -672,30 +518,33 @@ struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *pr
  */
 void nss_ipsecmgr_sa_flush_all(struct nss_ipsecmgr_priv *priv)
 {
-	struct nss_ipsecmgr_sa_db *sa_db = &priv->sa_db;
+	struct nss_ipsecmgr_sa_db *sa_db = &ipsecmgr_ctx->sa_db;
 	struct nss_ipsecmgr_sa_entry *entry;
+	int ifindex  = priv->dev->ifindex;
 	struct list_head *head;
 	int i;
 
 	/*
 	 * lock database
 	 */
-	write_lock_bh(&priv->lock);
+	write_lock_bh(&ipsecmgr_ctx->lock);
 
 	/*
-	 * walk the SA database for each entry and delete the attached SA
+	 * walk the SA database for each entry and delete the attached SA.
+	 * Assumption is that single SA cannot be associated to multiple ipsectunX interfaces.
 	 */
 	for (i = 0, head = sa_db->entries; i < NSS_IPSECMGR_MAX_SA; i++, head++) {
-		while (!list_empty(head)) {
-			entry = list_first_entry(head, struct nss_ipsecmgr_sa_entry, node);
-			nss_ipsecmgr_ref_free(priv, &entry->ref);
+		list_for_each_entry(entry, head, node) {
+			if (entry->nim.tunnel_id == ifindex) {
+				nss_ipsecmgr_ref_free(priv, &entry->ref);
+			}
 		}
 	}
 
 	/*
 	 * unlock database
 	 */
-	write_unlock_bh(&priv->lock);
+	write_unlock_bh(&ipsecmgr_ctx->lock);
 }
 
 /*
@@ -965,14 +814,14 @@ bool nss_ipsecmgr_sa_flush(struct net_device *tun, struct nss_ipsecmgr_sa *sa)
 	/*
 	 * lock database
 	 */
-	write_lock_bh(&priv->lock);
+	write_lock_bh(&ipsecmgr_ctx->lock);
 
 	/*
 	 * search the SA in sa_db
 	 */
-	sa_ref = nss_ipsecmgr_sa_lookup(priv, &sa_key);
+	sa_ref = nss_ipsecmgr_sa_lookup(&sa_key);
 	if (!sa_ref) {
-		write_unlock_bh(&priv->lock);
+		write_unlock_bh(&ipsecmgr_ctx->lock);
 		nss_ipsecmgr_warn("%p:failed to lookup SA\n", priv);
 		return false;
 	}
@@ -985,7 +834,7 @@ bool nss_ipsecmgr_sa_flush(struct net_device *tun, struct nss_ipsecmgr_sa *sa)
 	/*
 	 * unlock database
 	 */
-	write_unlock_bh(&priv->lock);
+	write_unlock_bh(&ipsecmgr_ctx->lock);
 
 	return true;
 }

@@ -176,8 +176,15 @@ nss_dtlsmgr_status_t nss_dtlsmgr_netdev_create(struct nss_dtlsmgr_session *ds)
 	struct nss_dtlsmgr_netdev_priv *priv;
 	int32_t err = 0;
 
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 16, 0))
 	dev = alloc_netdev(sizeof(struct nss_dtlsmgr_netdev_priv),
 			   "qca-nss-dtls%d", nss_dtlsmgr_dev_setup);
+#else
+	dev = alloc_netdev(sizeof(struct nss_dtlsmgr_netdev_priv),
+			   "qca-nss-dtls%d", NET_NAME_UNKNOWN,
+			   nss_dtlsmgr_dev_setup);
+#endif
+
 	if (!dev) {
 		nss_dtlsmgr_info("DTLS netdev alloc failed\n");
 		return NSS_DTLSMGR_FAIL;

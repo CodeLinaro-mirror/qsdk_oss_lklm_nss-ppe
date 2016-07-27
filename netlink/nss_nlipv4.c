@@ -233,9 +233,8 @@ fail:
  * nss_nlipv4_verify_5tuple()
  * 	verify and override 5-tuple entries
  */
-static int nss_nlipv4_verify_5tuple(struct nss_ipv4_rule_create_msg *msg)
+static int nss_nlipv4_verify_5tuple(struct nss_ipv4_5tuple *tuple)
 {
-	struct nss_ipv4_5tuple *tuple = &msg->tuple;
 	bool ident_check = false;
 
 	/*
@@ -302,10 +301,19 @@ static int nss_nlipv4_verify_conn_rule(struct nss_ipv4_rule_create_msg *msg, str
 	}
 
 	/*
-	 * update flow and return interface numbers
+	 * update flow and return interface numbers. Handle Ipsec interfaces seperately.
 	 */
-	conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(flow_dev);
-	conn->return_interface_num = nss_cmn_get_interface_number_by_dev(return_dev);
+	if (flow_dev->type == NSS_IPSEC_ARPHRD_IPSEC) {
+		conn->flow_interface_num = nss_ipsec_get_interface(nss_ipsec_get_context());
+	} else {
+		conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(flow_dev);
+	}
+
+	if (return_dev->type == NSS_IPSEC_ARPHRD_IPSEC) {
+		conn->flow_interface_num = nss_ipsec_get_interface(nss_ipsec_get_context());
+	} else {
+		conn->return_interface_num = nss_cmn_get_interface_number_by_dev(return_dev);
+	}
 
 	/*
 	 * update the flow & return MTU(s)
@@ -601,7 +609,7 @@ static int nss_nlipv4_ops_create_rule(struct sk_buff *skb, struct genl_info *inf
 	/*
 	 * check 5-tuple
 	 */
-	error = nss_nlipv4_verify_5tuple(&nim->msg.rule_create);
+	error = nss_nlipv4_verify_5tuple(&nim->msg.rule_create.tuple);
 	if (error < 0) {
 		nss_nl_error("%d:invalid 5-tuple information passed\n", pid);
 		goto done;
@@ -731,7 +739,7 @@ static int nss_nlipv4_ops_destroy_rule(struct sk_buff *skb, struct genl_info *in
 	/*
 	 * check 5-tuple
 	 */
-	error = nss_nlipv4_verify_5tuple(&nim->msg.rule_create);
+	error = nss_nlipv4_verify_5tuple(&nim->msg.rule_destroy.tuple);
 	if (error < 0) {
 		nss_nl_error("%d:invalid 5-tuple information passed\n", pid);
 		goto done;

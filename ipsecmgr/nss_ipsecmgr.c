@@ -30,6 +30,8 @@
 #include <asm/atomic.h>
 #include <linux/vmalloc.h>
 #include <linux/debugfs.h>
+#include <net/route.h>
+#include <net/ip6_route.h>
 
 #include <nss_api_if.h>
 #include <nss_ipsec.h>
@@ -40,7 +42,7 @@
 
 extern bool nss_cmn_get_nss_enabled(void);
 
-static struct nss_ipsecmgr_drv ipsecmgr_ctx = {0};
+struct nss_ipsecmgr_drv *ipsecmgr_ctx;
 
 /*
  **********************
@@ -87,8 +89,6 @@ void nss_ipsecmgr_ref_init(struct nss_ipsecmgr_ref *ref, nss_ipsecmgr_ref_update
  */
 void nss_ipsecmgr_ref_add(struct nss_ipsecmgr_ref *child, struct nss_ipsecmgr_ref *parent)
 {
-	struct dentry *p_dentry = dget_parent(child->dentry);
-
 	/*
 	 * if child is already part of an existing chain then remove it before
 	 * adding it to the new one. In case this is a new entry then the list
@@ -97,11 +97,6 @@ void nss_ipsecmgr_ref_add(struct nss_ipsecmgr_ref *child, struct nss_ipsecmgr_re
 	 */
 	list_del_init(&child->node);
 	list_add(&child->node, &parent->head);
-
-	if (p_dentry != parent->dentry) {
-		debugfs_rename(p_dentry, child->dentry, parent->dentry, child->name);
-	}
-
 }
 
 /*
@@ -236,7 +231,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 * Check if skb is non-linear
 	 */
 	if (skb_is_nonlinear(skb)) {
-		nss_ipsecmgr_error("%p: NSS IPSEC does not support fragments %p\n", priv->nss_ctx, skb);
+		nss_ipsecmgr_error("%s: NSS IPSEC does not support fragments %p\n", dev->name, skb);
 		goto fail;
 	}
 
@@ -244,7 +239,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 * Check if skb is shared
 	 */
 	if (unlikely(skb_shared(skb))) {
-		nss_ipsecmgr_error("%p: Shared skb is not supported: %p\n", priv->nss_ctx, skb);
+		nss_ipsecmgr_error("%s: Shared skb is not supported: %p\n", dev->name, skb);
 		goto fail;
 	}
 
@@ -252,7 +247,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 * Check if packet is given starting from network header
 	 */
 	if (skb->data != skb_network_header(skb)) {
-		nss_ipsecmgr_error("%p: 'Skb data is not starting from IP header", priv->nss_ctx);
+		nss_ipsecmgr_error("%s: 'Skb data is not starting from IP header\n", dev->name);
 		goto fail;
 	}
 
@@ -267,7 +262,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	}
 
 	if (expand_skb && pskb_expand_head(skb, nhead, ntail, GFP_KERNEL)) {
-		nss_ipsecmgr_error("%p: unable to expand buffer\n", priv->nss_ctx);
+		nss_ipsecmgr_error("%s: unable to expand buffer\n", dev->name);
 		goto fail;
 	}
 
@@ -369,25 +364,77 @@ static void nss_ipsecmgr_tunnel_setup(struct net_device *dev)
 }
 
 /*
+ * nss_ipsecmgr_get_dev()
+ *	Get the net_device associated with the packet.
+ */
+static struct net_device *nss_ipsecmgr_get_dev(struct sk_buff *skb)
+{
+	struct dst_entry *dst;
+	struct net_device *dev;
+	uint32_t ip_addr;
+	struct rtable *rt;
+	struct flowi6 fl6;
+
+	skb_reset_network_header(skb);
+
+	switch (ip_hdr(skb)->version) {
+	case IPVERSION:
+		ip_addr = ip_hdr(skb)->saddr;
+
+		rt = ip_route_output(&init_net, ip_addr, 0, 0, 0);
+		if (IS_ERR(rt)) {
+			return NULL;
+		}
+
+		dst = (struct dst_entry *)rt;
+		break;
+
+	case 6:
+		memset(&fl6, 0, sizeof(fl6));
+		memcpy(&fl6.daddr, &ipv6_hdr(skb)->saddr, sizeof(fl6.daddr));
+
+		dst = ip6_route_output(&init_net, NULL, &fl6);
+		if (IS_ERR(dst)) {
+			return NULL;
+		}
+		break;
+
+	default:
+		nss_ipsecmgr_warn("%p:could not get dev for the flow\n", skb);
+		return NULL;
+	}
+
+	dev = dst->dev;
+	dst_release(dst);
+
+	return dev;
+}
+
+/*
  * nss_ipsecmgr_tunnel_rx()
  *	receive NSS exception packets
  */
-static void nss_ipsecmgr_tunnel_rx(struct net_device *dev, struct sk_buff *skb, __attribute((unused)) struct napi_struct *napi)
+static void nss_ipsecmgr_tunnel_rx(struct net_device *dummy, struct sk_buff *skb, __attribute((unused)) struct napi_struct *napi)
 {
 	struct nss_ipsecmgr_priv *priv;
 	nss_ipsecmgr_data_cb_t cb_fn;
+	struct net_device *dev;
 	uint16_t next_protocol;
 	void *cb_ctx;
 
-	BUG_ON(dev == NULL);
+	BUG_ON(dummy == NULL);
 	BUG_ON(skb == NULL);
+
+	dev = nss_ipsecmgr_get_dev(skb);
+	if (unlikely(!dev)) {
+		nss_ipsecmgr_error("didn't find an tunnel dev\n");
+		dev_kfree_skb_any(skb);
+		return;
+	}
 
 	/* hold the device till we process it */
 	dev_hold(dev);
 
-	/*
-	 * XXX:need to ensure that the dev being accessed is not deleted
-	 */
 	priv = netdev_priv(dev);
 
 	skb->dev = dev;
@@ -399,7 +446,7 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dev, struct sk_buff *skb, 
 	 * if tunnel creator gave a callback then send the packet without
 	 * any modifications to him
 	 */
-	if (cb_fn && cb_ctx) {
+	if (cb_fn) {
 		cb_fn(cb_ctx, skb);
 		goto done;
 	}
@@ -418,7 +465,7 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dev, struct sk_buff *skb, 
 		break;
 
 	default:
-		nss_ipsecmgr_error("%p: Unsupported IP Version\n",  priv->nss_ctx);
+		nss_ipsecmgr_error("%s: Unsupported IP Version\n",  dev->name);
 		dev_kfree_skb_any(skb);
 		goto done;
 	}
@@ -450,9 +497,8 @@ done:
  * nss_ipsecmgr_tunnel_notify()
  * 	asynchronous event reception
  */
-static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim)
+static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, struct nss_ipsec_msg *nim)
 {
-	struct net_device *tun_dev = (struct net_device *)app_data;
 	struct nss_ipsecmgr_sa_stats *sa_stats;
 	struct nss_ipsec_node_stats *drv_stats;
 	struct nss_ipsecmgr_event stats_event;
@@ -463,7 +509,6 @@ static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim
 	struct nss_ipsecmgr_key key;
 	struct net_device *dev;
 
-	BUG_ON(tun_dev == NULL);
 	BUG_ON(nim == NULL);
 
 	/*
@@ -471,7 +516,7 @@ static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim
 	 */
 	dev = dev_get_by_index(&init_net, nim->tunnel_id);
 	if (!dev) {
-		nss_ipsecmgr_error("event received on deallocated I/F (%d)\n", nim->tunnel_id);
+		nss_ipsecmgr_info("event received on deallocated I/F (%d)\n", nim->tunnel_id);
 		return;
 	}
 
@@ -485,11 +530,11 @@ static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim
 		 */
 		nss_ipsecmgr_sa_sel2key(&nim->msg.sa_stats.sel, &key);
 
-		write_lock(&priv->lock);
+		write_lock(&ipsecmgr_ctx->lock);
 
-		ref = nss_ipsecmgr_sa_lookup(priv, &key);
+		ref = nss_ipsecmgr_sa_lookup(&key);
 		if (!ref) {
-			write_unlock(&priv->lock);
+			write_unlock(&ipsecmgr_ctx->lock);
 			nss_ipsecmgr_error("event received on deallocated SA tunnel:(%d)\n", nim->tunnel_id);
 			goto done;
 		}
@@ -505,7 +550,7 @@ static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim
 		memcpy(&sa_stats->sa, &sa->sa_info, sizeof(struct nss_ipsecmgr_sa));
 		sa_stats->crypto_index = sa->nim.msg.push.data.crypto_index;
 
-		write_unlock(&priv->lock);
+		write_unlock(&ipsecmgr_ctx->lock);
 
 		/*
 		 * if event callback is available then post the statistics using the callback function
@@ -528,9 +573,9 @@ static void nss_ipsecmgr_tunnel_notify(void *app_data, struct nss_ipsec_msg *nim
 
 	case NSS_IPSEC_MSG_TYPE_SYNC_NODE_STATS:
 
-		drv_stats = &ipsecmgr_ctx.enc_stats;
+		drv_stats = &ipsecmgr_ctx->enc_stats;
 		if (unlikely(nim->cm.interface == NSS_IPSEC_DECAP_IF_NUMBER)) {
-			drv_stats = &ipsecmgr_ctx.dec_stats;
+			drv_stats = &ipsecmgr_ctx->dec_stats;
 		}
 
 		memcpy(drv_stats, &nim->msg.node_stats, sizeof(struct nss_ipsec_node_stats));
@@ -549,22 +594,24 @@ done:
  */
 static ssize_t nss_ipsecmgr_node_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
 {
-	char *local;
+	struct nss_ipsec_node_stats *enc_stats = &ipsecmgr_ctx->enc_stats;
+	struct nss_ipsec_node_stats *dec_stats = &ipsecmgr_ctx->dec_stats;
 	ssize_t ret = 0;
+	char *local;
 	int len;
 
 	local = vmalloc(NSS_IPSECMGR_MAX_BUF_SZ);
 
 	len = 0;
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_enqueued: %d\n", ipsecmgr_ctx.enc_stats.enqueued);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_completed: %d\n", ipsecmgr_ctx.enc_stats.completed);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_exceptioned: %d\n", ipsecmgr_ctx.enc_stats.exceptioned);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_enqueue_failed: %d\n", ipsecmgr_ctx.enc_stats.fail_enqueue);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_enqueued: %d\n", enc_stats->enqueued);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_completed: %d\n", enc_stats->completed);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_exceptioned: %d\n", enc_stats->exceptioned);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_enqueue_failed: %d\n", enc_stats->fail_enqueue);
 
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueued: %d\n", ipsecmgr_ctx.dec_stats.enqueued);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_completed: %d\n", ipsecmgr_ctx.dec_stats.completed);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_exceptioned: %d\n", ipsecmgr_ctx.dec_stats.exceptioned);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueue_failed: %d\n", ipsecmgr_ctx.dec_stats.fail_enqueue);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueued: %d\n", dec_stats->enqueued);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_completed: %d\n", dec_stats->completed);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_exceptioned: %d\n", dec_stats->exceptioned);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueue_failed: %d\n", dec_stats->fail_enqueue);
 
 	ret = simple_read_from_buffer(ubuf, sz, ppos, local, len + 1);
 
@@ -604,30 +651,12 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 	priv->cb_ctx = cb->ctx;
 	priv->data_cb = cb->data_fn;
 	priv->event_cb = cb->event_fn;
-	priv->nss_ctx = nss_ipsec_get_context();
-	priv->nss_ifnum = nss_ipsec_get_interface(priv->nss_ctx);
-	if (priv->nss_ifnum < 0) {
-		nss_ipsecmgr_error("Invalid nss interface :%d\n", priv->nss_ifnum);
-		goto fail;
-	}
-
-	rwlock_init(&priv->lock);
-	nss_ipsecmgr_init_sa_db(&priv->sa_db);
-	nss_ipsecmgr_init_netmask_db(&priv->net_db);
-	nss_ipsecmgr_init_flow_db(&priv->flow_db);
 
 	status = rtnl_is_locked() ? register_netdevice(dev) : register_netdev(dev);
 	if (status < 0) {
-		nss_ipsecmgr_error("register net dev failed :%d\n", priv->nss_ifnum);
+		nss_ipsecmgr_error("register net dev failed :%s\n", dev->name);
 		goto fail;
 	}
-
-	nss_ipsec_data_register(priv->nss_ifnum, nss_ipsecmgr_tunnel_rx, dev, 0);
-	nss_ipsec_notify_register(NSS_IPSEC_ENCAP_IF_NUMBER, nss_ipsecmgr_tunnel_notify, dev);
-	nss_ipsec_notify_register(NSS_IPSEC_DECAP_IF_NUMBER, nss_ipsecmgr_tunnel_notify, dev);
-
-	priv->dentry = debugfs_create_dir(dev->name, ipsecmgr_ctx.dentry);
-	init_completion(&priv->complete);
 
 	return dev;
 fail:
@@ -645,23 +674,11 @@ bool nss_ipsecmgr_tunnel_del(struct net_device *dev)
 {
 	struct nss_ipsecmgr_priv *priv = netdev_priv(dev);
 
-	/*
-	 * Unregister the callbacks from the HLOS as we are no longer
-	 * interested in exception data & async messages
-	 */
-	nss_ipsec_data_unregister(priv->nss_ctx, priv->nss_ifnum);
-
-	nss_ipsec_notify_unregister(priv->nss_ctx, NSS_IPSEC_ENCAP_IF_NUMBER);
-	nss_ipsec_notify_unregister(priv->nss_ctx, NSS_IPSEC_DECAP_IF_NUMBER);
 
 	priv->data_cb = NULL;
 	priv->event_cb = NULL;
 
 	nss_ipsecmgr_sa_flush_all(priv);
-
-	if (priv->dentry)  {
-		debugfs_remove_recursive(priv->dentry);
-	}
 
 	/*
 	 * The unregister should start here but the expectation is that the free would
@@ -673,24 +690,96 @@ bool nss_ipsecmgr_tunnel_del(struct net_device *dev)
 }
 EXPORT_SYMBOL(nss_ipsecmgr_tunnel_del);
 
+static const struct net_device_ops nss_ipsecmgr_ipsec_ndev_ops;
+
+/*
+ * nss_ipsecmgr_dummy_netdevice_setup()
+ *	Setup function for dummy netdevice.
+ */
+static void nss_ipsecmgr_dummy_netdevice_setup(struct net_device *dev)
+{
+}
+
 /*
  * nss_ipsecmgr_init()
  *	module init
  */
 static int __init nss_ipsecmgr_init(void)
 {
+	int status;
+
 	if (!nss_cmn_get_nss_enabled()) {
 		nss_ipsecmgr_info_always("NSS is not enabled in this platform\n");
 		return 0;
 	}
 
+	ipsecmgr_ctx = vmalloc(sizeof(struct nss_ipsecmgr_drv));
+	if (!ipsecmgr_ctx) {
+		nss_ipsecmgr_info_always("Allocating ipsecmgr context failed\n");
+		return 0;
+	}
+
+	ipsecmgr_ctx->nss_ctx = nss_ipsec_get_context();
+	if (!ipsecmgr_ctx->nss_ctx) {
+		nss_ipsecmgr_info_always("Getting NSS Context failed\n");
+		goto free;
+	}
+
+	ipsecmgr_ctx->nss_ifnum = nss_ipsec_get_interface(ipsecmgr_ctx->nss_ctx);
+	if (ipsecmgr_ctx->nss_ifnum < 0) {
+		nss_ipsecmgr_info_always("%p: Invalid interface number  %d\n", ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->nss_ifnum);
+		goto free;
+	}
+
+	ipsecmgr_ctx->ndev = alloc_netdev(0, NSS_IPSECMGR_TUN_NAME, nss_ipsecmgr_dummy_netdevice_setup);
+	if (!ipsecmgr_ctx->ndev) {
+		nss_ipsecmgr_info_always("Ipsec: Could not allocate ipsec net_device\n");
+		goto free;
+	}
+
+	ipsecmgr_ctx->ndev->netdev_ops = &nss_ipsecmgr_ipsec_ndev_ops;
+
+	status = rtnl_is_locked() ? register_netdevice(ipsecmgr_ctx->ndev) : register_netdev(ipsecmgr_ctx->ndev);
+	if (status) {
+		nss_ipsecmgr_info_always("IPsec: Could not register ipsec net_device\n");
+		goto netdev_free;
+	}
+
+	rwlock_init(&ipsecmgr_ctx->lock);
+	nss_ipsecmgr_init_sa_db(&ipsecmgr_ctx->sa_db);
+	nss_ipsecmgr_init_netmask_db(&ipsecmgr_ctx->net_db);
+	nss_ipsecmgr_init_flow_db(&ipsecmgr_ctx->flow_db);
+
+
+	nss_ipsec_data_register(ipsecmgr_ctx->nss_ifnum, nss_ipsecmgr_tunnel_rx, ipsecmgr_ctx->ndev, 0);
+	nss_ipsec_notify_register(NSS_IPSEC_ENCAP_IF_NUMBER, nss_ipsecmgr_tunnel_notify, NULL);
+	nss_ipsec_notify_register(NSS_IPSEC_DECAP_IF_NUMBER, nss_ipsecmgr_tunnel_notify, NULL);
+
 	/*
 	 * initialize debugfs.
 	 */
-	ipsecmgr_ctx.dentry = debugfs_create_dir("qca-nss-ipsecmgr", NULL);
-	debugfs_create_file("stats", S_IRUGO, ipsecmgr_ctx.dentry, NULL, &node_stats_op);
+	ipsecmgr_ctx->dentry = debugfs_create_dir("qca-nss-ipsecmgr", NULL);
+	if (!ipsecmgr_ctx->dentry) {
+		nss_ipsecmgr_info_always("Creating debug directory failed\n");
+		goto unregister_dev;
+
+	}
+
+	debugfs_create_file("stats", S_IRUGO, ipsecmgr_ctx->dentry, NULL, &node_stats_op);
 
 	nss_ipsecmgr_info_always("NSS IPsec manager loaded: %s\n", NSS_CLIENT_BUILD_ID);
+	return 0;
+
+unregister_dev:
+	rtnl_is_locked() ? unregister_netdevice(ipsecmgr_ctx->ndev) : unregister_netdev(ipsecmgr_ctx->ndev);
+
+netdev_free:
+	free_netdev(ipsecmgr_ctx->ndev);
+
+free:
+	vfree(ipsecmgr_ctx);
+	ipsecmgr_ctx = NULL;
+
 	return 0;
 }
 
@@ -700,14 +789,45 @@ static int __init nss_ipsecmgr_init(void)
  */
 static void __exit nss_ipsecmgr_exit(void)
 {
-	nss_ipsecmgr_info_always("NSS IPsec manager unloaded\n");
+	if (!ipsecmgr_ctx) {
+		nss_ipsecmgr_info_always("Invalid ipsecmgr Context\n");
+		return;
+	}
+
+	if (!ipsecmgr_ctx->nss_ctx) {
+		nss_ipsecmgr_info_always("Invalid NSS Context\n");
+		vfree(ipsecmgr_ctx);
+		ipsecmgr_ctx = NULL;
+		return;
+	}
 
 	/*
-	 * cleanup debugfs.
+	 * Unregister the callbacks from the HLOS as we are no longer
+	 * interested in exception data & async messages
 	 */
-	if (ipsecmgr_ctx.dentry) {
-		debugfs_remove_recursive(ipsecmgr_ctx.dentry);
+	nss_ipsec_data_unregister(ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->nss_ifnum);
+
+	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, NSS_IPSEC_ENCAP_IF_NUMBER);
+	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, NSS_IPSEC_DECAP_IF_NUMBER);
+
+	if (ipsecmgr_ctx->ndev) {
+		rtnl_is_locked() ? unregister_netdevice(ipsecmgr_ctx->ndev) : unregister_netdev(ipsecmgr_ctx->ndev);
 	}
+
+	/*
+	 * Remove debugfs directory and entries below that.
+	 */
+	if (ipsecmgr_ctx->dentry) {
+		debugfs_remove_recursive(ipsecmgr_ctx->dentry);
+	}
+
+	/*
+	 * Free the ipsecmgr ctx
+	 */
+	vfree(ipsecmgr_ctx);
+	ipsecmgr_ctx = NULL;
+
+	nss_ipsecmgr_info_always("NSS IPsec manager unloaded\n");
 
 }
 
