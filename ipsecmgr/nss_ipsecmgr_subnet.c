@@ -70,7 +70,7 @@ static inline bool nss_ipsecmgr_netmask_is_default(struct nss_ipsecmgr_key *key)
 	}
 
 	mask64_low = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST);
-	mask64_high = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST + 2);
+	mask64_high = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST + 64);
 
 	return !(mask64_low || mask64_high);
 }
@@ -157,7 +157,7 @@ static inline uint32_t nss_ipsecmgr_netmask2idx(struct nss_ipsecmgr_key *key)
 		return __ffs64(mask64_low);
 	}
 
-	mask64_high = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST + 2);
+	mask64_high = nss_ipsecmgr_key_read_mask64(key, NSS_IPSECMGR_KEY_POS_IPV6_DST + 64);
 	if (mask64_high) {
 		return __ffs64(mask64_high) + 64;
 	}
