@@ -85,7 +85,7 @@
 #error "NSS_IPSECMGR_MAX_SUBNET is not a power of 2"
 #endif
 
-#define NSS_IPSECMGR_MAX_NETMASK 64 /* Max subnets */
+#define NSS_IPSECMGR_MAX_NETMASK 128 /* Max subnets */
 #if (~(NSS_IPSECMGR_MAX_NETMASK - 1) & (NSS_IPSECMGR_MAX_NETMASK >> 1))
 #error "NSS_IPSECMGR_MAX_NETMASK is not a power of 2"
 #endif
@@ -118,7 +118,7 @@ enum nss_ipsecmgr_key_len {
 	NSS_IPSECMGR_KEY_LEN_IPV4_ENCAP_FLOW = 3,	/* 12 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV4_DECAP_FLOW = 4,	/* 16 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV6_SA = 10,		/* 40 bytes */
-	NSS_IPSECMGR_KEY_LEN_IPV6_SUBNET = 3,		/* 12 bytes */
+	NSS_IPSECMGR_KEY_LEN_IPV6_SUBNET = 5,		/* 20 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV6_ENCAP_FLOW = 9,	/* 36 bytes */
 	NSS_IPSECMGR_KEY_LEN_IPV6_DECAP_FLOW = 10,	/* 40 bytes */
 	NSS_IPSECMGR_KEY_LEN_MAX = NSS_IPSECMGR_MAX_KEY_WORDS
@@ -164,7 +164,6 @@ typedef void (*nss_ipsecmgr_ref_free_t)(struct nss_ipsecmgr_priv *priv, struct n
 struct nss_ipsecmgr_key {
 	uint32_t data[NSS_IPSECMGR_MAX_KEY_WORDS];	/* Value N-bits */
 	uint32_t mask[NSS_IPSECMGR_MAX_KEY_WORDS];	/* Mask N-bits */
-	uint32_t hash;					/* 32-bit hash */
 	uint32_t len;					/* Length of the key */
 };
 
@@ -176,8 +175,6 @@ struct nss_ipsecmgr_ref {
 	struct list_head node;				/* child "ref" */
 
 	uint32_t id;					/* identifier */
-	uint8_t name[NSS_IPSECMGR_MAX_NAME];		/* reference object name */
-	struct dentry *dentry;				/* debugfs entry */
 
 	nss_ipsecmgr_ref_update_t update;		/* update function */
 	nss_ipsecmgr_ref_free_t free;			/* free function */
@@ -234,7 +231,7 @@ struct nss_ipsecmgr_subnet_entry {
  * IPsec netmask entry
  */
 struct nss_ipsecmgr_netmask_entry {
-	uint64_t mask_bits;					/* no. of bits in netmask */
+	uint32_t mask_bits;					/* no. of bits in netmask */
 	uint32_t count;						/* no. of subnets entries */
 	struct list_head subnets[NSS_IPSECMGR_MAX_SUBNET];	/* subnet database */
 };
@@ -287,21 +284,11 @@ struct nss_ipsecmgr_flow_db {
  */
 struct nss_ipsecmgr_priv {
 	struct net_device *dev;			/* back pointer to tunnel device */
-	rwlock_t lock;				/* lock for all DB operations */
-
-	struct nss_ipsecmgr_sa_db sa_db;	/* SA database */
-	struct nss_ipsecmgr_netmask_db net_db;	/* Subnet mask database */
-	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
 
 	void *cb_ctx;				/* callback context */
 	nss_ipsecmgr_data_cb_t data_cb;		/* data callback function */
 	nss_ipsecmgr_event_cb_t event_cb;	/* event callback function */
 
-	uint32_t nss_ifnum;			/* NSS interface for sending data */
-	struct nss_ctx_instance *nss_ctx;	/* NSS context */
-
-	struct dentry *dentry;			/* Tunnel device debugfs entry */
-	struct completion complete;		/* completion for flow stats nss msg */
 };
 
 /*
@@ -309,19 +296,21 @@ struct nss_ipsecmgr_priv {
  */
 struct nss_ipsecmgr_drv {
 	struct dentry *dentry;			/* Debugfs entry per ipsecmgr module */
+	struct net_device *ndev;		/* IPsec dummy net device */
+
+	rwlock_t lock;				/* lock for all DB operations */
+
+	struct nss_ipsecmgr_sa_db sa_db;	/* SA database */
+	struct nss_ipsecmgr_netmask_db net_db;	/* Subnet mask database */
+	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
+
+	uint32_t nss_ifnum;			/* NSS interface for sending data */
+
+	struct nss_ctx_instance *nss_ctx;	/* NSS context */
 
 	struct nss_ipsec_node_stats enc_stats;	/* Encap node stats */
 	struct nss_ipsec_node_stats dec_stats;	/* Decap node stats */
 };
-
-/*
- * nss_ipsecmgr_ref_get_dentry()
- * 	return the reference object's dentry
- */
-static inline struct dentry *nss_ipsecmgr_ref_get_dentry(struct nss_ipsecmgr_ref *ref)
-{
-	return ref->dentry;
-}
 
 /*
  * nss_ipsecmgr_ref_is_updated()
@@ -339,44 +328,6 @@ static inline bool nss_ipsecmgr_ref_is_updated(struct nss_ipsecmgr_ref *ref)
 static inline uint32_t nss_ipsecmgr_ref_get_id(struct nss_ipsecmgr_ref *ref)
 {
 	return ref->id;
-}
-
-/*
- * nss_ipsecmgr_ref_get_name()
- * 	return the reference object name
- */
-static inline char *nss_ipsecmgr_ref_get_name(struct nss_ipsecmgr_ref *ref)
-{
-	return (char *)ref->name;
-}
-
-/*
- * nss_ipsecmgr_ref_set_dentry()
- * 	set the reference object's dentry
- */
-static inline void nss_ipsecmgr_ref_set_dentry(struct nss_ipsecmgr_ref *ref, struct dentry *dentry)
-{
-	ref->dentry = dentry;
-}
-
-/*
- * nss_ipsecmgr_ref_update_name()
- * 	set the reference name
- */
-static inline void nss_ipsecmgr_ref_update_name(struct nss_ipsecmgr_ref *ref, char *name)
-{
-	strlcat(ref->name, name, NSS_IPSECMGR_MAX_NAME);
-}
-
-/*
- * nss_ipsecmgr_ref_update_name_u8()
- * 	set the reference name
- */
-static inline void nss_ipsecmgr_ref_update_name_u8(struct nss_ipsecmgr_ref *ref, uint8_t val)
-{
-	char *str = ref->name + strlen(ref->name);
-
-	hex_byte_pack(str, val);
 }
 
 /*
@@ -631,7 +582,7 @@ static inline void nss_ipsecmgr_key_clear_32(struct nss_ipsecmgr_key *key, enum 
 
 /*
  * nss_ipsecmgr_key_clear_64()
- * 	clear 32-bit mask from the specified position
+ * 	clear 64-bit mask from the specified position
  */
 static inline void nss_ipsecmgr_key_clear_64(struct nss_ipsecmgr_key *key, enum nss_ipsecmgr_key_pos p)
 {
@@ -640,6 +591,19 @@ static inline void nss_ipsecmgr_key_clear_64(struct nss_ipsecmgr_key *key, enum 
 	idx = BIT_WORD(p) % NSS_IPSECMGR_MAX_KEY_WORDS;
 	key->mask[idx] = 0;
 	key->mask[idx + 1] = 0;
+}
+
+/*
+ * nss_ipsecmgr_key_clear_128()
+ * 	clear 128-bit mask from the specified position
+ */
+static inline void nss_ipsecmgr_key_clear_128(struct nss_ipsecmgr_key *key, enum nss_ipsecmgr_key_pos p)
+{
+	uint16_t idx;
+
+	idx = BIT_WORD(p) % NSS_IPSECMGR_MAX_KEY_WORDS;
+
+	memset(&key->mask[idx], 0, sizeof(uint32_t) * 4);
 }
 
 /*
@@ -759,6 +723,22 @@ static inline void nss_ipsecmgr_key_lshift_mask64(struct nss_ipsecmgr_key *key, 
 }
 
 /*
+ * nss_ipsecmgr_key_lshift_mask128()
+ * 	left shift mask by an amount 's'
+ */
+static inline void nss_ipsecmgr_key_lshift_mask128(struct nss_ipsecmgr_key *key, uint32_t s, enum nss_ipsecmgr_key_pos p)
+{
+	uint16_t idx;
+	uint32_t mask[4];
+
+	idx = BIT_WORD(p) % NSS_IPSECMGR_MAX_KEY_WORDS;
+
+	memcpy(mask, &key->mask[idx], sizeof(uint32_t) * 4);
+
+	bitmap_shift_left((unsigned long *)&key->mask[idx], (unsigned long *)mask, s, 128);
+}
+
+/*
  * nss_ipsecmgr_key_cmp_data()
  * 	compare source key with destination key
  *
@@ -813,83 +793,6 @@ static inline uint32_t nss_ipsecmgr_key_data2idx(struct nss_ipsecmgr_key *key, c
 	}
 
 	return idx & (table_sz - 1);
-}
-
-/*
- * nss_ipsecmgr_key_get_hash()
- * 	return key hash
- */
-static inline uint32_t nss_ipsecmgr_key_get_hash(struct nss_ipsecmgr_key *key)
-{
-	return key->hash;
-}
-
-/*
- * nss_ipsecmgr_key_gen_hash()
- * 	generate the hash and store inside the key
- */
-static inline void nss_ipsecmgr_key_gen_hash(struct nss_ipsecmgr_key *key, const uint32_t table_sz)
-{
-	uint32_t *data = key->data;
-	uint32_t *mask = key->mask;
-	uint32_t len = key->len;
-	uint32_t idx;
-	uint32_t val;
-
-	/*
-	 * bug on if table_sz is not
-	 * - a constant
-	 * - and a power of 2
-	 */
-	BUG_ON(!NSS_IPSECMGR_CHK_POW2(table_sz));
-
-	for (idx = 0; len; len--, mask++, data++) {
-		val = *data & *mask;
-		idx ^= val;
-	}
-
-	/*
-	 * store the hash for various usage
-	 */
-	key->hash = idx;
-}
-
-/*
- * nss_ipsecmgr_key_hash2str()
- * 	converts a 32-bit key hash into a string value
- */
-static inline char *nss_ipsecmgr_key_hash2str(struct nss_ipsecmgr_key *key, char *str)
-{
-	uint8_t *hash = (uint8_t *)&key->hash;
-	char *tmp = str;
-
-	str = hex_byte_pack(str, hash[0]);
-	str = hex_byte_pack(str, hash[1]);
-	str = hex_byte_pack(str, hash[2]);
-	str = hex_byte_pack(str, hash[3]);
-
-	return tmp;
-}
-
-/*
- * nss_ipsecmgr_key_hash2str()
- * 	converts a 32-bit key hash into a string value
- */
-static inline char *nss_ipsecmgr_key_netmask2str(struct nss_ipsecmgr_key *key, char *str, enum nss_ipsecmgr_key_pos pos)
-{
-	uint32_t mask, data;
-	char *tmp = str;
-	uint8_t *hash;
-
-	nss_ipsecmgr_key_read(key, &data, &mask, pos, 1);
-	hash = (uint8_t *)&mask;
-
-	str = hex_byte_pack(str, hash[0]);
-	str = hex_byte_pack(str, hash[1]);
-	str = hex_byte_pack(str, hash[2]);
-	str = hex_byte_pack(str, hash[3]);
-
-	return tmp;
 }
 
 /*
@@ -1170,7 +1073,7 @@ void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr
  * SA alloc/lookup/flush API(s)
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
-struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
+struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_sa_flush_all(struct nss_ipsecmgr_priv *priv);
 
 #endif /* __NSS_IPSECMGR_PRIV_H */

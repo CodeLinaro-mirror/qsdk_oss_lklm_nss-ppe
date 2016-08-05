@@ -27,7 +27,7 @@
 #define NSS_NLIPV6_FAMILY "nss_nlipv6"
 
 #define NSS_NLIPV6_ADDR_BITS (sizeof(uint32_t) * 4 * BITS_PER_BYTE)	/* 128 bits */
-#define NSS_NLIPV6_SUBNET_BITS (sizeof(uint32_t) * 2 * BITS_PER_BYTE)	/* 64 bits */
+#define NSS_NLIPV6_SUBNET_BITS (sizeof(uint32_t) * 4 * BITS_PER_BYTE)	/* 128 bits */
 
 /**
  * @brief IPv6 rule
