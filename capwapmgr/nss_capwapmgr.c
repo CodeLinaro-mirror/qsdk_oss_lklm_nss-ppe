@@ -479,8 +479,13 @@ struct net_device *nss_capwapmgr_netdev_create()
 	int i;
 	int err;
 
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 16, 0))
 	ndev = alloc_netdev(sizeof(struct nss_capwapmgr_priv),
                                         "nsscapwap%d", nss_capwapmgr_dummpy_netdev_setup);
+#else
+	ndev = alloc_netdev(sizeof(struct nss_capwapmgr_priv),
+					"nsscapwap%d", NET_NAME_ENUM, nss_capwapmgr_dummpy_netdev_setup);
+#endif
 	if (!ndev) {
 		nss_capwapmgr_warn("Error allocating netdev\n");
 		return NULL;
