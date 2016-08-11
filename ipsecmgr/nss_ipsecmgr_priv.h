@@ -114,6 +114,8 @@
 #define NSS_IPSECMGR_PER_FLOW_BUF_DST_IP_SIZE 100
 #define NSS_IPSECMGR_PER_FLOW_BUF_TYPE_SIZE 100
 
+#define NSS_IPSECMGR_DEFAULT_TUN_NAME "ipsecdummy"
+
 struct nss_ipsecmgr_ref;
 struct nss_ipsecmgr_key;
 struct nss_ipsecmgr_priv;
