@@ -802,7 +802,7 @@ static int __init nss_ipsecmgr_init(void)
 		goto free;
 	}
 
-	ipsecmgr_ctx->ndev = alloc_netdev(0, NSS_IPSECMGR_TUN_NAME, nss_ipsecmgr_dummy_netdevice_setup);
+	ipsecmgr_ctx->ndev = alloc_netdev(0, NSS_IPSECMGR_DEFAULT_TUN_NAME, nss_ipsecmgr_dummy_netdevice_setup);
 	if (!ipsecmgr_ctx->ndev) {
 		nss_ipsecmgr_info_always("Ipsec: Could not allocate ipsec net_device\n");
 		goto free;
