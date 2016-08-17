@@ -143,14 +143,13 @@ ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, size_t sz
 	read_lock_bh(&ipsecmgr_ctx->lock);
 
 	head = sa_db->entries;
-	for (i = NSS_IPSECMGR_MAX_SA; (max_len > 0) && i--; head++) {
+	for (i = NSS_IPSECMGR_MAX_SA; ((max_len - len) > 0) && i--; head++) {
 		list_for_each_entry(sa, head, node) {
-			if (unlikely(max_len <= 0)) {
+			if (unlikely((max_len - len) <= 0)) {
 				break;
 			}
 
-			len += nss_ipsecmgr_sa_dump(sa, buf + len, max_len);
-			max_len = max_len - len;
+			len += nss_ipsecmgr_sa_dump(sa, buf + len, max_len - len);
 		}
 	}
 
