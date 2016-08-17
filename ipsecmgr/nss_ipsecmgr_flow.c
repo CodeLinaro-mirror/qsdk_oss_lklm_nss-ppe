@@ -132,17 +132,21 @@ static void nss_ipsecmgr_flow_free(struct nss_ipsecmgr_priv *priv, struct nss_ip
 static size_t nss_ipsecmgr_flow_dump(struct net_device *dev, struct nss_ipsec_msg *nim, char *buf, int max_len)
 {
 	struct nss_ipsec_rule_sel *sel = &nim->msg.flow_stats.sel;
+	struct nss_ipsec_rule_oip *oip = &nim->msg.push.oip;
 	uint32_t src_ip[4] = {0}, dst_ip[4] = {0};
+	uint32_t esp_spi;
 	size_t len;
 	char *type;
 
 	switch (nim->cm.interface) {
 	case NSS_IPSEC_ENCAP_IF_NUMBER:
 		type = "encap";
+		esp_spi = oip->esp_spi;
 		break;
 
 	case NSS_IPSEC_DECAP_IF_NUMBER:
 		type = "decap";
+		esp_spi = sel->esp_spi;
 		break;
 
 	default:
@@ -154,7 +158,7 @@ static size_t nss_ipsecmgr_flow_dump(struct net_device *dev, struct nss_ipsec_ms
 	switch (sel->ip_ver) {
 	case NSS_IPSEC_IPVER_4:
 		len = snprintf(buf, max_len, "3-tuple type=%s tunnelid=%s ip_ver=4 src_ip=%pI4h dst_ip=%pI4h proto=%d spi=%x\n",
-				type, dev->name, &sel->src_addr[0], &sel->dst_addr[0], sel->proto_next_hdr, sel->esp_spi);
+				type, dev->name, &sel->src_addr[0], &sel->dst_addr[0], sel->proto_next_hdr, esp_spi);
 		break;
 
 	case NSS_IPSEC_IPVER_6:
@@ -162,7 +166,7 @@ static size_t nss_ipsecmgr_flow_dump(struct net_device *dev, struct nss_ipsec_ms
 		nss_ipsecmgr_v6addr_hton(sel->src_addr, src_ip);
 
 		len = snprintf(buf, max_len, "3-tuple type=%s tunnelid=%s ip_ver=6 src_ip=%pI6c dst_ip=%pI6c proto=%d spi=%x\n",
-				type, dev->name, src_ip, dst_ip, sel->proto_next_hdr, sel->esp_spi);
+				type, dev->name, src_ip, dst_ip, sel->proto_next_hdr, esp_spi);
 		break;
 
 	default:
@@ -413,6 +417,7 @@ ssize_t nss_ipsecmgr_per_flow_stats_write(struct file *file, const char __user *
 	uint8_t *buf, *src_ip, *dst_ip, *type, *tunnel_id;
 	uint32_t interface, ip_ver, proto;
 	struct nss_ipsec_rule_sel *sel;
+	struct nss_ipsec_rule_oip *oip;
 	struct net_device *dev;
 	uint32_t buf_size;
 	ssize_t ret;
@@ -467,6 +472,7 @@ ssize_t nss_ipsecmgr_per_flow_stats_write(struct file *file, const char __user *
 	 * prepare for string to numeric conversion of the data
 	 */
 	sel  = &resp_nim->msg.flow_stats.sel;
+	oip  = &resp_nim->msg.push.oip;
 	src_ip = buf + NSS_IPSECMGR_PER_FLOW_BUF_SIZE;
 	dst_ip = src_ip + NSS_IPSECMGR_PER_FLOW_BUF_SRC_IP_SIZE;
 	type = dst_ip + NSS_IPSECMGR_PER_FLOW_BUF_DST_IP_SIZE;
@@ -527,6 +533,7 @@ ssize_t nss_ipsecmgr_per_flow_stats_write(struct file *file, const char __user *
 	 */
 	if (!strcmp(type, "encap")) {
 		interface = NSS_IPSEC_ENCAP_IF_NUMBER;
+		oip->esp_spi = sel->esp_spi;
 	} else {
 		interface = NSS_IPSEC_DECAP_IF_NUMBER;
 	}
