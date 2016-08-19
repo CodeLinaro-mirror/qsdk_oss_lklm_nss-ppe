@@ -94,13 +94,25 @@
 
 #define NSS_IPSECMGR_GENMASK(hi, lo) ((~0 >> (31 - hi)) << lo)
 
-#define NSS_IPSECMGR_MAX_BUF_SZ 512
+#define NSS_IPSECMGR_MAX_BUF_SZ 2048
 #define NSS_IPSECMGR_PROTO_NEXT_HDR_ANY 0xff
 
 #define NSS_IPSECMGR_V6_SUBNET_BITS (sizeof(uint32_t) * 2 * BITS_PER_BYTE)
 
 #define NSS_IPSECMGR_DSCP_MASK_ON 0xFF
 #define NSS_IPSECMGR_DSCP_MASK_OFF 0x00
+
+#define NSS_IPSECMGR_SA_STATS_SIZE 200
+#define NSS_IPSECMGR_SUBNET_STATS_SIZE 100
+
+#define NSS_IPSECMGR_MSG_SYNC_TIMEOUT_MSECS 2000
+#define NSS_IPSECMGR_MSG_SYNC_TIMEOUT_TICKS msecs_to_jiffies(NSS_IPSECMGR_MSG_SYNC_TIMEOUT_MSECS)
+
+#define NSS_IPSECMGR_PER_FLOW_STATS_SIZE 200
+#define NSS_IPSECMGR_PER_FLOW_BUF_SIZE 500
+#define NSS_IPSECMGR_PER_FLOW_BUF_SRC_IP_SIZE 100
+#define NSS_IPSECMGR_PER_FLOW_BUF_DST_IP_SIZE 100
+#define NSS_IPSECMGR_PER_FLOW_BUF_TYPE_SIZE 100
 
 struct nss_ipsecmgr_ref;
 struct nss_ipsecmgr_key;
@@ -212,6 +224,8 @@ struct nss_ipsecmgr_sa_entry {
  * IPsec manager SA entry table
  */
 struct nss_ipsecmgr_sa_db {
+	atomic_t num_entries;			/* active entries in the entity */
+
 	struct list_head entries[NSS_IPSECMGR_MAX_SA];
 };
 
@@ -244,6 +258,7 @@ struct nss_ipsecmgr_netmask_entry {
  * table
  */
 struct nss_ipsecmgr_netmask_db {
+	atomic_t num_entries;							/* active entries in the entity */
 	unsigned long bitmap[NSS_IPSECMGR_NETMASK_BITMAP];			/* netmask bitmap */
 	struct nss_ipsecmgr_netmask_entry *entries[NSS_IPSECMGR_MAX_NETMASK];	/* netmask entry database */
 	struct nss_ipsecmgr_netmask_entry *default_entry;			/* default netmask */
@@ -276,6 +291,7 @@ struct nss_ipsecmgr_flow_retry {
  * IPsec manager flow database
  */
 struct nss_ipsecmgr_flow_db {
+	atomic_t num_entries;					/* active entries in the entity */
 	struct list_head entries[NSS_IPSECMGR_MAX_FLOW];	/* flow database */
 };
 
@@ -295,7 +311,8 @@ struct nss_ipsecmgr_priv {
  * IPsec manager drv instance
  */
 struct nss_ipsecmgr_drv {
-	struct dentry *dentry;			/* Debugfs entry per ipsecmgr module */
+	struct dentry *dentry;			/* Debugfs entry per ipsecmgr module. */
+	struct dentry *stats_dentry;		/* Debugfs entry per stats dir */
 	struct net_device *ndev;		/* IPsec dummy net device */
 
 	rwlock_t lock;				/* lock for all DB operations */
@@ -303,10 +320,15 @@ struct nss_ipsecmgr_drv {
 	struct nss_ipsecmgr_sa_db sa_db;	/* SA database */
 	struct nss_ipsecmgr_netmask_db net_db;	/* Subnet mask database */
 	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
+	struct completion complete;		/* completion for flow stats nss msg */
 
 	uint32_t nss_ifnum;			/* NSS interface for sending data */
 
 	struct nss_ctx_instance *nss_ctx;	/* NSS context */
+
+	struct nss_ipsec_msg resp_nim;		/* nim for per_flow stats */
+	struct semaphore sem;			/* per flow semaphore lock */
+	atomic_t seq_num;			/* per flow seq no */
 
 	struct nss_ipsec_node_stats enc_stats;	/* Encap node stats */
 	struct nss_ipsec_node_stats dec_stats;	/* Decap node stats */
@@ -812,6 +834,7 @@ static inline void nss_ipsecmgr_init_sa_db(struct nss_ipsecmgr_sa_db *sa_db)
 		INIT_LIST_HEAD(head);
 	}
 
+	atomic_set(&sa_db->num_entries, 0);
 }
 
 /*
@@ -821,6 +844,8 @@ static inline void nss_ipsecmgr_init_sa_db(struct nss_ipsecmgr_sa_db *sa_db)
 static inline void nss_ipsecmgr_init_netmask_db(struct nss_ipsecmgr_netmask_db *net_db)
 {
 	memset(net_db, 0, sizeof(struct nss_ipsecmgr_netmask_db));
+
+	atomic_set(&net_db->num_entries, 0);
 }
 
 /*
@@ -857,6 +882,7 @@ static inline void nss_ipsecmgr_init_flow_db(struct nss_ipsecmgr_flow_db *flow_d
 		INIT_LIST_HEAD(head);
 	}
 
+	atomic_set(&flow_db->num_entries, 0);
 }
 
 /*
@@ -1075,5 +1101,13 @@ void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr
 struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
 struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_sa_flush_all(struct nss_ipsecmgr_priv *priv);
+/*
+ * Stats op functions.
+ */
+ssize_t nss_ipsecmgr_netmask_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos);
+ssize_t nss_ipsecmgr_sa_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos);
+ssize_t nss_ipsecmgr_per_flow_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos);
+ssize_t nss_ipsecmgr_per_flow_stats_write(struct file *file, const char __user *buf, size_t count, loff_t *f_pos);
+ssize_t nss_ipsecmgr_flow_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos);
 
 #endif /* __NSS_IPSECMGR_PRIV_H */

@@ -15,6 +15,7 @@
  */
 #include <linux/types.h>
 #include <linux/ip.h>
+#include <linux/inet.h>
 #include <linux/of.h>
 #include <linux/ipv6.h>
 #include <linux/skbuff.h>
@@ -99,6 +100,7 @@ static void nss_ipsecmgr_flow_update(struct nss_ipsecmgr_priv *priv, struct nss_
 static void nss_ipsecmgr_flow_free(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_ref *ref)
 {
 	struct nss_ipsecmgr_flow_entry *flow = container_of(ref, struct nss_ipsecmgr_flow_entry, ref);
+	struct nss_ipsecmgr_flow_db *db = &ipsecmgr_ctx->flow_db;
 	struct nss_ipsec_msg nss_nim;
 
 	/*
@@ -119,7 +121,427 @@ static void nss_ipsecmgr_flow_free(struct nss_ipsecmgr_priv *priv, struct nss_ip
 	}
 
 	list_del_init(&flow->node);
+	atomic_dec(&db->num_entries);
 	kfree(flow);
+}
+
+/*
+ * nss_ipsecmgr_flow_dump()
+ *	Display the common info for one flow.
+ */
+static size_t nss_ipsecmgr_flow_dump(struct net_device *dev, struct nss_ipsec_msg *nim, char *buf, int max_len)
+{
+	struct nss_ipsec_rule_sel *sel = &nim->msg.flow_stats.sel;
+	uint32_t src_ip[4] = {0}, dst_ip[4] = {0};
+	size_t len;
+	char *type;
+
+	switch (nim->cm.interface) {
+	case NSS_IPSEC_ENCAP_IF_NUMBER:
+		type = "encap";
+		break;
+
+	case NSS_IPSEC_DECAP_IF_NUMBER:
+		type = "decap";
+		break;
+
+	default:
+		nss_ipsecmgr_info("%p:Invalid interface(%d)\n", nim, nim->cm.interface);
+		return 0;
+
+	}
+
+	switch (sel->ip_ver) {
+	case NSS_IPSEC_IPVER_4:
+		len = snprintf(buf, max_len, "3-tuple type=%s tunnelid=%s ip_ver=4 src_ip=%pI4h dst_ip=%pI4h proto=%d spi=%x\n",
+				type, dev->name, &sel->src_addr[0], &sel->dst_addr[0], sel->proto_next_hdr, sel->esp_spi);
+		break;
+
+	case NSS_IPSEC_IPVER_6:
+		nss_ipsecmgr_v6addr_hton(sel->dst_addr, dst_ip);
+		nss_ipsecmgr_v6addr_hton(sel->src_addr, src_ip);
+
+		len = snprintf(buf, max_len, "3-tuple type=%s tunnelid=%s ip_ver=6 src_ip=%pI6c dst_ip=%pI6c proto=%d spi=%x\n",
+				type, dev->name, src_ip, dst_ip, sel->proto_next_hdr, sel->esp_spi);
+		break;
+
+	default:
+		nss_ipsecmgr_info("%p:Invalid IP_VERSION (%d)\n", sel, sel->ip_ver);
+		return 0;
+	}
+
+	return len;
+}
+
+/*
+ * nss_ipsecmgr_flow_stats_read()
+ *	read flow statistics
+ */
+ssize_t nss_ipsecmgr_flow_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
+{
+	struct nss_ipsecmgr_flow_db *db = &ipsecmgr_ctx->flow_db;
+	struct nss_ipsecmgr_flow_entry *entry;
+	struct nss_ipsec_rule_data *data;
+	struct net_device *dev;
+	struct list_head *head;
+	uint32_t num_entries;
+	uint32_t len;
+	ssize_t ret;
+	int max_len;
+	char *buf;
+	int i;
+
+	num_entries = atomic_read(&db->num_entries);
+	if (!num_entries) {
+		return 0;
+	}
+
+	len = 0;
+	max_len = (num_entries * NSS_IPSECMGR_PER_FLOW_STATS_SIZE);
+
+	buf = vzalloc(max_len);
+	if (!buf) {
+		nss_ipsecmgr_error("Memory allocation failed for buffer\n");
+		return 0;
+	}
+
+	read_lock_bh(&ipsecmgr_ctx->lock);
+
+	/*
+	 * Get the flow information from flow db. for both encap and decap
+	 */
+	head = db->entries;
+
+	for (i = NSS_IPSECMGR_MAX_FLOW; ((max_len - len) > 0) && i--; head++) {
+		list_for_each_entry(entry, head, node) {
+			dev = dev_get_by_index(&init_net, entry->nim.tunnel_id);
+			if (!dev) {
+
+				/*
+				 * If, the associated tunnel is deleted and
+				 * the flow remains in table then reassociate
+				 * the flow to the default tunnel
+				 */
+				dev = ipsecmgr_ctx->ndev;
+				dev_hold(dev);
+				entry->nim.tunnel_id = dev->ifindex;
+			}
+
+			if (unlikely((max_len - len) <= 0)) {
+				dev_put(dev);
+				break;
+			}
+
+			data = &entry->nim.msg.push.data;
+			len += nss_ipsecmgr_flow_dump(dev, &entry->nim, buf + len, max_len - len);
+			len += snprintf(buf + len, max_len - len, "cindex:%d\n\n", data->crypto_index);
+
+			dev_put(dev);
+		}
+	}
+
+	read_unlock_bh(&ipsecmgr_ctx->lock);
+
+	ret = simple_read_from_buffer(ubuf, sz, ppos, buf, len);
+	vfree(buf);
+
+	return ret;
+}
+
+/*
+ * nss_ipsecmgr_per_flow_stats_resp()
+ *	response for the flow message
+ *	Note: we don't have anything to process for flow responses as of now
+ */
+static void nss_ipsecmgr_per_flow_stats_resp(void *app_data, struct nss_ipsec_msg *nim)
+{
+	struct nss_ipsec_msg *resp_nim = &ipsecmgr_ctx->resp_nim;
+
+	/*
+	 * Match the sequence number of the nim from NSS to that of the
+	 * global resp nim. This will ensure the response is valid against
+	 * flow parameters stored in global reponse nim. This will help to
+	 * discard any stale responses from NSS.
+	 */
+	if (nim->cm.app_data != atomic_read(&ipsecmgr_ctx->seq_num)) {
+		resp_nim->cm.response = NSS_CMN_RESPONSE_EMSG;
+		goto done;
+
+	}
+
+	if (nim->cm.response != NSS_CMN_RESPONSE_ACK) {
+		resp_nim->cm.response = nim->cm.response;
+		goto done;
+	}
+
+	/*
+	 * Cannot copy entire nim because IP addresses will be in diffrent format in side the nim
+	 */
+	resp_nim->msg.flow_stats.processed  = nim->msg.flow_stats.processed;
+	resp_nim->cm.response = nim->cm.response;
+
+done:
+	complete(&ipsecmgr_ctx->complete);
+}
+
+/*
+ * nss_ipsecmgr_per_flow_stats_read()
+ *	read flow statistics
+ */
+ssize_t nss_ipsecmgr_per_flow_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
+{
+	struct nss_ipsec_flow_stats *flow_stats;
+	struct nss_ipsec_msg *flow_nim, nss_nim;
+	ssize_t ret, len, max_len;
+	struct net_device *dev;
+	char *buf;
+
+	/*
+	 * only one caller will be allowed to send a message
+	 */
+	if (down_interruptible(&ipsecmgr_ctx->sem)) {
+		return 0;
+	}
+
+	flow_nim  = &ipsecmgr_ctx->resp_nim;
+
+	/*
+	 * The check is to ensure prevent the corrupted or uninitialized
+	 * nim to be send to NSS.
+	 */
+	if (flow_nim->cm.len != NSS_IPSEC_MSG_LEN) {
+		nss_ipsecmgr_error("wrong message length\n");
+		goto error;
+	}
+
+	/*
+	 * Update the sequence number in the app_data field of common message.
+	 */
+	flow_nim->cm.app_data = atomic_read(&ipsecmgr_ctx->seq_num);
+
+	/*
+	 * Before send the nim to NSS convert the ip addresses to NSS order
+	 */
+	nss_ipsecmgr_copy_nim(flow_nim, &nss_nim);
+
+	/*
+	 * send stats message to nss
+	 */
+	if (nss_ipsec_tx_msg(ipsecmgr_ctx->nss_ctx, &nss_nim) != NSS_TX_SUCCESS) {
+		nss_ipsecmgr_error("nss tx msg error\n");
+		goto error;
+	}
+
+	/*
+	 * Blocking call, wait till we get ACK for this msg.
+	 */
+	ret = wait_for_completion_timeout(&ipsecmgr_ctx->complete, NSS_IPSECMGR_MSG_SYNC_TIMEOUT_TICKS);
+	if (!ret) {
+		nss_ipsecmgr_error("nss stats message timed out \n");
+
+		/*
+		 * increment the seq_num so that if any stale response comes
+		 * it will get ignored.
+		 */
+		atomic_inc(&ipsecmgr_ctx->seq_num);
+
+		goto error;
+	}
+
+	/*
+	 * need to ensure that the response data has correctly arrived in
+	 * current CPU cache
+	 */
+	smp_rmb();
+
+	if (flow_nim->cm.response != NSS_CMN_RESPONSE_ACK) {
+		goto error;
+	}
+
+	buf = vzalloc(NSS_IPSECMGR_PER_FLOW_STATS_SIZE);
+	if (!buf) {
+		nss_ipsecmgr_error("Memory allocation failed for buffer\n");
+		goto error;
+	}
+
+	dev = dev_get_by_index(&init_net, flow_nim->tunnel_id);
+	if (!dev) {
+
+		/*
+		 * Clean the global response nim
+		 */
+		memset(&ipsecmgr_ctx->resp_nim, 0, sizeof(ipsecmgr_ctx->resp_nim));
+		vfree(buf);
+		goto error;
+	}
+
+	/*
+	 * packet stats
+	 */
+	max_len = NSS_IPSECMGR_PER_FLOW_STATS_SIZE;
+	len = nss_ipsecmgr_flow_dump(dev, flow_nim, buf, max_len);
+
+	max_len = max_len - len;
+	if (max_len <= 0) {
+		goto done;
+	}
+
+	flow_stats = &flow_nim->msg.flow_stats;
+	len += snprintf(buf + len, max_len, "processed: %d\n\n", flow_stats->processed);
+done:
+	ret = simple_read_from_buffer(ubuf, sz, ppos, buf, len);
+
+
+	dev_put(dev);
+	vfree(buf);
+	up(&ipsecmgr_ctx->sem);
+
+	return ret;
+
+error:
+	up(&ipsecmgr_ctx->sem);
+	return 0;
+}
+
+/*
+ * nss_ipsecmgr_per_flow_stats_write()
+ *	write flow entry
+ */
+ssize_t nss_ipsecmgr_per_flow_stats_write(struct file *file, const char __user *ubuf, size_t count, loff_t *f_pos)
+{
+	struct nss_ipsec_msg *resp_nim = &ipsecmgr_ctx->resp_nim;
+	uint8_t *buf, *src_ip, *dst_ip, *type, *tunnel_id;
+	uint32_t interface, ip_ver, proto;
+	struct nss_ipsec_rule_sel *sel;
+	struct net_device *dev;
+	uint32_t buf_size;
+	ssize_t ret;
+	int status;
+
+	if (*f_pos > NSS_IPSECMGR_PER_FLOW_BUF_SIZE) {
+		return -EINVAL;
+	}
+
+	/*
+	 * add all the expected input buffers into a single
+	 * one
+	 */
+	buf_size = NSS_IPSECMGR_PER_FLOW_BUF_SIZE;
+	buf_size = buf_size + NSS_IPSECMGR_PER_FLOW_BUF_SRC_IP_SIZE;
+	buf_size = buf_size + NSS_IPSECMGR_PER_FLOW_BUF_DST_IP_SIZE;
+	buf_size = buf_size + NSS_IPSECMGR_PER_FLOW_BUF_TYPE_SIZE;
+	buf_size = buf_size + IFNAMSIZ;
+
+	buf = vzalloc(buf_size);
+	if (!buf) {
+		return -ENOMEM;
+	}
+
+	ret = simple_write_to_buffer(buf, NSS_IPSECMGR_PER_FLOW_BUF_SIZE, f_pos, ubuf, count);
+	if (ret < 0) {
+		vfree(buf);
+		return -ENOMEM;
+	}
+
+	/*
+	 * need to ensure that the buffer ends with NULL character
+	 */
+	buf[ret] = '\0';
+
+	/*
+	 * only one outstanding read or write is allowed
+	 */
+	if (down_interruptible(&ipsecmgr_ctx->sem)) {
+		vfree(buf);
+		return -EINTR;
+	}
+
+	/*
+	 * increment the sequence no. here to ensure
+	 * that the any pending responses after this
+	 * are invalid
+	 */
+	atomic_inc(&ipsecmgr_ctx->seq_num);
+
+	/*
+	 * prepare for string to numeric conversion of the data
+	 */
+	sel  = &resp_nim->msg.flow_stats.sel;
+	src_ip = buf + NSS_IPSECMGR_PER_FLOW_BUF_SIZE;
+	dst_ip = src_ip + NSS_IPSECMGR_PER_FLOW_BUF_SRC_IP_SIZE;
+	type = dst_ip + NSS_IPSECMGR_PER_FLOW_BUF_DST_IP_SIZE;
+	tunnel_id = type + NSS_IPSECMGR_PER_FLOW_BUF_TYPE_SIZE;
+
+	status = sscanf(buf, "type=%s tunnelid=%s ip_ver=%d src_ip=%s dst_ip=%s proto=%d spi=%x",
+			type, tunnel_id, &ip_ver, src_ip, dst_ip, &proto, &sel->esp_spi);
+	if (status <= 0) {
+		goto error;
+	}
+
+	if (strcmp(type, "encap") && strcmp(type, "decap")) {
+		goto error;
+	}
+
+	if ((ip_ver != 4) && (ip_ver != 6)) {
+		goto error;
+	}
+
+	dev = dev_get_by_name(&init_net, tunnel_id);
+	if (!dev) {
+		nss_ipsecmgr_info("Invalid tunnel Id:%s\n", tunnel_id);
+		goto error;
+	}
+
+	resp_nim->tunnel_id = dev->ifindex;
+	dev_put(dev);
+
+	sel->proto_next_hdr = proto;
+
+	switch (ip_ver) {
+	case 4: /* ipv4 */
+		in4_pton(src_ip, strlen(src_ip), (uint8_t *)&sel->src_addr[0], '\0', NULL);
+		sel->src_addr[0] = ntohl(sel->src_addr[0]);
+
+		in4_pton(dst_ip, strlen(dst_ip), (uint8_t *)&sel->dst_addr[0], '\0', NULL);
+		sel->dst_addr[0] = ntohl(sel->dst_addr[0]);
+
+		sel->ip_ver = NSS_IPSEC_IPVER_4;
+		break;
+
+	case 6: /* ipv6 */
+		in6_pton(src_ip, strlen(src_ip), (uint8_t *)&sel->src_addr[0], '\0', NULL);
+		nss_ipsecmgr_v6addr_ntoh(sel->src_addr, sel->src_addr);
+
+		in6_pton(dst_ip, strlen(dst_ip), (uint8_t *)&sel->dst_addr[0], '\0', NULL);
+		nss_ipsecmgr_v6addr_ntoh(sel->dst_addr, sel->dst_addr);
+
+		sel->ip_ver = NSS_IPSEC_IPVER_6;
+		break;
+
+	default:
+		BUG_ON(0);
+	}
+
+	/*
+	 * prepare IPsec message
+	 */
+	if (!strcmp(type, "encap")) {
+		interface = NSS_IPSEC_ENCAP_IF_NUMBER;
+	} else {
+		interface = NSS_IPSEC_DECAP_IF_NUMBER;
+	}
+
+	nss_ipsec_msg_init(resp_nim, interface, NSS_IPSEC_MSG_TYPE_SYNC_FLOW_STATS, NSS_IPSEC_MSG_LEN, nss_ipsecmgr_per_flow_stats_resp, NULL);
+
+	vfree(buf);
+	up(&ipsecmgr_ctx->sem);
+	return ret;
+
+error:
+	memset(resp_nim, 0, sizeof(struct nss_ipsec_msg));
+	vfree(buf);
+	up(&ipsecmgr_ctx->sem);
+	return -EINVAL;
 }
 
 /*
@@ -438,6 +860,8 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_alloc(struct nss_ipsecmgr_priv *priv,
 
 	memcpy(&flow->key, key, sizeof(struct nss_ipsecmgr_key));
 	list_add(&flow->node, &db->entries[idx]);
+
+	atomic_inc(&db->num_entries);
 
 	/*
 	 * initiallize the reference object
