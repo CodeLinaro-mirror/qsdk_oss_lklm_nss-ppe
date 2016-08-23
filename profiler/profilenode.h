@@ -86,7 +86,10 @@ struct n2h_meta_header {
 
 struct profile_session {	// use for per session start
 	uint32_t hd_magic;	// common ovarlay in all headers
-	uint32_t num_counters;	// how many registered performance (app) counters -- may change
+	uint8_t	num_counters;	/* # performance (app) counters registered (changeable) */
+	uint8_t	unused1B;
+	uint8_t nc_sts_sel_thrA;
+	uint8_t nc_sts_sel_thrB;
 	uint32_t ocm_size;
 	uint32_t sram_start;
 

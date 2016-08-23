@@ -34,6 +34,7 @@
 #include <asm/uaccess.h>
 #include <asm/page.h>
 #include <asm/thread_info.h>
+#include <linux/ctype.h>
 #include <nss_api_if.h>
 
 #include "profilenode.h"
@@ -87,6 +88,9 @@ static void profiler_handle_reply(struct nss_ctx_instance *nss_ctx, struct nss_c
  * LINUX and Ultra counters must all fit in one packet
  */
 #define PROFILE_LINUX_MAX_COUNTERS 40
+#define PROFILE_STS_EVENT_COUNTERS 8
+#define PROFILE_STS_EVENT_THREAD_BITS 5
+
 static int profile_num_counters = 0;
 static volatile unsigned int *profile_counter[PROFILE_LINUX_MAX_COUNTERS];
 static char profile_name[PROFILE_LINUX_MAX_COUNTERS][PROFILE_COUNTER_NAME_LENGTH];
@@ -183,7 +187,7 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 	ph.pph.ddr_freq = pn->pnc.un.ddr_freq;
 	ph.pph.cpu_id = pn->pnc.un.cpu_id;
 	ph.pph.seq_num = htonl(pn->profile_sequence_num);
-	ph.pph.sample_stack_words = htonl(PROFILE_STACK_WORDS);
+	ph.pph.sample_stack_words = PROFILE_STACK_WORDS;
 
 	ns = (blen - sizeof(ph)) / sizeof(struct profile_sample);
 	profileInfo("%X: blen %d ns = %d psc_hd count %d ssets %d phs %d pss %d\n", pn->profile_sequence_num, blen, ns, psc_hd->count, psc_hd->exh.sample_sets, sizeof(ph), sizeof(struct profile_sample));
@@ -262,7 +266,7 @@ struct profile_counter profile_builtin_stats[] =
 };
 
 /*
- * make a packet full of performance counters
+ * make a packet full of performance counters (software)
  */
 static int profile_make_stats_packet(char *buf, int bytes, struct profile_io *pn)
 {
@@ -344,16 +348,24 @@ static int profile_open(struct inode *inode, struct file *filp)
 
 	if (!pn->pnc.enabled && nss_get_state(pn->ctx) == NSS_STATE_INITIALIZED) {
 		nss_tx_status_t ret;
+
+		/*
+		 * sw_ksp_ptr is used as event flag. NULL means normal I/O
+		 */
+		pn->sw_ksp_ptr = NULL;
 		pn->pnc.enabled = 1;
 		pn->profile_first_packet = 1;
 		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
-		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un, sizeof(pn->pnc.un), profiler_handle_reply);
-		profileInfo("%s: %d -- %p: ccl %p sp %p\n", __func__, ret, pn, pn->ccl, pn->pnc.samples);
+		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
+				sizeof(pn->pnc.un), profiler_handle_reply, pn);
+		profileInfo("%s: %d -- %p: ccl %p sp %p\n", __func__, ret,
+			pn, pn->ccl, pn->pnc.samples);
 		filp->private_data = pn;
 		return 0;
 	}
 
-	profileWarn("profile ena %d nss stat %x\n", pn->pnc.enabled, nss_get_state(pn->ctx));
+	profileWarn("profile ena %d nss stat %x\n", pn->pnc.enabled,
+			nss_get_state(pn->ctx));
 	return -EBUSY;
 }
 
@@ -373,6 +385,14 @@ static int profile_read(struct file *filp, char *buf, size_t count, loff_t *f_po
 	if (!pn->pnc.enabled) {
 		return -EPERM;
 	}
+	if (pn->sw_ksp_ptr) {
+		struct debug_box *db = (struct debug_box *) pn->sw_ksp_ptr;
+		slen = (PROFILE_STS_EVENT_COUNTERS + 1) * sizeof(db->data[0]);
+		if (copy_to_user(buf, db->data, slen))
+			return -EFAULT;
+		return	slen;
+	}
+
 	if (!pn->pnc.samples) {
 		return -ENOMEM;
 	}
@@ -408,8 +428,10 @@ static int profile_read(struct file *filp, char *buf, size_t count, loff_t *f_po
 		nss_tx_status_t ret;
 		pn->pnc.enabled = 1;
 		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
-		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un, sizeof(pn->pnc.un), profiler_handle_reply);
-		profileWarn("%s: restart %d -- %p: ccl %p sp %p\n", __func__, ret, pn, pn->ccl, pn->pnc.samples);
+		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un, sizeof(pn->pnc.un),
+						profiler_handle_reply, pn);
+		profileWarn("%s: restart %d -- %p: ccl %p sp %p\n", __func__,
+				ret, pn, pn->ccl, pn->pnc.samples);
 	}
 
 	return result + slen;
@@ -427,9 +449,11 @@ static int profile_release(struct inode *inode, struct file *filp)
 
 	if (pn->pnc.enabled) {
 		nss_tx_status_t ret;
+		pn->sw_ksp_ptr = NULL;
 		pn->pnc.enabled = 0;
 		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_STOP_MSG;
-		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un, sizeof(pn->pnc.un), profiler_handle_reply);
+		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
+				sizeof(pn->pnc.un), profiler_handle_reply, pn);
 		profileInfo("%s: %p %d\n", __func__, pn, ret);
 		return 0;
 	}
@@ -438,8 +462,121 @@ static int profile_release(struct inode *inode, struct file *filp)
 	return -EBADF;
 }
 
-#define isspace(c)	(c==' ' || c=='\t')
+/*
+ * profiler_handle_stat_event_reply()
+ *	print current FW stat event counter configurations
+ */
+static void profiler_handle_stat_event_reply(struct nss_ctx_instance *nss_ctx,
+						struct nss_cmn_msg *ncm)
+{
+	struct profile_io *pio = (struct profile_io *) ncm->app_data;
+	struct debug_box *pdb = (struct debug_box *) &pio->pnc;
+	struct debug_box *db = (struct debug_box *) &ncm[1];
+	int i, thrds;
 
+	for (i = 0; i < db->dlen; i++)
+		printk("stat counter %d: %x\n", i, db->data[i]);
+
+	thrds = db->data[i];
+	i = (1 << PROFILE_STS_EVENT_THREAD_BITS) - 1;
+	profileInfo("%d: event end mark %x, ThrA %d ThrB %d\n",
+		ncm->len, thrds, (thrds & i) + 1,
+		((thrds >> PROFILE_STS_EVENT_THREAD_BITS) & i) + 1);
+
+	/*
+	 * save data for read()
+	 */
+	memcpy(pdb->data, db->data, (db->dlen + 1) * sizeof(db->data[0]));
+}
+
+/*
+ * parse_sys_stat_event_req()
+ *	process FW stat events request: event#1 index#1 event#2 index#2 ...
+ */
+static int parse_sys_stat_event_req(const char *buf, size_t count,
+				struct debug_box *db, struct profile_io *pio)
+{
+	char *cp;
+	int result;
+
+	printk("%d cmd buf %s\n", count, buf);
+	if (count < 19) /* minimum data for sys_stat_event request */
+		return	-EINVAL;
+
+	if (strncmp(buf, "get-sys-stat-events", 19) == 0) {
+		db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_GET_SYS_STAT_EVENT;
+		db->dlen = result;
+		result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
+					sizeof(pio->pnc.un),
+					profiler_handle_stat_event_reply, pio);
+		profileInfo("get_sys_stat_events: %d\n", result);
+		return	result == NSS_TX_SUCCESS ? count : -EFAULT;
+	}
+
+	if (strncmp(buf, "set-sys-stat-events", 19)) {
+		printk("unknow event: %s\n", buf);
+		return	-EINVAL;
+	}
+
+	db->dlen = sizeof(pio->pnc.un);
+	memset(db->data, 0, PROFILE_STS_EVENT_COUNTERS * sizeof(db->data[0]));
+
+	cp = strchr(buf, ' ');
+	if (!cp) {
+		printk("no enough paramters %s\n", buf);
+		return	-EINVAL;
+	}
+
+	do {
+		int idx, event;
+
+		while (isspace(*cp))
+			cp++;
+		event = kstrtoul(cp, NULL, 0);
+
+		cp = strchr(cp, ' ');
+		if (!cp) {
+			printk("missing index %s\n", buf);
+			return	-EINVAL;
+		}
+		while (isspace(*cp))
+			cp++;
+		idx = event >> 16;
+		if (idx) {
+			if ((event & 0x1FF) < 50) {
+				printk("thr ID (%d) ignored for event %d\n",
+					idx, event & 0x1FF);
+			} else if (idx > 12) {
+				if ((idx >>= 5) > 12) {
+					printk("tID %d too big [1..12]\n", idx);
+					return	-E2BIG;
+				}
+			}
+		}
+		idx = kstrtoul(cp, NULL, 10);
+		if (idx < 0 || idx > 7) {
+			printk("index %d out of range [0..7]\n", idx);
+			return	-ERANGE;
+		}
+		printk("%p: e %d i %d\n", db, event, idx);
+		db->data[idx] = event;
+		cp = strchr(cp, ' ');
+	} while (cp);
+	db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_SET_SYS_STAT_EVENT;
+	result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un, sizeof(pio->pnc.un),
+				profiler_handle_stat_event_reply, pio);
+	profileInfo("%p: %d send cmd %x to FW ret %d\n",
+			db, count, db->hd_magic, result);
+	return	count;
+}
+
+/*
+ * parseDbgData()
+ *	parsing debug requests: base_address [options] cmd length
+ *
+ * cmd is either read or write
+ * option is one of mio, moveio, h [heap security verify], etc.
+ */
 static int parseDbgData(const char *buf, size_t count, struct debug_box *db)
 {
 	char *cp;
@@ -523,7 +660,7 @@ static int debug_if(struct file *filp, const char *buf, size_t count, loff_t *f_
 {
 	int result;
 	struct debug_box *db;
-	struct profile_io *pio = node[0];
+	struct profile_io *pio = (struct profile_io *)filp->private_data;
 
 	if (!pio) {
 		return -ENOENT;
@@ -535,6 +672,19 @@ static int debug_if(struct file *filp, const char *buf, size_t count, loff_t *f_
 
 	db = (struct debug_box *) &pio->pnc;
 	db->dlen = db->opts = 0;
+
+	if (!isdigit(buf[0])) {
+		result = parse_sys_stat_event_req(buf, count, db, pio);
+
+		if ((result > 0) && (filp->f_flags & O_RDWR)) {
+			/*
+			 * set flag so event-counter can read the data from FW
+			 */
+			pio->sw_ksp_ptr = (uint32_t *)db;
+		}
+		return	result;
+	}
+
 	result = parseDbgData(buf, count, db);
 	if (result < 0) {
 		return	result;
@@ -546,7 +696,8 @@ static int debug_if(struct file *filp, const char *buf, size_t count, loff_t *f_
 		db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_DEBUG_WR_MSG;
 		db->dlen = result;
 	}
-	result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un, sizeof(pio->pnc.un), profiler_handle_debug_reply);
+	result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
+			sizeof(pio->pnc.un), profiler_handle_debug_reply, pio);
 	printk("dbg res %d dlen = %d opt %x\n", result, db->dlen, db->opts);
 	return	count;
 }
@@ -664,7 +815,7 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 			pn->pnc.un.cpu_id = ntohl(pTx->cpu_id);
 			pn->pnc.un.cpu_freq = ntohl(pTx->cpu_freq);
 			pn->pnc.un.ddr_freq = ntohl(pTx->ddr_freq);
-			pn->pnc.un.num_counters = ntohl(pTx->num_counters);
+			pn->pnc.un.num_counters = pTx->num_counters;
 		} else {
 			pn->pnc.un = *pTx;
 		}
@@ -680,7 +831,9 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 		if (pn->pnc.enabled > 0) {
 			pn->pnc.enabled = -1;
 			pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_STOP_MSG;
-			ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un, sizeof(pn->pnc.un), profiler_handle_reply);
+			ret = nss_profiler_if_tx_buf(pn->ctx,
+					&pn->pnc.un, sizeof(pn->pnc.un),
+					profiler_handle_reply, pn);
 			profileWarn("%d temp stop sampling engine %d\n", swap, ret);
 		}
 		if (swap < 3) {
@@ -696,19 +849,16 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 	memcpy(&nsb->psc_header, buf, buf_len); /* pn->pnc.pn2h->psc_header = *psc_hd; maybe faster, but take more memory */
 
 	nsb->mh.md_type = PINGPONG_FULL;
-	//kxdump((void*)(nsb->samples + 23), sizeof(*nsb->samples) << 1, "1st 2 samples");
+
+	/*
+	 * ask for perf_counters (software counters) update every 32 samples
+	 */
 	if (!wr) {
-		/*
-		 * should be UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_COUNTERS_MSG
-		 * but FW is hard to change due to packge warehouse, so using
-		 * STOP/START instead till PROFILER_COUNTERS_MSG done in FW
-		 */
-		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_STOP_MSG;
-		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un, sizeof(pn->pnc.un), profiler_handle_reply);
+		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_COUNTERS_MSG;
+		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
+				sizeof(pn->pnc.un), profiler_handle_reply, pn);
 		if (ret == NSS_TX_FAILURE)
-			printk("STOP Cmd failed %d %d\n", ret, wr);
-		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
-		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un, sizeof(pn->pnc.un), profiler_handle_reply);
+			printk("req counters Cmd failed %d %d\n", ret, wr);
 	}
 	profileInfo("filled %p %p wr %d\n", nsb, nsb->samples, pn->ccl_write);
 }
@@ -748,9 +898,11 @@ static void profile_init(struct profile_io *node)
 	}
 
 	/*
-	 * sw_ksp is an array of pointers to struct thread_info, the current task executing for each linux virtual processor
+	 * sw_ksp is an array of pointers to struct thread_info,
+	 * the current task executing for each linux virtual processor
 	node->sw_ksp_ptr = sw_ksp;
 	 */
+	node->sw_ksp_ptr = NULL;
 	node->task_offset = offsetof(struct thread_info, task);
 	node->pid_offset = offsetof(struct task_struct, tgid);
 }
