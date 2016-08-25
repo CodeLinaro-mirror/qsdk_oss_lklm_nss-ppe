@@ -2366,4 +2366,4 @@ static void __exit nss_qdisc_module_exit(void)
 module_init(nss_qdisc_module_init)
 module_exit(nss_qdisc_module_exit)
 
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Dual BSD/GPL");
