@@ -12,9 +12,7 @@ obj-y+= nss_qdisc/
 obj-y+=dtls/
 
 # CAPWAP Manager
-ifneq ($(findstring 3.4, $(KERNELVERSION)),)
 obj-y+= capwapmgr/
-endif
 
 # Port interface Manager
 ifneq ($(findstring 3.4, $(KERNELVERSION)),)
