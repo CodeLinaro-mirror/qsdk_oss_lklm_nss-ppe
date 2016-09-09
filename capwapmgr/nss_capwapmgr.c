@@ -1310,6 +1310,17 @@ nss_capwapmgr_status_t nss_capwapmgr_configure_dtls(struct net_device *dev, uint
 		capwapmsg.msg.dtls.enable = 0;
 		capwapmsg.msg.dtls.dtls_if_num = t->capwap_rule.dtls_if_num;
 		capwapmsg.msg.dtls.mtu_adjust = 0;
+
+		/*
+		 * Unconfigure trustsec tx first
+		 */
+		if (t->capwap_rule.trustsec_enabled) {
+			nss_status = nss_trustsec_tx_unconfigure_sgt(t->capwap_rule.dtls_if_num, t->capwap_rule.sgt_value);
+			if (nss_status != NSS_TX_SUCCESS) {
+				nss_capwapmgr_warn("%p: unconfigure trustsec_tx failed\n", dev);
+				return NSS_CAPWAPMGR_FAILURE_UNCONFIGURE_TRUSTSEC_TX;
+			}
+		}
 	} else {
 		nss_capwapmgr_info("%p enabling DTLS for tunnel: %d\n", dev, tunnel_id);
 
@@ -1340,6 +1351,28 @@ nss_capwapmgr_status_t nss_capwapmgr_configure_dtls(struct net_device *dev, uint
 		capwapmsg.msg.dtls.enable = 1;
 		capwapmsg.msg.dtls.dtls_if_num = t->capwap_rule.dtls_if_num;
 		capwapmsg.msg.dtls.mtu_adjust = t->capwap_rule.mtu_adjust;
+
+		/*
+		 * Unconfigure trustsec tx first
+		 */
+		if (t->capwap_rule.trustsec_enabled) {
+			nss_status = nss_trustsec_tx_unconfigure_sgt(t->if_num, t->capwap_rule.sgt_value);
+			if (nss_status != NSS_TX_SUCCESS) {
+				nss_capwapmgr_warn("%p: unconfigure trustsec_tx failed\n", dev);
+				return NSS_CAPWAPMGR_FAILURE_UNCONFIGURE_TRUSTSEC_TX;
+			}
+		}
+	}
+
+	/*
+	 * Re-configure trustsec_tx
+	 */
+	if (t->capwap_rule.trustsec_enabled) {
+		nss_status = nss_trustsec_tx_configure_sgt(ip_if_num, t->capwap_rule.gmac_ifnum, t->capwap_rule.sgt_value);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: configure trustsec_tx failed\n", dev);
+			return NSS_CAPWAPMGR_FAILURE_CONFIGURE_TRUSTSEC_TX;
+		}
 	}
 
 	dev_hold(dev);
@@ -1764,6 +1797,24 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 		forward_if_num = nss_dtls_get_ifnum_with_coreid(out_data.dtls_if);
 	}
 
+	if (capwap_rule->trustsec_enabled) {
+		nss_capwapmgr_info("%p: configure TrustsecTx with sgt value: %x\n", dev, capwap_rule->sgt_value);
+		if (v4) {
+			capwap_rule->gmac_ifnum = v4->src_interface_num;
+			nss_status = nss_trustsec_tx_configure_sgt(forward_if_num, v4->src_interface_num, capwap_rule->sgt_value);
+			v4->src_interface_num = NSS_TRUSTSEC_TX_INTERFACE;
+		} else {
+			capwap_rule->gmac_ifnum = v6->src_interface_num;
+			nss_status = nss_trustsec_tx_configure_sgt(forward_if_num, v6->src_interface_num, capwap_rule->sgt_value);
+			v6->src_interface_num = NSS_TRUSTSEC_TX_INTERFACE;
+		}
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: configure trustsectx node failed\n", dev);
+			status = NSS_CAPWAPMGR_FAILURE_CONFIGURE_TRUSTSEC_TX;
+			goto fail;
+		}
+	}
+
 	/*
 	 * We use type_flags to determine the correct header sizes
 	 * for a frame when encaping. CAPWAP processing node in the
@@ -2066,6 +2117,20 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 		nss_capwapmgr_warn("%p: %d: Dealloc of dynamic interface failed for tunnel : %d\n",
 			dev, if_num, tunnel_id);
 	}
+
+	/*
+	 * Unconfigure Trustsec Tx
+	 */
+	 if (t->capwap_rule.trustsec_enabled) {
+		if (t->capwap_rule.dtls_enabled) {
+			nss_status = nss_trustsec_tx_unconfigure_sgt(t->capwap_rule.dtls_if_num, t->capwap_rule.sgt_value);
+		} else {
+			nss_status = nss_trustsec_tx_unconfigure_sgt(t->if_num, t->capwap_rule.sgt_value);
+		}
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: unconfigure trustsec_tx failed\n", dev);
+		}
+	 }
 
 	/*
 	 * Destroy DTLS node if there is one associated to this tunnel
