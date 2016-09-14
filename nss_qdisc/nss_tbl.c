@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014, 2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -241,9 +241,6 @@ static int nss_tbl_graft(struct Qdisc *sch, unsigned long arg, struct Qdisc *new
 
 	sch_tree_lock(sch);
 	*old = q->qdisc;
-	q->qdisc = new;
-	qdisc_tree_decrease_qlen(*old, (*old)->q.qlen);
-	qdisc_reset(*old);
 	sch_tree_unlock(sch);
 
 	nss_qdisc_info("%s:Grafting old: %p with new: %p\n", __func__, *old, new);
@@ -266,6 +263,11 @@ static int nss_tbl_graft(struct Qdisc *sch, unsigned long arg, struct Qdisc *new
 			return -EINVAL;
 		}
 	}
+
+	/*
+	 * Replaced in NSS, now replace in Linux.
+	 */
+	nss_qdisc_replace(sch, new, &q->qdisc);
 
 	nss_qdisc_info("Nsstbl grafted");
 

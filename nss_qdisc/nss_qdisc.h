@@ -276,3 +276,9 @@ extern int nss_qdisc_gnet_stats_copy_basic(struct gnet_dump *d,
 extern int nss_qdisc_gnet_stats_copy_queue(struct gnet_dump *d,
 				struct gnet_stats_queue *q);
 
+/*
+ * nss_qdisc_replace()
+ *	Used to replace old qdisc with a new one
+ */
+extern struct Qdisc *nss_qdisc_replace(struct Qdisc *sch, struct Qdisc *new,
+					struct Qdisc **pold);

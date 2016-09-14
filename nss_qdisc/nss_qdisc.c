@@ -921,6 +921,35 @@ static void nss_qdisc_bounce_callback(void *app_data, struct sk_buff *skb)
 }
 
 /*
+ * nss_qdisc_replace()
+ *	Used to replace old qdisc with a new qdisc.
+ */
+struct Qdisc *nss_qdisc_replace(struct Qdisc *sch, struct Qdisc *new,
+					  struct Qdisc **pold)
+{
+	/*
+	 * The qdisc_replace() API is originally introduced in kernel version 4.6,
+	 * however this has been back ported to the 4.4. kernal used in QSDK.
+	 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+	return qdisc_replace(sch, new, pold);
+#else
+	struct Qdisc *old;
+
+	sch_tree_lock(sch);
+	old = *pold;
+	*pold = new;
+	if (old != NULL) {
+		qdisc_tree_decrease_qlen(old, old->q.qlen);
+		qdisc_reset(old);
+	}
+	sch_tree_unlock(sch);
+
+	return old;
+#endif
+}
+
+/*
  * nss_qdisc_peek()
  *	Called to peek at the head of an nss qdisc
  */
@@ -1654,7 +1683,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 	 * Determine if dev is a bridge or not as this determines if we
 	 * interract with an I or B shaper.
 	 */
-	if (dev->priv_flags == IFF_EBRIDGE) {
+	if (dev->priv_flags & IFF_EBRIDGE) {
 		nss_qdisc_info("%s: Qdisc %p (type %d) init qdisc: %p, is bridge\n",
 			__func__, nq->qdisc, nq->type, nq->qdisc);
 		nq->is_bridge = true;
@@ -2180,7 +2209,7 @@ static int nss_qdisc_if_event_cb(struct notifier_block *unused,
 		br = nss_qdisc_get_dev_master(dev);
 		if_num = nss_cmn_get_interface_number(nss_qdisc_ctx, dev);
 
-		if (br == NULL || br->priv_flags != IFF_EBRIDGE) {
+		if (br == NULL || !(br->priv_flags & IFF_EBRIDGE)) {
 			nss_qdisc_error("Sensed bridge activity on interface %s "
 				"that is not on any bridge\n", dev->name);
 			break;
