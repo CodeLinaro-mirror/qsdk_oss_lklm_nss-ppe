@@ -345,7 +345,11 @@ static void nss_connmgr_pptp_exception(struct net_device *dev,
 				skb_reset_network_header(skb);
 				skb_set_transport_header(skb, iph_outer->ihl*4);
 				skb->skb_iif = dev->ifindex;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0))
 				ip_local_out(skb);
+#else
+				ip_local_out(&init_net, skb->sk, skb);
+#endif
 				return;
 			} else  { /* pkt is decapsulated */
 				if (iph_outer->version == 4) {
