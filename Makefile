@@ -6,11 +6,7 @@ export BUILD_ID = \"Build Id: $(shell date +'%m/%d/%y, %H:%M:%S')\"
 ccflags-y += -DNSS_CLIENT_BUILD_ID="$(BUILD_ID)"
 
 obj-y+= profiler/
-
-#TODO: The following modules will be enabled for 4.4 kernel as porting progresses
-ifneq ($(VERSION).$(PATCHLEVEL), 4.4)
 obj-y+= nss_qdisc/
-endif
 
 # DTLS manager
 obj-y+=dtls/
