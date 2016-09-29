@@ -109,6 +109,8 @@ typedef enum {
 	NSS_CAPWAPMGR_FAILURE_INVALID_IP_NODE,		/**< Invalid tunnel IP node */
 	NSS_CAPWAPMGR_FAILURE_INVALID_TYPE_FLAG,	/**< Invalid type */
 	NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG,		/**< Invalid DTLS configuration */
+	NSS_CAPWAPMGR_FAILURE_CONFIGURE_TRUSTSEC_TX,	/**< Failed to configure trustsectx */
+	NSS_CAPWAPMGR_FAILURE_UNCONFIGURE_TRUSTSEC_TX,    /**< Failed to umconfigure trustsectx */
 } nss_capwapmgr_status_t;
 
 /**

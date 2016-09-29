@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015,2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -96,6 +96,8 @@ struct nss_capwap_metaheader {
 	uint8_t vlan_pcp;	/**< VLAN priority .P marking */
 	uint16_t type;		/**< Type of CAPWAP packet & What was there in CAPWAP header */
 	uint16_t nwireless;	/**< Number of wireless info sections in CAPWAP header */
+	uint16_t sgt;		/**< SGT value in the TrustSec header */
+	uint16_t reserved;	/**< Reserved for future use */
 	uint16_t magic;		/**< Magic for verification purpose. Use only for debugging */
 } __packed __aligned(4);
 

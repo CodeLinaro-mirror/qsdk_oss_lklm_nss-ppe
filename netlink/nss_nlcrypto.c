@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -41,6 +41,7 @@
  * @brief prototypes
  */
 static int nss_nlcrypto_op_session_create(struct sk_buff *skb_msg, struct genl_info *info);
+static int nss_nlcrypto_op_session_create_nokey(struct sk_buff *skb_msg, struct genl_info *info);
 static int nss_nlcrypto_op_session_update(struct sk_buff *skb_msg, struct genl_info *info);
 static int nss_nlcrypto_op_session_destroy(struct sk_buff *skb_msg, struct genl_info *info);
 static int nss_nlcrypto_op_session_info(struct sk_buff *skb_msg, struct genl_info *info);
@@ -70,15 +71,16 @@ static struct genl_family nss_nlcrypto_family = {
  *  @brief operation table called by the generic netlink layer based on the command
  */
 static struct genl_ops nss_nlcrypto_ops[] = {
-	{.cmd = NSS_NLCRYPTO_CMD_CREATE_SESSION, .doit = nss_nlcrypto_op_session_create,},	/* rule create */
-	{.cmd = NSS_NLCRYPTO_CMD_UPDATE_SESSION, .doit = nss_nlcrypto_op_session_update,},	/* rule destroy */
-	{.cmd = NSS_NLCRYPTO_CMD_DESTROY_SESSION, .doit = nss_nlcrypto_op_session_destroy,},	/* rule destroy */
-	{.cmd = NSS_NLCRYPTO_CMD_INFO_SESSION, .doit = nss_nlcrypto_op_session_info,},	/* rule destroy */
+	{.cmd = NSS_NLCRYPTO_CMD_CREATE_SESSION, .doit = nss_nlcrypto_op_session_create,},	/* session create */
+	{.cmd = NSS_NLCRYPTO_CMD_CREATE_SESSION_NOKEY, .doit = nss_nlcrypto_op_session_create_nokey,},	/* session create */
+	{.cmd = NSS_NLCRYPTO_CMD_UPDATE_SESSION, .doit = nss_nlcrypto_op_session_update,},	/* session update */
+	{.cmd = NSS_NLCRYPTO_CMD_DESTROY_SESSION, .doit = nss_nlcrypto_op_session_destroy,},	/* session delete */
+	{.cmd = NSS_NLCRYPTO_CMD_INFO_SESSION, .doit = nss_nlcrypto_op_session_info,},	/* sessoin info */
 };
 
 
 #define NSS_NLCRYPTO_OPS_SZ ARRAY_SIZE(nss_nlcrypto_ops)
-
+#define NSS_NLCRYPTO_MAX_IDX_LOCATION 0x2000 	/* 8K memory size */
 
 /*
  * global context
@@ -151,6 +153,20 @@ static inline bool nss_nlcrypto_validate_auth(struct nss_crypto_key *auth)
 	 */
 	return !(key_len > max_key_len);
 
+}
+
+/*
+ * @brief nss_nlcrypto_validate_key_index()
+ * 	validate the auth parameters
+ */
+static inline bool nss_nlcrypto_validate_key_index(struct nss_crypto_key *crypto)
+{
+	uint32_t max_index = NSS_NLCRYPTO_MAX_IDX_LOCATION - crypto->key_len;
+	if (crypto->index > max_index) {
+		return false;
+	}
+
+	return true;
 }
 
 /*
@@ -256,6 +272,107 @@ static int nss_nlcrypto_op_session_create(struct sk_buff *skb, struct genl_info 
 	auth->key   = create_msg->auth_key;
 
 	status = nss_crypto_session_alloc(gbl_ctx.crypto_hdl, cipher, auth, &session_idx);
+	if (status != NSS_CRYPTO_STATUS_OK) {
+		nss_nl_error("%d:session alloc failed\n", pid);
+		return -EINVAL;
+	}
+
+	/*
+	 * copy the NL message for response
+	 */
+	resp = nss_nl_copy_msg(skb);
+	if (!resp) {
+		nss_nl_error("%d:unable to save response data from NL buffer\n", pid);
+		return -ENOMEM;
+	}
+
+	/*
+	 * overload the nl_rule with the new response address
+	 */
+	nl_rule = nss_nl_get_data(resp);
+	nss_nlcrypto_rule_init(nl_rule, NSS_NLCRYPTO_CMD_INFO_SESSION);
+
+	/*
+	 * Fill up the info message
+	 */
+	reply = &nl_rule->msg.info;
+	memset(reply, 0, sizeof(struct nss_nlcrypto_info_session));
+
+	/*
+	 * copy the info message
+	 */
+	nss_crypto_copy_info(reply, session_idx);
+
+	/*
+	 * unicast the response to user
+	 */
+	nss_nl_ucast_resp(resp);
+
+	return 0;
+}
+/*
+ * @brief nss_nlcrypto_op_session_create_nokey()
+ * 	handler for session add without key
+ */
+static int nss_nlcrypto_op_session_create_nokey(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_nlcrypto_create_session *create_msg;
+	struct nss_nlcrypto_info_session *reply;
+	struct nss_crypto_key *cipher;
+	struct nss_crypto_key *auth;
+	struct nss_nlcrypto_rule *nl_rule;
+	nss_crypto_status_t status;
+	struct nss_nlcmn *nl_cm;
+	int32_t session_idx = -1;
+	struct sk_buff *resp;
+	uint32_t pid;
+
+	/*
+	 * extract the message payload
+	 */
+	nl_cm = nss_nl_get_msg(&nss_nlcrypto_family, info, NSS_NLCRYPTO_CMD_CREATE_SESSION_NOKEY);
+	if (!nl_cm) {
+		nss_nl_error("unable to extract rule create data\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * Message validation required before accepting the configuration
+	 */
+	nl_rule = container_of(nl_cm, struct nss_nlcrypto_rule, cm);
+
+	pid = nl_cm->pid;
+	create_msg = &nl_rule->msg.create;
+
+	cipher = &create_msg->cipher;
+	auth   = &create_msg->auth;
+
+	/* validate if cipher specific parameters are correct */
+	if (nss_nlcrypto_validate_cipher(cipher) == false) {
+		nss_nl_error("cipher validation failed: algo(%d), key_len(%d)\n",
+				 cipher->algo, cipher->key_len);
+		return -EINVAL;
+	}
+
+	/* validate if auth specific parameters are correct */
+	if (nss_nlcrypto_validate_auth(auth) == false) {
+		nss_nl_error("auth validation failed:  algo(%d), key_len(%d)\n",
+				auth->algo,
+				auth->key_len);
+		return -EINVAL;
+	}
+
+	if (nss_nlcrypto_validate_key_index(cipher) == false) {
+		nss_nl_error("cipher validation failed: key_idx(%d)\n", cipher->index);
+		return -EINVAL;
+	}
+
+	if (nss_nlcrypto_validate_key_index(auth) == false) {
+		nss_nl_error("auth validation failed: key_idx(%d)\n", auth->index);
+		return -EINVAL;
+	}
+
+	status = nss_crypto_session_alloc_nokey(gbl_ctx.crypto_hdl, cipher, auth, &session_idx);
 	if (status != NSS_CRYPTO_STATUS_OK) {
 		nss_nl_error("%d:session alloc failed\n", pid);
 		return -EINVAL;
