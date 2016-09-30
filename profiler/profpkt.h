@@ -79,7 +79,10 @@ struct profile_pkg_header {		// in network byte order !
 	uint16_t magic;			/* magic number and version */
 	uint8_t header_size;		/* number of bytes in profile header */
 	uint8_t sample_count;		/* number of samples in the packet */
-	uint32_t sample_stack_words;	/* number of stack words in the sample */
+	uint8_t nc_sts_tselA;		/* thr 1 statistics requst to FW */
+	uint8_t nc_sts_tselB;		/* thr 2 requst to FW */
+	uint8_t spare1B;
+	uint8_t sample_stack_words;	/* number of stack words in the sample */
 	uint32_t seq_num;		/* to detect dropped profiler packets */
 	uint32_t profile_instructions;	/* instructions executed by profiler mainline */
 
