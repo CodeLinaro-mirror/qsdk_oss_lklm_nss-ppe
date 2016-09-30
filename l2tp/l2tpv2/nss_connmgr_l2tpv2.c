@@ -581,7 +581,7 @@ static int nss_connmgr_l2tpv2_dev_down(struct net_device *dev)
 #endif
 	struct nss_l2tpv2_msg  l2tpv2msg;
 	struct nss_l2tpv2_session_destroy_msg *l2tpv2cfg;
-	uint32_t if_number;
+	int if_number;
 	nss_tx_status_t status;
 
 	/*

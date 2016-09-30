@@ -324,7 +324,7 @@ struct nss_ipsecmgr_drv {
 	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
 	struct completion complete;		/* completion for flow stats nss msg */
 
-	uint32_t nss_ifnum;			/* NSS interface for sending data */
+	int nss_ifnum;				/* NSS interface for sending data */
 
 	struct nss_ctx_instance *nss_ctx;	/* NSS context */
 

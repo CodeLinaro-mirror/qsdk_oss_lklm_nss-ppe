@@ -70,7 +70,7 @@ static int nss_connmgr_pptp_client_xmit(struct sk_buff *skb, struct net_device *
 #endif
 	struct nss_ctx_instance *nss_pptp_ctx;
 	nss_tx_status_t status;
-	uint32_t if_number;
+	int if_number;
 
 	/*
 	 * Check if pptp is registered ?
@@ -516,7 +516,7 @@ static int nss_connmgr_pptp_dev_down(struct net_device *dev)
 	struct nss_pptp_msg pptpmsg;
 	struct nss_pptp_session_deconfigure_msg *pptpcfg;
 	nss_tx_status_t status;
-	uint32_t if_number;
+	int if_number;
 
 	/*
 	 * check whether the interface is of type PPP
