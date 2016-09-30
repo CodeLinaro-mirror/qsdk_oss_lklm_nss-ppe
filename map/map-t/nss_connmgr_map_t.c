@@ -332,13 +332,13 @@ static bool nss_connmgr_mapt_check_correctness_of_mapt_rule(struct net_device *d
 	 * Validate local rule parameters
 	 */
 	switch (rule_pair->local.style) {
-	case NSS_MAP_T_STYLES_MAP_T:
+	case NAT46_XLATE_MAP:
 		if (!nss_connmgr_mapt_validate_rule_style_mapt(dev, &rule_pair->local, rule_num, true, stats)) {
 			return false;
 		}
 		break;
 
-	case NSS_MAP_T_STYLES_RFC6052:
+	case NAT46_XLATE_RFC6052:
 		if (!nss_connmgr_mapt_validate_rule_style_rfc6052(dev, &rule_pair->local, rule_num, true, stats)) {
 			return false;
 		}
@@ -353,13 +353,13 @@ static bool nss_connmgr_mapt_check_correctness_of_mapt_rule(struct net_device *d
 	 * Validate remote rule parameters
 	 */
 	switch (rule_pair->remote.style) {
-	case NSS_MAP_T_STYLES_MAP_T:
+	case NAT46_XLATE_MAP:
 		if (!nss_connmgr_mapt_validate_rule_style_mapt(dev, &rule_pair->remote, rule_num, false, stats)) {
 			return false;
 		}
 		break;
 
-	case NSS_MAP_T_STYLES_RFC6052:
+	case NAT46_XLATE_RFC6052:
 		if (!nss_connmgr_mapt_validate_rule_style_rfc6052(dev, &rule_pair->remote, rule_num, false, stats)) {
 			return false;
 		}
@@ -796,7 +796,7 @@ static int nss_connmgr_map_t_dev_up(struct net_device *dev)
  */
 static int nss_connmgr_map_t_dev_down(struct net_device *dev)
 {
-	uint32_t if_number;
+	int if_number;
 	nss_tx_status_t status;
 	struct nss_map_t_msg maptmsg;
 	struct nss_map_t_instance_rule_deconfig_msg *maptcfg;
