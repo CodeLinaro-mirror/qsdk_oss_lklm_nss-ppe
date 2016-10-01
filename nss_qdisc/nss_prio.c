@@ -267,8 +267,6 @@ static int nss_prio_graft(struct Qdisc *sch, unsigned long arg,
 
 	sch_tree_lock(sch);
 	*old = q->queues[band];
-	q->queues[band] = new;
-	qdisc_reset(*old);
 	sch_tree_unlock(sch);
 
 	nss_qdisc_info("%s:Grafting old: %p with new: %p\n", __func__, *old, new);
@@ -294,6 +292,12 @@ static int nss_prio_graft(struct Qdisc *sch, unsigned long arg,
 			return -EINVAL;
 		}
 	}
+
+	/*
+	 * Replaced in NSS, now replace in Linux.
+	 */
+	nss_qdisc_replace(sch, new, &q->queues[band]);
+
 	nss_qdisc_info("Nssprio grafted");
 
 	return 0;

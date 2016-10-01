@@ -503,11 +503,10 @@ static int nss_htb_graft_class(struct Qdisc *sch, unsigned long arg, struct Qdis
 	}
 
 	/*
-	 * Attach qdisc once it is done in the NSS
+	 * Replaced in NSS, now replace in Linux.
 	 */
-	sch_tree_lock(sch);
-	cl->qdisc = new;
-	sch_tree_unlock(sch);
+	nss_qdisc_replace(sch, new, &cl->qdisc);
+
 	return 0;
 }
 
