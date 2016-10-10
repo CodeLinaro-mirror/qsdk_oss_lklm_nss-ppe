@@ -497,7 +497,7 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 				struct debug_box *db, struct profile_io *pio)
 {
 	char *cp;
-	int result = 0;
+	int result;
 
 	printk("%d cmd buf %s\n", count, buf);
 	if (count < 19) /* minimum data for sys_stat_event request */
@@ -505,7 +505,6 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 
 	if (strncmp(buf, "get-sys-stat-events", 19) == 0) {
 		db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_GET_SYS_STAT_EVENT;
-		db->dlen = result;
 		result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
 					sizeof(pio->pnc.un),
 					profiler_handle_stat_event_reply, pio);
@@ -532,7 +531,8 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 
 		while (isspace(*cp))
 			cp++;
-		event = kstrtoul(cp, 0, NULL);
+		if (kstrtoul(cp, 0, &event))
+			return -EINVAL;
 
 		cp = strchr(cp, ' ');
 		if (!cp) {
@@ -553,8 +553,8 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 				}
 			}
 		}
-		idx = kstrtoul(cp, 10, NULL);
-		if (idx < 0 || idx > 7) {
+
+		if (kstrtoul(cp, 10, &idx) || idx < 0 || idx > 7) {
 			printk("index %d out of range [0..7]\n", idx);
 			return	-ERANGE;
 		}
