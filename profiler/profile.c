@@ -497,7 +497,7 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 				struct debug_box *db, struct profile_io *pio)
 {
 	char *cp;
-	int result;
+	int result = 0;
 
 	printk("%d cmd buf %s\n", count, buf);
 	if (count < 19) /* minimum data for sys_stat_event request */
@@ -532,7 +532,7 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 
 		while (isspace(*cp))
 			cp++;
-		event = kstrtoul(cp, NULL, 0);
+		event = kstrtoul(cp, 0, NULL);
 
 		cp = strchr(cp, ' ');
 		if (!cp) {
@@ -553,7 +553,7 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 				}
 			}
 		}
-		idx = kstrtoul(cp, NULL, 10);
+		idx = kstrtoul(cp, 10, NULL);
 		if (idx < 0 || idx > 7) {
 			printk("index %d out of range [0..7]\n", idx);
 			return	-ERANGE;
