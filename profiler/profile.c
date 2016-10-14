@@ -531,7 +531,7 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 
 		while (isspace(*cp))
 			cp++;
-		if (kstrtoul(cp, 0, &event))
+		if (kstrtoul(cp, 0, (unsigned long *)&event))
 			return -EINVAL;
 
 		cp = strchr(cp, ' ');
@@ -554,7 +554,7 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 			}
 		}
 
-		if (kstrtoul(cp, 10, &idx) || idx < 0 || idx > 7) {
+		if (kstrtoul(cp, 10, (unsigned long *)&idx) || idx < 0 || idx > 7) {
 			printk("index %d out of range [0..7]\n", idx);
 			return	-ERANGE;
 		}
