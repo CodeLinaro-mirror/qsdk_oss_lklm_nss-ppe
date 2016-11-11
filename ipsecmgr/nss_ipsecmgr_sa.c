@@ -652,7 +652,8 @@ void nss_ipsecmgr_sa_flush_all(struct nss_ipsecmgr_priv *priv)
 	 * Assumption is that single SA cannot be associated to multiple ipsectunX interfaces.
 	 */
 	for (i = 0, head = sa_db->entries; i < NSS_IPSECMGR_MAX_SA; i++, head++) {
-		list_for_each_entry(entry, head, node) {
+		while (!list_empty(head)) {
+			entry = list_first_entry(head, struct nss_ipsecmgr_sa_entry, node);
 			if (entry->nim.tunnel_id == ifindex) {
 				nss_ipsecmgr_ref_free(priv, &entry->ref);
 			}
