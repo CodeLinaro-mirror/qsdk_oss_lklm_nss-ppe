@@ -41,6 +41,7 @@
 #include <nss_crypto_if.h>
 
 #include "nss_ipsecmgr_priv.h"
+#include <nss_tstamp.h>
 
 extern bool nss_cmn_get_nss_enabled(void);
 
@@ -224,10 +225,13 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	struct nss_ipsecmgr_priv *priv;
 	bool expand_skb = false;
 	int nhead, ntail;
+	bool tstamp_skb;
 
 	priv = netdev_priv(dev);
 	nhead = dev->needed_headroom;
 	ntail = dev->needed_tailroom;
+
+	tstamp_skb = skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP;
 
 	/*
 	 * Check if skb is non-linear
@@ -291,12 +295,20 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	}
 
 	/*
+	 * If the packet needs to timestamped. Send to
+	 * timestamping NSS module.
+	 */
+	if (unlikely(tstamp_skb)) {
+		if (nss_tstamp_tx_buf(ipsecmgr_ctx->nss_ctx, skb, NSS_IPSEC_ENCAP_IF_NUMBER)) {
+			goto fail;
+		}
+		return NETDEV_TX_OK;
+	}
+
+	/*
 	 * Send the packet down
 	 */
-	if (nss_ipsec_tx_buf(skb, NSS_IPSEC_ENCAP_IF_NUMBER) != 0) {
-		/*
-		 * TODO: NEED TO STOP THE QUEUE
-		 */
+	if (nss_ipsec_tx_buf(skb, NSS_IPSEC_ENCAP_IF_NUMBER)) {
 		goto fail;
 	}
 
