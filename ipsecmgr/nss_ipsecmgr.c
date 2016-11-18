@@ -17,6 +17,7 @@
 /* nss_ipsecmgr.c
  *	NSS to HLOS IPSec Manager
  */
+#include <linux/version.h>
 #include <linux/types.h>
 #include <linux/ip.h>
 #include <linux/of.h>
@@ -639,7 +640,11 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 	struct net_device *dev;
 	int status;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
 	dev = alloc_netdev(sizeof(struct nss_ipsecmgr_priv), NSS_IPSECMGR_TUN_NAME, nss_ipsecmgr_tunnel_setup);
+#else
+	dev = alloc_netdev(sizeof(struct nss_ipsecmgr_priv), NSS_IPSECMGR_TUN_NAME, NET_NAME_ENUM, nss_ipsecmgr_tunnel_setup);
+#endif
 	if (!dev) {
 		nss_ipsecmgr_error("unable to allocate a tunnel device\n");
 		return NULL;
@@ -802,7 +807,11 @@ static int __init nss_ipsecmgr_init(void)
 		goto free;
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
 	ipsecmgr_ctx->ndev = alloc_netdev(0, NSS_IPSECMGR_DEFAULT_TUN_NAME, nss_ipsecmgr_dummy_netdevice_setup);
+#else
+	ipsecmgr_ctx->ndev = alloc_netdev(0, NSS_IPSECMGR_DEFAULT_TUN_NAME, NET_NAME_UNKNOWN, nss_ipsecmgr_dummy_netdevice_setup);
+#endif
 	if (!ipsecmgr_ctx->ndev) {
 		nss_ipsecmgr_info_always("Ipsec: Could not allocate ipsec net_device\n");
 		goto free;
