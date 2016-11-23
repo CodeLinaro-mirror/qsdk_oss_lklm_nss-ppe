@@ -343,7 +343,7 @@ static struct nss_ipsecmgr_netmask_entry *nss_ipsecmgr_netmask_alloc(struct nss_
 {
 	struct nss_ipsecmgr_netmask_db *db = &ipsecmgr_ctx->net_db;
 	struct nss_ipsecmgr_netmask_entry *entry;
-	int idx;
+	uint32_t idx;
 
 	entry = nss_ipsecmgr_netmask_lookup(priv, key);
 	if (entry) {
