@@ -33,6 +33,7 @@
 #include <linux/debugfs.h>
 #include <net/route.h>
 #include <net/ip6_route.h>
+#include <net/esp.h>
 
 #include <nss_api_if.h>
 #include <nss_ipsec.h>
@@ -232,7 +233,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 * Check if skb is non-linear
 	 */
 	if (skb_is_nonlinear(skb)) {
-		nss_ipsecmgr_error("%s: NSS IPSEC does not support fragments %p\n", dev->name, skb);
+		nss_ipsecmgr_trace("%s: NSS IPSEC does not support fragments %p\n", dev->name, skb);
 		goto fail;
 	}
 
@@ -240,7 +241,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 * Check if skb is shared
 	 */
 	if (unlikely(skb_shared(skb))) {
-		nss_ipsecmgr_error("%s: Shared skb is not supported: %p\n", dev->name, skb);
+		nss_ipsecmgr_trace("%s: Shared skb is not supported: %p\n", dev->name, skb);
 		goto fail;
 	}
 
@@ -248,7 +249,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 * Check if packet is given starting from network header
 	 */
 	if (skb->data != skb_network_header(skb)) {
-		nss_ipsecmgr_error("%s: 'Skb data is not starting from IP header\n", dev->name);
+		nss_ipsecmgr_trace("%s: 'Skb data is not starting from IP header\n", dev->name);
 		goto fail;
 	}
 
@@ -263,7 +264,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	}
 
 	if (expand_skb && pskb_expand_head(skb, nhead, ntail, GFP_KERNEL)) {
-		nss_ipsecmgr_error("%s: unable to expand buffer\n", dev->name);
+		nss_ipsecmgr_trace("%s: unable to expand buffer\n", dev->name);
 		goto fail;
 	}
 
@@ -370,44 +371,105 @@ static void nss_ipsecmgr_tunnel_setup(struct net_device *dev)
  */
 static struct net_device *nss_ipsecmgr_get_dev(struct sk_buff *skb)
 {
-	struct dst_entry *dst;
+	struct nss_ipsecmgr_sa_entry *sa_entry;
+	struct nss_ipsec_rule_sel sel;
+	struct nss_ipsecmgr_ref *ref;
+	struct nss_ipsecmgr_key key;
 	struct net_device *dev;
-	uint32_t ip_addr;
-	struct rtable *rt;
-	struct flowi6 fl6;
+	struct dst_entry *dst;
+	struct ip_esp_hdr *esph;
+	size_t hdr_sz = 0;
 
+	skb_reset_mac_header(skb);
 	skb_reset_network_header(skb);
 
 	switch (ip_hdr(skb)->version) {
 	case IPVERSION:
-		ip_addr = ip_hdr(skb)->saddr;
+	{
+		struct iphdr *iph = ip_hdr(skb);
+		struct rtable *rt;
+		bool is_encap;
 
-		rt = ip_route_output(&init_net, ip_addr, 0, 0, 0);
-		if (IS_ERR(rt)) {
-			return NULL;
+		hdr_sz = sizeof(struct iphdr);
+		skb->protocol = cpu_to_be16(ETH_P_IP);
+
+		is_encap = (iph->protocol == IPPROTO_ESP);
+		if (!is_encap && (iph->protocol == IPPROTO_UDP)) {
+			if (udp_hdr(skb)->dest == NSS_IPSECMGR_NATT_PORT_DATA) {
+				hdr_sz += sizeof(struct udphdr);
+				is_encap = true;
+			}
 		}
 
-		dst = (struct dst_entry *)rt;
+		if (!is_encap) {
+			rt = ip_route_output(&init_net, iph->saddr, 0, 0, 0);
+			if (IS_ERR(rt)) {
+				return NULL;
+			}
+
+			dst = (struct dst_entry *)rt;
+			dev = dst->dev;
+			dst_release(dst);
+			goto done;
+		}
+
+		nss_ipsecmgr_v4_hdr2sel(iph, &sel);
 		break;
+	}
 
 	case 6:
-		memset(&fl6, 0, sizeof(fl6));
-		memcpy(&fl6.daddr, &ipv6_hdr(skb)->saddr, sizeof(fl6.daddr));
+	{
+		struct ipv6hdr *ip6h = ipv6_hdr(skb);
+		struct flowi6 fl6;
 
-		dst = ip6_route_output(&init_net, NULL, &fl6);
-		if (IS_ERR(dst)) {
-			return NULL;
+		hdr_sz = sizeof(struct ipv6hdr);
+		skb->protocol = cpu_to_be16(ETH_P_IPV6);
+
+		nss_ipsecmgr_v6_hdr2sel(ip6h, &sel);
+
+		if (sel.proto_next_hdr != IPPROTO_ESP) {
+			memset(&fl6, 0, sizeof(fl6));
+			memcpy(&fl6.daddr, &ip6h->saddr, sizeof(fl6.daddr));
+
+			dst = ip6_route_output(&init_net, NULL, &fl6);
+			if (IS_ERR(dst)) {
+				return NULL;
+			}
+
+			dev = dst->dev;
+			dst_release(dst);
+			goto done;
+		}
+
+		if (ip6h->nexthdr == NEXTHDR_FRAGMENT) {
+			hdr_sz += sizeof(struct frag_hdr);
 		}
 		break;
-
+	}
 	default:
 		nss_ipsecmgr_warn("%p:could not get dev for the flow\n", skb);
 		return NULL;
 	}
 
-	dev = dst->dev;
-	dst_release(dst);
+	skb_set_transport_header(skb, hdr_sz);
+	esph = ip_esp_hdr(skb);
+	sel.esp_spi = ntohl(esph->spi);
 
+	nss_ipsecmgr_sa_sel2key(&sel, &key);
+
+	ref = nss_ipsecmgr_sa_lookup(&key);
+	if (!ref) {
+		nss_ipsecmgr_trace("unable to find SA (%p)\n", skb);
+		return NULL;
+	}
+
+	sa_entry = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
+	dev = sa_entry->priv->dev;
+done:
+
+	skb->pkt_type = PACKET_HOST;
+	skb->skb_iif = dev->ifindex;
+	skb->dev = dev;
 	return dev;
 }
 
@@ -420,77 +482,42 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dummy, struct sk_buff *skb
 	struct nss_ipsecmgr_priv *priv;
 	nss_ipsecmgr_data_cb_t cb_fn;
 	struct net_device *dev;
-	uint16_t next_protocol;
-	void *cb_ctx;
 
 	BUG_ON(dummy == NULL);
 	BUG_ON(skb == NULL);
 
 	dev = nss_ipsecmgr_get_dev(skb);
 	if (unlikely(!dev)) {
-		nss_ipsecmgr_error("didn't find an tunnel dev\n");
+		nss_ipsecmgr_trace("cannot find a dev(%p)\n", skb);
 		dev_kfree_skb_any(skb);
 		return;
 	}
 
-	/* hold the device till we process it */
 	dev_hold(dev);
 
+	/*
+	 * NETDEV doesn't belong to IPsec manager;
+	 * indicate it to the stack
+	 */
+	if (dev->type != NSS_IPSEC_ARPHRD_IPSEC) {
+		netif_receive_skb(skb);
+		goto done;
+	}
+
 	priv = netdev_priv(dev);
-
-	skb->dev = dev;
-
 	cb_fn = priv->data_cb;
-	cb_ctx = priv->cb_ctx;
 
 	/*
 	 * if tunnel creator gave a callback then send the packet without
 	 * any modifications to him
 	 */
-	if (cb_fn) {
-		cb_fn(cb_ctx, skb);
+	if (!cb_fn) {
+		netif_receive_skb(skb);
 		goto done;
 	}
 
-	skb_reset_network_header(skb);
-
-	switch (ip_hdr(skb)->version) {
-	case IPVERSION:
-		skb->protocol = cpu_to_be16(ETH_P_IP);
-		next_protocol = ip_hdr(skb)->protocol;
-		break;
-
-	case 6:
-		skb->protocol = cpu_to_be16(ETH_P_IPV6);
-		next_protocol = ipv6_hdr(skb)->nexthdr;
-		break;
-
-	default:
-		nss_ipsecmgr_error("%s: Unsupported IP Version\n",  dev->name);
-		dev_kfree_skb_any(skb);
-		goto done;
-	}
-
-	/*
-	 * Receiving an ESP packet indicates that NSS has performed the encapsulation
-	 * but the post-routing rule is not present. This condition can't be taken care
-	 * in Host we should flush the ENCAP rules and free the packet. This will force
-	 * subsequent packets to follow the Slow path IPsec thus recreating the rules
-	 */
-	if (next_protocol == IPPROTO_ESP) {
-		dev_kfree_skb_any(skb);
-		goto done;
-	}
-
-	skb->pkt_type = PACKET_HOST;
-	skb->skb_iif = dev->ifindex;
-
-	skb_reset_mac_header(skb);
-
-	/* Send the data up to Linux Stack */
-	netif_receive_skb(skb);
+	cb_fn(priv->cb_ctx, skb);
 done:
-	/* release the device as we are done */
 	dev_put(dev);
 }
 
@@ -536,7 +563,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 		ref = nss_ipsecmgr_sa_lookup(&key);
 		if (!ref) {
 			write_unlock(&ipsecmgr_ctx->lock);
-			nss_ipsecmgr_error("event received on deallocated SA tunnel:(%d)\n", nim->tunnel_id);
+			nss_ipsecmgr_trace("event received on deallocated SA tunnel:(%d)\n", nim->tunnel_id);
 			goto done;
 		}
 
