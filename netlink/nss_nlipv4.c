@@ -52,12 +52,6 @@
 #include "nss_ipsec.h"
 #include "nss_ipsecmgr.h"
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
-#define DST_NEIGH_LOOKUP(dst, ip_addr) dst_neigh_lookup(dst, ip_addr)
-#else
-#define DST_NEIGH_LOOKUP(dst, ip_addr) dst_get_neighbour_noref(dst)
-#endif
-
 /*
  * NSS NETLINK IPv4 context
  */
@@ -129,9 +123,8 @@ static struct neighbour *nss_nlipv4_get_neigh(uint32_t ip_addr)
 	/*
 	 * neighbour lookup using IP address in the route table
 	 */
-	neigh = DST_NEIGH_LOOKUP(dst, &ip_addr);
+	neigh = dst_neigh_lookup(dst, &ip_addr);
 	if (likely(neigh)) {
-		neigh_hold(neigh);
 		dst_release(dst);
 
 		return neigh;
@@ -142,7 +135,6 @@ static struct neighbour *nss_nlipv4_get_neigh(uint32_t ip_addr)
 	 */
 	neigh = neigh_lookup(&arp_tbl, &ip_addr, dst->dev);
 	if (likely(neigh)) {
-		neigh_hold(neigh);
 		dst_release(dst);
 		return neigh;
 	}

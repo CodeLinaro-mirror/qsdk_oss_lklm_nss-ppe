@@ -505,7 +505,6 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 
 	if (strncmp(buf, "get-sys-stat-events", 19) == 0) {
 		db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_GET_SYS_STAT_EVENT;
-		db->dlen = result;
 		result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
 					sizeof(pio->pnc.un),
 					profiler_handle_stat_event_reply, pio);
@@ -532,7 +531,8 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 
 		while (isspace(*cp))
 			cp++;
-		event = kstrtoul(cp, NULL, 0);
+		if (kstrtoul(cp, 0, (unsigned long *)&event))
+			return -EINVAL;
 
 		cp = strchr(cp, ' ');
 		if (!cp) {
@@ -553,8 +553,8 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 				}
 			}
 		}
-		idx = kstrtoul(cp, NULL, 10);
-		if (idx < 0 || idx > 7) {
+
+		if (kstrtoul(cp, 10, (unsigned long *)&idx) || idx < 0 || idx > 7) {
 			printk("index %d out of range [0..7]\n", idx);
 			return	-ERANGE;
 		}

@@ -2,6 +2,7 @@
 
 ccflags-y := -I$(obj) -I$(obj)/..
 ccflags-y += -DNSS_CLIENT_BUILD_ID="$(BUILD_ID)"
+ccflags-y += -Werror
 
 obj-m += qca-nss-ipsecmgr.o
 qca-nss-ipsecmgr-objs := nss_ipsecmgr.o
