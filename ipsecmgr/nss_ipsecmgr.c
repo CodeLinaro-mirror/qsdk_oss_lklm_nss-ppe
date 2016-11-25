@@ -654,7 +654,6 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 
 		sa_stats = &stats_event.data.stats;
 		memcpy(&sa_stats->sa, &sa->sa_info, sizeof(struct nss_ipsecmgr_sa));
-		sa_stats->crypto_index = sa->nim.msg.push.data.crypto_index;
 
 		write_unlock(&ipsecmgr_ctx->lock);
 
@@ -668,7 +667,12 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 			/*
 			 * copy stats and SA information
 			 */
+			sa_stats->crypto_index = sa->nim.msg.push.data.crypto_index;
 			sa_stats->seq_num = nim->msg.sa_stats.seq_num;
+
+			sa_stats->esn_enabled = nim->msg.sa_stats.esn_enabled;
+			sa_stats->window_max = nim->msg.sa_stats.window_max;
+			sa_stats->window_size = nim->msg.sa_stats.window_size;
 
 			sa_stats->pkts.count = nim->msg.sa_stats.pkts.count;
 			sa_stats->pkts.bytes = nim->msg.sa_stats.pkts.bytes;
