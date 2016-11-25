@@ -185,9 +185,17 @@ struct nss_ipsecmgr_ref {
 	nss_ipsecmgr_ref_free_t free;			/* free function */
 };
 
+/*
+ * IPsec manager packets stats per SA
+ */
 struct nss_ipsecmgr_sa_pkt_stats {
 	uint64_t count;
 	uint64_t bytes;
+
+	uint64_t seq_num;
+	uint64_t window_max;
+	uint32_t window_size;
+
 	uint32_t no_headroom;
 	uint32_t no_tailroom;
 	uint32_t no_buf;
@@ -217,6 +225,8 @@ struct nss_ipsecmgr_sa_entry {
 	struct nss_ipsecmgr_key key;		/* key instance */
 
 	uint32_t ifnum;				/* SA interface */
+
+	bool esn_enabled;			/* Is ESN enabled */
 
 	struct nss_ipsecmgr_sa_pkt_stats pkts;	/* packets processed per SA */
 	struct nss_ipsecmgr_priv *priv;		/* ipsecmgr private reference */

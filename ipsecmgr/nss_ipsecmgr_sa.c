@@ -93,6 +93,15 @@ static ssize_t nss_ipsecmgr_sa_dump(struct nss_ipsecmgr_sa_entry *sa, char *buf,
 	len += snprintf(buf + len, max_len - len, "ttl: %d\n", oip->ttl_hop_limit);
 	len += snprintf(buf + len, max_len - len, "crypto session: %d\n", data->crypto_index);
 
+	len += snprintf(buf + len, max_len - len, "ESN: %d\n", data->enable_esn);
+	len += snprintf(buf + len, max_len - len, "seq_num: %llx\n\n", sa->pkts.seq_num);
+
+	/*
+	 * display window information only for decap SA
+	 */
+	len += snprintf(buf + len, max_len - len, "win_size: %d\n", sa->pkts.window_size);
+	len += snprintf(buf + len, max_len - len, "wmax: 0x%llx\n\n", sa->pkts.window_max);
+
 	/*
 	 * packet stats
 	 */
@@ -302,6 +311,11 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	memcpy(&sa->sa_info, info->sa, sizeof(struct nss_ipsecmgr_sa));
 
 	/*
+	 * clear the stats information
+	 */
+	memset(&sa->pkts, 0, sizeof(struct nss_ipsecmgr_sa_pkt_stats));
+
+	/*
 	 * add child to parent
 	 */
 	nss_ipsecmgr_ref_add(child_ref, sa_ref);
@@ -418,7 +432,10 @@ void nss_ipsecmgr_copy_sa_data(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa
 	struct nss_ipsec_rule_data *data = &nim->msg.push.data;
 
 	data->crypto_index = (uint16_t)sa_data->crypto_index;
+
 	data->window_size = sa_data->esp.replay_win;
+	data->enable_esn = sa_data->enable_esn;
+
 	data->nat_t_req = sa_data->esp.nat_t_req;
 
 	data->cipher_algo = nss_crypto_get_cipher(data->crypto_index);
@@ -524,9 +541,11 @@ void nss_ipsecmgr_v6_sa2key(struct nss_ipsecmgr_sa_v6 *sa, struct nss_ipsecmgr_k
 void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_entry *sa)
 {
 	struct nss_ipsecmgr_sa_pkt_stats *stats;
+	struct nss_ipsec_sa_stats *sa_stats;
 	struct nss_ipsec_pkt_sa_stats *pkts;
 
 	pkts = &nim->msg.sa_stats.pkts;
+	sa_stats = &nim->msg.sa_stats;
 	stats = &sa->pkts;
 
 	/*
@@ -542,6 +561,12 @@ void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr
 	stats->fail_queue += pkts->fail_queue;
 	stats->fail_hash += pkts->fail_hash;
 	stats->fail_replay += pkts->fail_replay;
+
+	sa->esn_enabled = sa_stats->esn_enabled;
+
+	sa->pkts.seq_num = sa_stats->seq_num;
+	sa->pkts.window_max = sa_stats->window_max;
+	sa->pkts.window_size = sa_stats->window_size;
 }
 
 /*
