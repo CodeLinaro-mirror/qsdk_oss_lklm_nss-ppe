@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -329,7 +329,8 @@ static void nss_connmgr_dtls_event_receive(void *if_ctx,
 static uint32_t nss_dtlsmgr_get_cipher_iv_len(uint32_t cipher_algo)
 {
 	switch (cipher_algo) {
-	case NSS_CRYPTO_CIPHER_AES:
+	case NSS_CRYPTO_CIPHER_AES_CBC:
+	case NSS_CRYPTO_CIPHER_AES_CTR:
 		return NSS_CRYPTO_MAX_IVLEN_AES;
 
 	case NSS_CRYPTO_CIPHER_DES:

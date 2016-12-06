@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -98,20 +98,21 @@ static inline bool nss_nlcrypto_validate_cipher(struct nss_crypto_key *cipher)
 	uint16_t max_key_len = 0;
 
 	switch (algo) {
-		case NSS_CRYPTO_CIPHER_AES:
-			max_key_len = NSS_CRYPTO_MAX_KEYLEN_AES;
-			break;
+	case NSS_CRYPTO_CIPHER_AES_CBC:
+	case NSS_CRYPTO_CIPHER_AES_CTR:
+		max_key_len = NSS_CRYPTO_MAX_KEYLEN_AES;
+		break;
 
-		case NSS_CRYPTO_CIPHER_DES:
-			max_key_len =  NSS_CRYPTO_MAX_KEYLEN_DES;
-			break;
+	case NSS_CRYPTO_CIPHER_DES:
+		max_key_len =  NSS_CRYPTO_MAX_KEYLEN_DES;
+		break;
 
-		case NSS_CRYPTO_CIPHER_NULL:
-			max_key_len = 0;
-			break;
+	case NSS_CRYPTO_CIPHER_NULL:
+		max_key_len = 0;
+		break;
 
-		default:
-			return false;
+	default:
+		return false;
 	}
 
 	/*
