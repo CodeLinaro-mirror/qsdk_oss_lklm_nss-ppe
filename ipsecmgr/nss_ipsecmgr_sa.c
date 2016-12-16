@@ -529,16 +529,19 @@ void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr
 	pkts = &nim->msg.sa_stats.pkts;
 	stats = &sa->pkts;
 
+	/*
+	 * update SA specific stats
+	 */
 	stats->count += pkts->count;
 	stats->bytes += pkts->bytes;
 
-	stats->no_headroom = pkts->no_headroom;
-	stats->no_tailroom = pkts->no_tailroom;
-	stats->no_buf = pkts->no_buf;
+	stats->no_headroom += pkts->no_headroom;
+	stats->no_tailroom += pkts->no_tailroom;
+	stats->no_buf += pkts->no_buf;
 
-	stats->fail_queue = pkts->fail_queue;
-	stats->fail_hash = pkts->fail_hash;
-	stats->fail_replay = pkts->fail_replay;
+	stats->fail_queue += pkts->fail_queue;
+	stats->fail_hash += pkts->fail_hash;
+	stats->fail_replay += pkts->fail_replay;
 }
 
 /*
@@ -562,72 +565,6 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_lookup(struct nss_ipsecmgr_key *key)
 	}
 
 	return NULL;
-}
-
-/*
- * nss_ipsecmgr_sa_stats_all()
- * 	retrieve the SA statistics for all SA(s)
- */
-struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *priv, struct rtnl_link_stats64 *stats)
-{
-	struct nss_ipsecmgr_sa_db *sa_db = &ipsecmgr_ctx->sa_db;
-	struct nss_ipsecmgr_sa_entry *sa;
-	int ifindex = priv->dev->ifindex;
-	struct list_head *head;
-	int i;
-
-	memset(stats, 0, sizeof(struct net_device_stats));
-
-	/*
-	 * trigger a stats update chain
-	 */
-	read_lock_bh(&ipsecmgr_ctx->lock);
-
-	/*
-	 * walk the SA database for each entry and get stats for attached SA
-	 */
-	for (i = 0, head = sa_db->entries; i < NSS_IPSECMGR_MAX_SA; i++, head++) {
-		list_for_each_entry(sa, head, node) {
-
-			if (sa->nim.tunnel_id != ifindex) {
-				continue;
-			}
-
-			/*
-			 * Check the SA type (ENCAP or DECAP)
-			 */
-			switch (sa->ifnum) {
-			case NSS_IPSEC_ENCAP_IF_NUMBER:
-				stats->tx_bytes += sa->pkts.bytes;
-				stats->tx_packets += sa->pkts.count;
-				stats->tx_dropped += sa->pkts.no_headroom;
-				stats->tx_dropped += sa->pkts.no_tailroom;
-				stats->tx_dropped += sa->pkts.no_buf;
-				stats->tx_dropped += sa->pkts.fail_queue;
-				stats->tx_dropped += sa->pkts.fail_hash;
-				stats->tx_dropped += sa->pkts.fail_replay;
-				break;
-
-			case NSS_IPSEC_DECAP_IF_NUMBER:
-				stats->rx_bytes += sa->pkts.bytes;
-				stats->rx_packets += sa->pkts.count;
-				stats->rx_dropped += sa->pkts.no_headroom;
-				stats->rx_dropped += sa->pkts.no_tailroom;
-				stats->rx_dropped += sa->pkts.no_buf;
-				stats->rx_dropped += sa->pkts.fail_queue;
-				stats->rx_dropped += sa->pkts.fail_hash;
-				stats->rx_dropped += sa->pkts.fail_replay;
-				break;
-
-			default:
-				break;
-			}
-		}
-	}
-
-	read_unlock_bh(&ipsecmgr_ctx->lock);
-
-	return stats;
 }
 
 /*

@@ -313,7 +313,18 @@ fail:
  */
 static struct rtnl_link_stats64 *nss_ipsecmgr_tunnel_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 {
-	return nss_ipsecmgr_sa_stats_all(netdev_priv(dev), stats);
+	struct nss_ipsecmgr_priv *priv = netdev_priv(dev);
+
+	memset(stats, 0, sizeof(struct rtnl_link_stats64));
+
+	/*
+	 * trigger a stats update chain
+	 */
+	read_lock_bh(&ipsecmgr_ctx->lock);
+	memcpy(stats, &priv->stats, sizeof(struct rtnl_link_stats64));
+	read_unlock_bh(&ipsecmgr_ctx->lock);
+
+	return stats;
 }
 
 /* NSS IPsec tunnel operation */
@@ -527,13 +538,66 @@ done:
 }
 
 /*
+ * nss_ipsecmgr_update_tun_rx_stats()
+ * 	Update tunnel rx stats
+ */
+static void nss_ipsecmgr_update_tun_rx_stats(struct nss_ipsecmgr_priv *priv, struct nss_ipsec_msg *nim)
+{
+	struct rtnl_link_stats64 *tun_stats;
+	struct nss_ipsec_pkt_sa_stats *pkts;
+
+	tun_stats = &priv->stats;
+	pkts = &nim->msg.sa_stats.pkts;
+
+	/*
+	 * update tunnel specific stats
+	 */
+	tun_stats->rx_bytes += pkts->bytes;
+	tun_stats->rx_packets += pkts->count;
+
+	tun_stats->rx_dropped += pkts->no_headroom;
+	tun_stats->rx_dropped += pkts->no_tailroom;
+	tun_stats->rx_dropped += pkts->no_buf;
+	tun_stats->rx_dropped += pkts->fail_queue;
+	tun_stats->rx_dropped += pkts->fail_hash;
+	tun_stats->rx_dropped += pkts->fail_replay;
+}
+
+/*
+ * nss_ipsecmgr_update_tun_tx_stats()
+ * 	Update tunnel TX stats
+ */
+static void nss_ipsecmgr_update_tun_tx_stats(struct nss_ipsecmgr_priv *priv, struct nss_ipsec_msg *nim)
+{
+	struct rtnl_link_stats64 *tun_stats;
+	struct nss_ipsec_pkt_sa_stats *pkts;
+
+	tun_stats = &priv->stats;
+	pkts = &nim->msg.sa_stats.pkts;
+
+	/*
+	 * update tunnel specific stats
+	 */
+	tun_stats->tx_bytes += pkts->bytes;
+	tun_stats->tx_packets += pkts->count;
+
+	tun_stats->tx_dropped += pkts->no_headroom;
+	tun_stats->tx_dropped += pkts->no_tailroom;
+	tun_stats->tx_dropped += pkts->no_buf;
+	tun_stats->tx_dropped += pkts->fail_queue;
+	tun_stats->tx_dropped += pkts->fail_hash;
+	tun_stats->tx_dropped += pkts->fail_replay;
+}
+
+/*
  * nss_ipsecmgr_tunnel_notify()
  * 	asynchronous event reception
  */
 static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, struct nss_ipsec_msg *nim)
 {
+	struct nss_ipsecmgr_node_stats *drv_stats;
+	struct nss_ipsec_node_stats *node_stats;
 	struct nss_ipsecmgr_sa_stats *sa_stats;
-	struct nss_ipsec_node_stats *drv_stats;
 	struct nss_ipsecmgr_event stats_event;
 	struct nss_ipsecmgr_sa_entry *sa;
 	struct nss_ipsecmgr_priv *priv;
@@ -579,6 +643,15 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 		 */
 		nss_ipsecmgr_sa_stats_update(nim, sa);
 
+		/*
+		 * update tunnel stats
+		 */
+		if (nim->type == NSS_IPSEC_TYPE_ENCAP) {
+			nss_ipsecmgr_update_tun_tx_stats(priv, nim);
+		} else {
+			nss_ipsecmgr_update_tun_rx_stats(priv, nim);
+		}
+
 		sa_stats = &stats_event.data.stats;
 		memcpy(&sa_stats->sa, &sa->sa_info, sizeof(struct nss_ipsecmgr_sa));
 		sa_stats->crypto_index = sa->nim.msg.push.data.crypto_index;
@@ -607,11 +680,17 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 	case NSS_IPSEC_MSG_TYPE_SYNC_NODE_STATS:
 
 		drv_stats = &ipsecmgr_ctx->enc_stats;
-		if (unlikely(nim->cm.interface == NSS_IPSEC_DECAP_IF_NUMBER)) {
+		if (unlikely(nim->type == NSS_IPSEC_TYPE_DECAP)) {
 			drv_stats = &ipsecmgr_ctx->dec_stats;
 		}
 
-		memcpy(drv_stats, &nim->msg.node_stats, sizeof(struct nss_ipsec_node_stats));
+		node_stats = &nim->msg.node_stats;
+		drv_stats->enqueued += node_stats->enqueued;
+		drv_stats->completed += node_stats->completed;
+		drv_stats->linearized += node_stats->linearized;
+		drv_stats->exceptioned += node_stats->exceptioned;
+		drv_stats->fail_enqueue += node_stats->fail_enqueue;
+
 		break;
 
 	default:
@@ -627,8 +706,8 @@ done:
  */
 static ssize_t nss_ipsecmgr_node_stats_read(struct file *fp, char __user *ubuf, size_t sz, loff_t *ppos)
 {
-	struct nss_ipsec_node_stats *enc_stats = &ipsecmgr_ctx->enc_stats;
-	struct nss_ipsec_node_stats *dec_stats = &ipsecmgr_ctx->dec_stats;
+	struct nss_ipsecmgr_node_stats *enc_stats = &ipsecmgr_ctx->enc_stats;
+	struct nss_ipsecmgr_node_stats *dec_stats = &ipsecmgr_ctx->dec_stats;
 	ssize_t ret = 0;
 	char *local;
 	int len;
@@ -636,15 +715,15 @@ static ssize_t nss_ipsecmgr_node_stats_read(struct file *fp, char __user *ubuf, 
 	local = vmalloc(NSS_IPSECMGR_MAX_BUF_SZ);
 
 	len = 0;
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_enqueued: %d\n", enc_stats->enqueued);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_completed: %d\n", enc_stats->completed);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_exceptioned: %d\n", enc_stats->exceptioned);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_enqueue_failed: %d\n", enc_stats->fail_enqueue);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_enqueued: %lld\n", enc_stats->enqueued);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_completed: %lld\n", enc_stats->completed);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_exceptioned: %lld\n", enc_stats->exceptioned);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tencap_enqueue_failed: %lld\n", enc_stats->fail_enqueue);
 
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueued: %d\n", dec_stats->enqueued);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_completed: %d\n", dec_stats->completed);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_exceptioned: %d\n", dec_stats->exceptioned);
-	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueue_failed: %d\n", dec_stats->fail_enqueue);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueued: %lld\n", dec_stats->enqueued);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_completed: %lld\n", dec_stats->completed);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_exceptioned: %lld\n", dec_stats->exceptioned);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueue_failed: %lld\n", dec_stats->fail_enqueue);
 
 	ret = simple_read_from_buffer(ubuf, sz, ppos, local, len + 1);
 
@@ -821,7 +900,7 @@ static int __init nss_ipsecmgr_init(void)
 		return 0;
 	}
 
-	ipsecmgr_ctx = vmalloc(sizeof(struct nss_ipsecmgr_drv));
+	ipsecmgr_ctx = vzalloc(sizeof(struct nss_ipsecmgr_drv));
 	if (!ipsecmgr_ctx) {
 		nss_ipsecmgr_info_always("Allocating ipsecmgr context failed\n");
 		return 0;

@@ -206,6 +206,17 @@ struct nss_ipsecmgr_sa_pkt_stats {
 };
 
 /*
+ * IPsec manager node stats
+ */
+struct nss_ipsecmgr_node_stats {
+	uint64_t enqueued;		/* packets enqueued to the node */
+	uint64_t completed;		/* packets processed by the node */
+	uint64_t linearized;		/* linearized the packet */
+	uint64_t exceptioned;		/* packets exception from NSS */
+	uint64_t fail_enqueue;		/* packets failed to enqueue */
+};
+
+/*
  * IPsec manager SA entry
  */
 struct nss_ipsecmgr_sa_entry {
@@ -307,6 +318,7 @@ struct nss_ipsecmgr_priv {
 	nss_ipsecmgr_data_cb_t data_cb;		/* data callback function */
 	nss_ipsecmgr_event_cb_t event_cb;	/* event callback function */
 
+	struct rtnl_link_stats64 stats;		/* stats of IPsec tunnel */
 };
 
 /*
@@ -332,8 +344,8 @@ struct nss_ipsecmgr_drv {
 	struct semaphore sem;			/* per flow semaphore lock */
 	atomic_t seq_num;			/* per flow seq no */
 
-	struct nss_ipsec_node_stats enc_stats;	/* Encap node stats */
-	struct nss_ipsec_node_stats dec_stats;	/* Decap node stats */
+	struct nss_ipsecmgr_node_stats enc_stats;	/* Encap node stats */
+	struct nss_ipsecmgr_node_stats dec_stats;	/* Decap node stats */
 };
 
 /*
@@ -1094,7 +1106,6 @@ void nss_ipsecmgr_copy_sa_data(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa
 void nss_ipsecmgr_v4_sa2key(struct nss_ipsecmgr_sa_v4 *sa, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_v6_sa2key(struct nss_ipsecmgr_sa_v6 *sa, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_sa_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
-struct rtnl_link_stats64 *nss_ipsecmgr_sa_stats_all(struct nss_ipsecmgr_priv *priv, struct rtnl_link_stats64 *stats);
 void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_entry *sa);
 
 /*
