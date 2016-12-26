@@ -393,6 +393,11 @@ static struct net_device *nss_ipsecmgr_get_dev(struct sk_buff *skb)
 		hdr_sz = sizeof(struct iphdr);
 		skb->protocol = cpu_to_be16(ETH_P_IP);
 
+		/*
+		 * Set the transport header skb pointer
+		 */
+		skb_set_transport_header(skb, hdr_sz);
+
 		is_encap = (iph->protocol == IPPROTO_ESP);
 		if (!is_encap && (iph->protocol == IPPROTO_UDP)) {
 			if (udp_hdr(skb)->dest == NSS_IPSECMGR_NATT_PORT_DATA) {
