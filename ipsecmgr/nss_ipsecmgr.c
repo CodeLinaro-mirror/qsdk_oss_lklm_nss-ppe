@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -327,12 +327,23 @@ static struct rtnl_link_stats64 *nss_ipsecmgr_tunnel_stats64(struct net_device *
 	return stats;
 }
 
+/*
+ * nss_ipsecmgr_change_mtu()
+ * 	change MTU size of IPsec tunnel device
+ */
+static int32_t nss_ipsecmgr_change_mtu(struct net_device *dev, int32_t mtu)
+{
+	dev->mtu = mtu;
+	return 0;
+}
+
 /* NSS IPsec tunnel operation */
 static const struct net_device_ops nss_ipsecmgr_tunnel_ops = {
 	.ndo_open = nss_ipsecmgr_tunnel_open,
 	.ndo_stop = nss_ipsecmgr_tunnel_stop,
 	.ndo_start_xmit = nss_ipsecmgr_tunnel_tx,
 	.ndo_get_stats64 = nss_ipsecmgr_tunnel_stats64,
+	.ndo_change_mtu = nss_ipsecmgr_change_mtu,
 };
 
 /*
