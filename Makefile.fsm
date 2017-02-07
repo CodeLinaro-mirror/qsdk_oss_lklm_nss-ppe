@@ -1,6 +1,7 @@
 # Makefile for the clients using the NSS driver
 
 ccflags-y := -I$(obj) -I$(obj)/..
+export SoC = fsm9010
 
 # Profiler
 obj-y+= profiler/

@@ -27,12 +27,15 @@
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
 #include <linux/etherdevice.h>
-#include <asm/atomic.h>
 #include <linux/vmalloc.h>
 #include <linux/debugfs.h>
+#include <asm/atomic.h>
+#include <net/protocol.h>
 #include <net/route.h>
 #include <net/ip6_route.h>
 #include <net/esp.h>
+#include <net/xfrm.h>
+#include <net/icmp.h>
 
 #include <nss_api_if.h>
 #include <nss_ipsec.h>
@@ -44,6 +47,10 @@
 extern bool nss_cmn_get_nss_enabled(void);
 
 struct nss_ipsecmgr_drv *ipsecmgr_ctx;
+
+static bool gen_pmtu_error = true;
+module_param(gen_pmtu_error, bool, 0644);
+MODULE_PARM_DESC(gen_pmtu_error, "Support generation of PMTU error packet");
 
 /*
  **********************
@@ -72,6 +79,25 @@ static void nss_ipsecmgr_ref_no_free(struct nss_ipsecmgr_priv *priv, struct nss_
 }
 
 /*
+ * nss_ipsecmgr_ref_no_overhead()
+ * 	dummy functions for object owner when there is no overhead
+ */
+static uint32_t nss_ipsecmgr_ref_no_overhead(struct nss_ipsecmgr_ref *ref)
+{
+	nss_ipsecmgr_trace("%p:ref_get_no_overhead triggered\n", ref);
+	return 0;
+}
+
+/*
+ * nss_ipsecmgr_ref_set_overhead()
+ * 	set the overhead function for reference object
+ */
+void nss_ipsecmgr_ref_set_overhead(struct nss_ipsecmgr_ref *ref, nss_ipsecmgr_ref_overhead_t overhead)
+{
+	ref->overhead = overhead;
+}
+
+/*
  * nss_ipsecmgr_ref_init()
  * 	initiaize the reference object
  */
@@ -80,8 +106,11 @@ void nss_ipsecmgr_ref_init(struct nss_ipsecmgr_ref *ref, nss_ipsecmgr_ref_update
 	INIT_LIST_HEAD(&ref->head);
 	INIT_LIST_HEAD(&ref->node);
 
+	ref->id = 0;
+	ref->parent = NULL;
 	ref->update = update ? update : nss_ipsecmgr_ref_no_update;
 	ref->free = free ? free : nss_ipsecmgr_ref_no_free;
+	ref->overhead = nss_ipsecmgr_ref_no_overhead;
 }
 
 /*
@@ -98,6 +127,8 @@ void nss_ipsecmgr_ref_add(struct nss_ipsecmgr_ref *child, struct nss_ipsecmgr_re
 	 */
 	list_del_init(&child->node);
 	list_add(&child->node, &parent->head);
+
+	child->parent = parent;
 }
 
 /*
@@ -120,6 +151,21 @@ void nss_ipsecmgr_ref_update(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr
 	list_for_each_entry(entry, &child->head, node) {
 		nss_ipsecmgr_ref_update(priv, entry, nim);
 	}
+}
+
+/*
+ * nss_ipsecmgr_ref_overhead()
+ * 	Get the SA overhead of the reference passed
+ *
+ * note: ideally this will trigger a chain of callbacks till
+ * the SA
+ */
+uint32_t nss_ipsecmgr_ref_overhead(struct nss_ipsecmgr_ref *ref)
+{
+	if (!ref->parent)
+		return ref->overhead(ref);
+
+	return nss_ipsecmgr_ref_overhead(ref->parent);
 }
 
 /*
@@ -220,6 +266,8 @@ static int nss_ipsecmgr_tunnel_stop(struct net_device *dev)
  */
 static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device *dev)
 {
+	struct nss_ipsecmgr_flow_data flow_data = {0};
+	bool process_mtu = gen_pmtu_error;
 	struct nss_ipsecmgr_priv *priv;
 	bool expand_skb = false;
 	int nhead, ntail;
@@ -233,7 +281,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 */
 	if (skb_is_nonlinear(skb)) {
 		nss_ipsecmgr_trace("%s: NSS IPSEC does not support fragments %p\n", dev->name, skb);
-		goto fail;
+		goto free;
 	}
 
 	/*
@@ -241,7 +289,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 */
 	if (unlikely(skb_shared(skb))) {
 		nss_ipsecmgr_trace("%s: Shared skb is not supported: %p\n", dev->name, skb);
-		goto fail;
+		goto free;
 	}
 
 	/*
@@ -249,7 +297,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 */
 	if (skb->data != skb_network_header(skb)) {
 		nss_ipsecmgr_trace("%s: 'Skb data is not starting from IP header\n", dev->name);
-		goto fail;
+		goto free;
 	}
 
 	/*
@@ -264,29 +312,33 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 
 	if (expand_skb && pskb_expand_head(skb, nhead, ntail, GFP_KERNEL)) {
 		nss_ipsecmgr_trace("%s: unable to expand buffer\n", dev->name);
-		goto fail;
+		goto free;
 	}
 
-	switch (skb->protocol) {
-	case htons(ETH_P_IP):
-		BUG_ON(ip_hdr(skb)->ttl == 0);
-		break;
-
-	case htons(ETH_P_IPV6):
-		BUG_ON(ipv6_hdr(skb)->hop_limit == 0);
-		break;
-
-	default:
-		goto fail;
+	/*
+	 * Before proceeding check for the following conditions
+	 * For IPv4 packet if DF bit is set then process_mtu
+	 */
+	if (process_mtu && (skb->protocol == htons(ETH_P_IP))) {
+		process_mtu = !!(ip_hdr(skb)->frag_off & htons(IP_DF));
 	}
+
 	/*
 	 * check whether the IPsec encapsulation can be offloaded to NSS
-	 * 	if the flow matches a subnet rule, then a new flow rule is added to NSS
-	 * 	if the flow doesn't match any subnet, then the packet is dropped
+	 * 	- if the flow matches a subnet rule, then a new flow rule is added to NSS
+	 * 	- if the flow doesn't match any subnet, then the packet is dropped
 	 */
-	if (!nss_ipsecmgr_flow_offload(priv, skb)) {
+	if (!nss_ipsecmgr_flow_offload(priv, skb, &flow_data)) {
 		nss_ipsecmgr_warn("%p:failed to accelerate flow\n", dev);
-		goto fail;
+		goto free;
+	}
+
+	/*
+	 * Check if pre-fragmentation is not enabled or already a fragment.
+	 * then send the buffer on its way to NSS
+	 */
+	if (process_mtu && nss_ipsecmgr_flow_process_pmtu(priv, skb, &flow_data)) {
+		goto free;
 	}
 
 	/*
@@ -296,12 +348,12 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 		/*
 		 * TODO: NEED TO STOP THE QUEUE
 		 */
-		goto fail;
+		goto free;
 	}
 
 	return NETDEV_TX_OK;
 
-fail:
+free:
 	dev_kfree_skb_any(skb);
 	return NETDEV_TX_OK;
 }
@@ -905,6 +957,178 @@ static int nss_ipsecmgr_init_stats_debugfs(struct dentry *stats_root)
 	return 0;
 }
 
+#if defined NSS_IPSECMGR_PMTU_SUPPORT
+
+/*
+ * nss_ipsecmgr_esp4_rcv()
+ * 	IPv4 Receive handler for ESP protocol
+ */
+static int nss_ipsecmgr_tunnel_rx_esp4(struct sk_buff *skb)
+{
+	/*
+	 * TODO:This can potentially receive ESP packets in when
+	 * the outer ESP rule is flushed. In which case the DECAP
+	 * packets entering linux must be bounced through offload
+	 */
+	dev_kfree_skb_any(skb);
+	return 0;
+}
+
+/*
+ * nss_ipsecmgr_esp4_err()
+ *	IPv4 Error handler for ESP protocol
+ */
+static void nss_ipsecmgr_tunnel_error_esp4(struct sk_buff *skb, uint32_t mtu)
+{
+	struct nss_ipsecmgr_sa_entry *sa_entry;
+	struct nss_ipsecmgr_sa_v4 sa = {0};
+	struct nss_ipsecmgr_key key = {{0}};
+	struct nss_ipsecmgr_priv *priv;
+	struct nss_ipsecmgr_ref *ref;
+	struct ip_esp_hdr *esph;
+	struct iphdr *iph;
+
+	/*
+	 * If the ICMP error is not PMTU then return
+	 */
+	if (icmp_hdr(skb)->type != ICMP_DEST_UNREACH) {
+		return;
+	}
+
+	if (icmp_hdr(skb)->code != ICMP_FRAG_NEEDED) {
+		return;
+	}
+
+	/*
+	 * Get the ESP header
+	 */
+	iph = (struct iphdr *)skb->data;
+	esph = (struct ip_esp_hdr *)(skb->data + (iph->ihl << 2));
+
+	sa.src_ip = ntohl(iph->saddr);
+	sa.dst_ip = ntohl(iph->daddr);
+	sa.spi_index = ntohl(esph->spi);
+
+	nss_ipsecmgr_v4_sa2key(&sa, &key);
+
+	/*
+	 * Get the SA corresponding to the ESP flow
+	 */
+	read_lock(&ipsecmgr_ctx->lock);
+	ref = nss_ipsecmgr_sa_lookup(&key);
+	if (!ref) {
+		read_unlock(&ipsecmgr_ctx->lock);
+		nss_ipsecmgr_trace("unable to find SA (%p)\n", skb);
+		return;
+	}
+
+	sa_entry = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
+	priv = sa_entry->priv;
+	BUG_ON(!priv);
+
+	atomic_set(&priv->outer_dst_mtu, mtu);
+	read_unlock(&ipsecmgr_ctx->lock);
+
+	/*
+	 * update new mtu for this flow
+	 */
+	BUG_ON(!dev_net(skb->dev));
+	ipv4_update_pmtu(skb, dev_net(skb->dev), mtu, 0, 0, IPPROTO_ESP, 0);
+	return;
+}
+
+/*
+ * protocol handler for IPv4 ESP
+ */
+static const struct net_protocol nss_ipsecmgr_proto_esp4 = {
+	.handler     = nss_ipsecmgr_tunnel_rx_esp4,
+	.err_handler = nss_ipsecmgr_tunnel_error_esp4,
+	.netns_ok    = 1,
+};
+
+/*
+ * nss_ipsecmgr_esp6_rcv()
+ * 	IPV6 Receive handler for ESP protocol
+ */
+static int nss_ipsecmgr_tunnel_rx_esp6(struct sk_buff *skb)
+{
+	/*
+	 * TODO:This can potentially receive ESP packets in when
+	 * the outer ESP rule is flushed. In which case the DECAP
+	 * packets entering linux must be bounced through offload
+	 */
+	dev_kfree_skb_any(skb);
+	return 0;
+}
+
+/*
+ * nss_ipsecmgr_esp6_err()
+ *	IPV6 Error handler for ESP protocol
+ */
+static void nss_ipsecmgr_tunnel_error_esp6(struct sk_buff *skb, struct inet6_skb_parm *opt,
+					uint8_t type, uint8_t code, int32_t offset, uint32_t mtu)
+{
+	struct nss_ipsecmgr_sa_entry *sa_entry;
+	struct nss_ipsecmgr_priv *priv;
+	struct nss_ipsecmgr_ref *ref;
+	struct nss_ipsecmgr_sa_v6 sa = {{0}};
+	struct nss_ipsecmgr_key key = {{0}};
+	struct ip_esp_hdr *esph;
+	struct ipv6hdr *iph;
+
+	/*
+	 * If the ICMP type is not PMTU return
+	 */
+	if (type != ICMPV6_PKT_TOOBIG) {
+		return;
+	}
+
+	esph = (struct ip_esp_hdr *)(skb->data + offset);
+	iph = (struct ipv6hdr *)skb->data;
+
+	/*
+	 * Get the selectors from IPv6 header. Compose the key and
+	 * get the decap SA
+	 */
+	nss_ipsecmgr_v6addr_ntoh(iph->daddr.s6_addr32, sa.dst_ip);
+	nss_ipsecmgr_v6addr_ntoh(iph->saddr.s6_addr32, sa.src_ip);
+	sa.spi_index = ntohl(esph->spi);
+
+	nss_ipsecmgr_v6_sa2key(&sa, &key);
+
+	read_lock(&ipsecmgr_ctx->lock);
+	ref = nss_ipsecmgr_sa_lookup(&key);
+	if (!ref) {
+		read_unlock(&ipsecmgr_ctx->lock);
+		nss_ipsecmgr_info("%p: unable to find SA\n", skb);
+		return;
+	}
+
+	sa_entry = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
+	priv = sa_entry->priv;
+	BUG_ON(!priv);
+
+	atomic_set(&priv->outer_dst_mtu, ntohl(mtu));
+	read_unlock(&ipsecmgr_ctx->lock);
+
+	/*
+	 * Update the PMTU
+	 */
+	BUG_ON(!dev_net(skb->dev));
+	ip6_update_pmtu(skb, dev_net(skb->dev), mtu, 0, 0);
+	return;
+}
+
+/*
+ * protocol handler for IPv6 ESP
+ */
+static struct inet6_protocol nss_ipsecmgr_proto_esp6 = {
+	.handler        =       nss_ipsecmgr_tunnel_rx_esp6,
+	.err_handler    =       nss_ipsecmgr_tunnel_error_esp6,
+	.flags          =       INET6_PROTO_NOPOLICY,
+};
+#endif
+
 /*
  * nss_ipsecmgr_init()
  *	module init
@@ -988,11 +1212,27 @@ static int __init nss_ipsecmgr_init(void)
 
 	}
 
+#if defined NSS_IPSECMGR_PMTU_SUPPORT
+
+	/*
+	 * Register a ESP protocol handler only when XFRM is not loaded
+	 */
+	status = inet_add_protocol(&nss_ipsecmgr_proto_esp4, IPPROTO_ESP);
+	if (status < 0) {
+		nss_ipsecmgr_warn("%p:%d in Registering ESP4 Handler\n", ipsecmgr_ctx->nss_ctx, status);
+	}
+
+	status = inet6_add_protocol(&nss_ipsecmgr_proto_esp6, IPPROTO_ESP);
+	if (status < 0) {
+		nss_ipsecmgr_warn("%p:%d in Registering ESP6 Handler\n", ipsecmgr_ctx->nss_ctx, status);
+	}
+#endif
+
 	init_completion(&ipsecmgr_ctx->complete);
 	sema_init(&ipsecmgr_ctx->sem, 1);
 	atomic_set(&ipsecmgr_ctx->seq_num, 0);
 
-	nss_ipsecmgr_info_always("NSS IPsec manager loaded: Build date %s\n", __DATE__);
+	nss_ipsecmgr_info_always("NSS IPsec manager loaded: %s\n", NSS_CLIENTS_BUILD_ID);
 	return 0;
 
 unregister_dev:

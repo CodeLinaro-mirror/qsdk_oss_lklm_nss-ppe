@@ -21,6 +21,8 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
+#include <net/route.h>
+#include <net/ip6_route.h>
 #include <asm/atomic.h>
 #include <linux/debugfs.h>
 #include <linux/vmalloc.h>
@@ -43,6 +45,8 @@ struct nss_ipsecmgr_sa_info {
 	struct nss_ipsecmgr_key child_key;
 	struct nss_ipsecmgr_sa *sa;
 	uint32_t fail_hash_thresh;
+	uint32_t sa_overhead;
+	uint32_t dst_mtu;
 
 	struct nss_ipsecmgr_ref * (*child_alloc)(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
 	struct nss_ipsecmgr_ref * (*child_lookup)(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
@@ -194,6 +198,16 @@ static void nss_ipsecmgr_sa_free(struct nss_ipsecmgr_priv *priv, struct nss_ipse
 }
 
 /*
+ * nss_ipsecmgr_sa_get_overhead()
+ * 	get overhead from SA
+ */
+static uint32_t nss_ipsecmgr_sa_overhead(struct nss_ipsecmgr_ref *ref)
+{
+	struct nss_ipsecmgr_sa_entry *entry = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
+	return entry->sa_overhead;
+}
+
+/*
  * nss_ipsecmgr_sa_del()
  * 	delete sa/child from the reference chain
  */
@@ -303,6 +317,14 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	sa = container_of(sa_ref, struct nss_ipsecmgr_sa_entry, ref);
 	sa->ifnum = info->nim.cm.interface;
 	sa->fail_hash_thresh = info->fail_hash_thresh;
+	sa->sa_overhead = info->sa_overhead;
+
+	/*
+	 * Set outer dst entry when overhead is non zero
+	 */
+	if (info->sa_overhead) {
+		atomic_set(&priv->outer_dst_mtu, info->dst_mtu);
+	}
 
 	memcpy(&sa->nim, &info->nim, sizeof(struct nss_ipsec_msg));
 	memset(&sa->nim.msg.push.sel, 0, sizeof(struct nss_ipsec_rule_sel));
@@ -331,6 +353,21 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 
 	write_unlock_bh(&ipsecmgr_ctx->lock);
 	return true;
+}
+
+/*
+ * nss_ipsecmgr_get_cipher_ivlen()
+ * 	Get IV Length for a given crypto index
+ */
+static uint32_t nss_ipsecmgr_get_cipher_ivlen(uint32_t session_idx)
+{
+	enum nss_crypto_cipher cipher = nss_crypto_get_cipher(session_idx);
+
+	switch (cipher) {
+	case NSS_CRYPTO_CIPHER_AES: return NSS_CRYPTO_MAX_IVLEN_AES;
+	case NSS_CRYPTO_CIPHER_DES: return NSS_CRYPTO_MAX_IVLEN_DES;
+	default: return NSS_CRYPTO_MAX_IVLEN_NULL;
+	}
 }
 
 /*
@@ -387,6 +424,7 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_priv *priv, s
 	 * initiallize the reference object
 	 */
 	nss_ipsecmgr_ref_init(&sa->ref, NULL, nss_ipsecmgr_sa_free);
+	nss_ipsecmgr_ref_set_overhead(&sa->ref, nss_ipsecmgr_sa_overhead);
 
 	return ref;
 }
@@ -638,19 +676,22 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 				struct nss_ipsecmgr_sa *sa, struct nss_ipsecmgr_sa_data *data)
 {
 	struct nss_ipsecmgr_priv *priv = netdev_priv(tun);
-	struct nss_ipsecmgr_sa_info info;
-
+	struct nss_ipsecmgr_sa_info info = {{{0}}};
+	struct dst_entry *dst;
+	struct flowi6 fl6;
 
 	nss_ipsecmgr_info("%p:encap_add initiated\n", tun);
 
-	memset(&info, 0, sizeof(struct nss_ipsecmgr_sa_info));
+	info.sa_overhead = sizeof(struct ip_esp_hdr);
+	info.sa_overhead += NSS_IPSECMGR_ESP_PAD_SZ;
+	info.sa_overhead += NSS_IPSECMGR_ESP_TRAIL_SZ;
+	info.sa_overhead += ETH_HLEN;
+
 	nss_ipsecmgr_encap_flow_init(&info.nim, NSS_IPSEC_MSG_TYPE_ADD_RULE, priv);
 
 	switch (flow->type) {
 	case NSS_IPSECMGR_FLOW_TYPE_V4_TUPLE:
-
 		nss_ipsecmgr_copy_encap_v4_flow(&info.nim, &flow->data.v4_tuple);
-
 		nss_ipsecmgr_encap_v4_flow2key(&flow->data.v4_tuple, &info.child_key);
 
 		info.child_alloc = nss_ipsecmgr_flow_alloc;
@@ -658,7 +699,6 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		break;
 
 	case NSS_IPSECMGR_FLOW_TYPE_V4_SUBNET:
-
 		if (nss_ipsecmgr_verify_v4_subnet(&flow->data.v4_subnet)) {
 			nss_ipsecmgr_warn("%p:invalid subnet and mask\n", tun);
 			return false;
@@ -671,9 +711,7 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		break;
 
 	case NSS_IPSECMGR_FLOW_TYPE_V6_TUPLE:
-
 		nss_ipsecmgr_copy_encap_v6_flow(&info.nim, &flow->data.v6_tuple);
-
 		nss_ipsecmgr_encap_v6_flow2key(&flow->data.v6_tuple, &info.child_key);
 
 		info.child_alloc = nss_ipsecmgr_flow_alloc;
@@ -681,7 +719,6 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		break;
 
 	case NSS_IPSECMGR_FLOW_TYPE_V6_SUBNET:
-
 		if (nss_ipsecmgr_verify_v6_subnet(&flow->data.v6_subnet)) {
 			nss_ipsecmgr_warn("%p:invalid subnet and mask\n", tun);
 			return false;
@@ -704,6 +741,21 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		nss_ipsecmgr_copy_v4_sa(&info.nim, &sa->data.v4);
 		nss_ipsecmgr_copy_sa_data(&info.nim, data);
 		nss_ipsecmgr_v4_sa2key(&sa->data.v4, &info.sa_key);
+
+		info.sa_overhead += sizeof(struct iphdr);
+		info.sa_overhead += data->esp.nat_t_req ? sizeof(struct udphdr) : 0;
+
+		/*
+		 * Update initial value for outer_dst_mtu
+		 * Further this value will be updated as per the PMTU error
+		 * generated for the Tunnel.
+		 */
+		dst = (struct dst_entry *)ip_route_output(&init_net, htonl(sa->data.v4.dst_ip), 0, 0, 0);
+		if (IS_ERR(dst)) {
+			return false;
+		}
+		info.dst_mtu = dst_mtu(dst);
+		dst_release(dst);
 		break;
 
 	case NSS_IPSECMGR_SA_TYPE_V6:
@@ -711,16 +763,35 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		nss_ipsecmgr_copy_v6_sa(&info.nim, &sa->data.v6);
 		nss_ipsecmgr_copy_sa_data(&info.nim, data);
 		nss_ipsecmgr_v6_sa2key(&sa->data.v6, &info.sa_key);
+
+		info.sa_overhead += sizeof(struct ipv6hdr);
+
+		nss_ipsecmgr_v6addr_ntoh((uint32_t *)&sa->data.v6.dst_ip, (uint32_t *)&fl6.daddr);
+
+		/*
+		 * Update initial value for outer_dst_mtu
+		 * Further this value will be updated as per the PMTU error
+		 * generated for the Tunnel.
+		 */
+		dst = ip6_route_output(&init_net, NULL, &fl6);
+		if (IS_ERR(dst)) {
+			return false;
+		}
+		info.dst_mtu = dst_mtu(dst);
+		dst_release(dst);
 		break;
 
 	default:
 		nss_ipsecmgr_warn("%p:unknown sa type(%d)\n", tun, sa->type);
 		return false;
-
-
 	}
 
+	/*
+	 * Compute additional overhead for this SA
+	 */
 	info.sa = sa;
+	info.sa_overhead += nss_ipsecmgr_get_cipher_ivlen(data->crypto_index);
+	info.sa_overhead += data->esp.icv_len;
 	return nss_ipsecmgr_sa_add(priv, &info);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_encap_add);
@@ -828,7 +899,6 @@ bool nss_ipsecmgr_decap_add(struct net_device *tun, struct nss_ipsecmgr_sa *sa, 
 
 	switch (sa->type) {
 	case NSS_IPSECMGR_SA_TYPE_V4:
-
 		nss_ipsecmgr_copy_decap_v4_flow(&info.nim, &sa->data.v4);
 		nss_ipsecmgr_copy_v4_sa(&info.nim, &sa->data.v4);
 		nss_ipsecmgr_copy_sa_data(&info.nim, data);
@@ -848,7 +918,6 @@ bool nss_ipsecmgr_decap_add(struct net_device *tun, struct nss_ipsecmgr_sa *sa, 
 		break;
 
 	case NSS_IPSECMGR_SA_TYPE_V6:
-
 		nss_ipsecmgr_copy_decap_v6_flow(&info.nim, &sa->data.v6);
 		nss_ipsecmgr_copy_v6_sa(&info.nim, &sa->data.v6);
 		nss_ipsecmgr_copy_sa_data(&info.nim, data);
@@ -865,10 +934,11 @@ bool nss_ipsecmgr_decap_add(struct net_device *tun, struct nss_ipsecmgr_sa *sa, 
 	/*
 	 * Store the fail_hash_threshold in the info
 	 */
+	info.sa = sa;
+	info.sa_overhead = 0;
 	info.fail_hash_thresh  = data->fail_hash_thresh;
 	info.child_alloc = nss_ipsecmgr_flow_alloc;
 	info.child_lookup = nss_ipsecmgr_flow_lookup;
-	info.sa = sa;
 
 	return nss_ipsecmgr_sa_add(priv, &info);
 }
