@@ -1,6 +1,6 @@
 /*
  * ********************************************************************************
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -202,6 +202,7 @@ struct nss_ipsecmgr_sa_pkt_stats {
 	uint32_t fail_queue;
 	uint32_t fail_hash;
 	uint32_t fail_replay;
+	uint32_t fail_hash_cont;		/* Continous fail hash count */
 };
 
 /*
@@ -232,6 +233,8 @@ struct nss_ipsecmgr_sa_entry {
 	struct nss_ipsecmgr_priv *priv;		/* ipsecmgr private reference */
 	struct nss_ipsec_msg nim;		/* ipsec message */
 	struct nss_ipsecmgr_sa sa_info;		/* SA information */
+
+	uint32_t fail_hash_thresh;		/* continous hash fail threshold */
 };
 
 /*
