@@ -346,7 +346,9 @@ struct nss_ipsecmgr_drv {
 	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
 	struct completion complete;		/* completion for flow stats nss msg */
 
-	int nss_ifnum;				/* NSS interface for sending data */
+	int encap_ifnum;			/* NSS encap interface */
+	int decap_ifnum;			/* NSS decap interface */
+	int data_ifnum;			/* NSS data interface */
 
 	struct nss_ctx_instance *nss_ctx;	/* NSS context */
 
@@ -910,15 +912,15 @@ static inline void nss_ipsecmgr_init_flow_db(struct nss_ipsecmgr_flow_db *flow_d
 }
 
 /*
- * nss_ipsecmgr_v4_hdr2sel()
- * 	convert v4_hdr to message sel
+ * nss_ipsecmgr_v4_hdr2tuple()
+ * 	convert v4_hdr to message tuple
  */
-static inline void nss_ipsecmgr_v4_hdr2sel(struct iphdr *iph, struct nss_ipsec_rule_sel *sel)
+static inline void nss_ipsecmgr_v4_hdr2tuple(struct iphdr *iph, struct nss_ipsec_tuple *tuple)
 {
-	sel->dst_addr[0] = ntohl(iph->daddr);
-	sel->src_addr[0] = ntohl(iph->saddr);
-	sel->proto_next_hdr = iph->protocol;
-	sel->ip_ver = NSS_IPSEC_IPVER_4;
+	tuple->dst_addr[0] = ntohl(iph->daddr);
+	tuple->src_addr[0] = ntohl(iph->saddr);
+	tuple->proto_next_hdr = iph->protocol;
+	tuple->ip_ver = IPVERSION;
 }
 
 /*
@@ -980,27 +982,27 @@ static inline uint32_t *nss_ipsecmgr_v6addr_hton(uint32_t *src, uint32_t *dst)
  */
 static inline void nss_ipsecmgr_copy_nim(struct nss_ipsec_msg *src_nim, struct nss_ipsec_msg *dst_nim)
 {
-	struct nss_ipsec_rule *src_push = &src_nim->msg.push;
-	struct nss_ipsec_rule *dst_push = &dst_nim->msg.push;
+	struct nss_ipsec_rule *src_rule = &src_nim->msg.rule;
+	struct nss_ipsec_rule *dst_rule = &dst_nim->msg.rule;
 
 	memcpy(dst_nim, src_nim, sizeof(struct nss_ipsec_msg));
 
-	if (src_push->sel.ip_ver == NSS_IPSEC_IPVER_6) {
-		nss_ipsecmgr_v6addr_swap(src_push->sel.dst_addr, dst_push->sel.dst_addr);
-		nss_ipsecmgr_v6addr_swap(src_push->sel.src_addr, dst_push->sel.src_addr);
+	if (src_nim->tuple.ip_ver == 6) {
+		nss_ipsecmgr_v6addr_swap(src_nim->tuple.dst_addr, dst_nim->tuple.dst_addr);
+		nss_ipsecmgr_v6addr_swap(src_nim->tuple.src_addr, dst_nim->tuple.src_addr);
 	}
 
-	if (src_push->oip.ip_ver == NSS_IPSEC_IPVER_6) {
-		nss_ipsecmgr_v6addr_swap(src_push->oip.dst_addr, dst_push->oip.dst_addr);
-		nss_ipsecmgr_v6addr_swap(src_push->oip.src_addr, dst_push->oip.src_addr);
+	if (src_rule->oip.ip_ver == 6) {
+		nss_ipsecmgr_v6addr_swap(src_rule->oip.dst_addr, dst_rule->oip.dst_addr);
+		nss_ipsecmgr_v6addr_swap(src_rule->oip.src_addr, dst_rule->oip.src_addr);
 	}
 }
 
 /*
- * nss_ipsecmgr_v6_hdr2sel()
- * 	convert v6_hdr to message sel
+ * nss_ipsecmgr_v6_hdr2tuple()
+ * 	convert v6_hdr to message tuple
  */
-static inline void nss_ipsecmgr_v6_hdr2sel(struct ipv6hdr *iph, struct nss_ipsec_rule_sel *sel)
+static inline void nss_ipsecmgr_v6_hdr2tuple(struct ipv6hdr *iph, struct nss_ipsec_tuple *tuple)
 {
 	uint8_t nexthdr = iph->nexthdr;
 	struct frag_hdr *frag;
@@ -1015,11 +1017,11 @@ static inline void nss_ipsecmgr_v6_hdr2sel(struct ipv6hdr *iph, struct nss_ipsec
 		nexthdr = frag->nexthdr;
 	}
 
-	nss_ipsecmgr_v6addr_ntoh(iph->daddr.s6_addr32, sel->dst_addr);
-	nss_ipsecmgr_v6addr_ntoh(iph->saddr.s6_addr32, sel->src_addr);
+	nss_ipsecmgr_v6addr_ntoh(iph->daddr.s6_addr32, tuple->dst_addr);
+	nss_ipsecmgr_v6addr_ntoh(iph->saddr.s6_addr32, tuple->src_addr);
 
-	sel->proto_next_hdr = nexthdr;
-	sel->ip_ver = NSS_IPSEC_IPVER_6;
+	tuple->proto_next_hdr = nexthdr;
+	tuple->ip_ver = 6;
 }
 
 /*
@@ -1070,7 +1072,7 @@ void nss_ipsecmgr_copy_encap_v4_flow(struct nss_ipsec_msg *nim, struct nss_ipsec
 void nss_ipsecmgr_copy_encap_v6_flow(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_encap_v6_tuple *flow);
 void nss_ipsecmgr_encap_v4_flow2key(struct nss_ipsecmgr_encap_v4_tuple *flow, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_encap_v6_flow2key(struct nss_ipsecmgr_encap_v6_tuple *flow, struct nss_ipsecmgr_key *key);
-void nss_ipsecmgr_encap_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_encap_tuple2key(struct nss_ipsec_tuple *tuple, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_encap_flow_init(struct nss_ipsec_msg *nim, enum nss_ipsec_msg_type type, struct nss_ipsecmgr_priv *priv);
 
 /*
@@ -1080,7 +1082,7 @@ void nss_ipsecmgr_copy_decap_v4_flow(struct nss_ipsec_msg *nim, struct nss_ipsec
 void nss_ipsecmgr_copy_decap_v6_flow(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v6 *flow);
 void nss_ipsecmgr_decap_v4_flow2key(struct nss_ipsecmgr_sa_v4 *flow, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_decap_v6_flow2key(struct nss_ipsecmgr_sa_v6 *flow, struct nss_ipsecmgr_key *key);
-void nss_ipsecmgr_decap_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_decap_tuple2key(struct nss_ipsec_tuple *tuple, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_decap_flow_init(struct nss_ipsec_msg *nim, enum nss_ipsec_msg_type type, struct nss_ipsecmgr_priv *priv);
 
 /*
@@ -1096,16 +1098,16 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 void nss_ipsecmgr_copy_subnet(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_ref *subnet_ref);
 void nss_ipsecmgr_v4_subnet2key(struct nss_ipsecmgr_encap_v4_subnet *subnet, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_v6_subnet2key(struct nss_ipsecmgr_encap_v6_subnet *subnet, struct nss_ipsecmgr_key *key);
-void nss_ipsecmgr_v4_subnet_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
-void nss_ipsecmgr_v6_subnet_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_v4_subnet_tuple2key(struct nss_ipsec_tuple *tuple, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_v6_subnet_tuple2key(struct nss_ipsec_tuple *tuple, struct nss_ipsecmgr_key *key);
 
 /*
  * Subnet alloc/lookup API(s)
  */
 struct nss_ipsecmgr_ref *nss_ipsecmgr_subnet_alloc(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
 struct nss_ipsecmgr_ref *nss_ipsecmgr_subnet_lookup(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
-struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *sel);
-struct nss_ipsecmgr_ref *nss_ipsecmgr_v6_subnet_match(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *sel);
+struct nss_ipsecmgr_ref *nss_ipsecmgr_v4_subnet_match(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *tuple);
+struct nss_ipsecmgr_ref *nss_ipsecmgr_v6_subnet_match(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *tuple);
 
 /*
  * SA API(s)
@@ -1115,7 +1117,7 @@ void nss_ipsecmgr_copy_v6_sa(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v
 void nss_ipsecmgr_copy_sa_data(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_data *data);
 void nss_ipsecmgr_v4_sa2key(struct nss_ipsecmgr_sa_v4 *sa, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_v6_sa2key(struct nss_ipsecmgr_sa_v6 *sa, struct nss_ipsecmgr_key *key);
-void nss_ipsecmgr_sa_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key);
+void nss_ipsecmgr_sa_tuple2key(struct nss_ipsec_tuple *tuple, struct nss_ipsecmgr_key *key);
 void nss_ipsecmgr_sa_stats_update(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_entry *sa);
 
 /*

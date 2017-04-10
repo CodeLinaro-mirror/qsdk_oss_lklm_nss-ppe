@@ -16,7 +16,9 @@ endif
 obj-y+=dtls/
 
 # CAPWAP Manager
+ifneq ($(SoC), ipq807x)
 obj-y+= capwapmgr/
+endif
 
 # Port interface Manager
 ifneq ($(findstring 3.4, $(KERNELVERSION)),)
@@ -48,7 +50,9 @@ obj-y+=l2tp/l2tpv2/
 obj-y+= pptp/
 
 #IPsecmgr
+ifneq ($(SoC), ipq807x)
 obj-y+= ipsecmgr/
+endif
 
 #LAG Manager
 obj-y+= lag/

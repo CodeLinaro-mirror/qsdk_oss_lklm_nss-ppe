@@ -389,24 +389,24 @@ void nss_ipsecmgr_copy_subnet(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_ref
 
 	entry = container_of(ref, struct nss_ipsecmgr_subnet_entry, ref);
 
-	oip = &entry->nim.msg.push.oip;
-	data = &entry->nim.msg.push.data;
+	oip = &entry->nim.msg.rule.oip;
+	data = &entry->nim.msg.rule.data;
 
-	memcpy(&nim->msg.push.oip, oip, sizeof(struct nss_ipsec_rule_oip));
-	memcpy(&nim->msg.push.data, data, sizeof(struct nss_ipsec_rule_data));
+	memcpy(&nim->msg.rule.oip, oip, sizeof(struct nss_ipsec_rule_oip));
+	memcpy(&nim->msg.rule.data, data, sizeof(struct nss_ipsec_rule_data));
 }
 
 /*
  * nss_ipsecmgr_v4_subnet_sel2key()
  * 	convert subnet selector to key
  */
-void nss_ipsecmgr_v4_subnet_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key)
+void nss_ipsecmgr_v4_subnet_tuple2key(struct nss_ipsec_tuple *tuple, struct nss_ipsecmgr_key *key)
 {
 	nss_ipsecmgr_key_reset(key);
 
 	nss_ipsecmgr_key_write_8(key, 4 /* ipv4 */, NSS_IPSECMGR_KEY_POS_IP_VER);
-	nss_ipsecmgr_key_write_8(key, sel->proto_next_hdr, NSS_IPSECMGR_KEY_POS_IP_PROTO);
-	nss_ipsecmgr_key_write_32(key, nss_ipsecmgr_get_v4addr(sel->dst_addr), NSS_IPSECMGR_KEY_POS_IPV4_DST);
+	nss_ipsecmgr_key_write_8(key, tuple->proto_next_hdr, NSS_IPSECMGR_KEY_POS_IP_PROTO);
+	nss_ipsecmgr_key_write_32(key, nss_ipsecmgr_get_v4addr(tuple->dst_addr), NSS_IPSECMGR_KEY_POS_IPV4_DST);
 
 	key->len = NSS_IPSECMGR_KEY_LEN_IPV4_SUBNET;
 }
@@ -415,17 +415,17 @@ void nss_ipsecmgr_v4_subnet_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_i
  * nss_ipsecmgr_v6_subnet_sel2key()
  * 	convert subnet selector to key
  */
-void nss_ipsecmgr_v6_subnet_sel2key(struct nss_ipsec_rule_sel *sel, struct nss_ipsecmgr_key *key)
+void nss_ipsecmgr_v6_subnet_tuple2key(struct nss_ipsec_tuple *tuple, struct nss_ipsecmgr_key *key)
 {
 	uint32_t i;
 
 	nss_ipsecmgr_key_reset(key);
 
 	nss_ipsecmgr_key_write_8(key, 6 /* ipv6 */, NSS_IPSECMGR_KEY_POS_IP_VER);
-	nss_ipsecmgr_key_write_8(key, sel->proto_next_hdr, NSS_IPSECMGR_KEY_POS_IP_PROTO);
+	nss_ipsecmgr_key_write_8(key, tuple->proto_next_hdr, NSS_IPSECMGR_KEY_POS_IP_PROTO);
 
 	for (i = 0; i < 4; i++) {
-		nss_ipsecmgr_key_write_32(key, sel->dst_addr[i], NSS_IPSECMGR_KEY_POS_IPV6_DST + (i * BITS_PER_LONG));
+		nss_ipsecmgr_key_write_32(key, tuple->dst_addr[i], NSS_IPSECMGR_KEY_POS_IPV6_DST + (i * BITS_PER_LONG));
 	}
 
 	key->len = NSS_IPSECMGR_KEY_LEN_IPV6_SUBNET;

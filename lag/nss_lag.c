@@ -59,7 +59,6 @@
 #define NSS_LAG_MAX_BOND_DEVICES 4
 #define NSS_LAG_MAX_PPE_BOND_DEVICES 2
 #define NSS_LAG_MAX_SLAVES_PER_BONDID 16
-#define NSS_LAG_BOND_ID_INVALID	0xFFFFFFFF
 #define NSS_LAG_BOND_DEV_STATE_ACTIVE 1
 #define NSS_LAG_BOND_DEV_STATE_INACTIVE 2
 
@@ -259,7 +258,7 @@ static int nss_lag_update_slave(struct netdev_notifier_info *info)
 		 * Figure out the aggregation id of this slave
 		 */
 		bondid = bond_get_id(bond_dev);
-		if (bondid == NSS_LAG_BOND_ID_INVALID) {
+		if ((bondid < 0) || (bondid >= NSS_LAG_MAX_BOND_DEVICES)) {
 			nss_lag_warn("Invalid LAG group id 0x%x\n", bondid);
 			return NOTIFY_DONE;
 		}

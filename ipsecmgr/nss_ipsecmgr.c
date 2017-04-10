@@ -293,7 +293,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	/*
 	 * Send the packet down
 	 */
-	if (nss_ipsec_tx_buf(skb, NSS_IPSEC_ENCAP_IF_NUMBER) != 0) {
+	if (nss_ipsec_tx_buf(skb, ipsecmgr_ctx->encap_ifnum) != 0) {
 		/*
 		 * TODO: NEED TO STOP THE QUEUE
 		 */
@@ -394,7 +394,7 @@ static void nss_ipsecmgr_tunnel_setup(struct net_device *dev)
 static struct net_device *nss_ipsecmgr_get_dev(struct sk_buff *skb)
 {
 	struct nss_ipsecmgr_sa_entry *sa_entry;
-	struct nss_ipsec_rule_sel sel;
+	struct nss_ipsec_tuple tuple;
 	struct nss_ipsecmgr_ref *ref;
 	struct nss_ipsecmgr_key key;
 	struct net_device *dev;
@@ -440,7 +440,7 @@ static struct net_device *nss_ipsecmgr_get_dev(struct sk_buff *skb)
 			goto done;
 		}
 
-		nss_ipsecmgr_v4_hdr2sel(iph, &sel);
+		nss_ipsecmgr_v4_hdr2tuple(iph, &tuple);
 		break;
 	}
 
@@ -452,9 +452,9 @@ static struct net_device *nss_ipsecmgr_get_dev(struct sk_buff *skb)
 		hdr_sz = sizeof(struct ipv6hdr);
 		skb->protocol = cpu_to_be16(ETH_P_IPV6);
 
-		nss_ipsecmgr_v6_hdr2sel(ip6h, &sel);
+		nss_ipsecmgr_v6_hdr2tuple(ip6h, &tuple);
 
-		if (sel.proto_next_hdr != IPPROTO_ESP) {
+		if (tuple.proto_next_hdr != IPPROTO_ESP) {
 			memset(&fl6, 0, sizeof(fl6));
 			memcpy(&fl6.daddr, &ip6h->saddr, sizeof(fl6.daddr));
 
@@ -480,9 +480,9 @@ static struct net_device *nss_ipsecmgr_get_dev(struct sk_buff *skb)
 
 	skb_set_transport_header(skb, hdr_sz);
 	esph = ip_esp_hdr(skb);
-	sel.esp_spi = ntohl(esph->spi);
+	tuple.esp_spi = ntohl(esph->spi);
 
-	nss_ipsecmgr_sa_sel2key(&sel, &key);
+	nss_ipsecmgr_sa_tuple2key(&tuple, &key);
 
 	ref = nss_ipsecmgr_sa_lookup(&key);
 	if (!ref) {
@@ -555,10 +555,10 @@ done:
 static void nss_ipsecmgr_update_tun_rx_stats(struct nss_ipsecmgr_priv *priv, struct nss_ipsec_msg *nim)
 {
 	struct rtnl_link_stats64 *tun_stats;
-	struct nss_ipsec_pkt_sa_stats *pkts;
+	struct nss_ipsec_sa_stats *pkts;
 
 	tun_stats = &priv->stats;
-	pkts = &nim->msg.sa_stats.pkts;
+	pkts = &nim->msg.stats.sa;
 
 	/*
 	 * update tunnel specific stats
@@ -568,7 +568,7 @@ static void nss_ipsecmgr_update_tun_rx_stats(struct nss_ipsecmgr_priv *priv, str
 
 	tun_stats->rx_dropped += pkts->no_headroom;
 	tun_stats->rx_dropped += pkts->no_tailroom;
-	tun_stats->rx_dropped += pkts->no_buf;
+	tun_stats->rx_dropped += pkts->no_resource;
 	tun_stats->rx_dropped += pkts->fail_queue;
 	tun_stats->rx_dropped += pkts->fail_hash;
 	tun_stats->rx_dropped += pkts->fail_replay;
@@ -581,10 +581,10 @@ static void nss_ipsecmgr_update_tun_rx_stats(struct nss_ipsecmgr_priv *priv, str
 static void nss_ipsecmgr_update_tun_tx_stats(struct nss_ipsecmgr_priv *priv, struct nss_ipsec_msg *nim)
 {
 	struct rtnl_link_stats64 *tun_stats;
-	struct nss_ipsec_pkt_sa_stats *pkts;
+	struct nss_ipsec_sa_stats *pkts;
 
 	tun_stats = &priv->stats;
-	pkts = &nim->msg.sa_stats.pkts;
+	pkts = &nim->msg.stats.sa;
 
 	/*
 	 * update tunnel specific stats
@@ -594,7 +594,7 @@ static void nss_ipsecmgr_update_tun_tx_stats(struct nss_ipsecmgr_priv *priv, str
 
 	tun_stats->tx_dropped += pkts->no_headroom;
 	tun_stats->tx_dropped += pkts->no_tailroom;
-	tun_stats->tx_dropped += pkts->no_buf;
+	tun_stats->tx_dropped += pkts->no_resource;
 	tun_stats->tx_dropped += pkts->fail_queue;
 	tun_stats->tx_dropped += pkts->fail_hash;
 	tun_stats->tx_dropped += pkts->fail_replay;
@@ -636,7 +636,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 		/*
 		 * prepare and lookup sa based on selector sent from nss
 		 */
-		nss_ipsecmgr_sa_sel2key(&nim->msg.sa_stats.sel, &key);
+		nss_ipsecmgr_sa_tuple2key(&nim->tuple, &key);
 
 		write_lock(&ipsecmgr_ctx->lock);
 
@@ -678,15 +678,15 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 			/*
 			 * copy stats and SA information
 			 */
-			sa_stats->crypto_index = sa->nim.msg.push.data.crypto_index;
-			sa_stats->seq_num = nim->msg.sa_stats.seq_num;
+			sa_stats->crypto_index = sa->nim.msg.rule.data.crypto_index;
+			sa_stats->seq_num = nim->msg.stats.sa.seq_num;
 
-			sa_stats->esn_enabled = nim->msg.sa_stats.esn_enabled;
-			sa_stats->window_max = nim->msg.sa_stats.window_max;
-			sa_stats->window_size = nim->msg.sa_stats.window_size;
+			sa_stats->esn_enabled = nim->msg.stats.sa.esn_enabled;
+			sa_stats->window_max = nim->msg.stats.sa.window_max;
+			sa_stats->window_size = nim->msg.stats.sa.window_size;
 
-			sa_stats->pkts.count = nim->msg.sa_stats.pkts.count;
-			sa_stats->pkts.bytes = nim->msg.sa_stats.pkts.bytes;
+			sa_stats->pkts.count = nim->msg.stats.sa.count;
+			sa_stats->pkts.bytes = nim->msg.stats.sa.bytes;
 
 			cb_fn(priv->cb_ctx, &stats_event);
 		}
@@ -699,7 +699,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 			drv_stats = &ipsecmgr_ctx->dec_stats;
 		}
 
-		node_stats = &nim->msg.node_stats;
+		node_stats = &nim->msg.stats.node;
 		drv_stats->enqueued += node_stats->enqueued;
 		drv_stats->completed += node_stats->completed;
 		drv_stats->linearized += node_stats->linearized;
@@ -927,11 +927,9 @@ static int __init nss_ipsecmgr_init(void)
 		goto free;
 	}
 
-	ipsecmgr_ctx->nss_ifnum = nss_ipsec_get_interface(ipsecmgr_ctx->nss_ctx);
-	if (ipsecmgr_ctx->nss_ifnum < 0) {
-		nss_ipsecmgr_info_always("%p: Invalid interface number  %d\n", ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->nss_ifnum);
-		goto free;
-	}
+	ipsecmgr_ctx->data_ifnum = nss_ipsec_get_data_interface();
+	ipsecmgr_ctx->encap_ifnum = nss_ipsec_get_encap_interface();
+	ipsecmgr_ctx->decap_ifnum = nss_ipsec_get_decap_interface();
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
 	ipsecmgr_ctx->ndev = alloc_netdev(0, NSS_IPSECMGR_DEFAULT_TUN_NAME, nss_ipsecmgr_dummy_netdevice_setup);
@@ -957,9 +955,9 @@ static int __init nss_ipsecmgr_init(void)
 	nss_ipsecmgr_init_flow_db(&ipsecmgr_ctx->flow_db);
 
 
-	nss_ipsec_data_register(ipsecmgr_ctx->nss_ifnum, nss_ipsecmgr_tunnel_rx, ipsecmgr_ctx->ndev, 0);
-	nss_ipsec_notify_register(NSS_IPSEC_ENCAP_IF_NUMBER, nss_ipsecmgr_tunnel_notify, NULL);
-	nss_ipsec_notify_register(NSS_IPSEC_DECAP_IF_NUMBER, nss_ipsecmgr_tunnel_notify, NULL);
+	nss_ipsec_data_register(ipsecmgr_ctx->data_ifnum, nss_ipsecmgr_tunnel_rx, ipsecmgr_ctx->ndev, 0);
+	nss_ipsec_notify_register(ipsecmgr_ctx->encap_ifnum, nss_ipsecmgr_tunnel_notify, NULL);
+	nss_ipsec_notify_register(ipsecmgr_ctx->decap_ifnum, nss_ipsecmgr_tunnel_notify, NULL);
 
 	/*
 	 * initialize debugfs.
@@ -1031,10 +1029,10 @@ static void __exit nss_ipsecmgr_exit(void)
 	 * Unregister the callbacks from the HLOS as we are no longer
 	 * interested in exception data & async messages
 	 */
-	nss_ipsec_data_unregister(ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->nss_ifnum);
+	nss_ipsec_data_unregister(ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->data_ifnum);
 
-	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, NSS_IPSEC_ENCAP_IF_NUMBER);
-	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, NSS_IPSEC_DECAP_IF_NUMBER);
+	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->encap_ifnum);
+	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->decap_ifnum);
 
 	if (ipsecmgr_ctx->ndev) {
 		rtnl_is_locked() ? unregister_netdevice(ipsecmgr_ctx->ndev) : unregister_netdev(ipsecmgr_ctx->ndev);

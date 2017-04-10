@@ -2115,7 +2115,7 @@ static void nss_qdisc_basic_stats_callback(void *app_data,
 	atomic_t *refcnt;
 
 	if (nim->cm.response != NSS_CMN_RESPONSE_ACK) {
-		nss_qdisc_info("%s: Qdisc %p (type %d): Receive stats FAILED - "
+		nss_qdisc_warning("%s: Qdisc %p (type %d): Receive stats FAILED - "
 			"response: type: %d\n", __func__, qdisc, nq->type,
 			nim->msg.shaper_configure.config.response_type);
 		atomic_sub(1, &nq->pending_stat_requests);
@@ -2214,8 +2214,8 @@ static void nss_qdisc_get_stats_timer_callback(unsigned long int data)
 	 * Check if we failed to send the stats request to NSS.
 	 */
 	if (rc != NSS_TX_SUCCESS) {
-		nss_qdisc_error("%s: %p: basic stats get failed to send\n",
-				__func__, nq->qdisc);
+		nss_qdisc_info("%s: %p: stats fetch request dropped, causing ",
+				"delay in stats fetch\n", __func__, nq->qdisc);
 
 		/*
 		 * Schedule the timer once again for re-trying. Since this is a

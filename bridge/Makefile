@@ -5,3 +5,8 @@ obj-m += qca-nss-bridge-mgr.o
 qca-nss-bridge-mgr-objs := nss_bridge_mgr.o
 
 ccflags-y += -DNSS_BRIDGE_MGR_DEBUG_LEVEL=0
+
+ifeq ($(SoC), ipq807x)
+ccflags-y += -DNSS_BRIDGE_MGR_PPE_SUPPORT
+endif
+
