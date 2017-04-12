@@ -127,34 +127,7 @@ static int nss_lag_update_ppe(int32_t bondid, int32_t slave_ifnum,
 }
 #endif
 
-/*
- * nss_lag_state_callback()
- *	Call back function for nss LAG State
- */
-static void nss_lag_state_callback(void *ctx, struct nss_lag_msg *nm)
-{
-#if defined(NSS_LAG_PPE_SUPPORT)
-	int32_t lagid, bondid, slave_ifnum;
-	enum nss_lag_state_change_ev slave_state;
-#endif
-	if (nm->cm.response != NSS_CMN_RESPONSE_ACK) {
-		nss_lag_warn("LAG State update Request failed, error=%d\n",
-				nm->cm.error);
-		return;
-	}
 
-	nss_lag_info("LAG State update Request Passed\n");
-#if defined(NSS_LAG_PPE_SUPPORT)
-	bondid = nm->cm.interface - NSS_LAG0_INTERFACE_NUM;
-	slave_ifnum = nm->msg.state.interface;
-	slave_state = nm->msg.state.event;
-
-	/* Call SSDK API to update trunk Port details */
-	ret = nss_lag_update_ppe(bondid, slave_ifnum, slave_state);
-	if (ret)
-		nss_lag_warn("Couldn't update PPE: ret =  %d\n", ret);
-#endif
-}
 
 /*
  * nss_lag_send_lag_state()
@@ -168,12 +141,8 @@ static nss_tx_status_t nss_lag_send_lag_state(struct nss_ctx_instance *nss_ctx,
 	int32_t lagid = 0;
 	int32_t slave_ifnum;
 	nss_tx_status_t nss_tx_status;
-	struct nss_lag_msg nm;
-	struct nss_lag_state_change *nlsc = NULL;
 
 	nss_lag_info("Send LAG update for: %p (%s)\n", slave, slave->name);
-
-	memset(&nm, 0, sizeof(nm));
 
 	lagid = bondid + NSS_LAG0_INTERFACE_NUM;
 
@@ -184,19 +153,7 @@ static nss_tx_status_t nss_lag_send_lag_state(struct nss_ctx_instance *nss_ctx,
 	nss_lag_info("slave_state=%d, slave_ifnum=%d, bondid=%d\n",
 			slave_state, slave_ifnum, bondid);
 
-	/*
-	 * Construct a message to the NSS to update it
-	 */
-	nss_lag_msg_init(&nm, lagid,
-			 NSS_TX_METADATA_LAG_STATE_CHANGE,
-			 sizeof(struct nss_lag_state_change),
-			 nss_lag_state_callback, NULL);
-
-	nlsc = &nm.msg.state;
-	nlsc->event = slave_state;
-	nlsc->interface = slave_ifnum;
-
-	nss_tx_status = nss_lag_tx(nss_ctx, &nm);
+	nss_tx_status = nss_lag_tx_slave_state(lagid, slave_ifnum, slave_state);
 	if (nss_tx_status != NSS_TX_SUCCESS) {
 		nss_lag_warn("%p: Send LAG update failed, status: %d\n", slave,
 				nss_tx_status);
@@ -204,6 +161,12 @@ static nss_tx_status_t nss_lag_send_lag_state(struct nss_ctx_instance *nss_ctx,
 	}
 	nss_lag_info("%p: Send LAG update success\n", slave);
 
+#if defined(NSS_LAG_PPE_SUPPORT)
+	ret = nss_lag_update_ppe(bondid, slave_ifnum, slave_state);
+	if (ret)
+		nss_lag_warn("%p: Couldn't update PPE: ret =  %d\n",
+				slave, ret);
+#endif
 	return NSS_TX_SUCCESS;
 }
 

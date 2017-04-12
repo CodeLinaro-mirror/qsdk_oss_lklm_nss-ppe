@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -305,13 +305,13 @@ static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, str
 	 * update flow and return interface numbers. Handle Ipsec interfaces seperately.
 	 */
 	if (flow_dev->type == NSS_IPSEC_ARPHRD_IPSEC) {
-		conn->flow_interface_num = nss_ipsec_get_interface(nss_ipsec_get_context());
+		conn->flow_interface_num = nss_ipsec_get_data_interface();
 	} else {
 		conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(flow_dev);
 	}
 
 	if (return_dev->type == NSS_IPSEC_ARPHRD_IPSEC) {
-		conn->flow_interface_num = nss_ipsec_get_interface(nss_ipsec_get_context());
+		conn->flow_interface_num = nss_ipsec_get_data_interface();
 	} else {
 		conn->return_interface_num = nss_cmn_get_interface_number_by_dev(return_dev);
 	}
