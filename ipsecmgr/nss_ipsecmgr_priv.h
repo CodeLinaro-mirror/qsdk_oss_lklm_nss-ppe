@@ -319,15 +319,30 @@ struct nss_ipsecmgr_flow_db {
 };
 
 /*
+ * IPsec manager callback database
+ */
+struct nss_ipsecmgr_callback_db {
+	atomic_t num_entries;			/* number of callback(s) registered */
+	struct list_head entries;		/* head of the first callback */
+};
+
+/*
+ * IPsec manager callback entry
+ */
+struct nss_ipsecmgr_callback_entry {
+	struct list_head node;			/* list node */
+	int dev_index;				/* device bound for callback */
+	void *app_data;				/* callback context */
+	nss_ipsecmgr_data_cb_t data;		/* data callback function */
+	nss_ipsecmgr_event_cb_t event;		/* event callback function */
+};
+
+/*
  * IPsec manager private context
  */
 struct nss_ipsecmgr_priv {
 	struct net_device *dev;			/* back pointer to tunnel device */
-
-	void *cb_ctx;				/* callback context */
-	nss_ipsecmgr_data_cb_t data_cb;		/* data callback function */
-	nss_ipsecmgr_event_cb_t event_cb;	/* event callback function */
-
+	struct nss_ipsecmgr_callback_entry cb;	/* callback entry instance */
 	struct rtnl_link_stats64 stats;		/* stats of IPsec tunnel */
 };
 
@@ -344,6 +359,7 @@ struct nss_ipsecmgr_drv {
 	struct nss_ipsecmgr_sa_db sa_db;	/* SA database */
 	struct nss_ipsecmgr_netmask_db net_db;	/* Subnet mask database */
 	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
+	struct nss_ipsecmgr_callback_db cb_db;	/* callback database */
 	struct completion complete;		/* completion for flow stats nss msg */
 
 	int encap_ifnum;			/* NSS encap interface */
@@ -893,7 +909,8 @@ static inline void nss_ipsecmgr_init_subnet_db(struct nss_ipsecmgr_netmask_entry
 }
 
 /*
- * Initialize the various databases
+ * nss_ipsecmgr_init_flow_db()
+ *	Initialize the flow databases
  */
 static inline void nss_ipsecmgr_init_flow_db(struct nss_ipsecmgr_flow_db *flow_db)
 {
@@ -909,6 +926,16 @@ static inline void nss_ipsecmgr_init_flow_db(struct nss_ipsecmgr_flow_db *flow_d
 	}
 
 	atomic_set(&flow_db->num_entries, 0);
+}
+
+/*
+ * nss_ipsecmgr_init_callback_db()
+ * 	initialize the callback database
+ */
+static inline void nss_ipsecmgr_init_callback_db(struct nss_ipsecmgr_callback_db *cb_db)
+{
+	INIT_LIST_HEAD(&cb_db->entries);
+	atomic_set(&cb_db->num_entries, 0);
 }
 
 /*

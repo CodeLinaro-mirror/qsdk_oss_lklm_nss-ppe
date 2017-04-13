@@ -388,10 +388,43 @@ static void nss_ipsecmgr_tunnel_setup(struct net_device *dev)
 }
 
 /*
- * nss_ipsecmgr_get_dev()
+ * nss_ipsecmgr_tunnel_get_callback()
+ * 	get the callback entry for the dev index
+ *
+ * Note: this is typically expected in the RX BH path
+ */
+static struct nss_ipsecmgr_callback_entry *nss_ipsecmgr_tunnel_get_callback(int dev_index)
+{
+	struct nss_ipsecmgr_callback_db *cb_db = &ipsecmgr_ctx->cb_db;
+	struct nss_ipsecmgr_callback_entry *cb_entry;
+
+	if (!atomic_read(&cb_db->num_entries))
+		return NULL;
+
+	BUG_ON(!in_atomic());
+
+	/*
+	 * search the callback database to find if there
+	 * are any registered callback for the net_device
+	 */
+	read_lock(&ipsecmgr_ctx->lock);				/* lock */
+	list_for_each_entry(cb_entry, &cb_db->entries, node) {
+		if (cb_entry->dev_index == dev_index) {
+			read_unlock(&ipsecmgr_ctx->lock);	/* unlock */
+			return cb_entry;
+		}
+	}
+
+	read_unlock(&ipsecmgr_ctx->lock);			/* unlock */
+
+	return NULL;
+}
+
+/*
+ * nss_ipsecmgr_tunnel_get_dev()
  *	Get the net_device associated with the packet.
  */
-static struct net_device *nss_ipsecmgr_get_dev(struct sk_buff *skb)
+static struct net_device *nss_ipsecmgr_tunnel_get_dev(struct sk_buff *skb)
 {
 	struct nss_ipsecmgr_sa_entry *sa_entry;
 	struct nss_ipsec_tuple tuple;
@@ -506,14 +539,14 @@ done:
  */
 static void nss_ipsecmgr_tunnel_rx(struct net_device *dummy, struct sk_buff *skb, __attribute((unused)) struct napi_struct *napi)
 {
-	struct nss_ipsecmgr_priv *priv;
+	struct nss_ipsecmgr_callback_entry *cb_entry;
 	nss_ipsecmgr_data_cb_t cb_fn;
 	struct net_device *dev;
 
 	BUG_ON(dummy == NULL);
 	BUG_ON(skb == NULL);
 
-	dev = nss_ipsecmgr_get_dev(skb);
+	dev = nss_ipsecmgr_tunnel_get_dev(skb);
 	if (unlikely(!dev)) {
 		nss_ipsecmgr_trace("cannot find a dev(%p)\n", skb);
 		dev_kfree_skb_any(skb);
@@ -523,42 +556,50 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dummy, struct sk_buff *skb
 	dev_hold(dev);
 
 	/*
-	 * NETDEV doesn't belong to IPsec manager;
-	 * indicate it to the stack
+	 * search the device in the registered callback table;
+	 * if there is match then load the callback for indication
 	 */
-	if (dev->type != NSS_IPSEC_ARPHRD_IPSEC) {
+	cb_entry = nss_ipsecmgr_tunnel_get_callback(dev->ifindex);
+	if (!cb_entry) {
 		netif_receive_skb(skb);
 		goto done;
 	}
 
-	priv = netdev_priv(dev);
-	cb_fn = priv->data_cb;
+	cb_fn = cb_entry->data;
+	BUG_ON(!cb_fn);
 
-	/*
-	 * if tunnel creator gave a callback then send the packet without
-	 * any modifications to him
-	 */
-	if (!cb_fn) {
-		netif_receive_skb(skb);
-		goto done;
-	}
-
-	cb_fn(priv->cb_ctx, skb);
+	cb_fn(cb_entry->app_data, skb);
 done:
 	dev_put(dev);
 }
 
 /*
- * nss_ipsecmgr_update_tun_rx_stats()
+ * nss_ipsecmgr_tunnel_update_stats()
  * 	Update tunnel rx stats
  */
-static void nss_ipsecmgr_update_tun_rx_stats(struct nss_ipsecmgr_priv *priv, struct nss_ipsec_msg *nim)
+static void nss_ipsecmgr_tunnel_update_stats(struct nss_ipsecmgr_priv *priv, struct nss_ipsec_msg *nim)
 {
 	struct rtnl_link_stats64 *tun_stats;
 	struct nss_ipsec_sa_stats *pkts;
 
 	tun_stats = &priv->stats;
 	pkts = &nim->msg.stats.sa;
+
+	if (nim->type == NSS_IPSEC_TYPE_ENCAP) {
+		/*
+		 * update tunnel specific stats
+		 */
+		tun_stats->tx_bytes += pkts->bytes;
+		tun_stats->tx_packets += pkts->count;
+
+		tun_stats->tx_dropped += pkts->no_headroom;
+		tun_stats->tx_dropped += pkts->no_tailroom;
+		tun_stats->tx_dropped += pkts->no_resource;
+		tun_stats->tx_dropped += pkts->fail_queue;
+		tun_stats->tx_dropped += pkts->fail_hash;
+		tun_stats->tx_dropped += pkts->fail_replay;
+		return;
+	}
 
 	/*
 	 * update tunnel specific stats
@@ -572,32 +613,6 @@ static void nss_ipsecmgr_update_tun_rx_stats(struct nss_ipsecmgr_priv *priv, str
 	tun_stats->rx_dropped += pkts->fail_queue;
 	tun_stats->rx_dropped += pkts->fail_hash;
 	tun_stats->rx_dropped += pkts->fail_replay;
-}
-
-/*
- * nss_ipsecmgr_update_tun_tx_stats()
- * 	Update tunnel TX stats
- */
-static void nss_ipsecmgr_update_tun_tx_stats(struct nss_ipsecmgr_priv *priv, struct nss_ipsec_msg *nim)
-{
-	struct rtnl_link_stats64 *tun_stats;
-	struct nss_ipsec_sa_stats *pkts;
-
-	tun_stats = &priv->stats;
-	pkts = &nim->msg.stats.sa;
-
-	/*
-	 * update tunnel specific stats
-	 */
-	tun_stats->tx_bytes += pkts->bytes;
-	tun_stats->tx_packets += pkts->count;
-
-	tun_stats->tx_dropped += pkts->no_headroom;
-	tun_stats->tx_dropped += pkts->no_tailroom;
-	tun_stats->tx_dropped += pkts->no_resource;
-	tun_stats->tx_dropped += pkts->fail_queue;
-	tun_stats->tx_dropped += pkts->fail_hash;
-	tun_stats->tx_dropped += pkts->fail_replay;
 }
 
 /*
@@ -657,11 +672,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 		/*
 		 * update tunnel stats
 		 */
-		if (nim->type == NSS_IPSEC_TYPE_ENCAP) {
-			nss_ipsecmgr_update_tun_tx_stats(priv, nim);
-		} else {
-			nss_ipsecmgr_update_tun_rx_stats(priv, nim);
-		}
+		nss_ipsecmgr_tunnel_update_stats(priv, nim);
 
 		sa_stats = &stats_event.data.stats;
 		memcpy(&sa_stats->sa, &sa->sa_info, sizeof(struct nss_ipsecmgr_sa));
@@ -671,7 +682,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 		/*
 		 * if event callback is available then post the statistics using the callback function
 		 */
-		cb_fn = priv->event_cb;
+		cb_fn = priv->cb.event;
 		if (cb_fn) {
 			stats_event.type = NSS_IPSECMGR_EVENT_SA_STATS;
 
@@ -688,7 +699,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 			sa_stats->pkts.count = nim->msg.stats.sa.count;
 			sa_stats->pkts.bytes = nim->msg.stats.sa.bytes;
 
-			cb_fn(priv->cb_ctx, &stats_event);
+			cb_fn(priv->cb.app_data, &stats_event);
 		}
 		break;
 
@@ -762,6 +773,7 @@ static const struct file_operations node_stats_op = {
  */
 struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 {
+	struct nss_ipsecmgr_callback_db *cb_db = &ipsecmgr_ctx->cb_db;
 	struct nss_ipsecmgr_priv *priv;
 	struct net_device *dev;
 	int status;
@@ -777,16 +789,29 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 	}
 
 	priv = netdev_priv(dev);
-
 	priv->dev = dev;
-	priv->cb_ctx = cb->ctx;
-	priv->data_cb = cb->data_fn;
-	priv->event_cb = cb->event_fn;
+
+	INIT_LIST_HEAD(&priv->cb.node);
+	priv->cb.dev_index = dev->ifindex;
+	priv->cb.app_data = cb->ctx;
+	priv->cb.data = cb->data_fn;
+	priv->cb.event = cb->event_fn;
+
 
 	status = rtnl_is_locked() ? register_netdevice(dev) : register_netdev(dev);
 	if (status < 0) {
 		nss_ipsecmgr_error("register net dev failed :%s\n", dev->name);
 		goto fail;
+	}
+
+	/*
+	 * only register if data callback is available
+	 */
+	if (cb->data_fn){
+		write_lock_bh(&ipsecmgr_ctx->lock);
+		list_add(&priv->cb.node, &cb_db->entries);
+		atomic_inc(&cb_db->num_entries);
+		write_unlock_bh(&ipsecmgr_ctx->lock);
 	}
 
 	return dev;
@@ -803,11 +828,13 @@ EXPORT_SYMBOL(nss_ipsecmgr_tunnel_add);
  */
 bool nss_ipsecmgr_tunnel_del(struct net_device *dev)
 {
+	struct nss_ipsecmgr_callback_db *cb_db = &ipsecmgr_ctx->cb_db;
 	struct nss_ipsecmgr_priv *priv = netdev_priv(dev);
 
-
-	priv->data_cb = NULL;
-	priv->event_cb = NULL;
+	write_lock_bh(&ipsecmgr_ctx->lock);
+	atomic_dec(&cb_db->num_entries);
+	list_del(&priv->cb.node);
+	write_unlock_bh(&ipsecmgr_ctx->lock);
 
 	nss_ipsecmgr_sa_flush_all(priv);
 
@@ -820,6 +847,42 @@ bool nss_ipsecmgr_tunnel_del(struct net_device *dev)
 	return true;
 }
 EXPORT_SYMBOL(nss_ipsecmgr_tunnel_del);
+
+/*
+ * nss_ipsecmgr_tunnel_update_callback()
+ * 	update the callback databse with the new device index
+ *
+ * Note: the callback is database that holds callback functions w.r.t a
+ * device index. The tunnel_add would typically load this with the device
+ * index of the tunnel. Overtime the caller can decide to update this with
+ * different device index. In cases where the IPsec stack typically creates
+ * a tunnel device of its own (KLIPS), the callback would then get mapped to
+ * these devices instead of the IPsec manager created tunnel netdevice
+ */
+void nss_ipsecmgr_tunnel_update_callback(struct net_device *tun, struct net_device *cur)
+{
+	struct nss_ipsecmgr_callback_db *cb_db = &ipsecmgr_ctx->cb_db;
+	struct nss_ipsecmgr_callback_entry *cb_entry;
+	int tun_dev_index = tun->ifindex;
+
+	if (!atomic_read(&cb_db->num_entries))
+		return;
+
+	/*
+	 * search the old device index in callback table
+	 * and replace it with the new index
+	 */
+	write_lock_bh(&ipsecmgr_ctx->lock);
+	list_for_each_entry(cb_entry, &cb_db->entries, node) {
+		if (cb_entry->dev_index == tun_dev_index) {
+			cb_entry->dev_index = cur->ifindex;
+			break;
+		}
+	}
+
+	write_unlock_bh(&ipsecmgr_ctx->lock);
+}
+EXPORT_SYMBOL(nss_ipsecmgr_tunnel_update_callback);
 
 static const struct net_device_ops nss_ipsecmgr_ipsec_ndev_ops;
 
@@ -953,6 +1016,7 @@ static int __init nss_ipsecmgr_init(void)
 	nss_ipsecmgr_init_sa_db(&ipsecmgr_ctx->sa_db);
 	nss_ipsecmgr_init_netmask_db(&ipsecmgr_ctx->net_db);
 	nss_ipsecmgr_init_flow_db(&ipsecmgr_ctx->flow_db);
+	nss_ipsecmgr_init_callback_db(&ipsecmgr_ctx->cb_db);
 
 
 	nss_ipsec_data_register(ipsecmgr_ctx->data_ifnum, nss_ipsecmgr_tunnel_rx, ipsecmgr_ctx->ndev, 0);
