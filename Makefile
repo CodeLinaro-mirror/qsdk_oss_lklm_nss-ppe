@@ -67,6 +67,11 @@ ifeq ($(SoC), ipq807x)
 obj-y += bridge/
 endif
 
+# GRE manager
+ifeq ($(findstring 3.14, $(KERNELVERSION)), 3.14)
+obj-y+=gre/
+endif
+
 # Vlan manager
 obj-y += vlan/
 
