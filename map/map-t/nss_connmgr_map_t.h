@@ -29,6 +29,11 @@
 #define MAP_T_MAX_NUM_RULES_PER_MAP_T_INSTANCE 64
 #define MAP_T_MIN_NUM_RULES_PER_MAP_T_INSTANCE 1
 
+/*
+ * MAP-T Flag.
+ */
+#define MAPT_FLAG_ADD_DUMMY_HDR 0x01
+
 struct list_dev_to_map_t_rules_entry_t {
 	struct list_head list;					/* list head */
 	struct net_device *dev;					/* net device */
