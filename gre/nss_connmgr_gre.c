@@ -68,7 +68,7 @@ static int nss_connmgr_gre_dev_change_mtu(struct net_device *dev, int new_mtu)
 static int nss_connmgr_gre_dev_init(struct net_device *dev)
 {
 	int i;
-	struct nss_connmgr_gre_priv *priv = netdev_priv(dev);
+	nss_connmgr_gre_priv_t *priv = netdev_priv(dev);
 	int32_t append = priv->pad_len + priv->gre_hlen;
 
 	dev->tstats = alloc_percpu(struct pcpu_sw_netstats);
@@ -122,7 +122,7 @@ static netdev_tx_t nss_connmgr_gre_dev_xmit(struct sk_buff *skb, struct net_devi
 	nss_tx_status_t status;
 	int if_number;
 	struct nss_ctx_instance *gre_ctx;
-	struct nss_connmgr_gre_priv *priv = netdev_priv(dev);
+	nss_connmgr_gre_priv_t *priv = netdev_priv(dev);
 
 	if_number = priv->nss_if_number;
 	if (unlikely(if_number <= 0)) {
@@ -319,32 +319,34 @@ static void nss_connmgr_gre_tap_setup(struct net_device *dev)
  *	Retrieve info from netdevie and fill it in config message to NSS.
  */
 static int32_t nss_connmgr_gre_prepare_config_cmd(struct net_device *dev,
-						      struct nss_gre_msg *req)
+						      struct nss_gre_msg *req,
+						      struct net_device **next_dev,
+						      bool hold)
 {
 	struct nss_gre_config_msg *cmsg = &req->msg.cmsg;
 
 	if ((dev->type == ARPHRD_ETHER) && (dev->priv_flags & IFF_GRE_V4_TAP)) {
 		cmsg->mode = NSS_GRE_MODE_TAP;
 		cmsg->ip_type = NSS_GRE_IP_IPV4;
-		return nss_connmgr_gre_v4_get_config(dev, req);
+		return nss_connmgr_gre_v4_get_config(dev, req, next_dev, hold);
 	}
 
 	if ((dev->type == ARPHRD_ETHER) && (dev->priv_flags & IFF_GRE_V6_TAP)) {
 		cmsg->mode = NSS_GRE_MODE_TAP;
 		cmsg->ip_type = NSS_GRE_IP_IPV6;
-		return nss_connmgr_gre_v6_get_config(dev, req);
+		return nss_connmgr_gre_v6_get_config(dev, req, next_dev, hold);
 	}
 
 	if (dev->type == ARPHRD_IPGRE) {
 		cmsg->mode = NSS_GRE_MODE_TUN;
 		cmsg->ip_type = NSS_GRE_IP_IPV4;
-		return nss_connmgr_gre_v4_get_config(dev, req);
+		return nss_connmgr_gre_v4_get_config(dev, req, next_dev, hold);
 	}
 
 	if (dev->type == ARPHRD_IP6GRE) {
 		cmsg->mode = NSS_GRE_MODE_TUN;
 		cmsg->ip_type = NSS_GRE_IP_IPV6;
-		return nss_connmgr_gre_v6_get_config(dev, req);
+		return nss_connmgr_gre_v6_get_config(dev, req, next_dev, hold);
 	}
 
 	return GRE_ERR_NOT_GRE_NETDEV;
@@ -462,8 +464,9 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 	struct nss_ctx_instance *nss_ctx;
 	nss_tx_status_t status;
 	char name[IFNAMSIZ] = {0};
-	struct nss_connmgr_gre_priv *priv;
+	nss_connmgr_gre_priv_t *priv;
 	int retry = 0;
+	struct net_device *next_dev = NULL;
 
 	if (cfg->name) {
 		strlcpy(name, cfg->name, IFNAMSIZ);
@@ -474,9 +477,9 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 	switch (cfg->mode) {
 	case GRE_MODE_TUN:
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0))
-		dev = alloc_netdev(sizeof(struct nss_connmgr_gre_priv), name, nss_connmgr_gre_tun_setup);
+		dev = alloc_netdev(sizeof(nss_connmgr_gre_priv_t), name, nss_connmgr_gre_tun_setup);
 #else
-		dev = alloc_netdev(sizeof(struct nss_connmgr_gre_priv), name, NET_NAME_UNKNOWN, nss_connmgr_gre_tun_setup);
+		dev = alloc_netdev(sizeof(nss_connmgr_gre_priv_t), name, NET_NAME_UNKNOWN, nss_connmgr_gre_tun_setup);
 #endif
 
 		if (!dev) {
@@ -496,7 +499,7 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 		break;
 
 	case GRE_MODE_TAP:
-		dev = alloc_etherdev(sizeof(struct nss_connmgr_gre_priv));
+		dev = alloc_etherdev(sizeof(nss_connmgr_gre_priv_t));
 		if (!dev) {
 			nss_connmgr_gre_warning("Allocation of netdev failed\n");
 			*err_code = GRE_ERR_ALLOC_NETDEV;
@@ -535,7 +538,7 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 	 * Create config cmd for acceleration engine
 	 */
 	memset(&req, 0, sizeof(struct nss_gre_msg));
-	ret = nss_connmgr_gre_prepare_config_cmd(dev, &req);
+	ret = nss_connmgr_gre_prepare_config_cmd(dev, &req, &next_dev, true);
 	if (ret) {
 		nss_connmgr_gre_warning("%p: gre get config failed\n", dev);
 		*err_code = ret;
@@ -562,7 +565,15 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 	}
 
 	if (cfg->next_dev) {
+
+		if (next_dev) {
+			dev_put(next_dev);
+		}
+
+		dev_hold(cfg->next_dev);
 		cmsg->next_node_if_num = nss_cmn_get_interface_number_by_dev(cfg->next_dev);
+		next_dev = cfg->next_dev;
+
 		if (cmsg->next_node_if_num < 0) {
 			nss_connmgr_gre_warning("%p: Next dev = %s is not registered with ae engine\n",
 						dev, cfg->next_dev->name);
@@ -605,8 +616,9 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 		goto err2;
 	}
 
-	priv = (struct nss_connmgr_gre_priv *)netdev_priv(dev);
+	priv = (nss_connmgr_gre_priv_t *)netdev_priv(dev);
 	priv->nss_if_number = if_number;
+	priv->next_dev = next_dev;
 
 	/*
 	 * Register gre tunnel with NSS
@@ -665,6 +677,10 @@ err2:
 	unregister_netdevice(dev);
 
 err1:
+	if (next_dev) {
+		dev_put(next_dev);
+	}
+
 	return dev;
 }
 
@@ -680,8 +696,15 @@ static enum nss_connmgr_gre_err_codes __nss_connmgr_gre_destroy_interface(struct
 	int if_number;
 	nss_tx_status_t status;
 	int retry = 0;
+	nss_connmgr_gre_priv_t *priv;
 
 	netif_tx_disable(dev);
+
+	/*
+	 * Decrement ref to next_dev
+	 */
+	priv = (nss_connmgr_gre_priv_t *)netdev_priv(dev);
+	dev_put(priv->next_dev);
 
 	/*
 	 * Check if gre-std interface is registered with NSS
@@ -755,6 +778,7 @@ static int nss_connmgr_gre_dev_up(struct net_device *dev)
 	uint32_t features = 0;
 	struct nss_ctx_instance *nss_ctx;
 	nss_tx_status_t status;
+	struct net_device *next_dev = NULL;
 
 	if (!nss_connmgr_gre_is_gre(dev)) {
 		nss_connmgr_gre_info("%p: No GRE net_device found\n", dev);
@@ -764,7 +788,7 @@ static int nss_connmgr_gre_dev_up(struct net_device *dev)
 	/*
 	 * Create config cmd for acceleration engine
 	 */
-	if (nss_connmgr_gre_prepare_config_cmd(dev, &req)) {
+	if (nss_connmgr_gre_prepare_config_cmd(dev, &req, &next_dev, false)) {
 		nss_connmgr_gre_info("%p: gre tunnel get config failed\n", dev);
 		return NOTIFY_DONE;
 	}

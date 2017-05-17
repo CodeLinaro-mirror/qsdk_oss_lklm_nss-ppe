@@ -68,15 +68,7 @@
 
 #define GRE_HDR_PAD_LEN 2
 
-struct nss_connmgr_gre_priv {
-	union {
-		struct ip_tunnel t4;	/**< IPv4 tunnel */
-		struct ip6_tnl t6;	/**< IPv6 tunnel */
-	} t;
-	int nss_if_number;		/**< NSS interface number */
-	uint8_t gre_hlen;		/**< GRE header length */
-	uint8_t pad_len;		/**< Pad length */
-};
+typedef struct nss_gre_info nss_connmgr_gre_priv_t;
 
 uint32_t nss_connmgr_gre_get_hlen(struct nss_connmgr_gre_cfg *cfg);
 void nss_connmgr_gre_set_gre_flags(struct nss_connmgr_gre_cfg *cfg,
@@ -90,7 +82,7 @@ int nss_connmgr_gre_set_wifi_next_hop(struct net_device *wifi_vdev);
 int nss_connmgr_gre_v4_set_config(struct net_device *dev, struct nss_connmgr_gre_cfg *cfg);
 int nss_connmgr_gre_v6_set_config(struct net_device *dev, struct nss_connmgr_gre_cfg *cfg);
 
-int nss_connmgr_gre_v4_get_config(struct net_device *dev, struct nss_gre_msg *req);
-int nss_connmgr_gre_v6_get_config(struct net_device *dev, struct nss_gre_msg *req);
+int nss_connmgr_gre_v4_get_config(struct net_device *dev, struct nss_gre_msg *req, struct net_device **next_dev, bool hold);
+int nss_connmgr_gre_v6_get_config(struct net_device *dev, struct nss_gre_msg *req, struct net_device **next_dev, bool hold);
 
 #endif

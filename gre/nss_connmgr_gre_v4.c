@@ -34,22 +34,15 @@
 #include "nss_connmgr_gre_public.h"
 #include "nss_connmgr_gre.h"
 
-#define IS_V4_LINK_LOCAL(x) ((x & 0xA9FE0000) == 0xA9FE0000)
-
 /*
  * nss_connmgr_gre_v4_get_tx_dev()
- *	Find tx interface for IP address.
+ *	Find tx interface for IP address. Holds ref to next_dev.
  */
 static struct net_device *nss_connmgr_gre_v4_get_tx_dev(uint32_t dest_ip)
 {
 	struct rtable *rt;
 	struct net_device *dev;
 	uint32_t ip_addr = ntohl(dest_ip);
-
-	if (IS_V4_LINK_LOCAL(dest_ip)) {
-		nss_connmgr_gre_info("Route look up on link local IP address = %pI4\n", &ip_addr);
-		return NULL;
-	}
 
 	rt = ip_route_output(&init_net, htonl(dest_ip), 0, 0, 0);
 	if (IS_ERR(rt)) {
@@ -58,14 +51,15 @@ static struct net_device *nss_connmgr_gre_v4_get_tx_dev(uint32_t dest_ip)
 	}
 
 	dev = rt->dst.dev;
-	if (dev) {
-		dev_hold(dev);
+	if (!dev) {
 		ip_rt_put(rt);
-		return dev;
+		nss_connmgr_gre_warning("Unable to find route dev for %pI4\n", &ip_addr);
+		return NULL;
 	}
 
-	nss_connmgr_gre_warning("Unable to find route dev for %pI4\n", &ip_addr);
-	return NULL;
+	dev_hold(dev);
+	ip_rt_put(rt);
+	return dev;
 }
 
 /*
@@ -158,7 +152,7 @@ static int nss_connmgr_gre_v4_get_mac_address(uint32_t src_ip, uint32_t dest_ip,
  */
 int nss_connmgr_gre_v4_set_config(struct net_device *dev, struct nss_connmgr_gre_cfg *cfg)
 {
-	struct nss_connmgr_gre_priv *priv = netdev_priv(dev);
+	nss_connmgr_gre_priv_t *priv = netdev_priv(dev);
 	struct ip_tunnel *t = (struct ip_tunnel *)priv;
 	struct iphdr *iphdr;
 
@@ -227,7 +221,8 @@ int nss_connmgr_gre_v4_set_config(struct net_device *dev, struct nss_connmgr_gre
  * nss_connmgr_gre_v4_get_config()
  *	Fill in config message to send to NSS.
  */
-int nss_connmgr_gre_v4_get_config(struct net_device *dev, struct nss_gre_msg *req)
+int nss_connmgr_gre_v4_get_config(struct net_device *dev, struct nss_gre_msg *req,
+				  struct net_device **next_dev, bool hold)
 {
 	uint32_t src_ip, dest_ip;
 	struct ip_tunnel *t = netdev_priv(dev);
@@ -268,7 +263,10 @@ int nss_connmgr_gre_v4_get_config(struct net_device *dev, struct nss_gre_msg *re
 	if (out_dev) {
 		cmsg->next_node_if_num = nss_cmn_get_interface_number_by_dev(out_dev);
 		cmsg->flags |= NSS_GRE_CONFIG_NEXT_NODE_AVAILABLE;
-		dev_put(out_dev);
+		*next_dev = out_dev;
+		if (!hold) {
+			dev_put(out_dev);
+		}
 	}
 
 	return GRE_SUCCESS;

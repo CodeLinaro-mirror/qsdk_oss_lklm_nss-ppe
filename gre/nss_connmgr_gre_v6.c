@@ -126,7 +126,7 @@ static int nss_connmgr_gre_v6_get_mac_address(uint8_t *src_ip, uint8_t *dest_ip,
  */
 int nss_connmgr_gre_v6_set_config(struct net_device *dev, struct nss_connmgr_gre_cfg *cfg)
 {
-	struct nss_connmgr_gre_priv *priv = netdev_priv(dev);
+	nss_connmgr_gre_priv_t *priv = netdev_priv(dev);
 	struct ip6_tnl *t = (struct ip6_tnl *)priv;
 
 	/*
@@ -186,7 +186,8 @@ int nss_connmgr_gre_v6_set_config(struct net_device *dev, struct nss_connmgr_gre
  * nss_connmgr_gre_v6_get_config()
  *	Fill info in config message to send to NSS.
  */
-int nss_connmgr_gre_v6_get_config(struct net_device *dev, struct nss_gre_msg *req)
+int nss_connmgr_gre_v6_get_config(struct net_device *dev, struct nss_gre_msg *req,
+				  struct net_device **next_dev, bool hold)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
 	struct net_device *out_dev;
@@ -223,7 +224,10 @@ int nss_connmgr_gre_v6_get_config(struct net_device *dev, struct nss_gre_msg *re
 	if (out_dev) {
 		cmsg->next_node_if_num = nss_cmn_get_interface_number_by_dev(out_dev);
 		cmsg->flags |= NSS_GRE_CONFIG_NEXT_NODE_AVAILABLE;
-		dev_put(out_dev);
+		*next_dev = out_dev;
+		if (!hold) {
+			dev_put(out_dev);
+		}
 	}
 
 	return GRE_SUCCESS;
