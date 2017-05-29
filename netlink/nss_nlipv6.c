@@ -30,6 +30,7 @@
 #include <linux/if_addr.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
+#include <linux/if_vlan.h>
 #include <linux/completion.h>
 #include <linux/semaphore.h>
 #include <net/addrconf.h>
@@ -302,19 +303,21 @@ static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, str
 	}
 
 	/*
-	 * update flow and return interface numbers. Handle Ipsec interfaces seperately.
+	 * update flow and return interface numbers. Handle Ipsec and vlan interfaces seperately.
 	 */
-	if (flow_dev->type == NSS_IPSEC_ARPHRD_IPSEC) {
+	if (flow_dev->type == NSS_IPSEC_ARPHRD_IPSEC)
 		conn->flow_interface_num = nss_ipsec_get_data_interface();
-	} else {
+	else if (is_vlan_dev(flow_dev))
+		conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(vlan_dev_real_dev(flow_dev));
+	else
 		conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(flow_dev);
-	}
 
-	if (return_dev->type == NSS_IPSEC_ARPHRD_IPSEC) {
-		conn->flow_interface_num = nss_ipsec_get_data_interface();
-	} else {
+	if (return_dev->type == NSS_IPSEC_ARPHRD_IPSEC)
+		conn->return_interface_num = nss_ipsec_get_data_interface();
+	else if (is_vlan_dev(return_dev))
+		conn->return_interface_num = nss_cmn_get_interface_number_by_dev(vlan_dev_real_dev(return_dev));
+	else
 		conn->return_interface_num = nss_cmn_get_interface_number_by_dev(return_dev);
-	}
 
 	/*
 	 * update the flow & return MTU(s)
@@ -430,25 +433,36 @@ static int nss_nlipv6_verify_dscp_rule(struct nss_ipv6_rule_create_msg *msg)
  * nss_nlipv6_verify_vlan_rule()
  * 	verify and override vlan rule entries
  */
-static int nss_nlipv6_verify_vlan_rule(struct nss_ipv6_rule_create_msg *msg)
+static int nss_nlipv6_verify_vlan_rule(struct nss_ipv6_rule_create_msg *msg,
+		struct net_device *flow_dev, struct net_device *return_dev)
 {
-	struct nss_ipv6_vlan_rule *vlan_outer = &msg->vlan_primary_rule;
-	struct nss_ipv6_vlan_rule *vlan_inner = &msg->vlan_secondary_rule;
-	bool valid;
+	struct nss_ipv6_vlan_rule *vlan_primary = &msg->vlan_primary_rule;
+	struct nss_ipv6_vlan_rule *vlan_secondary = &msg->vlan_secondary_rule;
+	bool flow_vlan = is_vlan_dev(flow_dev);
+	bool return_vlan = is_vlan_dev(return_dev);
 
 	/*
-	 * vlan rule is not valid ignore rest of the checks
+	 * Fill all with default values.
 	 */
-	valid = msg->valid_flags & NSS_IPV6_RULE_CREATE_VLAN_VALID;
-	if (!valid) {
-		vlan_outer->ingress_vlan_tag = NSS_NLIPV6_VLAN_ID_NOT_CONFIGURED;
-		vlan_outer->egress_vlan_tag = NSS_NLIPV6_VLAN_ID_NOT_CONFIGURED;
+	vlan_primary->ingress_vlan_tag = NSS_NLIPV6_VLAN_ID_NOT_CONFIGURED;
+	vlan_primary->egress_vlan_tag = NSS_NLIPV6_VLAN_ID_NOT_CONFIGURED;
 
-		vlan_inner->ingress_vlan_tag = NSS_NLIPV6_VLAN_ID_NOT_CONFIGURED;
-		vlan_inner->egress_vlan_tag = NSS_NLIPV6_VLAN_ID_NOT_CONFIGURED;
+	vlan_secondary->ingress_vlan_tag = NSS_NLIPV6_VLAN_ID_NOT_CONFIGURED;
+	vlan_secondary->egress_vlan_tag = NSS_NLIPV6_VLAN_ID_NOT_CONFIGURED;
 
+	if (!flow_vlan && !return_vlan)
 		return 0;
-	}
+
+	msg->valid_flags |= NSS_IPV6_RULE_CREATE_VLAN_VALID;
+
+	/*
+	 * Add single vlan
+	 */
+	if (flow_vlan)
+		vlan_primary->ingress_vlan_tag = ETH_P_8021Q << 16 | vlan_dev_vlan_id(flow_dev);
+
+	if (return_vlan)
+		vlan_primary->egress_vlan_tag = ETH_P_8021Q << 16 | vlan_dev_vlan_id(return_dev);
 
 	/*
 	 * XXX: add addtional checks as required
@@ -624,7 +638,7 @@ static int nss_nlipv6_ops_create_rule(struct sk_buff *skb, struct genl_info *inf
 	/*
 	 * check vlan rule
 	 */
-	error = nss_nlipv6_verify_vlan_rule(&nim->msg.rule_create);
+	error = nss_nlipv6_verify_vlan_rule(&nim->msg.rule_create, flow_dev, return_dev);
 	if (error < 0) {
 		nss_nl_error("%d:invalid vlan rule information passed\n", pid);
 		goto done;
