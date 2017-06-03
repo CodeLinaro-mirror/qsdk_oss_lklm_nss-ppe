@@ -68,7 +68,7 @@ obj-y += bridge/
 endif
 
 # GRE manager
-ifeq ($(findstring 3.14, $(KERNELVERSION)), 3.14)
+ifeq ($(findstring 3.4, $(KERNELVERSION)),)
 obj-y+=gre/
 endif
 
