@@ -454,17 +454,17 @@ static void nss_ipsecmgr_tunnel_setup(struct net_device *dev)
 }
 
 /*
- * nss_ipsecmgr_tunnel_get_callback()
- * 	get the callback entry for the dev index
+ * nss_ipsecmgr_tunnel_dev_index2entry()
+ * 	get the tunnel entry for the dev index
  *
  * Note: this is typically expected in the RX BH path
  */
-static struct nss_ipsecmgr_callback_entry *nss_ipsecmgr_tunnel_get_callback(int dev_index)
+static struct nss_ipsecmgr_tunnel_entry *nss_ipsecmgr_tunnel_dev_index2entry(int dev_index)
 {
-	struct nss_ipsecmgr_callback_db *cb_db = &ipsecmgr_ctx->cb_db;
-	struct nss_ipsecmgr_callback_entry *cb_entry;
+	struct nss_ipsecmgr_tunnel_db *tun_db = &ipsecmgr_ctx->tun_db;
+	struct nss_ipsecmgr_tunnel_entry *entry;
 
-	if (!atomic_read(&cb_db->num_entries))
+	if (!atomic_read(&tun_db->num_entries))
 		return NULL;
 
 	BUG_ON(!in_atomic());
@@ -474,10 +474,10 @@ static struct nss_ipsecmgr_callback_entry *nss_ipsecmgr_tunnel_get_callback(int 
 	 * are any registered callback for the net_device
 	 */
 	read_lock(&ipsecmgr_ctx->lock);				/* lock */
-	list_for_each_entry(cb_entry, &cb_db->entries, node) {
-		if (cb_entry->dev_index == dev_index) {
+	list_for_each_entry(entry, &tun_db->entries, node) {
+		if (entry->dev_index == dev_index) {
 			read_unlock(&ipsecmgr_ctx->lock);	/* unlock */
-			return cb_entry;
+			return entry;
 		}
 	}
 
@@ -605,7 +605,7 @@ done:
  */
 static void nss_ipsecmgr_tunnel_rx(struct net_device *dummy, struct sk_buff *skb, __attribute((unused)) struct napi_struct *napi)
 {
-	struct nss_ipsecmgr_callback_entry *cb_entry;
+	struct nss_ipsecmgr_tunnel_entry *entry;
 	nss_ipsecmgr_data_cb_t cb_fn;
 	struct net_device *dev;
 
@@ -625,16 +625,16 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dummy, struct sk_buff *skb
 	 * search the device in the registered callback table;
 	 * if there is match then load the callback for indication
 	 */
-	cb_entry = nss_ipsecmgr_tunnel_get_callback(dev->ifindex);
-	if (!cb_entry) {
+	entry = nss_ipsecmgr_tunnel_dev_index2entry(dev->ifindex);
+	if (!entry || !entry->data) {
 		netif_receive_skb(skb);
 		goto done;
 	}
 
-	cb_fn = cb_entry->data;
+	cb_fn = entry->data;
 	BUG_ON(!cb_fn);
 
-	cb_fn(cb_entry->app_data, skb);
+	cb_fn(entry->app_data, skb);
 done:
 	dev_put(dev);
 }
@@ -791,7 +791,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 		/*
 		 * if event callback is available then post the statistics using the callback function
 		 */
-		cb_fn = priv->cb.event;
+		cb_fn = priv->tun_entry.event;
 		if (cb_fn) {
 			stats_event.type = NSS_IPSECMGR_EVENT_SA_STATS;
 
@@ -807,7 +807,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 			sa_stats->pkts.count = nim->msg.stats.sa.count;
 			sa_stats->pkts.bytes = nim->msg.stats.sa.bytes;
 
-			cb_fn(priv->cb.app_data, &stats_event);
+			cb_fn(priv->tun_entry.app_data, &stats_event);
 		}
 
 		break;
@@ -882,7 +882,7 @@ static const struct file_operations node_stats_op = {
  */
 struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 {
-	struct nss_ipsecmgr_callback_db *cb_db = &ipsecmgr_ctx->cb_db;
+	struct nss_ipsecmgr_tunnel_db *tun_db = &ipsecmgr_ctx->tun_db;
 	struct nss_ipsecmgr_priv *priv;
 	struct net_device *dev;
 	int status;
@@ -900,11 +900,11 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 	priv = netdev_priv(dev);
 	priv->dev = dev;
 
-	INIT_LIST_HEAD(&priv->cb.node);
-	priv->cb.dev_index = dev->ifindex;
-	priv->cb.app_data = cb->ctx;
-	priv->cb.data = cb->data_fn;
-	priv->cb.event = cb->event_fn;
+	INIT_LIST_HEAD(&priv->tun_entry.node);
+	priv->tun_entry.dev_index = dev->ifindex;
+	priv->tun_entry.app_data = cb->ctx;
+	priv->tun_entry.data = cb->data_fn;
+	priv->tun_entry.event = cb->event_fn;
 
 
 	status = rtnl_is_locked() ? register_netdevice(dev) : register_netdev(dev);
@@ -913,16 +913,10 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 		goto fail;
 	}
 
-	/*
-	 * only register if data callback is available
-	 */
-	if (cb->data_fn){
-		write_lock_bh(&ipsecmgr_ctx->lock);
-		list_add(&priv->cb.node, &cb_db->entries);
-		atomic_inc(&cb_db->num_entries);
-		write_unlock_bh(&ipsecmgr_ctx->lock);
-	}
-
+	write_lock_bh(&ipsecmgr_ctx->lock);
+	list_add(&priv->tun_entry.node, &tun_db->entries);
+	atomic_inc(&tun_db->num_entries);
+	write_unlock_bh(&ipsecmgr_ctx->lock);
 	return dev;
 fail:
 	free_netdev(dev);
@@ -937,12 +931,12 @@ EXPORT_SYMBOL(nss_ipsecmgr_tunnel_add);
  */
 bool nss_ipsecmgr_tunnel_del(struct net_device *dev)
 {
-	struct nss_ipsecmgr_callback_db *cb_db = &ipsecmgr_ctx->cb_db;
+	struct nss_ipsecmgr_tunnel_db *tun_db = &ipsecmgr_ctx->tun_db;
 	struct nss_ipsecmgr_priv *priv = netdev_priv(dev);
 
 	write_lock_bh(&ipsecmgr_ctx->lock);
-	atomic_dec(&cb_db->num_entries);
-	list_del(&priv->cb.node);
+	atomic_dec(&tun_db->num_entries);
+	list_del(&priv->tun_entry.node);
 	write_unlock_bh(&ipsecmgr_ctx->lock);
 
 	nss_ipsecmgr_sa_flush_all(priv);
@@ -959,9 +953,9 @@ EXPORT_SYMBOL(nss_ipsecmgr_tunnel_del);
 
 /*
  * nss_ipsecmgr_tunnel_update_callback()
- * 	update the callback databse with the new device index
+ * 	update the tunnel databse with the new device index
  *
- * Note: the callback is database that holds callback functions w.r.t a
+ * Note: the tun_db is database that also holds callback functions w.r.t a
  * device index. The tunnel_add would typically load this with the device
  * index of the tunnel. Overtime the caller can decide to update this with
  * different device index. In cases where the IPsec stack typically creates
@@ -970,11 +964,11 @@ EXPORT_SYMBOL(nss_ipsecmgr_tunnel_del);
  */
 void nss_ipsecmgr_tunnel_update_callback(struct net_device *tun, struct net_device *cur)
 {
-	struct nss_ipsecmgr_callback_db *cb_db = &ipsecmgr_ctx->cb_db;
-	struct nss_ipsecmgr_callback_entry *cb_entry;
+	struct nss_ipsecmgr_tunnel_db *tun_db = &ipsecmgr_ctx->tun_db;
+	struct nss_ipsecmgr_tunnel_entry *tun_entry;
 	int tun_dev_index = tun->ifindex;
 
-	if (!atomic_read(&cb_db->num_entries))
+	if (!atomic_read(&tun_db->num_entries))
 		return;
 
 	/*
@@ -982,9 +976,9 @@ void nss_ipsecmgr_tunnel_update_callback(struct net_device *tun, struct net_devi
 	 * and replace it with the new index
 	 */
 	write_lock_bh(&ipsecmgr_ctx->lock);
-	list_for_each_entry(cb_entry, &cb_db->entries, node) {
-		if (cb_entry->dev_index == tun_dev_index) {
-			cb_entry->dev_index = cur->ifindex;
+	list_for_each_entry(tun_entry, &tun_db->entries, node) {
+		if (tun_entry->dev_index == tun_dev_index) {
+			tun_entry->dev_index = cur->ifindex;
 			break;
 		}
 	}
@@ -1077,176 +1071,131 @@ static int nss_ipsecmgr_init_stats_debugfs(struct dentry *stats_root)
 #if defined NSS_IPSECMGR_PMTU_SUPPORT
 
 /*
- * nss_ipsecmgr_esp4_rcv()
- *	IPv4 Receive handler for ESP protocol
+ * nss_ipsecmgr_update_pmtu_v4()
+ * 	PMTU notification handler for IPv4
  */
-static int nss_ipsecmgr_tunnel_rx_esp4(struct sk_buff *skb)
+static int nss_ipsecmgr_update_pmtu_v4(struct notifier_block *this, unsigned long code, void *ptr)
 {
+	struct nss_ipsecmgr_tunnel_db *tun_db = &ipsecmgr_ctx->tun_db;
+	struct sk_buff *skb = (struct sk_buff *)ptr;
+	struct nss_ipsecmgr_tunnel_entry *entry;
+	struct nss_ipsecmgr_priv *priv;
+	struct dst_entry *dst;
+	struct icmphdr *icmph;
+	struct iphdr *iph;
+	uint16_t mtu;
+
+	iph = (struct iphdr *)skb->data;
+	icmph = icmp_hdr(skb);
+
+	BUG_ON(!in_atomic());
+
 	/*
-	 * TODO:This can potentially receive ESP packets in when
-	 * the outer ESP rule is flushed. In which case the DECAP
-	 * packets entering linux must be bounced through offload
+	 * We are interested only in PMTU message
 	 */
-	dev_kfree_skb_any(skb);
+	if (code != ICMP_FRAG_NEEDED)
+		return 0;
+
+	mtu = ntohs(icmph->un.frag.mtu);
+
+	/*
+	 * XFRM will neglect the PMTU ICMP message, since the
+	 * SA is not known. So update the MTU in dst.
+	 */
+	if (iph->protocol == IPPROTO_ESP)
+		ipv4_update_pmtu(skb, dev_net(skb->dev), mtu, 0, 0, IPPROTO_ESP, 0);
+
+	/*
+	 * lookup dst for the destination address
+	 */
+	dst = (struct dst_entry *)ip_route_output(&init_net, iph->daddr, 0, 0, 0);
+	if (IS_ERR(dst))
+		goto exit;
+
+	/*
+	 * retrieve the tunnel priv corresponding to the destination address
+	 */
+	read_lock(&ipsecmgr_ctx->lock);
+	list_for_each_entry(entry, &tun_db->entries, node) {
+		if (entry->dest_addr[0] == iph->daddr) {
+			/*
+			 * set MTU from the dst to tunnel private structure
+			 */
+			priv = container_of(entry, struct nss_ipsecmgr_priv, tun_entry);
+			atomic_set(&priv->outer_dst_mtu, dst_mtu(dst));
+		}
+	}
+
+exit:
+	dst_release(dst);
+	read_unlock(&ipsecmgr_ctx->lock);
 	return 0;
 }
 
 /*
- * nss_ipsecmgr_esp4_err()
- *	IPv4 Error handler for ESP protocol
+ * nss_ipsecmgr_update_pmtu_v6()
+ * 	PMTU notification handler for IPv6
  */
-static void nss_ipsecmgr_tunnel_error_esp4(struct sk_buff *skb, uint32_t mtu)
+static int nss_ipsecmgr_update_pmtu_v6 (struct notifier_block *this, unsigned long code, void *ptr)
 {
-	struct nss_ipsecmgr_sa_entry *sa_entry;
-	struct nss_ipsecmgr_key key = { {0} };
-	struct nss_ipsecmgr_sa_v4 sa = {0};
+	struct nss_ipsecmgr_tunnel_db *tun_db = &ipsecmgr_ctx->tun_db;
+	struct sk_buff *skb = (struct sk_buff *)ptr;
+	struct nss_ipsecmgr_tunnel_entry *entry;
 	struct nss_ipsecmgr_priv *priv;
-	struct nss_ipsecmgr_ref *ref;
-	struct ip_esp_hdr *esph;
-	struct iphdr *iph;
+	struct icmp6hdr *icmph;
+	struct dst_entry *dst;
+	struct ipv6hdr *iph;
+	struct flowi6 fl6;
+
+	iph = (struct ipv6hdr *)skb->data;
+	icmph = icmp6_hdr(skb);
+
+	BUG_ON(!in_atomic());
 
 	/*
-	 * If the ICMP error is not PMTU then return
+	 * XFRM will neglect the PMTU ICMP message, since the
+	 * SA is not known. So update the MTU in dst.
 	 */
-	if (icmp_hdr(skb)->type != ICMP_DEST_UNREACH)
-		return;
-
-	if (icmp_hdr(skb)->code != ICMP_FRAG_NEEDED)
-		return;
+	if (iph->nexthdr == IPPROTO_ESP)
+		ip6_update_pmtu(skb, dev_net(skb->dev), icmph->icmp6_mtu, 0, 0);
 
 	/*
-	 * Skb data now points to the IP header present in the
-	 * IMCP payload. It will be of the packet which generated the
-	 * PMTU error. Extract the ESP header from the payload.
+	 * lookup dst for the destination address
 	 */
-	iph = (struct iphdr *)skb->data;
-	esph = (struct ip_esp_hdr *)(skb->data + (iph->ihl << 2));
-
-	sa.src_ip = ntohl(iph->saddr);
-	sa.dst_ip = ntohl(iph->daddr);
-	sa.spi_index = ntohl(esph->spi);
-
-	nss_ipsecmgr_v4_sa2key(&sa, &key);
+	memcpy(&fl6.daddr, &iph->daddr, sizeof(fl6.daddr));
+	dst = ip6_route_output(&init_net, NULL, &fl6);
+	if (IS_ERR(dst))
+		goto exit;
 
 	/*
-	 * Get the SA corresponding to the ESP flow
+	 * retrieve the tunnel corresponding to the destination address
 	 */
 	read_lock(&ipsecmgr_ctx->lock);
-	ref = nss_ipsecmgr_sa_lookup(&key);
-	if (!ref) {
-		read_unlock(&ipsecmgr_ctx->lock);
-		nss_ipsecmgr_trace("unable to find SA (%p)\n", skb);
-		return;
+	list_for_each_entry(entry, &tun_db->entries, node) {
+		if (!memcmp(entry->dest_addr, &iph->daddr, sizeof(iph->daddr))) {
+			/*
+			 * set MTU from the dst to tunnel private structure
+			 */
+			priv = container_of(entry, struct nss_ipsecmgr_priv, tun_entry);
+			atomic_set(&priv->outer_dst_mtu, dst_mtu(dst));
+		}
 	}
 
-	sa_entry = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
-	priv = sa_entry->priv;
-	BUG_ON(!priv);
-
-	atomic_set(&priv->outer_dst_mtu, mtu);
+exit:
+	dst_release(dst);
 	read_unlock(&ipsecmgr_ctx->lock);
-
-	/*
-	 * update new mtu for this flow
-	 */
-	BUG_ON(!dev_net(skb->dev));
-	ipv4_update_pmtu(skb, dev_net(skb->dev), mtu, 0, 0, IPPROTO_ESP, 0);
-	return;
+	return 0;
 }
 
 /*
- * protocol handler for IPv4 ESP
+ * register notifier for PMTU callback
  */
-static const struct net_protocol nss_ipsecmgr_proto_esp4 = {
-	.handler     = nss_ipsecmgr_tunnel_rx_esp4,
-	.err_handler = nss_ipsecmgr_tunnel_error_esp4,
-	.netns_ok    = 1,
+static struct notifier_block nss_ipsecmgr_pmtu_notify_handler_v4 = {
+	.notifier_call = nss_ipsecmgr_update_pmtu_v4,
 };
 
-/*
- * nss_ipsecmgr_esp6_rcv()
- *	IPV6 Receive handler for ESP protocol
- */
-static int nss_ipsecmgr_tunnel_rx_esp6(struct sk_buff *skb)
-{
-	/*
-	 * TODO:This can potentially receive ESP packets in when
-	 * the outer ESP rule is flushed. In which case the DECAP
-	 * packets entering linux must be bounced through offload
-	 */
-	dev_kfree_skb_any(skb);
-	return 0;
-}
-
-/*
- * nss_ipsecmgr_esp6_err()
- *	IPV6 Error handler for ESP protocol
- */
-static void nss_ipsecmgr_tunnel_error_esp6(struct sk_buff *skb, struct inet6_skb_parm *opt, uint8_t type,
-								uint8_t code, int32_t offset, uint32_t mtu)
-{
-	struct nss_ipsecmgr_sa_entry *sa_entry;
-	struct nss_ipsecmgr_sa_v6 sa = { {0} };
-	struct nss_ipsecmgr_key key = { {0} };
-	struct nss_ipsecmgr_priv *priv;
-	struct nss_ipsecmgr_ref *ref;
-	struct ip_esp_hdr *esph;
-	struct ipv6hdr *iph;
-
-	/*
-	 * If the ICMP type is not PMTU return
-	 */
-	if (type != ICMPV6_PKT_TOOBIG)
-		return;
-
-	/*
-	 * Skb data now points to the IP header present in the
-	 * IMCP payload. It will be of the packet which generated the
-	 * PMTU error. Extract the ESP header from the payload.
-	 */
-	esph = (struct ip_esp_hdr *)(skb->data + offset);
-	iph = (struct ipv6hdr *)skb->data;
-
-	/*
-	 * Get the selectors from IPv6 header. Compose the key and
-	 * get the decap SA
-	 */
-	nss_ipsecmgr_v6addr_ntoh(iph->daddr.s6_addr32, sa.dst_ip);
-	nss_ipsecmgr_v6addr_ntoh(iph->saddr.s6_addr32, sa.src_ip);
-	sa.spi_index = ntohl(esph->spi);
-
-	nss_ipsecmgr_v6_sa2key(&sa, &key);
-
-	read_lock(&ipsecmgr_ctx->lock);
-	ref = nss_ipsecmgr_sa_lookup(&key);
-	if (!ref) {
-		read_unlock(&ipsecmgr_ctx->lock);
-		nss_ipsecmgr_info("%p: unable to find SA\n", skb);
-		return;
-	}
-
-	sa_entry = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
-	priv = sa_entry->priv;
-	BUG_ON(!priv);
-
-	atomic_set(&priv->outer_dst_mtu, ntohl(mtu));
-	read_unlock(&ipsecmgr_ctx->lock);
-
-	/*
-	 * Update the PMTU
-	 */
-	BUG_ON(!dev_net(skb->dev));
-	ip6_update_pmtu(skb, dev_net(skb->dev), mtu, 0, 0);
-	return;
-}
-
-/*
- * protocol handler for IPv6 ESP
- */
-static struct inet6_protocol nss_ipsecmgr_proto_esp6 = {
-	.handler        =       nss_ipsecmgr_tunnel_rx_esp6,
-	.err_handler    =       nss_ipsecmgr_tunnel_error_esp6,
-	.flags          =       INET6_PROTO_NOPOLICY,
+static struct notifier_block nss_ipsecmgr_pmtu_notify_handler_v6 = {
+	.notifier_call = nss_ipsecmgr_update_pmtu_v6,
 };
 #endif
 
@@ -1301,8 +1250,7 @@ static int __init nss_ipsecmgr_init(void)
 	nss_ipsecmgr_init_sa_db(&ipsecmgr_ctx->sa_db);
 	nss_ipsecmgr_init_netmask_db(&ipsecmgr_ctx->net_db);
 	nss_ipsecmgr_init_flow_db(&ipsecmgr_ctx->flow_db);
-	nss_ipsecmgr_init_callback_db(&ipsecmgr_ctx->cb_db);
-
+	nss_ipsecmgr_init_tunnel_db(&ipsecmgr_ctx->tun_db);
 
 	nss_ipsec_data_register(ipsecmgr_ctx->data_ifnum, nss_ipsecmgr_tunnel_rx, ipsecmgr_ctx->ndev, 0);
 	nss_ipsec_notify_register(ipsecmgr_ctx->encap_ifnum, nss_ipsecmgr_tunnel_notify, NULL);
@@ -1337,21 +1285,8 @@ static int __init nss_ipsecmgr_init(void)
 	}
 
 #if defined NSS_IPSECMGR_PMTU_SUPPORT
-
-	/*
-	 * Register a ESP protocol handler only when XFRM is not loaded
-	 */
-	status = inet_add_protocol(&nss_ipsecmgr_proto_esp4, IPPROTO_ESP);
-	if (status < 0) {
-		nss_ipsecmgr_warn("%p:%d in Registering ESP4 Handler\n",
-				ipsecmgr_ctx->nss_ctx, status);
-	}
-
-	status = inet6_add_protocol(&nss_ipsecmgr_proto_esp6, IPPROTO_ESP);
-	if (status < 0) {
-		nss_ipsecmgr_warn("%p:%d in Registering ESP6 Handler\n",
-				ipsecmgr_ctx->nss_ctx, status);
-	}
+	icmp_register_notifier(&nss_ipsecmgr_pmtu_notify_handler_v4, ICMP_DEST_UNREACH);
+	icmpv6_register_notifier(&nss_ipsecmgr_pmtu_notify_handler_v6, ICMPV6_PKT_TOOBIG);
 #endif
 
 	init_completion(&ipsecmgr_ctx->complete);
@@ -1400,6 +1335,11 @@ static void __exit nss_ipsecmgr_exit(void)
 
 	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->encap_ifnum);
 	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->decap_ifnum);
+
+#if defined NSS_IPSECMGR_PMTU_SUPPORT
+	icmp_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v4, ICMP_DEST_UNREACH);
+	icmpv6_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v6, ICMPV6_PKT_TOOBIG);
+#endif
 
 	if (ipsecmgr_ctx->ndev) {
 		rtnl_is_locked() ? unregister_netdevice(ipsecmgr_ctx->ndev) : unregister_netdev(ipsecmgr_ctx->ndev);

@@ -336,19 +336,20 @@ struct nss_ipsecmgr_flow_db {
 };
 
 /*
- * IPsec manager callback database
+ * IPsec manager tunnel database
  */
-struct nss_ipsecmgr_callback_db {
-	atomic_t num_entries;			/* number of callback(s) registered */
+struct nss_ipsecmgr_tunnel_db {
+	atomic_t num_entries;			/* number of tunnel(s) registered */
 	struct list_head entries;		/* head of the first callback */
 };
 
 /*
- * IPsec manager callback entry
+ * IPsec manager tunnel entry
  */
-struct nss_ipsecmgr_callback_entry {
+struct nss_ipsecmgr_tunnel_entry {
 	struct list_head node;			/* list node */
 	int dev_index;				/* device bound for callback */
+	uint32_t dest_addr[4];			/* destination address of tunnel */
 	void *app_data;				/* callback context */
 	nss_ipsecmgr_data_cb_t data;		/* data callback function */
 	nss_ipsecmgr_event_cb_t event;		/* event callback function */
@@ -358,10 +359,10 @@ struct nss_ipsecmgr_callback_entry {
  * IPsec manager private context
  */
 struct nss_ipsecmgr_priv {
-	struct net_device *dev;			/* back pointer to tunnel device */
-	struct nss_ipsecmgr_callback_entry cb;	/* callback entry instance */
-	atomic_t outer_dst_mtu;			/* PMTU of outer tunnel DST */
-	struct rtnl_link_stats64 stats;		/* stats of IPsec tunnel */
+	struct net_device *dev;				/* back pointer to tunnel device */
+	struct nss_ipsecmgr_tunnel_entry tun_entry;	/* callback entry instance */
+	atomic_t outer_dst_mtu;				/* PMTU of outer tunnel DST */
+	struct rtnl_link_stats64 stats;			/* stats of IPsec tunnel */
 };
 
 /*
@@ -377,7 +378,7 @@ struct nss_ipsecmgr_drv {
 	struct nss_ipsecmgr_sa_db sa_db;	/* SA database */
 	struct nss_ipsecmgr_netmask_db net_db;	/* Subnet mask database */
 	struct nss_ipsecmgr_flow_db flow_db;	/* flow database */
-	struct nss_ipsecmgr_callback_db cb_db;	/* callback database */
+	struct nss_ipsecmgr_tunnel_db tun_db;	/* callback database */
 	struct completion complete;		/* completion for flow stats nss msg */
 
 	int encap_ifnum;			/* NSS encap interface */
@@ -947,13 +948,13 @@ static inline void nss_ipsecmgr_init_flow_db(struct nss_ipsecmgr_flow_db *flow_d
 }
 
 /*
- * nss_ipsecmgr_init_callback_db()
- * 	initialize the callback database
+ * nss_ipsecmgr_init_tunnel_db()
+ * 	initialize the tunnel database
  */
-static inline void nss_ipsecmgr_init_callback_db(struct nss_ipsecmgr_callback_db *cb_db)
+static inline void nss_ipsecmgr_init_tunnel_db(struct nss_ipsecmgr_tunnel_db *tun_db)
 {
-	INIT_LIST_HEAD(&cb_db->entries);
-	atomic_set(&cb_db->num_entries, 0);
+	INIT_LIST_HEAD(&tun_db->entries);
+	atomic_set(&tun_db->num_entries, 0);
 }
 
 /*

@@ -49,6 +49,7 @@ struct nss_ipsecmgr_sa_info {
 	struct nss_ipsecmgr_sa *sa;
 	uint32_t fail_hash_thresh;
 	uint32_t sa_overhead;
+	uint32_t dest_addr[4];
 	uint32_t dst_mtu;
 
 	struct nss_ipsecmgr_ref * (*child_alloc)(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
@@ -329,6 +330,7 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	if (info->sa_overhead)
 		atomic_set(&priv->outer_dst_mtu, info->dst_mtu);
 
+	memcpy(priv->tun_entry.dest_addr, info->dest_addr, sizeof(priv->tun_entry.dest_addr));
 	memcpy(&sa->nim, &info->nim, sizeof(struct nss_ipsec_msg));
 	memset(&sa->nim.tuple, 0, sizeof(struct nss_ipsec_tuple));
 
@@ -741,6 +743,7 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 			return false;
 		}
 		info.dst_mtu = dst_mtu(dst);
+		info.dest_addr[0] = htonl(sa->data.v4.dst_ip);
 		dst_release(dst);
 		break;
 
@@ -752,7 +755,7 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 
 		info.sa_overhead += sizeof(struct ipv6hdr);
 
-		nss_ipsecmgr_v6addr_ntoh((uint32_t *)&sa->data.v6.dst_ip, (uint32_t *)&fl6.daddr);
+		nss_ipsecmgr_v6addr_hton((uint32_t *)&sa->data.v6.dst_ip, (uint32_t *)&fl6.daddr);
 
 		/*
 		 * Update initial value for outer_dst_mtu
@@ -764,6 +767,7 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 			return false;
 		}
 		info.dst_mtu = dst_mtu(dst);
+		nss_ipsecmgr_v6addr_hton((uint32_t *)&sa->data.v6.dst_ip, (uint32_t *)info.dest_addr);
 		dst_release(dst);
 		break;
 
