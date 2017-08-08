@@ -17,11 +17,13 @@
 /* nss_ipsecmgr.c
  *	NSS to HLOS IPSec Manager
  */
+#include <linux/cache.h>
 #include <linux/version.h>
 #include <linux/types.h>
 #include <linux/ip.h>
 #include <linux/of.h>
 #include <linux/ipv6.h>
+#include <linux/if_vlan.h>
 #include <linux/skbuff.h>
 #include <linux/module.h>
 #include <linux/bitops.h>
@@ -262,6 +264,38 @@ static int nss_ipsecmgr_tunnel_stop(struct net_device *dev)
 }
 
 /*
+ * nss_ipsecmgr_create_meta_data()
+ *	Create the meta data
+ */
+static void nss_ipsecmgr_create_vlan_metadata(struct sk_buff *skb, uint16_t prio)
+{
+	/*
+	 * Assume that size of metadata never goes beyond L1_CACHE_BYTES.
+	 */
+	uint8_t *data_align;
+	struct nss_ipsec_metadata *meta_data;
+	uint8_t iphdr_offset;
+
+	BUG_ON(skb_headroom(skb) < (2 * L1_CACHE_BYTES));
+
+	data_align = (uint8_t *)round_down((nss_ptr_t)skb->data, 2 * L1_CACHE_BYTES);
+	iphdr_offset = skb->data - data_align;
+
+	/*
+	 * We can pull the skb unconditionaly because we already ensured that
+	 * the SKB has 128 bytes of headroom.
+	 */
+	meta_data = (struct nss_ipsec_metadata *)skb_push(skb, iphdr_offset);
+
+	meta_data->version = NSS_IPSEC_METADATA_VER;
+	meta_data->type = NSS_IPSEC_METADATA_TYPE_VLAN;
+	meta_data->len = sizeof(struct nss_ipsec_metadata_vlan);
+	meta_data->iphdr_offset = iphdr_offset;
+
+	meta_data->data.vlan.prio = prio;
+}
+
+/*
  * nss_ipsecmgr_tunnel_tx()
  * 	tunnel transmit function
  */
@@ -270,7 +304,9 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	struct nss_ipsecmgr_flow_data flow_data = {0};
 	bool process_mtu = gen_pmtu_error;
 	struct nss_ipsecmgr_priv *priv;
+	struct net_device *outer_dev;
 	bool expand_skb = false;
+	uint16_t vlan_prio = 0;
 	int nhead, ntail;
 	bool tstamp_skb;
 
@@ -354,6 +390,30 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 			goto free;
 
 		return NETDEV_TX_OK;
+	}
+
+	/*
+	 * Check whether the skb->priority has to be
+	 * translated to 8021p.
+	 */
+	if (unlikely(atomic_read(&priv->is_vlan))) {
+		outer_dev = dev_get_by_index(&init_net, atomic_read(&priv->outer_ifindex));
+		if (outer_dev) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+			vlan_prio = vlan_dev_get_egress_qos_mask(outer_dev, skb);
+#else
+			vlan_prio = vlan_dev_get_egress_qos_mask(outer_dev, skb->priority);
+#endif
+
+			/*
+			 * If the mapped priority is zero, will be taken care by default
+			 * condition in NSS.
+			 */
+			if (vlan_prio)
+				nss_ipsecmgr_create_vlan_metadata(skb, vlan_prio >> VLAN_PRIO_SHIFT);
+
+			dev_put(outer_dev);
+		}
 	}
 
 	/*
@@ -946,6 +1006,12 @@ bool nss_ipsecmgr_tunnel_del(struct net_device *dev)
 	 * happen when the reference count goes down to '0'
 	 */
 	rtnl_is_locked() ? unregister_netdevice(dev) : unregister_netdev(dev);
+
+	/*
+	 * Reset the index of outer interface.
+	 */
+	atomic_set(&priv->outer_ifindex, -1);
+	atomic_set(&priv->is_vlan, false);
 
 	return true;
 }

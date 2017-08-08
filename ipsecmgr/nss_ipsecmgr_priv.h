@@ -363,6 +363,8 @@ struct nss_ipsecmgr_priv {
 	struct nss_ipsecmgr_tunnel_entry tun_entry;	/* callback entry instance */
 	atomic_t outer_dst_mtu;				/* PMTU of outer tunnel DST */
 	struct rtnl_link_stats64 stats;			/* stats of IPsec tunnel */
+	atomic_t outer_ifindex;				/* Ifindex of outer dev */
+	atomic_t is_vlan;					/* Whether the associated dev is VLAN or not */
 };
 
 /*

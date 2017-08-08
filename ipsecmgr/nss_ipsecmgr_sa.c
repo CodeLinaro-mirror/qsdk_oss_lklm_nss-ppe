@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/ip.h>
 #include <linux/of.h>
+#include <linux/if_vlan.h>
 #include <linux/ipv6.h>
 #include <linux/skbuff.h>
 #include <linux/module.h>
@@ -51,6 +52,9 @@ struct nss_ipsecmgr_sa_info {
 	uint32_t sa_overhead;
 	uint32_t dest_addr[4];
 	uint32_t dst_mtu;
+	int outer_ifindex;
+	bool is_vlan;
+	bool is_encap;
 
 	struct nss_ipsecmgr_ref * (*child_alloc)(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
 	struct nss_ipsecmgr_ref * (*child_lookup)(struct nss_ipsecmgr_priv *priv, struct nss_ipsecmgr_key *key);
@@ -323,6 +327,14 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	sa->ifnum = info->nim.cm.interface;
 	sa->fail_hash_thresh = info->fail_hash_thresh;
 	sa->sa_overhead = info->sa_overhead;
+
+	/*
+	 * Populate the outer dev index if the SA is encap.
+	 */
+	if (info->is_encap) {
+		atomic_set(&priv->outer_ifindex, info->outer_ifindex);
+		atomic_set(&priv->is_vlan, info->is_vlan);
+	}
 
 	/*
 	 * Set outer dst entry when overhead is non zero
@@ -744,6 +756,13 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		}
 		info.dst_mtu = dst_mtu(dst);
 		info.dest_addr[0] = htonl(sa->data.v4.dst_ip);
+
+		/*
+		 * Cache the outer interface index..
+		 */
+		info.outer_ifindex = dst->dev->ifindex;
+		info.is_vlan = is_vlan_dev(dst->dev);
+
 		dst_release(dst);
 		break;
 
@@ -768,6 +787,13 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		}
 		info.dst_mtu = dst_mtu(dst);
 		nss_ipsecmgr_v6addr_hton((uint32_t *)&sa->data.v6.dst_ip, (uint32_t *)info.dest_addr);
+
+		/*
+		 * Cache the outer interface index..
+		 */
+		info.outer_ifindex = dst->dev->ifindex;
+		info.is_vlan = is_vlan_dev(dst->dev);
+
 		dst_release(dst);
 		break;
 
@@ -782,6 +808,8 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 	info.sa = sa;
 	info.sa_overhead += nss_crypto_get_iv_len(data->crypto_index);
 	info.sa_overhead += data->esp.icv_len;
+	info.is_encap = true;
+
 	return nss_ipsecmgr_sa_add(priv, &info);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_encap_add);
@@ -865,7 +893,6 @@ bool nss_ipsecmgr_encap_del(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		return false;
 	}
 
-
 	return nss_ipsecmgr_sa_del(priv, &info);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_encap_del);
@@ -929,6 +956,7 @@ bool nss_ipsecmgr_decap_add(struct net_device *tun, struct nss_ipsecmgr_sa *sa, 
 	info.fail_hash_thresh  = data->fail_hash_thresh;
 	info.child_alloc = nss_ipsecmgr_flow_alloc;
 	info.child_lookup = nss_ipsecmgr_flow_lookup;
+	info.is_encap = false;
 
 	return nss_ipsecmgr_sa_add(priv, &info);
 }
