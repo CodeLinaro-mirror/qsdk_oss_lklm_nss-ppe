@@ -329,20 +329,21 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 	sa->sa_overhead = info->sa_overhead;
 
 	/*
-	 * Populate the outer dev index if the SA is encap.
+	 * Encap specific settings.
 	 */
 	if (info->is_encap) {
 		atomic_set(&priv->outer_ifindex, info->outer_ifindex);
 		atomic_set(&priv->is_vlan, info->is_vlan);
-	}
 
-	/*
-	 * Set outer dst entry when overhead is non zero
-	 */
-	if (info->sa_overhead)
+		memcpy(priv->tun_entry.dest_addr, info->dest_addr, sizeof(priv->tun_entry.dest_addr));
+
+		/*
+		 * Set outer dst entry when overhead is non zero
+		 */
 		atomic_set(&priv->outer_dst_mtu, info->dst_mtu);
 
-	memcpy(priv->tun_entry.dest_addr, info->dest_addr, sizeof(priv->tun_entry.dest_addr));
+	}
+
 	memcpy(&sa->nim, &info->nim, sizeof(struct nss_ipsec_msg));
 	memset(&sa->nim.tuple, 0, sizeof(struct nss_ipsec_tuple));
 
