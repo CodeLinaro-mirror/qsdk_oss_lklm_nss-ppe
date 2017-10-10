@@ -118,6 +118,7 @@
 
 #define NSS_IPSECMGR_ESP_TRAIL_SZ 2 /* esp trailer size */
 #define NSS_IPSECMGR_ESP_PAD_SZ 14 /* maximum amount of padding */
+#define NSS_IPSECMGR_IPV4_MIN_MTU 576 /* Minimum PMTU value for IPv4 */
 
 struct nss_ipsecmgr_ref;
 struct nss_ipsecmgr_key;
@@ -303,6 +304,7 @@ struct nss_ipsecmgr_netmask_db {
 struct nss_ipsecmgr_flow_data {
 	uint32_t pkts_processed;	/* packets processed for this flow */
 	uint32_t sa_overhead;		/* max header + trailer added for SA */
+	uint32_t min_mtu;		/* minimum MTU for the flow */
 };
 
 /*
@@ -364,7 +366,7 @@ struct nss_ipsecmgr_priv {
 	atomic_t outer_dst_mtu;				/* PMTU of outer tunnel DST */
 	struct rtnl_link_stats64 stats;			/* stats of IPsec tunnel */
 	atomic_t outer_ifindex;				/* Ifindex of outer dev */
-	atomic_t is_vlan;					/* Whether the associated dev is VLAN or not */
+	atomic_t is_vlan;				/* Whether the associated dev is VLAN or not */
 };
 
 /*

@@ -338,7 +338,6 @@ static bool nss_ipsecmgr_sa_add(struct nss_ipsecmgr_priv *priv, struct nss_ipsec
 		memcpy(priv->tun_entry.dest_addr, info->dest_addr, sizeof(priv->tun_entry.dest_addr));
 
 		atomic_set(&priv->outer_dst_mtu, info->dst_mtu);
-
 	}
 
 	memcpy(&sa->nim, &info->nim, sizeof(struct nss_ipsec_msg));

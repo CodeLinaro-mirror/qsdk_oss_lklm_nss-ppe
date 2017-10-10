@@ -84,6 +84,11 @@ static void nss_ipsecmgr_flow_update(struct nss_ipsecmgr_priv *priv, struct nss_
 	}
 
 	/*
+	 * Update the flow specific minimum MTU value.
+	 */
+	flow->data.min_mtu = (flow_tuple->ip_ver == IPVERSION) ? NSS_IPSECMGR_IPV4_MIN_MTU : IPV6_MIN_MTU;
+
+	/*
 	 * Convert the message to NSS format
 	 */
 	nss_ipsecmgr_copy_nim(&flow->nim, &nss_nim);
@@ -908,7 +913,7 @@ bool nss_ipsecmgr_flow_process_pmtu(struct nss_ipsecmgr_priv *priv,
 	 * If length of the packet is more than computed MTU,
 	 * then send ICMP PMTU error back to Linux
 	 */
-	mtu = atomic_read(&priv->outer_dst_mtu) - data->sa_overhead;
+	mtu = max((atomic_read(&priv->outer_dst_mtu) - data->sa_overhead), data->min_mtu);
 	if (likely(mtu >= skb->len))
 		return false;
 
@@ -933,14 +938,6 @@ send_icmp:
 		return true;
 
 	case htons(ETH_P_IPV6):
-
-		/*
-		 * If the computed MTU is less than IPV6_MIN_MTU[1280]
-		 * proceed with post fragmentation
-		 */
-		if (unlikely(mtu < IPV6_MIN_MTU))
-			return false;
-
 		if (likely(skb_dst(skb)))
 			goto send_icmp6;
 
