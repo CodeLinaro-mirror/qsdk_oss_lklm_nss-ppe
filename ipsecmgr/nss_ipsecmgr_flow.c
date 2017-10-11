@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
+#include <linux/version.h>
 #include <asm/atomic.h>
 #include <linux/debugfs.h>
 #include <linux/completion.h>
@@ -972,6 +973,7 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 	struct nss_ipsecmgr_ref *subnet_ref, *flow_ref;
 	struct nss_ipsecmgr_key subnet_key, flow_key;
 	struct nss_ipsecmgr_flow_entry *flow;
+	struct nss_ipsec_rule_data *nim_data;
 	struct nss_ipsec_tuple *tuple;
 	struct nss_ipsec_msg nim;
 
@@ -1024,6 +1026,16 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		 * copy nim data from subnet entry
 		 */
 		nss_ipsecmgr_copy_subnet(&nim, subnet_ref);
+
+		/*
+		 * Set the ignore_df in the nim with skb->local_df
+		 */
+		nim_data = &nim.msg.rule.data;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 15, 0)
+		nim_data->ignore_df = skb->ignore_df;
+#else
+		nim_data->ignore_df = skb->local_df;
+#endif
 
 		/*
 		 * if, the same flow was added in between then flow alloc will return the
