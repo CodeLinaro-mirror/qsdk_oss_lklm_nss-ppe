@@ -91,6 +91,7 @@ struct nss_connmgr_gre_cfg {
 	bool ttl_inherit;			/**< Interit TTL ? (Optional) */
 	bool use_mac_hdr;			/**< Add MAC header which is provided (Optional Field)*/
 	bool add_padding;			/**< Add padding to make GRE 4 byte aligned ? (Optional Field) */
+	bool copy_metadata;			/**< Copy metadata during alignment ? (Optional Field) */
 	bool is_ipv6;				/**< Set if addr is IPv6 (Mandatory Field)*/
 
 	uint32_t src_ip[4];			/**< Src IP address (Mandatory Field) */

@@ -83,7 +83,8 @@ static int nss_connmgr_gre_test(char *src_ip, char *dest_ip, char *next_dev_name
 	cfg.ip_type = GRE_OVER_IPV4;
 	cfg.ttl_inherit = true;
 	cfg.tos_inherit = true;
-	cfg.add_padding = true;
+	cfg.add_padding = false;
+	cfg.copy_metadata = true;
 	cfg.next_dev = next_dev;
 
 	cfg.src_ip[0] = sip;

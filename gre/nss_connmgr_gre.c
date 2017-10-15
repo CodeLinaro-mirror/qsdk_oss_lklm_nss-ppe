@@ -596,6 +596,11 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 		cmsg->flags |= NSS_GRE_CONFIG_SET_PADDING;
 	}
 
+	if (cfg->copy_metadata) {
+		cmsg->flags |= NSS_GRE_CONFIG_COPY_METADATA;
+		cmsg->metadata_size = sizeof(struct nss_wifi_append_statsv2_metahdr);
+	}
+
 	/*
 	 * Register net_device
 	 */
