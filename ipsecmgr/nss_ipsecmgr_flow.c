@@ -1105,6 +1105,16 @@ bool nss_ipsecmgr_flow_offload(struct nss_ipsecmgr_priv *priv, struct sk_buff *s
 		nss_ipsecmgr_copy_subnet(&nim, subnet_ref);
 
 		/*
+		 * Set the ignore_df in the nim with skb->local_df
+		 */
+		nim_data = &nim.msg.rule.data;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 15, 0)
+		nim_data->ignore_df = skb->ignore_df;
+#else
+		nim_data->ignore_df = skb->local_df;
+#endif
+
+		/*
 		 * if, the same flow was added in between then flow alloc will return the
 		 * same flow. The only side affect of this will be NSS getting duplicate
 		 * add requests and thus rejecting one of them
