@@ -379,7 +379,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	 * then send the buffer on its way to NSS
 	 */
 	if (process_mtu && nss_ipsecmgr_flow_process_pmtu(priv, skb, &flow_data))
-		goto free;
+		return NETDEV_TX_OK;
 
 	/*
 	 * If the packet needs to timestamped. Send to

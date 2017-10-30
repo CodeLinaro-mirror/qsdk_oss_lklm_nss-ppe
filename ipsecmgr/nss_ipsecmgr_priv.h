@@ -400,6 +400,15 @@ struct nss_ipsecmgr_drv {
 };
 
 /*
+ * IPsec manager work data passed to the work function.
+ */
+struct nss_ipsecmgr_work_data {
+	struct work_struct pmtu_work;	/* PMTU work to be scheduled to kernel work queue. */
+	struct sk_buff *skb;		/* SKB need to submit to work function. */
+	uint32_t mtu;			/* MTU which needs to send to linux. */
+};
+
+/*
  * nss_ipsecmgr_ref_is_updated()
  * 	return true if reference objects id is updated
  */

@@ -24,6 +24,7 @@
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
 #include <linux/version.h>
+#include <linux/workqueue.h>
 #include <asm/atomic.h>
 #include <linux/debugfs.h>
 #include <linux/completion.h>
@@ -893,6 +894,20 @@ struct nss_ipsecmgr_ref *nss_ipsecmgr_flow_alloc(struct nss_ipsecmgr_priv *priv,
 }
 
 /*
+ * nss_ipsecmgr_pmtu_work()
+ *	work function for IPsecmgr pmtu work.
+ */
+static void nss_ipsecmgr_pmtu_work(struct work_struct *work)
+{
+	struct nss_ipsecmgr_work_data *data = container_of(work,
+			struct nss_ipsecmgr_work_data, pmtu_work);
+
+	icmpv6_send(data->skb, ICMPV6_PKT_TOOBIG, 0, data->mtu);
+	dev_kfree_skb_any(data->skb);
+	kfree(data);
+}
+
+/*
  * nss_ipsecmgr_flow_process_pmtu()
  *	process the mtu and send an ICMP error
  *
@@ -904,6 +919,7 @@ bool nss_ipsecmgr_flow_process_pmtu(struct nss_ipsecmgr_priv *priv,
 			struct sk_buff *skb,
 			struct nss_ipsecmgr_flow_data *data)
 {
+	struct nss_ipsecmgr_work_data *pmtu_data;
 	struct dst_entry *dst;
 	struct flowi6 fl6;
 	struct rtable *rt;
@@ -935,6 +951,7 @@ bool nss_ipsecmgr_flow_process_pmtu(struct nss_ipsecmgr_priv *priv,
 		skb_dst_set(skb, &rt->dst);
 send_icmp:
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));
+		dev_kfree_skb_any(skb);
 		return true;
 
 	case htons(ETH_P_IPV6):
@@ -951,7 +968,22 @@ send_icmp:
 
 		skb_dst_set(skb, dst);
 send_icmp6:
-		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu);
+		pmtu_data = kzalloc(sizeof(struct nss_ipsecmgr_work_data), GFP_ATOMIC);
+		if (!pmtu_data) {
+			dev_kfree_skb_any(skb);
+			return true;
+		}
+
+		pmtu_data->skb = skb;
+		pmtu_data->mtu = mtu;
+
+		/*
+		 * icmpv6_send will try to take tx lock which is already taken by
+		 * the transmit path. To decouple the path submit a work to kernel
+		 * workqueue to send the PMTU error to upper layer.
+		 */
+		INIT_WORK(&pmtu_data->pmtu_work, nss_ipsecmgr_pmtu_work);
+		schedule_work(&pmtu_data->pmtu_work);
 		return true;
 
 	default:
