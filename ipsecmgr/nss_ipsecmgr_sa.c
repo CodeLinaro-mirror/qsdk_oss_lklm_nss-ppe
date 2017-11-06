@@ -651,7 +651,7 @@ void nss_ipsecmgr_sa_flush_all(struct nss_ipsecmgr_priv *priv)
 	 */
 	for (i = 0, head = sa_db->entries; i < NSS_IPSECMGR_MAX_SA; i++, head++) {
 		list_for_each_entry_safe(entry, tmp, head, node) {
-			if (entry->nim.tunnel_id != ifindex) {
+			if (entry->nim.tunnel_id == ifindex) {
 				nss_ipsecmgr_ref_free(priv, &entry->ref);
 			}
 		}
