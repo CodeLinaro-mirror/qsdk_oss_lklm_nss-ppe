@@ -354,15 +354,34 @@ static int32_t nss_connmgr_gre_prepare_config_cmd(struct net_device *dev,
 
 /*
  * nss_connmgr_gre_exception()
- *	Exception handler for GRE Tap netdevice. This function is
- *	yet to be implemetented and is needed only in case of full
- *	flow acceleration in NSS.
  */
 static void nss_connmgr_gre_exception(struct net_device *dev, struct sk_buff *skb,
 					  __attribute__((unused)) struct napi_struct *napi)
 {
-	nss_connmgr_gre_error("%p: NSS GRE exception handler called\n", dev);
-	dev_kfree_skb_any(skb);
+
+	if (unlikely(!enable_notifier)) {
+		nss_connmgr_gre_error("%p: NSS GRE exception handler called\n", dev);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+
+	skb->dev = dev;
+	skb->skb_iif = dev->ifindex;
+	skb->protocol = eth_type_trans(skb, dev);
+	switch (ntohs(skb->protocol)) {
+	case ETH_P_IP:
+		return nss_connmgr_gre_v4_exception(dev, skb);
+
+	case ETH_P_IPV6:
+		return nss_connmgr_gre_v6_exception(dev, skb);
+	default:
+		break;
+	}
+
+	/*
+	 * These are decapped and exceptioned non IP packets.
+	 */
+	netif_receive_skb(skb);
 	return;
 }
 
@@ -779,6 +798,7 @@ static bool nss_connmgr_gre_validate_config(struct nss_connmgr_gre_cfg *cfg)
 static int nss_connmgr_gre_dev_up(struct net_device *dev)
 {
 	struct nss_gre_msg req;
+	struct nss_gre_config_msg *cmsg = &req.msg.cmsg;
 	int if_number;
 	uint32_t features = 0;
 	struct nss_ctx_instance *nss_ctx;
@@ -797,6 +817,11 @@ static int nss_connmgr_gre_dev_up(struct net_device *dev)
 		nss_connmgr_gre_info("%p: gre tunnel get config failed\n", dev);
 		return NOTIFY_DONE;
 	}
+
+	/*
+	 * Ignore set_mac and next_dev flags for generic GRE
+	 */
+	cmsg->flags &= ~(NSS_GRE_CONFIG_SET_MAC | NSS_GRE_CONFIG_NEXT_NODE_AVAILABLE);
 
 	/*
 	 * Create nss dynamic interface and register
@@ -827,6 +852,16 @@ static int nss_connmgr_gre_dev_up(struct net_device *dev)
 
 	nss_connmgr_gre_info("%p: nss_register_gre_if() successful. nss_ctx = %p\n", dev, nss_ctx);
 
+	if (nss_connmgr_gre_dev_open(dev)) {
+		nss_gre_unregister_if(if_number);
+		status = nss_dynamic_interface_dealloc_node(if_number, NSS_DYNAMIC_INTERFACE_TYPE_GRE);
+		if (status != NSS_TX_SUCCESS) {
+			nss_connmgr_gre_warning("%p: Unable to dealloc the node[%d] in the NSS fw!\n", dev, if_number);
+		}
+		nss_connmgr_gre_warning("%p: nss gre std device up command failed %d\n", dev, status);
+		return NOTIFY_DONE;
+	}
+
 	nss_gre_msg_init(&req, if_number, NSS_GRE_MSG_CONFIGURE, sizeof(struct nss_gre_config_msg), NULL, NULL);
 
 	status = nss_gre_tx_msg_sync(nss_ctx, &req);
@@ -854,6 +889,11 @@ static int nss_connmgr_gre_dev_down(struct net_device *dev)
 	int if_number;
 	nss_tx_status_t status;
 
+	if (!nss_connmgr_gre_is_gre(dev)) {
+		nss_connmgr_gre_info("%p: No GRE net_device found\n", dev);
+		return NOTIFY_DONE;
+	}
+
 	/*
 	 * Check if gre-std interface is registered with NSS
 	 */
@@ -870,6 +910,11 @@ static int nss_connmgr_gre_dev_down(struct net_device *dev)
 	status = nss_gre_tx_msg_sync(nss_gre_get_context(), &req);
 	if (status != NSS_TX_SUCCESS) {
 		nss_connmgr_gre_info("%p: gre instance deconfigure command failed, if_number = %d\n", dev, if_number);
+		return NOTIFY_DONE;
+	}
+
+	if (nss_connmgr_gre_dev_close(dev)) {
+		nss_connmgr_gre_info("%p: gre instance device close command failed, if_number = %d\n", dev, if_number);
 		return NOTIFY_DONE;
 	}
 
@@ -1076,11 +1121,11 @@ uint32_t nss_connmgr_gre_get_nss_config_flags(uint16_t o_flags, uint16_t i_flags
 		gre_flags |= NSS_GRE_CONFIG_OCSUM_VALID;
 	}
 
-	if (!tos) {
+	if (tos & 0x1) {
 		gre_flags |= NSS_GRE_CONFIG_TOS_INHERIT;
 	}
 
-	if (ttl & 0x1) {
+	if (!ttl) {
 		gre_flags |= NSS_GRE_CONFIG_TTL_INHERIT;
 	}
 

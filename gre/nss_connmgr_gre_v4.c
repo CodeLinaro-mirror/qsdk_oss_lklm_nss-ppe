@@ -29,6 +29,7 @@
 #include <net/ip_tunnels.h>
 #include <net/ip6_tunnel.h>
 #include <net/arp.h>
+#include <net/gre.h>
 
 #include <nss_api_if.h>
 #include "nss_connmgr_gre_public.h"
@@ -215,6 +216,41 @@ int nss_connmgr_gre_v4_set_config(struct net_device *dev, struct nss_connmgr_gre
 	strlcpy(t->parms.name, dev->name, IFNAMSIZ);
 	t->dev = dev;
 	return GRE_SUCCESS;
+}
+
+/*
+ * nss_connmgr_gre_v4_exception()
+ */
+void nss_connmgr_gre_v4_exception(struct net_device *dev, struct sk_buff *skb)
+{
+	struct iphdr *iph = (struct iphdr *)skb->data;
+	if (iph->protocol != IPPROTO_GRE) {
+
+		/*
+		 * These are decapped IP packets.
+		 */
+		netif_receive_skb(skb);
+		return;
+	}
+	if (unlikely(!pskb_may_pull(skb, (sizeof(struct iphdr) + sizeof(struct gre_base_hdr))))) {
+		nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+	skb_pull(skb, sizeof(struct iphdr));
+	skb_pull(skb, sizeof(struct gre_base_hdr));
+
+	if (unlikely(!pskb_may_pull(skb, sizeof(struct ethhdr)))) {
+		nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+	skb->protocol = eth_type_trans(skb, dev);
+	skb_push(skb, ETH_HLEN);
+
+	skb_reset_network_header(skb);
+	skb_reset_transport_header(skb);
+	dev_queue_xmit(skb);
 }
 
 /*

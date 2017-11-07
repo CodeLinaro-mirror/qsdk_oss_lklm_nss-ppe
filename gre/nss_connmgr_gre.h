@@ -85,4 +85,7 @@ int nss_connmgr_gre_v6_set_config(struct net_device *dev, struct nss_connmgr_gre
 int nss_connmgr_gre_v4_get_config(struct net_device *dev, struct nss_gre_msg *req, struct net_device **next_dev, bool hold);
 int nss_connmgr_gre_v6_get_config(struct net_device *dev, struct nss_gre_msg *req, struct net_device **next_dev, bool hold);
 
+void nss_connmgr_gre_v4_exception(struct net_device *dev, struct sk_buff *skb);
+void nss_connmgr_gre_v6_exception(struct net_device *dev, struct sk_buff *skb);
+
 #endif
