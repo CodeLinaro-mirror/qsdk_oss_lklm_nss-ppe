@@ -126,34 +126,47 @@ static int nss_connmgr_gre_v6_get_mac_address(uint8_t *src_ip, uint8_t *dest_ip,
  */
 void nss_connmgr_gre_v6_exception(struct net_device *dev, struct sk_buff *skb)
 {
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)skb->data;
+	struct ethhdr *eth = (struct ethhdr *)skb->data;
+	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eth + 1);
+
 	if (ip6h->nexthdr != IPPROTO_GRE) {
 
 		/*
 		 * These are decapped IP packets.
 		 */
+		skb->protocol = eth_type_trans(skb, dev);
 		netif_receive_skb(skb);
 		return;
 	}
-	if (unlikely(!pskb_may_pull(skb, (sizeof(struct ipv6hdr) + sizeof(struct gre_base_hdr))))) {
+
+	/*
+	 * GRE encapsulated packet exceptioned, remove the encapsulation
+	 * and transmit on GRE interface.
+	 */
+	if (unlikely(!pskb_may_pull(skb, (sizeof(struct ethhdr) + sizeof(struct ipv6hdr)
+				+ sizeof(struct gre_base_hdr))))) {
 		nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
 		dev_kfree_skb_any(skb);
 		return;
 	}
-	skb_pull(skb, sizeof(struct ipv6hdr));
-	skb_pull(skb, sizeof(struct gre_base_hdr));
+	skb_pull(skb, (sizeof(struct ethhdr) + sizeof(struct ipv6hdr)
+				+ sizeof(struct gre_base_hdr)));
 
 	if (unlikely(!pskb_may_pull(skb, sizeof(struct ethhdr)))) {
 		nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
 		dev_kfree_skb_any(skb);
 		return;
 	}
-	skb->protocol = eth_type_trans(skb, dev);
-	skb_push(skb, ETH_HLEN);
-
+	skb->dev = dev;
+	if (likely(ntohs(eth->h_proto) >= ETH_P_802_3_MIN)) {
+		skb->protocol = eth->h_proto;
+	} else {
+		skb->protocol = htons(ETH_P_802_2);
+	}
+	skb_reset_mac_header(skb);
 	skb_reset_network_header(skb);
 	skb_reset_transport_header(skb);
-
+	skb_reset_mac_len(skb);
 	dev_queue_xmit(skb);
 }
 
@@ -194,14 +207,11 @@ int nss_connmgr_gre_v6_set_config(struct net_device *dev, struct nss_connmgr_gre
 	memcpy(t->parms.laddr.s6_addr, &cfg->src_ip, 16);
 	memcpy(t->parms.raddr.s6_addr, &cfg->dest_ip, 16);
 
-	t->parms.flowinfo = cfg->tos;
-	if (cfg->tos_inherit) {
-		t->parms.flowinfo = 0;
-	}
+	t->parms.flowinfo = 0;
 
 	t->parms.hop_limit = cfg->ttl;
 	if (cfg->ttl_inherit) {
-		t->parms.hop_limit = 0x1;
+		t->parms.hop_limit = 0;
 	}
 
 	if (cfg->ikey_valid) {
@@ -234,9 +244,12 @@ int nss_connmgr_gre_v6_get_config(struct net_device *dev, struct nss_gre_msg *re
 	memcpy(cmsg->src_ip, t->parms.laddr.s6_addr, 16);
 	memcpy(cmsg->dest_ip, t->parms.raddr.s6_addr, 16);
 
+	/*
+	 * IPv6 outer tos field is always inherited from inner IP header.
+	 */
 	cmsg->flags = nss_connmgr_gre_get_nss_config_flags(t->parms.o_flags,
 								     t->parms.i_flags,
-								     t->parms.flowinfo,
+								     0x1,
 								     t->parms.hop_limit, 0);
 
 	cmsg->ikey = t->parms.i_key;

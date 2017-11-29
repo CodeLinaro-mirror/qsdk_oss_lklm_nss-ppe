@@ -190,13 +190,14 @@ int nss_connmgr_gre_v4_set_config(struct net_device *dev, struct nss_connmgr_gre
 	iphdr->saddr = htonl(iphdr->saddr);
 	iphdr->daddr = htonl(iphdr->daddr);
 
-	if (!cfg->tos_inherit) {
-		iphdr->tos = cfg->tos;
+	iphdr->tos = cfg->tos << 2;
+	if (cfg->tos_inherit) {
+		iphdr->tos |= 0x1;
 	}
 
 	iphdr->ttl = cfg->ttl;
 	if (cfg->ttl_inherit) {
-		iphdr->ttl = 0x1;
+		iphdr->ttl = 0;
 	}
 
 	if (cfg->set_df) {
@@ -223,33 +224,47 @@ int nss_connmgr_gre_v4_set_config(struct net_device *dev, struct nss_connmgr_gre
  */
 void nss_connmgr_gre_v4_exception(struct net_device *dev, struct sk_buff *skb)
 {
-	struct iphdr *iph = (struct iphdr *)skb->data;
+	struct ethhdr *eth_hdr = (struct ethhdr *)skb->data;
+	struct iphdr *iph = (struct iphdr *)(eth_hdr + 1);
+
 	if (iph->protocol != IPPROTO_GRE) {
 
 		/*
 		 * These are decapped IP packets.
 		 */
+		skb->protocol = eth_type_trans(skb, dev);
 		netif_receive_skb(skb);
 		return;
 	}
-	if (unlikely(!pskb_may_pull(skb, (sizeof(struct iphdr) + sizeof(struct gre_base_hdr))))) {
+
+	/*
+	 * GRE encapsulated packet exceptioned, remove the encapsulation
+	 * and transmit on GRE interface.
+	 */
+	if (unlikely(!pskb_may_pull(skb, (sizeof(struct ethhdr) + sizeof(struct iphdr)
+				+ sizeof(struct gre_base_hdr))))) {
 		nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
 		dev_kfree_skb_any(skb);
 		return;
 	}
-	skb_pull(skb, sizeof(struct iphdr));
-	skb_pull(skb, sizeof(struct gre_base_hdr));
+	skb_pull(skb, (sizeof(struct ethhdr) + sizeof(struct iphdr)
+				+ sizeof(struct gre_base_hdr)));
 
 	if (unlikely(!pskb_may_pull(skb, sizeof(struct ethhdr)))) {
 		nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
 		dev_kfree_skb_any(skb);
 		return;
 	}
-	skb->protocol = eth_type_trans(skb, dev);
-	skb_push(skb, ETH_HLEN);
-
+	skb->dev = dev;
+	if (likely(ntohs(eth_hdr->h_proto) >= ETH_P_802_3_MIN)) {
+		skb->protocol = eth_hdr->h_proto;
+	} else {
+		skb->protocol = htons(ETH_P_802_2);
+	}
+	skb_reset_mac_header(skb);
 	skb_reset_network_header(skb);
 	skb_reset_transport_header(skb);
+	skb_reset_mac_len(skb);
 	dev_queue_xmit(skb);
 }
 
@@ -280,7 +295,7 @@ int nss_connmgr_gre_v4_get_config(struct net_device *dev, struct nss_gre_msg *re
 	cmsg->ikey = t->parms.i_key;
 	cmsg->okey = t->parms.o_key;
 	cmsg->ttl = iphdr->ttl;
-	cmsg->tos = iphdr->tos;
+	cmsg->tos = iphdr->tos >> 2;
 
 	/*
 	 * fill in MAC addresses

@@ -359,28 +359,44 @@ static void nss_connmgr_gre_exception(struct net_device *dev, struct sk_buff *sk
 					  __attribute__((unused)) struct napi_struct *napi)
 {
 
+	struct ethhdr *eth_hdr;
 	if (unlikely(!enable_notifier)) {
 		nss_connmgr_gre_error("%p: NSS GRE exception handler called\n", dev);
 		dev_kfree_skb_any(skb);
 		return;
 	}
 
-	skb->dev = dev;
-	skb->skb_iif = dev->ifindex;
-	skb->protocol = eth_type_trans(skb, dev);
-	switch (ntohs(skb->protocol)) {
-	case ETH_P_IP:
-		return nss_connmgr_gre_v4_exception(dev, skb);
-
-	case ETH_P_IPV6:
-		return nss_connmgr_gre_v6_exception(dev, skb);
-	default:
-		break;
+	if (unlikely(!pskb_may_pull(skb, sizeof(struct ethhdr)))) {
+		nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+	eth_hdr = (struct ethhdr *)skb->data;
+	if (likely(ntohs(eth_hdr->h_proto) >= ETH_P_802_3_MIN)) {
+		switch (ntohs(eth_hdr->h_proto)) {
+		case ETH_P_IP:
+			if (unlikely(!pskb_may_pull(skb, sizeof(struct iphdr)))) {
+				nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
+				dev_kfree_skb_any(skb);
+				return;
+			}
+			return nss_connmgr_gre_v4_exception(dev, skb);
+		case ETH_P_IPV6:
+			if (unlikely(!pskb_may_pull(skb, sizeof(struct ipv6hdr)))) {
+				nss_connmgr_gre_warning("%p: pskb_may_pull failed for skb:%p\n", dev, skb);
+				dev_kfree_skb_any(skb);
+				return;
+			}
+			return nss_connmgr_gre_v6_exception(dev, skb);
+		default:
+			break;
+		}
 	}
 
 	/*
 	 * These are decapped and exceptioned non IP packets.
 	 */
+	skb->protocol = eth_type_trans(skb, dev);
 	netif_receive_skb(skb);
 	return;
 }
