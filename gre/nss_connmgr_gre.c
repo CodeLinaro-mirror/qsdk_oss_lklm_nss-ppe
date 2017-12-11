@@ -372,7 +372,7 @@ static void nss_connmgr_gre_exception(struct net_device *dev, struct sk_buff *sk
 		return;
 	}
 	eth_hdr = (struct ethhdr *)skb->data;
-	if (likely(eth_proto_is_802_3(eth_hdr->h_proto))) {
+	if (likely(ntohs(eth_hdr->h_proto) >= ETH_P_802_3_MIN)) {
 		switch (ntohs(eth_hdr->h_proto)) {
 		case ETH_P_IP:
 			if (unlikely(!pskb_may_pull(skb, sizeof(struct iphdr)))) {

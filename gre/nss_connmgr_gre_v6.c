@@ -158,12 +158,9 @@ void nss_connmgr_gre_v6_exception(struct net_device *dev, struct sk_buff *skb)
 		return;
 	}
 	skb->dev = dev;
-	if (likely(eth_proto_is_802_3(eth->h_proto))) {
+	if (likely(ntohs(eth->h_proto) >= ETH_P_802_3_MIN)) {
 		skb->protocol = eth->h_proto;
 	} else {
-		/*
-		 *      Real 802.2 LLC
-		 */
 		skb->protocol = htons(ETH_P_802_2);
 	}
 	skb_reset_mac_header(skb);

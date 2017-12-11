@@ -192,7 +192,7 @@ int nss_connmgr_gre_v4_set_config(struct net_device *dev, struct nss_connmgr_gre
 
 	iphdr->tos = cfg->tos << 2;
 	if (cfg->tos_inherit) {
-		iphdr->tos |= 0x1 ;
+		iphdr->tos |= 0x1;
 	}
 
 	iphdr->ttl = cfg->ttl;
@@ -256,7 +256,7 @@ void nss_connmgr_gre_v4_exception(struct net_device *dev, struct sk_buff *skb)
 		return;
 	}
 	skb->dev = dev;
-	if (likely(eth_proto_is_802_3(eth_hdr->h_proto))) {
+	if (likely(ntohs(eth_hdr->h_proto) >= ETH_P_802_3_MIN)) {
 		skb->protocol = eth_hdr->h_proto;
 	} else {
 		skb->protocol = htons(ETH_P_802_2);
