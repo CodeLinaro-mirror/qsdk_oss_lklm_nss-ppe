@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -48,44 +48,36 @@
 #define nss_tunipip6_assert(c) if (!(c)) { BUG_ON(!(c)); }
 #endif
 
-#if (NSS_TUNIPIP6_DEBUG_LEVEL < 2)
-#define nss_tunipip6_error(fmt, args...)
+#if defined(CONFIG_DYNAMIC_DEBUG)
+/*
+ * Compile messages for dynamic enable/disable
+ */
+#define nss_tunipip6_warning(s, ...) pr_debug("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
+#define nss_tunipip6_info(s, ...) pr_debug("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
+#define nss_tunipip6_trace(s, ...) pr_debug("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 #else
-#define nss_tunipip6_error(fmt, args...) printk(KERN_WARNING "nss tunipip6:"fmt, ##args)
+
+/*
+ * Statically compile messages at different levels
+ */
+#if (NSS_TUNIPIP6_DEBUG_LEVEL < 2)
+#define nss_tunipip6_warning(s, ...)
+#else
+#define nss_tunipip6_warning(s, ...) pr_warn("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if (NSS_TUNIPIP6_DEBUG_LEVEL < 3)
-#define nss_tunipip6_warning(fmt, args...)
+#define nss_tunipip6_info(s, ...)
 #else
-#define nss_tunipip6_warning(fmt, args...) printk(KERN_WARNING "nss tunipip6:"fmt, ##args)
+#define nss_tunipip6_info(s, ...)   pr_notice("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if (NSS_TUNIPIP6_DEBUG_LEVEL < 4)
-#define nss_tunipip6_info(fmt, args...)
+#define nss_tunipip6_trace(s, ...)
 #else
-#define nss_tunipip6_info(fmt, args...) printk(KERN_INFO "nss tunipip6 :"fmt, ##args)
+#define nss_tunipip6_trace(s, ...)  pr_info("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 #endif
-
-#if (NSS_TUNIPIP6_DEBUG_LEVEL < 5)
-#define nss_tunipip6_trace(fmt, args...)
-#else
-#define nss_tunipip6_trace(fmt, args...) printk(KERN_DEBUG "nss tunipip6 :"fmt, ##args)
 #endif
-
-void nss_tunipip6_exception(struct net_device *netdev, struct sk_buff *skb, __attribute__((unused)) struct napi_struct *napi);
-void nss_tunipip6_event_receive(void *ctx, struct nss_tunipip6_msg *msg);
-
-/*
- * nss_tunipip6_tunnel
- *	DS-lite and ipip 6tunnel host instance
- */
-struct nss_tunipip6_tunnel{
-	struct nss_ctx_instance *nss_ctx;
-	uint32_t if_num;
-	struct net_device *netdev;
-	uint32_t device_up;
-	uint32_t features;  /* The skb types supported by this interface */
-};
 
 /*
  *  tunipip6 stats structure
@@ -97,216 +89,17 @@ struct nss_tunipip6_stats {
 	uint32_t tx_bytes;	/* Number of transmitted bytes */
 };
 
-struct nss_tunipip6_tunnel g_tunipip6;
-
-/*
- * Internal function
- */
-static int
-nss_tunipip6_dev_event(struct notifier_block  *nb,
-			unsigned long event,
-			void  *dev);
-
-/*
- * Linux Net device Notifier
- */
-struct notifier_block nss_tunipip6_notifier = {
-	.notifier_call = nss_tunipip6_dev_event,
-};
-
-/*
- * nss_tunipip6_dev_up()
- *	IPIP6 Tunnel device i/f up handler
- */
-void nss_tunipip6_dev_up( struct net_device * netdev)
-{
-	struct ip6_tnl *tunnel;
-	struct nss_tunipip6_msg tnlmsg;
-	struct nss_tunipip6_create_msg *tnlcfg;
-	struct flowi6 *fl6;
-	nss_tx_status_t status;
-
-	/*
-	 * Validate netdev for ipv6-in-ipv4  Tunnel
-	 */
-	if (netdev->type != ARPHRD_TUNNEL6 ) {
-		return;
-	}
-
-	tunnel = (struct ip6_tnl *)netdev_priv(netdev);
-
-	/*
-	 * Find he Tunnel device flow information
-	 */
-
-	fl6  = &tunnel->fl.u.ip6;
-
-	nss_tunipip6_trace(" Tunnel Param srcaddr %x:%x:%x:%x  daddr %x:%x:%x:%x \n",
-			fl6->saddr.s6_addr32[0], fl6->saddr.s6_addr32[1],
-			fl6->saddr.s6_addr32[2], fl6->saddr.s6_addr32[3],
-			fl6->daddr.s6_addr32[0], fl6->daddr.s6_addr32[1],
-			fl6->daddr.s6_addr32[2], fl6->daddr.s6_addr32[3] );
-	nss_tunipip6_trace(" hop limit %d \n", tunnel->parms.hop_limit);
-	nss_tunipip6_trace(" tunnel param flag %x  fl6.flowlabel %x  \n", tunnel->parms.flags, fl6->flowlabel);
-
-	/*
-	 * Register ipip6 tunnel with NSS
-	 */
-	g_tunipip6.nss_ctx = nss_register_tunipip6_if(g_tunipip6.if_num,
-				nss_tunipip6_exception,
-				nss_tunipip6_event_receive,
-				netdev,
-				g_tunipip6.features);
-	if (g_tunipip6.nss_ctx == NULL) {
-		nss_tunipip6_trace("nss_register_tunipip6_if Failed \n");
-		return;
-	} else {
-		nss_tunipip6_trace("nss_register_tunipip6_if Success \n");
-	}
-
-	/*
-	 *Prepare The Tunnel configuration parameter to send to nss
-	 */
-	memset(&tnlmsg, 0, sizeof(struct nss_tunipip6_msg));
-	tnlcfg = &tnlmsg.msg.tunipip6_create;
-
-	tnlcfg->saddr[0] = ntohl(fl6->saddr.s6_addr32[0]);
-	tnlcfg->saddr[1] = ntohl(fl6->saddr.s6_addr32[1]);
-	tnlcfg->saddr[2] = ntohl(fl6->saddr.s6_addr32[2]);
-	tnlcfg->saddr[3] = ntohl(fl6->saddr.s6_addr32[3]);
-	tnlcfg->daddr[0] = ntohl(fl6->daddr.s6_addr32[0]);
-	tnlcfg->daddr[1] = ntohl(fl6->daddr.s6_addr32[1]);
-	tnlcfg->daddr[2] = ntohl(fl6->daddr.s6_addr32[2]);
-	tnlcfg->daddr[3] = ntohl(fl6->daddr.s6_addr32[3]);
-	tnlcfg->hop_limit = tunnel->parms.hop_limit;
-	tnlcfg->flags = ntohl(tunnel->parms.flags);
-	tnlcfg->flowlabel = fl6->flowlabel;  /*flow Label In kernel is stored in big endian format*/
-	nss_tunipip6_trace(" Tunnel Param srcaddr %x:%x:%x:%x  daddr %x:%x:%x:%x \n",
-			tnlcfg->saddr[0], tnlcfg->saddr[1],
-			tnlcfg->saddr[2], tnlcfg->saddr[3],
-			tnlcfg->daddr[0], tnlcfg->daddr[1],
-			tnlcfg->daddr[2], tnlcfg->daddr[3] );
-
-
-	nss_tunipip6_trace("Sending IPIP6 tunnel i/f up command to NSS	%x \n",
-			(int)g_tunipip6.nss_ctx);
-
-	/*
-	 * Send IPIP6 Tunnel UP command to NSS
-	 */
-	nss_tunipip6_msg_init(&tnlmsg, NSS_TUNIPIP6_INTERFACE, NSS_TUNIPIP6_TX_IF_CREATE,
-			sizeof(struct nss_tunipip6_create_msg), NULL, NULL);
-
-	status = nss_tunipip6_tx(g_tunipip6.nss_ctx, &tnlmsg);
-	if (status != NSS_TX_SUCCESS) {
-		nss_tunipip6_error("Tunnel up command error %d \n", status);
-		return;
-	}
-
-	g_tunipip6.device_up = 1;
-}
-
-/*
- * nss_tunipip6_dev_down()
- *	IPP6 Tunnel device i/f down handler
- */
-void nss_tunipip6_dev_down( struct net_device * netdev)
-{
-	struct nss_tunipip6_msg tnlmsg;
-	struct nss_tunipip6_destroy_msg *tnlcfg;
-	nss_tx_status_t status;
-
-	/*
-	 * Check if tunnel ipip6 is registered ?
-	 */
-	if(g_tunipip6.nss_ctx == NULL){
-		return;
-	}
-
-	/*
-	 * Validate netdev for ipv6-in-ipv4  Tunnel
-	 */
-	if (netdev->type != ARPHRD_TUNNEL6) {
-		return;
-	}
-
-	/*
-	 * TODO: Strick check required if its the same tunnel
-	 * registerd with us
-	 */
-
-	memset(&tnlmsg, 0, sizeof(struct nss_tunipip6_msg));
-	tnlcfg = &tnlmsg.msg.tunipip6_destroy;
-
-	nss_tunipip6_trace("Sending Tunnel ipip6 Down command %x \n",g_tunipip6.if_num);
-
-	/*
-	 * Send IPIP6 Tunnel DOWN command to NSS
-	 */
-	nss_tunipip6_msg_init(&tnlmsg, NSS_TUNIPIP6_INTERFACE, NSS_TUNIPIP6_TX_IF_DESTROY,
-			sizeof(struct nss_tunipip6_destroy_msg), NULL, NULL);
-
-	status = nss_tunipip6_tx(g_tunipip6.nss_ctx, &tnlmsg);
-	if (status != NSS_TX_SUCCESS) {
-		nss_tunipip6_error("Tunnel down command error %d \n", status);
-		return;
-	}
-
-	/*
-	 * Un-Register IPIP6 tunnel with NSS
-	 */
-	nss_unregister_tunipip6_if(g_tunipip6.if_num);
-	g_tunipip6.nss_ctx = NULL;
-	g_tunipip6.device_up = 0;
-}
-
-/*
- * nss_tun6rd_dev_event()
- *	Net device notifier for ipip6 module
- */
-static int nss_tunipip6_dev_event(struct notifier_block  *nb,
-		unsigned long event, void  *dev)
-{
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3,10,0))
-	struct net_device *netdev = (struct net_device *)dev;
-#else
-	struct net_device *netdev = netdev_notifier_info_to_dev(dev);
-#endif
-
-	nss_tunipip6_trace("%s\n",__FUNCTION__);
-	switch (event) {
-	case NETDEV_UP:
-		nss_tunipip6_trace(" NETDEV_UP :event %lu name %s \n",
-				event,netdev->name);
-		nss_tunipip6_dev_up(netdev);
-		break;
-
-	case NETDEV_DOWN:
-		nss_tunipip6_trace(" NETDEV_DOWN :event %lu name %s \n",
-				event,netdev->name);
-		nss_tunipip6_dev_down(netdev);
-		break;
-
-	default:
-		nss_tunipip6_trace("Unhandled notifier dev %s  event %x  \n",
-				netdev->name,(int)event);
-		break;
-	}
-
-	return NOTIFY_DONE;
-}
-
 /*
  * nss_tunipip6_exception()
  *	Exception handler registered to NSS driver
  */
-void nss_tunipip6_exception(struct net_device *dev, struct sk_buff *skb, __attribute__((unused)) struct napi_struct *napi)
+static void nss_tunipip6_exception(struct net_device *dev, struct sk_buff *skb, __attribute__((unused)) struct napi_struct *napi)
 {
 	const struct iphdr *iph;
 
 	skb->dev = dev;
-	nss_tunipip6_info("received - %d bytes name %s ver %x \n",
-			skb->len,dev->name,skb->data[0]);
+	nss_tunipip6_info("received - %d bytes name %s ver %x\n",
+			skb->len, dev->name, skb->data[0]);
 
 	iph = (const struct iphdr *)skb->data;
 
@@ -333,9 +126,7 @@ void nss_tunipip6_exception(struct net_device *dev, struct sk_buff *skb, __attri
 static void nss_tunipip6_update_dev_stats(struct net_device *dev,
 					struct nss_tunipip6_stats_sync_msg *sync_stats)
 {
-	void *ptr;
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0))
 	struct pcpu_sw_netstats stats;
 
 	u64_stats_init(&stats.syncp);
@@ -354,8 +145,7 @@ static void nss_tunipip6_update_dev_stats(struct net_device *dev,
 	stats.tx_bytes = sync_stats->node_stats.tx_bytes;
 #endif
 
-	ptr = (void *)&stats;
-	ip6_update_offload_stats(dev, ptr);
+	ip6_update_offload_stats(dev, (void *)&stats);
 
 }
 
@@ -374,15 +164,216 @@ void nss_tunipip6_event_receive(void *if_ctx, struct nss_tunipip6_msg *tnlmsg)
 
 	switch (tnlmsg->cm.type) {
 	case NSS_TUNIPIP6_RX_STATS_SYNC:
-		 nss_tunipip6_update_dev_stats(netdev, (struct nss_tunipip6_stats_sync_msg *)&tnlmsg->msg.stats_sync );
+		 nss_tunipip6_update_dev_stats(netdev, (struct nss_tunipip6_stats_sync_msg *)&tnlmsg->msg.stats_sync);
 		break;
 
 	default:
-		nss_tunipip6_info("%s: Unknown Event from NSS",
-			      __FUNCTION__);
+		nss_tunipip6_info("%s: Unknown Event from NSS", __func__);
 		break;
 	}
 }
+
+/*
+ * nss_tunipip6_dev_up()
+ *	IPIP6 Tunnel device i/f up handler
+ */
+int nss_tunipip6_dev_up(struct net_device *netdev)
+{
+	struct ip6_tnl *tunnel;
+	struct nss_tunipip6_msg tnlmsg;
+	struct nss_tunipip6_create_msg *tnlcfg;
+	struct flowi6 *fl6;
+	uint32_t fmr_number = 0;
+	int tnl_ifnum;
+	uint32_t features = 0;
+	nss_tx_status_t status;
+	struct nss_ctx_instance *nss_ctx;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+	struct __ip6_tnl_fmr *fmr;
+#endif
+
+	/*
+	 * Validate netdev for ipv6-in-ipv4  Tunnel
+	 */
+	if (netdev->type != ARPHRD_TUNNEL6 ) {
+		return NOTIFY_BAD;
+	}
+
+	tunnel = (struct ip6_tnl *)netdev_priv(netdev);
+
+	/*
+	 * Find he Tunnel device flow information
+	 */
+	fl6  = &tunnel->fl.u.ip6;
+
+	nss_tunipip6_trace("%p:Tunnel Param srcaddr %x:%x:%x:%x  daddr %x:%x:%x:%x\n", netdev,
+			fl6->saddr.s6_addr32[0], fl6->saddr.s6_addr32[1],
+			fl6->saddr.s6_addr32[2], fl6->saddr.s6_addr32[3],
+			fl6->daddr.s6_addr32[0], fl6->daddr.s6_addr32[1],
+			fl6->daddr.s6_addr32[2], fl6->daddr.s6_addr32[3] );
+	nss_tunipip6_trace("%p:Hop limit %d\n", netdev, tunnel->parms.hop_limit);
+	nss_tunipip6_trace("%p:Tunnel param flag %x  fl6.flowlabel %x\n", netdev,  tunnel->parms.flags, fl6->flowlabel);
+	tnl_ifnum = nss_dynamic_interface_alloc_node(NSS_DYNAMIC_INTERFACE_TYPE_TUNIPIP6);
+	if (tnl_ifnum < 0) {
+		nss_tunipip6_warning("%p:Request interface number failed\n", netdev);
+		return NOTIFY_BAD;
+	}
+
+	/*
+	 * Register ipip6 tunnel with NSS
+	 */
+	nss_ctx = nss_register_tunipip6_if(tnl_ifnum,
+					nss_tunipip6_exception,
+					nss_tunipip6_event_receive,
+					netdev,
+					features);
+	if (!nss_ctx) {
+		status = nss_dynamic_interface_dealloc_node(tnl_ifnum, NSS_DYNAMIC_INTERFACE_TYPE_TUNIPIP6);
+		nss_tunipip6_trace("%p:nss_register_tunipip6_if Failed\n", netdev);
+		return NOTIFY_BAD;
+	}
+
+	nss_tunipip6_trace("%p:nss_register_tunipip6_if Success\n", netdev);
+
+	/*
+	 * Prepare The Tunnel configuration parameter to send to nss
+	 */
+	memset(&tnlmsg, 0, sizeof(struct nss_tunipip6_msg));
+	tnlcfg = &tnlmsg.msg.tunipip6_create;
+
+	tnlcfg->saddr[0] = ntohl(fl6->saddr.s6_addr32[0]);
+	tnlcfg->saddr[1] = ntohl(fl6->saddr.s6_addr32[1]);
+	tnlcfg->saddr[2] = ntohl(fl6->saddr.s6_addr32[2]);
+	tnlcfg->saddr[3] = ntohl(fl6->saddr.s6_addr32[3]);
+	tnlcfg->daddr[0] = ntohl(fl6->daddr.s6_addr32[0]);
+	tnlcfg->daddr[1] = ntohl(fl6->daddr.s6_addr32[1]);
+	tnlcfg->daddr[2] = ntohl(fl6->daddr.s6_addr32[2]);
+	tnlcfg->daddr[3] = ntohl(fl6->daddr.s6_addr32[3]);
+	tnlcfg->hop_limit = tunnel->parms.hop_limit;
+	tnlcfg->flags = ntohl(tunnel->parms.flags);
+
+	/*
+	 * Flow Label In kernel is stored in big endian format.
+	 */
+	tnlcfg->flowlabel = fl6->flowlabel;
+
+	/*
+	 * Configure FMR table up to MAX_FMR_NUMBER, the rest will be forwarded to BR
+	 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+	for (fmr = tunnel->parms.fmrs; fmr && fmr_number < NSS_TUNIPIP6_MAX_FMR_NUMBER; fmr = fmr->next, fmr_number++) {
+		tnlcfg->fmr[fmr_number].ip6_prefix[0] = ntohl(fmr->ip6_prefix.s6_addr32[0]);
+		tnlcfg->fmr[fmr_number].ip6_prefix[1] = ntohl(fmr->ip6_prefix.s6_addr32[1]);
+		tnlcfg->fmr[fmr_number].ip6_prefix[2] = ntohl(fmr->ip6_prefix.s6_addr32[2]);
+		tnlcfg->fmr[fmr_number].ip6_prefix[3] = ntohl(fmr->ip6_prefix.s6_addr32[3]);
+		tnlcfg->fmr[fmr_number].ip4_prefix = ntohl(fmr->ip4_prefix.s_addr);
+		tnlcfg->fmr[fmr_number].ip6_prefix_len = fmr->ip6_prefix_len;
+		tnlcfg->fmr[fmr_number].ip4_prefix_len = fmr->ip4_prefix_len;
+		tnlcfg->fmr[fmr_number].ea_len = fmr->ea_len;
+		tnlcfg->fmr[fmr_number].offset = fmr->offset;
+	}
+#endif
+	tnlcfg->fmr_number = fmr_number;
+
+	nss_tunipip6_trace("%p:Tunnel Param srcaddr %x:%x:%x:%x  daddr %x:%x:%x:%x\n", netdev,
+			tnlcfg->saddr[0], tnlcfg->saddr[1],
+			tnlcfg->saddr[2], tnlcfg->saddr[3],
+			tnlcfg->daddr[0], tnlcfg->daddr[1],
+			tnlcfg->daddr[2], tnlcfg->daddr[3] );
+
+	/*
+	 * Send IPIP6 Tunnel UP command to NSS
+	 */
+	nss_tunipip6_msg_init(&tnlmsg, tnl_ifnum, NSS_TUNIPIP6_TX_IF_CREATE,
+			sizeof(struct nss_tunipip6_create_msg), NULL, NULL);
+
+	nss_tunipip6_trace("%p:Sending IPIP6 tunnel i/f up command to NSS %p\n", netdev, nss_ctx);
+	status = nss_tunipip6_tx(nss_ctx, &tnlmsg);
+	if (status != NSS_TX_SUCCESS) {
+		status = nss_dynamic_interface_dealloc_node(tnl_ifnum, NSS_DYNAMIC_INTERFACE_TYPE_TUNIPIP6);
+		nss_unregister_tunipip6_if(tnl_ifnum);
+		nss_tunipip6_warning("%p:Tunnel up command error %d\n", netdev, status);
+		return NOTIFY_BAD;
+	}
+
+	return NOTIFY_DONE;
+}
+
+/*
+ * nss_tunipip6_dev_down()
+ *	IPP6 Tunnel device i/f down handler
+ */
+int nss_tunipip6_dev_down(struct net_device *netdev)
+{
+	int tnl_ifnum;
+	nss_tx_status_t status;
+
+	/*
+	 * Validate netdev for ipv6-in-ipv4  Tunnel
+	 */
+	if (netdev->type != ARPHRD_TUNNEL6) {
+		return NOTIFY_BAD;
+	}
+
+	/*
+	 * Check if tunnel ipip6 is registered ?
+	 */
+	tnl_ifnum = nss_cmn_get_interface_number_by_dev(netdev);
+	if (tnl_ifnum < 0) {
+		nss_tunipip6_info("%p: Net device is not registered with nss\n", netdev);
+		return NOTIFY_BAD;
+	}
+
+	/*
+	 * Un-Register IPIP6 tunnel with NSS
+	 */
+	nss_unregister_tunipip6_if(tnl_ifnum);
+
+	status = nss_dynamic_interface_dealloc_node(tnl_ifnum, NSS_DYNAMIC_INTERFACE_TYPE_TUNIPIP6);
+	if (status != NSS_TX_SUCCESS) {
+		nss_tunipip6_warning("%p:Dealloc node failure\n", netdev);
+		return NOTIFY_BAD;
+	}
+
+	return NOTIFY_DONE;
+}
+
+/*
+ * nss_tunipip6_dev_event()
+ *	Net device notifier for ipip6 module
+ */
+static int nss_tunipip6_dev_event(struct notifier_block  *nb,
+		unsigned long event, void  *dev)
+{
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 10, 0))
+	struct net_device *netdev = (struct net_device *)dev;
+#else
+	struct net_device *netdev = netdev_notifier_info_to_dev(dev);
+#endif
+
+	switch (event) {
+	case NETDEV_UP:
+		nss_tunipip6_trace("%p:NETDEV_UP :event %lu name %s\n", netdev, event, netdev->name);
+		return nss_tunipip6_dev_up(netdev);
+
+	case NETDEV_DOWN:
+		nss_tunipip6_trace("%p:NETDEV_DOWN :event %lu name %s\n", netdev, event, netdev->name);
+		return nss_tunipip6_dev_down(netdev);
+
+	default:
+		nss_tunipip6_trace("%p:Unhandled notifier dev %s event %x\n", netdev, netdev->name, (int)event);
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+/*
+ * Linux Net device Notifier
+ */
+struct notifier_block nss_tunipip6_notifier = {
+	.notifier_call = nss_tunipip6_dev_event,
+};
 
 /*
  * nss_tunipip6_init_module()
@@ -402,13 +393,8 @@ int __init nss_tunipip6_init_module(void)
 			  NSS_CLIENT_BUILD_ID);
 
 	register_netdevice_notifier(&nss_tunipip6_notifier);
-	nss_tunipip6_trace("Netdev Notifier registerd \n");
+	nss_tunipip6_trace("Netdev Notifier registerd\n");
 
-	g_tunipip6.if_num = NSS_TUNIPIP6_INTERFACE;
-	g_tunipip6.netdev = NULL;
-	g_tunipip6.device_up = 0;
-	g_tunipip6.nss_ctx = NULL;
-	g_tunipip6.features = 0;
 
 	return 0;
 }
