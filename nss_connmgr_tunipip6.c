@@ -196,7 +196,7 @@ int nss_tunipip6_dev_up(struct net_device *netdev)
 	 * Validate netdev for ipv6-in-ipv4  Tunnel
 	 */
 	if (netdev->type != ARPHRD_TUNNEL6 ) {
-		return NOTIFY_BAD;
+		return NOTIFY_DONE;
 	}
 
 	tunnel = (struct ip6_tnl *)netdev_priv(netdev);
@@ -216,7 +216,7 @@ int nss_tunipip6_dev_up(struct net_device *netdev)
 	tnl_ifnum = nss_dynamic_interface_alloc_node(NSS_DYNAMIC_INTERFACE_TYPE_TUNIPIP6);
 	if (tnl_ifnum < 0) {
 		nss_tunipip6_warning("%p:Request interface number failed\n", netdev);
-		return NOTIFY_BAD;
+		return NOTIFY_DONE;
 	}
 
 	/*
@@ -230,7 +230,7 @@ int nss_tunipip6_dev_up(struct net_device *netdev)
 	if (!nss_ctx) {
 		status = nss_dynamic_interface_dealloc_node(tnl_ifnum, NSS_DYNAMIC_INTERFACE_TYPE_TUNIPIP6);
 		nss_tunipip6_trace("%p:nss_register_tunipip6_if Failed\n", netdev);
-		return NOTIFY_BAD;
+		return NOTIFY_DONE;
 	}
 
 	nss_tunipip6_trace("%p:nss_register_tunipip6_if Success\n", netdev);
@@ -293,7 +293,7 @@ int nss_tunipip6_dev_up(struct net_device *netdev)
 		status = nss_dynamic_interface_dealloc_node(tnl_ifnum, NSS_DYNAMIC_INTERFACE_TYPE_TUNIPIP6);
 		nss_unregister_tunipip6_if(tnl_ifnum);
 		nss_tunipip6_warning("%p:Tunnel up command error %d\n", netdev, status);
-		return NOTIFY_BAD;
+		return NOTIFY_DONE;
 	}
 
 	return NOTIFY_DONE;
@@ -312,7 +312,7 @@ int nss_tunipip6_dev_down(struct net_device *netdev)
 	 * Validate netdev for ipv6-in-ipv4  Tunnel
 	 */
 	if (netdev->type != ARPHRD_TUNNEL6) {
-		return NOTIFY_BAD;
+		return NOTIFY_DONE;
 	}
 
 	/*
@@ -321,7 +321,7 @@ int nss_tunipip6_dev_down(struct net_device *netdev)
 	tnl_ifnum = nss_cmn_get_interface_number_by_dev(netdev);
 	if (tnl_ifnum < 0) {
 		nss_tunipip6_info("%p: Net device is not registered with nss\n", netdev);
-		return NOTIFY_BAD;
+		return NOTIFY_DONE;
 	}
 
 	/*
@@ -332,7 +332,7 @@ int nss_tunipip6_dev_down(struct net_device *netdev)
 	status = nss_dynamic_interface_dealloc_node(tnl_ifnum, NSS_DYNAMIC_INTERFACE_TYPE_TUNIPIP6);
 	if (status != NSS_TX_SUCCESS) {
 		nss_tunipip6_warning("%p:Dealloc node failure\n", netdev);
-		return NOTIFY_BAD;
+		return NOTIFY_DONE;
 	}
 
 	return NOTIFY_DONE;
