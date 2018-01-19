@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -2188,6 +2188,87 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	return NSS_CAPWAPMGR_SUCCESS;
 }
 EXPORT_SYMBOL(nss_capwapmgr_tunnel_destroy);
+
+/*
+ * nss_capwapmgr_flow_rule_action()
+ */
+static inline nss_capwapmgr_status_t nss_capwapmgr_flow_rule_action(struct net_device *dev, uint8_t tunnel_id,
+						nss_capwap_msg_type_t cmd, uint16_t ip_version,
+						uint16_t protocol, uint32_t *src_ip, uint32_t *dst_ip,
+						uint16_t src_port, uint16_t dst_port, uint32_t flow_id)
+{
+	struct nss_capwapmgr_priv *priv;
+	struct nss_capwap_msg capwapmsg;
+	struct nss_capwap_flow_rule_msg *ncfrm;
+	struct nss_capwapmgr_tunnel *t;
+	nss_capwapmgr_status_t status;
+
+	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
+	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	dev_hold(dev);
+	priv = netdev_priv(dev);
+
+	memset(&capwapmsg, 0, sizeof(struct nss_capwap_msg));
+	nss_capwap_msg_init(&capwapmsg, t->if_num, cmd,
+		sizeof(struct nss_capwap_flow_rule_msg), nss_capwapmgr_msg_event_receive, dev);
+
+	/*
+	 * Set flow rule message
+	 */
+	if (cmd == NSS_CAPWAP_MSG_TYPE_FLOW_RULE_ADD) {
+		ncfrm = &capwapmsg.msg.flow_rule_add;
+	} else {
+		ncfrm = &capwapmsg.msg.flow_rule_del;
+	}
+	ncfrm->protocol = protocol;
+	ncfrm->src_port = src_port;
+	ncfrm->dst_port = dst_port;
+	ncfrm->ip_version = ip_version;
+	memcpy(ncfrm->src_ip, src_ip, sizeof(struct in6_addr));
+	memcpy(ncfrm->dst_ip, dst_ip, sizeof(struct in6_addr));
+	ncfrm->flow_id = flow_id;
+
+	/*
+	 * Send flow rule message to NSS core
+	 */
+	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%p: send flow rule message failed with error: %d\n", dev, status);
+	}
+
+	dev_put(dev);
+	return status;
+}
+
+/*
+ * nss_capwapmgr_add_flow_rule()
+ *	Send a capwap flow rule add message to NSS core.
+ */
+nss_capwapmgr_status_t nss_capwapmgr_add_flow_rule(struct net_device *dev, uint8_t tunnel_id, uint16_t ip_version,
+						uint16_t protocol, uint32_t *src_ip, uint32_t *dst_ip,
+						uint16_t src_port, uint16_t dst_port, uint32_t flow_id)
+{
+	return nss_capwapmgr_flow_rule_action(dev, tunnel_id, NSS_CAPWAP_MSG_TYPE_FLOW_RULE_ADD, ip_version,
+											protocol, src_ip, dst_ip, src_port, dst_port, flow_id);
+}
+EXPORT_SYMBOL(nss_capwapmgr_add_flow_rule);
+
+/*
+ * nss_capwapmgr_del_flow_rule()
+ *	Send a capwap flow rule del message to NSS core.
+ */
+nss_capwapmgr_status_t nss_capwapmgr_del_flow_rule(struct net_device *dev, uint8_t tunnel_id, uint16_t ip_version,
+						uint16_t protocol, uint32_t *src_ip, uint32_t *dst_ip,
+						uint16_t src_port, uint16_t dst_port)
+{
+	return nss_capwapmgr_flow_rule_action(dev, tunnel_id, NSS_CAPWAP_MSG_TYPE_FLOW_RULE_DEL, ip_version,
+											protocol, src_ip, dst_ip, src_port, dst_port, 0);
+}
+EXPORT_SYMBOL(nss_capwapmgr_del_flow_rule);
 
 /*
  * nss_capwapmgr_tunnel_stats()

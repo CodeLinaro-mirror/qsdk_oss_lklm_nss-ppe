@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -282,6 +282,43 @@ extern nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_tx_cipher_switch(struct n
  * @note CAPWAP tunnel must be disabled before destroy operation.
  */
 extern nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint8_t tunnel_id);
+
+/**
+ * @brief Send a flow rule add message to NSS
+ *
+ * @param netdevice
+ * @param tunnel_id
+ * @param ip_version
+ * @param protocol
+ * @param src_ip
+ * @param dst_ip
+ * @param src_port
+ * @param dst_port
+ * @param flow_id
+ *
+ * @return nss_capwapmgr_status_t
+ */
+extern nss_capwapmgr_status_t nss_capwapmgr_add_flow_rule(struct net_device *dev, uint8_t tunnel_id, uint16_t ip_version,
+						uint16_t protocol, uint32_t *src_ip, uint32_t *dst_ip,
+						uint16_t src_port, uint16_t dst_port, uint32_t flow_id);
+
+/**
+ * @brief Send a flow rule delete message to NSS
+ *
+ * @param netdevice
+ * @param tunnel_id
+ * @param ip_version
+ * @param protocol
+ * @param src_ip
+ * @param dst_ip
+ * @param src_port
+ * @param dst_port
+ *
+ * @return nss_capwapmgr_status_t
+ */
+extern nss_capwapmgr_status_t nss_capwapmgr_del_flow_rule(struct net_device *dev, uint8_t tunnel_id, uint16_t ip_version,
+						uint16_t protocol, uint32_t *src_ip, uint32_t *dst_ip,
+						uint16_t src_port, uint16_t dst_port);
 
 /**
  * @brief Destroy a netdevice

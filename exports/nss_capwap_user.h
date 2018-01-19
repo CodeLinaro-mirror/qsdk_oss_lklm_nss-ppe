@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -101,6 +101,7 @@ struct nss_capwap_metaheader {
 	uint16_t wireless_qos;	/**< 802.11e qos info */
 	uint16_t outer_sgt;	/**< Security Group Tag value in the TrustSec header */
 	uint16_t inner_sgt;	/**< Security Group Tag value in the TrustSec header */
+	uint32_t flow_id;	/**< Flow identification */
 	uint16_t vapid;		/**< VAP ID info */
 
 	uint16_t magic;		/**< Magic for verification purpose. Use only for debugging */

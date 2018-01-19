@@ -24,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/if_bonding.h>
 #if defined(NSS_LAG_PPE_SUPPORT)
+#include <nss_vlan_mgr.h>
 #include <fal/fal_trunk.h>
 #endif
 
@@ -253,6 +254,10 @@ static int nss_lag_update_slave(struct netdev_notifier_info *info)
 			return NOTIFY_BAD;
 		}
 
+#if defined(NSS_LAG_PPE_SUPPORT)
+		if (nss_vlan_mgr_add_bond_slave(bond_dev, slave_dev))
+			nss_lag_warn("%p: Adding vlan for %s dev failed\n", slave_dev, slave_dev->name);
+#endif
 		return NOTIFY_DONE;
 	}
 
@@ -285,6 +290,10 @@ static int nss_lag_update_slave(struct netdev_notifier_info *info)
 		return NOTIFY_BAD;
 	}
 
+#if defined(NSS_LAG_PPE_SUPPORT)
+	if (nss_vlan_mgr_delete_bond_slave(slave_dev))
+		nss_lag_warn("%p: Delete vlan for %s dev failed\n", slave_dev, slave_dev->name);
+#endif
 	return NOTIFY_DONE;
 }
 
