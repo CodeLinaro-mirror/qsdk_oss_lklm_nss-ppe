@@ -1,6 +1,6 @@
-# Makefile for the ipsecmgr client
+# Makefile for the ipsecmgr v1.0 client
 
-ccflags-y := -I$(obj) -I$(obj)/..
+ccflags-y := -I$(obj) -I$(obj)/../..
 ccflags-y += -DNSS_CLIENT_BUILD_ID="$(BUILD_ID)"
 ccflags-y += -Werror
 ifeq ($(SoC), fsm9010)
@@ -13,9 +13,5 @@ qca-nss-ipsecmgr-objs += nss_ipsecmgr_flow.o
 qca-nss-ipsecmgr-objs += nss_ipsecmgr_sa.o
 qca-nss-ipsecmgr-objs += nss_ipsecmgr_subnet.o
 ccflags-y += -DNSS_IPSECMGR_DEBUG_LEVEL=3
-
-ifeq (ipq807x, $(findstring ipq807x, $(SoC)))
-ccflags-y += -DNSS_IPSECMGR_IPQ807X_SUPPORT
-endif
 
 obj ?= .

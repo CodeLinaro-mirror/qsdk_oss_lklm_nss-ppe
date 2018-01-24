@@ -41,4 +41,34 @@ int nss_vlan_mgr_join_bridge(struct net_device *dev, uint32_t bridge_vsi);
  */
 int nss_vlan_mgr_leave_bridge(struct net_device *dev, uint32_t bridge_vsi);
 
+#ifdef NSS_VLAN_MGR_PPE_SUPPORT
+/*
+ * nss_vlan_mgr_add_bond_slave()
+ *	update ingress and egress vlan translation rule to use bond slave
+ *
+ * @param bond_dev[IN] bond device
+ * @param slave_dev[IN] slave device
+ * @return 0 for success, -1 for failure
+ */
+int nss_vlan_mgr_add_bond_slave(struct net_device *bond_dev,
+				struct net_device *slave_dev);
+
+/*
+ * nss_vlan_mgr_delete_bond_slave()
+ *	update ingress and egress vlan translation rule to use bond slave
+ *
+ * @param slave_dev[IN] slave device
+ * @return 0 for success, -1 for failure
+ */
+int nss_vlan_mgr_delete_bond_slave(struct net_device *slave_dev);
+#endif
+
+/*
+ * nss_vlan_mgr_get_real_dev()
+ *	get real_dev for the vlan
+ *
+ * @param vlan_dev[IN] device
+ * @return real_dev
+ */
+struct net_device *nss_vlan_mgr_get_real_dev(struct net_device *dev);
 #endif /* _NSS_VLAN_MGR_H_ */

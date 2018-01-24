@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014, 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2016-2018 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -185,9 +185,10 @@ static int nss_tun6rd_dev_up(struct net_device *netdev)
 	struct ip_tunnel *tunnel;
 	struct ip_tunnel_6rd_parm *ip6rd;
 	const struct iphdr  *tiph;
-	struct nss_tun6rd_msg tun6rdmsg;
-	struct nss_tun6rd_attach_tunnel_msg *tun6rdcfg;
-	uint32_t if_number;
+	struct nss_tun6rd_msg msg_tunnel;
+	struct nss_tun6rd_attach_tunnel_msg *cfg_tunnel;
+	int32_t outer_if;
+	int32_t inner_if;
 	nss_tx_status_t status;
 	struct nss_ctx_instance *nss_ctx;
 	uint32_t features = 0; /* features denote the skb types supported by this interface */
@@ -214,12 +215,13 @@ static int nss_tun6rd_dev_up(struct net_device *netdev)
 			|| (ip6rd->prefixlen
 				+ (32 - ip6rd->relay_prefixlen) > 64)) {
 
-		nss_tun6rd_warning("Invalid 6rd argument prefix len %d relayprefix len %d \n",
-				ip6rd->prefixlen,ip6rd->relay_prefixlen);
-		return NOTIFY_BAD;
+		nss_tun6rd_warning("%p: Invalid 6rd argument prefix len %d relayprefix len %d\n",
+				netdev, ip6rd->prefixlen, ip6rd->relay_prefixlen);
+		return NOTIFY_DONE;
 	}
 
-	nss_tun6rd_info("Valid 6rd Tunnel Prefix %x %x %x %x\n Prefix len %d relay_prefix %d relay_prefixlen %d \n",
+	nss_tun6rd_info("%p: Valid 6rd Tunnel Prefix %x %x %x %x\n Prefix len %d relay_prefix %d relay_prefixlen %d\n",
+			netdev,
 			ip6rd->prefix.s6_addr32[0],ip6rd->prefix.s6_addr32[1],
 			ip6rd->prefix.s6_addr32[2],ip6rd->prefix.s6_addr32[3],
 			ip6rd->prefixlen, ip6rd->relay_prefix,
@@ -229,92 +231,129 @@ static int nss_tun6rd_dev_up(struct net_device *netdev)
 	 * Find the Tunnel device IP header info
 	 */
 	tiph = &tunnel->parms.iph ;
-	nss_tun6rd_trace("Tunnel Param srcaddr %x daddr %x ttl %d tos %x\n",
-			tiph->saddr, tiph->daddr,tiph->ttl,tiph->tos);
+	nss_tun6rd_trace("%p: Tunnel Param srcaddr %x daddr %x ttl %d tos %x\n",
+			netdev, tiph->saddr, tiph->daddr, tiph->ttl, tiph->tos);
 
 	if (tiph->saddr == 0) {
-		nss_tun6rd_warning("Tunnel src address not configured %x\n",
-				tiph->saddr);
-		return NOTIFY_BAD;
+		nss_tun6rd_warning("%p: Tunnel src address not configured %x\n",
+				netdev, tiph->saddr);
+		return NOTIFY_DONE;
 	}
 
-	if_number = nss_dynamic_interface_alloc_node(NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD);
-	if (-1 == if_number) {
-		nss_tun6rd_warning("Request interface number failed\n");
-		return NOTIFY_BAD;
+	outer_if = nss_dynamic_interface_alloc_node(NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_OUTER);
+	if (-1 == outer_if) {
+		nss_tun6rd_warning("%p: Request outer interface number failed\n", netdev);
+		goto outer_fail;
 	}
 
-	if (!nss_is_dynamic_interface(if_number)) {
-		nss_tun6rd_warning("Invalid NSS dynamic I/F "
-				   "number %d \n", if_number);
+	if (!nss_is_dynamic_interface(outer_if)) {
+		nss_tun6rd_warning("%p: Invalid NSS dynamic I/F number %d\n", netdev, outer_if);
+		goto outer_fail;
+	}
 
-		return NOTIFY_BAD;
+	inner_if = nss_dynamic_interface_alloc_node(NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_INNER);
+	if (-1 == inner_if) {
+		nss_tun6rd_warning("%p: Request inner interface number failed\n", netdev);
+		goto inner_fail;
+	}
+
+	if (!nss_is_dynamic_interface(inner_if)) {
+		nss_tun6rd_warning("%p: Invalid NSS dynamic I/F number %d\n", netdev, inner_if);
+		goto inner_fail;
 	}
 
 	/*
-	 * Register 6rd tunnel with NSS
+	 * Register 6rd tunnel's inner interface with NSS
 	 */
-	nss_ctx = nss_register_tun6rd_if(if_number,
+	nss_ctx = nss_register_tun6rd_if(inner_if,
+				NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_INNER,
 				nss_tun6rd_exception,
 				nss_tun6rd_event_receive,
 				netdev,
 				features);
 	if (!nss_ctx) {
-		status = nss_dynamic_interface_dealloc_node(if_number, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD);
-		if (status != NSS_TX_SUCCESS) {
-			nss_tun6rd_warning("Unable to dealloc the node[%d] in the NSS fw!\n", if_number);
-		}
-		nss_tun6rd_trace("nss_register_tun6rd_if failed \n");
-		return NOTIFY_BAD;
+		nss_tun6rd_trace("%p: nss_register_tun6rd_if failed for inner interface\n", netdev);
+		goto register_inner_if_fail;
+	}
+
+	/*
+	 * Register 6rd tunnel's outer interface with NSS
+	 */
+	nss_ctx = nss_register_tun6rd_if(outer_if,
+				NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_OUTER,
+				nss_tun6rd_exception,
+				nss_tun6rd_event_receive,
+				netdev,
+				features);
+	if (!nss_ctx) {
+		nss_tun6rd_trace("%p: nss_register_tun6rd_if failed for outer interface\n", netdev);
+		goto register_outer_if_fail;
 	}
 
 	/*
 	 * Prepare The Tunnel configuration parameter to send to nss
 	 */
-	memset(&tun6rdmsg, 0, sizeof(struct nss_tun6rd_msg));
-	tun6rdcfg = &tun6rdmsg.msg.tunnel;
-	tun6rdcfg->prefixlen = ip6rd->prefixlen;
-	tun6rdcfg->relay_prefix = ip6rd->relay_prefix;
-	tun6rdcfg->relay_prefixlen = ip6rd->relay_prefixlen;
-	tun6rdcfg->saddr = ntohl(tiph->saddr);
-	tun6rdcfg->daddr = ntohl(tiph->daddr);
-	tun6rdcfg->prefix[0] = ntohl(ip6rd->prefix.s6_addr32[0]);
-	tun6rdcfg->prefix[1] = ntohl(ip6rd->prefix.s6_addr32[1]);
-	tun6rdcfg->prefix[2] = ntohl(ip6rd->prefix.s6_addr32[2]);
-	tun6rdcfg->prefix[3] = ntohl(ip6rd->prefix.s6_addr32[3]);
-	tun6rdcfg->ttl = tiph->ttl;
-	tun6rdcfg->tos = tiph->tos;
+	memset(&msg_tunnel, 0, sizeof(struct nss_tun6rd_msg));
+	cfg_tunnel = &msg_tunnel.msg.tunnel;
+	cfg_tunnel->prefixlen = ip6rd->prefixlen;
+	cfg_tunnel->relay_prefix = ip6rd->relay_prefix;
+	cfg_tunnel->relay_prefixlen = ip6rd->relay_prefixlen;
+	cfg_tunnel->saddr = ntohl(tiph->saddr);
+	cfg_tunnel->daddr = ntohl(tiph->daddr);
+	cfg_tunnel->prefix[0] = ntohl(ip6rd->prefix.s6_addr32[0]);
+	cfg_tunnel->prefix[1] = ntohl(ip6rd->prefix.s6_addr32[1]);
+	cfg_tunnel->prefix[2] = ntohl(ip6rd->prefix.s6_addr32[2]);
+	cfg_tunnel->prefix[3] = ntohl(ip6rd->prefix.s6_addr32[3]);
+	cfg_tunnel->ttl = tiph->ttl;
+	cfg_tunnel->tos = tiph->tos;
+	cfg_tunnel->sibling_if_num = outer_if;
 
-	nss_tun6rd_trace(" 6rd Tunnel info\n");
-	nss_tun6rd_trace(" saddr %x daddr %d ttl %x  tos %x\n",
-			tiph->saddr, tiph->daddr, tiph->ttl, tiph->tos);
-	nss_tun6rd_trace(" Prefix %x:%x:%x:%x  Prefix len %d\n",
+	nss_tun6rd_trace("%p: 6rd Tunnel info\n", netdev);
+	nss_tun6rd_trace("%p: saddr %x daddr %d ttl %x  tos %x\n",
+			netdev, tiph->saddr, tiph->daddr, tiph->ttl, tiph->tos);
+	nss_tun6rd_trace("%p: Prefix %x:%x:%x:%x  Prefix len %d\n", netdev,
 			ip6rd->prefix.s6_addr32[0], ip6rd->prefix.s6_addr32[1],
 			ip6rd->prefix.s6_addr32[2], ip6rd->prefix.s6_addr32[3],
 			ip6rd->prefixlen);
-	nss_tun6rd_trace("Relay Prefix %x Len %d\n",
+	nss_tun6rd_trace("%p: Relay Prefix %x Len %d\n", netdev,
 			ip6rd->relay_prefix, ip6rd->relay_prefixlen);
 
-	nss_tun6rd_trace("Sending 6rd tunnel i/f up command to NSS %x\n",
-			(int)nss_ctx);
+	nss_tun6rd_trace("%p: Sending 6rd tunnel i/f up command to NSS %x\n",
+			netdev, (int)nss_ctx);
 
 	/*
 	 * Send 6rd Tunnel UP command to NSS
 	 */
-	nss_tun6rd_msg_init(&tun6rdmsg, if_number, NSS_TUN6RD_ATTACH_PNODE,
+	nss_tun6rd_msg_init(&msg_tunnel, inner_if, NSS_TUN6RD_ATTACH_PNODE,
 			sizeof(struct nss_tun6rd_attach_tunnel_msg), NULL, NULL);
 
-	status = nss_tun6rd_tx(nss_ctx, &tun6rdmsg);
+	status = nss_tun6rd_tx(nss_ctx, &msg_tunnel);
 	if (status != NSS_TX_SUCCESS) {
-		nss_unregister_tun6rd_if(if_number);
-		status = nss_dynamic_interface_dealloc_node(if_number, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD);
-		if (status != NSS_TX_SUCCESS) {
-			nss_tun6rd_warning("Unable to dealloc the node[%d] in the NSS fw!\n", if_number);
-		}
-		nss_tun6rd_warning("Tunnel up command error %d\n", status);
-		return NOTIFY_BAD;
+		nss_tun6rd_warning("%p: Tunnel up command error %d\n", netdev, status);
+		goto tunnel_up_fail;
 	}
 
+	return NOTIFY_OK;
+
+tunnel_up_fail:
+	nss_unregister_tun6rd_if(outer_if);
+
+register_outer_if_fail:
+	nss_unregister_tun6rd_if(inner_if);
+
+register_inner_if_fail:
+	status = nss_dynamic_interface_dealloc_node(inner_if, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_INNER);
+	if (status != NSS_TX_SUCCESS) {
+		nss_tun6rd_warning("%p: Unable to dealloc the node[%d] in the NSS fw!\n", netdev, inner_if);
+	}
+
+inner_fail:
+	status = nss_dynamic_interface_dealloc_node(outer_if, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_OUTER);
+	if (status != NSS_TX_SUCCESS) {
+		nss_tun6rd_warning("%p: Unable to dealloc the node[%d] in the NSS fw!\n", netdev, outer_if);
+	}
+
+outer_fail:
 	return NOTIFY_DONE;
 }
 
@@ -326,7 +365,8 @@ static int nss_tun6rd_dev_down(struct net_device *netdev)
 {
 	struct ip_tunnel *tunnel;
 	struct ip_tunnel_6rd_parm *ip6rd;
-	int32_t if_number;
+	int32_t outer_if;
+	int32_t inner_if;
 	nss_tx_status_t status;
 
 	/*
@@ -335,16 +375,6 @@ static int nss_tun6rd_dev_down(struct net_device *netdev)
 	if (netdev->type != ARPHRD_SIT) {
 		return NOTIFY_DONE;
 	}
-
-	/*
-	 * Check if tunnel 6rd is registered ?
-	 */
-	if_number = nss_cmn_get_interface_number_by_dev(netdev);
-	if (if_number < 0) {
-		nss_tun6rd_warning("Net device:%p is not registered \n",netdev);
-		return NOTIFY_BAD;
-	}
-
 
 	tunnel = (struct ip_tunnel *)netdev_priv(netdev);
 	ip6rd =  &tunnel->ip6rd;
@@ -357,24 +387,51 @@ static int nss_tun6rd_dev_down(struct net_device *netdev)
 			|| (ip6rd->prefixlen
 				+ (32 - ip6rd->relay_prefixlen) > 64)) {
 
-		nss_tun6rd_warning("Invalid 6rd argument prefix len %d relayprefix len %d \n",
-				ip6rd->prefixlen,ip6rd->relay_prefixlen);
-		return NOTIFY_BAD;
+		nss_tun6rd_warning("%p: Invalid 6rd argument prefix len %d relayprefix len %d\n",
+				netdev, ip6rd->prefixlen, ip6rd->relay_prefixlen);
+		return NOTIFY_DONE;
 	}
 
 	/*
-	 * Un-Register 6rd tunnel with NSS
+	 * Check if tunnel 6rd outer is registered ?
 	 */
-	nss_unregister_tun6rd_if(if_number);
-	status = nss_dynamic_interface_dealloc_node(if_number, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD);
-	if (status != NSS_TX_SUCCESS) {
-		nss_tun6rd_warning("Dealloc node failure\n");
-		return NOTIFY_BAD;
+	outer_if = nss_cmn_get_interface_number_by_dev_and_type(netdev, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_OUTER);
+	if (outer_if < 0) {
+		nss_tun6rd_warning("%p: Net device is not registered\n", netdev);
+		return NOTIFY_DONE;
 	}
 
-	return NOTIFY_DONE;
-}
+	/*
+	 * Un-Register 6rd tunnel's outer interface with NSS
+	 */
+	nss_unregister_tun6rd_if(outer_if);
+	status = nss_dynamic_interface_dealloc_node(outer_if, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_OUTER);
+	if (status != NSS_TX_SUCCESS) {
+		nss_tun6rd_warning("%p: Dealloc outer interface failed\n", netdev);
+		return NOTIFY_DONE;
+	}
 
+	/*
+	 * Check if tunnel 6rd inner is registered ?
+	 */
+	inner_if = nss_cmn_get_interface_number_by_dev_and_type(netdev, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_INNER);
+	if (inner_if < 0) {
+		nss_tun6rd_warning("%p: Net device is not registered\n", netdev);
+		return NOTIFY_DONE;
+	}
+
+	/*
+	 * Un-Register 6rd tunnel's inner interface with NSS
+	 */
+	nss_unregister_tun6rd_if(inner_if);
+	status = nss_dynamic_interface_dealloc_node(inner_if, NSS_DYNAMIC_INTERFACE_TYPE_TUN6RD_INNER);
+	if (status != NSS_TX_SUCCESS) {
+		nss_tun6rd_warning("%p: Dealloc inner interface failed\n", netdev);
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
 
 /*
  * nss_tun6rd_dev_event()
@@ -413,7 +470,6 @@ struct notifier_block nss_tun6rd_notifier = {
 	.notifier_call = nss_tun6rd_dev_event,
 };
 
-
 /*
  * nss_tun6rd_init_module()
  *	Tunnel 6rd module init function
@@ -432,7 +488,7 @@ int __init nss_tun6rd_init_module(void)
 			NSS_CLIENT_BUILD_ID);
 
 	register_netdevice_notifier(&nss_tun6rd_notifier);
-	nss_tun6rd_trace("Netdev Notifier registerd \n");
+	nss_tun6rd_trace("Netdev Notifier registered\n");
 
 	return 0;
 }
