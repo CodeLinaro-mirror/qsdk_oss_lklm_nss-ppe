@@ -21,6 +21,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/of.h>
+#include <linux/if_bridge.h>
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
 #include <ref/ref_vsi.h>
 #include <nss_vlan_mgr.h>
@@ -447,10 +448,16 @@ static int nss_bridge_mgr_del_bond_slave(struct net_device *bond_master,
 				b_pvt, port_id);
 		return -1;
 	}
+
 	spin_lock(&br_mgr_ctx.lock);
 	b_pvt->lag_ports[port_id] = 0;
 	spin_unlock(&br_mgr_ctx.lock);
 
+	/*
+	 * Set STP state to forwarding after bond physical port leaves bridge
+	 */
+	fal_stp_port_state_set(NSS_BRIDGE_MGR_SWITCH_ID, NSS_BRIDGE_MGR_SPANNING_TREE_ID,
+					port_id, FAL_STP_FORWARDING);
 	return 0;
 }
 
@@ -1071,10 +1078,124 @@ static int nss_bridge_mgr_netdevice_event(struct notifier_block *unused,
 	return NOTIFY_DONE;
 }
 
-
 static struct notifier_block nss_bridge_mgr_netdevice_nb __read_mostly = {
 	.notifier_call = nss_bridge_mgr_netdevice_event,
 };
+
+#if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
+/*
+ * nss_bridge_mgr_is_physical_dev()
+ *	Check if the device is on physical device.
+ */
+static bool nss_bridge_mgr_is_physical_dev(struct net_device *dev)
+{
+	struct net_device *root_dev = dev;
+	uint32_t ifnum;
+
+	if (!dev)
+		return false;
+
+	/*
+	 * Check if it is VLAN first because VLAN can be over bond interface.
+	 * However, the bond over VLAN is not supported in our driver.
+	 */
+	if (is_vlan_dev(dev)) {
+		root_dev = nss_vlan_mgr_get_real_dev(dev);
+		if (!root_dev)
+			goto error;
+
+		if (is_vlan_dev(root_dev))
+			root_dev = nss_vlan_mgr_get_real_dev(root_dev);
+
+		if (!root_dev)
+			goto error;
+	}
+
+	/*
+	 * Don't consider bond interface because FDB learning is disabled.
+	 */
+	if (netif_is_bond_master(root_dev))
+		return false;
+
+	ifnum = nss_cmn_get_interface_number_by_dev(root_dev);
+	if (!NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(ifnum)) {
+		nss_bridge_mgr_warn("%p: interface %s is not physical interface\n",
+				root_dev, root_dev->name);
+		return false;
+	}
+
+	return true;
+
+error:
+	nss_bridge_mgr_warn("%p: cannot find the real device for VLAN %s\n", dev, dev->name);
+	return false;
+}
+
+/*
+ * nss_bridge_mgr_fdb_update_callback()
+ *	Get invoked when there is a FDB update.
+ */
+static int nss_bridge_mgr_fdb_update_callback(struct notifier_block *notifier,
+					      unsigned long val, void *ctx)
+{
+	struct br_fdb_event *event = (struct br_fdb_event *)ctx;
+	struct nss_bridge_pvt *b_pvt = NULL;
+	struct net_device *br_dev = NULL;
+	fal_fdb_entry_t entry;
+
+	if (!event->br)
+		return NOTIFY_DONE;
+
+	br_dev = br_fdb_bridge_dev_get_and_hold(event->br);
+	if (!br_dev) {
+		nss_bridge_mgr_warn("%p: bridge device not found\n", event->br);
+		return NOTIFY_DONE;
+	}
+
+	nss_bridge_mgr_trace("%p: MAC: %pM, original source: %s, new source: %s, bridge: %s\n",
+			event, event->addr, event->orig_dev->name, event->dev->name, br_dev->name);
+
+	/*
+	 * When a MAC address move from a physical interface to a non-physical
+	 * interface, the FDB entry in the PPE needs to be flushed.
+	 */
+	if (!nss_bridge_mgr_is_physical_dev(event->orig_dev)) {
+		nss_bridge_mgr_trace("%p: original source is not a physical interface\n", event->orig_dev);
+		dev_put(br_dev);
+		return NOTIFY_DONE;
+	}
+
+	if (nss_bridge_mgr_is_physical_dev(event->dev)) {
+		nss_bridge_mgr_trace("%p: new source is not a non-physical interface\n", event->dev);
+		dev_put(br_dev);
+		return NOTIFY_DONE;
+	}
+
+	b_pvt = nss_bridge_mgr_find_instance(br_dev);
+	dev_put(br_dev);
+	if (!b_pvt) {
+		nss_bridge_mgr_warn("%p: bridge instance not found\n", event->br);
+		return NOTIFY_DONE;
+	}
+
+	memset(&entry, 0, sizeof(entry));
+	memcpy(&entry.addr, event->addr, ETH_ALEN);
+	entry.fid = b_pvt->vsi;
+	if (SW_OK != fal_fdb_entry_del_bymac(NSS_BRIDGE_MGR_SWITCH_ID, &entry)) {
+		nss_bridge_mgr_warn("%p: FDB entry delete failed with MAC %pM and fid %d\n",
+				    b_pvt, entry.addr, entry.fid);
+		return NOTIFY_DONE;
+	}
+	return NOTIFY_OK;
+}
+
+/*
+ * Notifier block for FDB update
+ */
+static struct notifier_block nss_bridge_mgr_fdb_update_notifier = {
+	.notifier_call = nss_bridge_mgr_fdb_update_callback,
+};
+#endif
 
 /*
  * nss_bridge_mgr_init_module()
@@ -1092,7 +1213,9 @@ int __init nss_bridge_mgr_init_module(void)
 	spin_lock_init(&br_mgr_ctx.lock);
 	register_netdevice_notifier(&nss_bridge_mgr_netdevice_nb);
 	nss_bridge_mgr_info("Module (Build %s) loaded\n", NSS_CLIENT_BUILD_ID);
-
+#if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
+	br_fdb_update_register_notify(&nss_bridge_mgr_fdb_update_notifier);
+#endif
 	return 0;
 }
 
@@ -1104,6 +1227,9 @@ void __exit nss_bridge_mgr_exit_module(void)
 {
 	unregister_netdevice_notifier(&nss_bridge_mgr_netdevice_nb);
 	nss_bridge_mgr_info("Module unloaded\n");
+#if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
+	br_fdb_update_unregister_notify(&nss_bridge_mgr_fdb_update_notifier);
+#endif
 }
 
 module_init(nss_bridge_mgr_init_module);

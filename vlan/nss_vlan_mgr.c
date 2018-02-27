@@ -27,6 +27,7 @@
 #ifdef NSS_VLAN_MGR_PPE_SUPPORT
 #include <ref/ref_vsi.h>
 #include <fal/fal_portvlan.h>
+#include <fal/fal_stp.h>
 #endif
 
 #if (NSS_VLAN_MGR_DEBUG_LEVEL < 1)
@@ -79,10 +80,8 @@
 #define NSS_VLAN_TPID_SHIFT 16
 #define NSS_VLAN_PORT_ROLE_CHANGED 1
 
-/*
- * Switch id corresponds to dev id to SSDK
- */
 #define NSS_VLAN_MGR_SWITCH_ID 0
+#define NSS_VLAN_MGR_STP_ID 0
 
 typedef enum {
 	NSS_VLAN_MGR_REGISTER = 0,
@@ -1169,8 +1168,16 @@ static int nss_vlan_mgr_over_bond_leave_bridge(struct net_device *real_dev, stru
 		}
 	}
 	rcu_read_unlock();
-
 	v->bridge_vsi = 0;
+	for_each_netdev_in_bond_rcu(real_dev, slave) {
+		port = nss_cmn_get_interface_number_by_dev(slave);
+
+		/*
+		 * Set port STP state to forwarding after bond interfaces leave bridge
+		 */
+		fal_stp_port_state_set(NSS_VLAN_MGR_SWITCH_ID, NSS_VLAN_MGR_STP_ID,
+						v->port[port - 1], FAL_STP_FORWARDING);
+	}
 	nss_vlan_mgr_instance_deref(v);
 	return 0;
 }
@@ -1306,6 +1313,12 @@ int nss_vlan_mgr_leave_bridge(struct net_device *dev, uint32_t bridge_vsi)
 		return -1;
 	}
 	v->bridge_vsi = 0;
+
+	/*
+	 * Set port STP state to forwarding after vlan interface leaves bridge
+	 */
+	fal_stp_port_state_set(NSS_VLAN_MGR_SWITCH_ID, NSS_VLAN_MGR_STP_ID,
+					v->port[0], FAL_STP_FORWARDING);
 #endif
 	nss_vlan_mgr_instance_deref(v);
 	return 0;
