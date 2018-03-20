@@ -206,10 +206,10 @@ static int nss_bridge_mgr_enable_fdb_learning(struct nss_bridge_pvt *br)
 	}
 
 	/*
-	 * Disable L2 exceptions in PPE.
+	 * Send a notification to NSS for FDB learning enable.
 	 */
-	if (nss_ppe_tx_l2_exception_msg(NSS_PPE_INTERFACE, NSS_BRIDGE_MGR_DISABLE_PPE_EXCEPTION) != NSS_TX_SUCCESS) {
-		nss_bridge_mgr_warn("%p: Failed to disable L2 exceptions in PPE\n", br);
+	if (nss_bridge_tx_set_fdb_learn_msg(br->ifnum, NSS_BRIDGE_FDB_LEARN_ENABLE) != NSS_TX_SUCCESS) {
+		nss_bridge_mgr_warn("%p: Tx message failed for FDB learning status\n", br);
 		goto disable_fdb_learning;
 	}
 
@@ -271,11 +271,10 @@ static int nss_bridge_mgr_disable_fdb_learning(struct nss_bridge_pvt *br)
 	}
 
 	/*
-	 * Enable L2 exceptions in PPE
-	 * to keep linux conntrack up to date
+	 * Send a notification to NSS for FDB learning disable.
 	 */
-	if (nss_ppe_tx_l2_exception_msg(NSS_PPE_INTERFACE, NSS_BRIDGE_MGR_ENABLE_PPE_EXCEPTION) != NSS_TX_SUCCESS) {
-		nss_bridge_mgr_warn("%p: Failed to enable L2 exceptions in PPE\n", br);
+	if (nss_bridge_tx_set_fdb_learn_msg(br->ifnum, NSS_BRIDGE_FDB_LEARN_DISABLE) != NSS_TX_SUCCESS) {
+		nss_bridge_mgr_warn("%p: Tx message failed for FDB learning status\n", br);
 		goto enable_fdb_learning;
 	}
 
