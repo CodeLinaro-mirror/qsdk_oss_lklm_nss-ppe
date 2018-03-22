@@ -223,6 +223,61 @@ static void nss_ipsecmgr_ref_no_free(struct nss_ipsecmgr_ref *ref)
 }
 
 /*
+ * nss_ipsecmgr_dev_rx_route_v4()
+ *	NSS IPsec manager device send IPv4 packet for routing
+ */
+static void nss_ipsecmgr_dev_rx_route_v4(struct sk_buff *skb)
+{
+	struct iphdr *iph = ip_hdr(skb);
+	struct rtable *rt;
+
+	rt = ip_route_output(&init_net, iph->daddr, iph->saddr, 0, 0);
+	if (unlikely(IS_ERR(rt))) {
+		nss_ipsecmgr_warn("%pK: No route, drop packet.\n", skb);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+
+	/*
+	 * Sets the 'dst' entry for SKB and sends the packet out directly to the physical
+	 * device associated with the IPsec tunnel interface.
+	 */
+	skb_dst_set(skb, &rt->dst);
+	skb->ip_summed = CHECKSUM_COMPLETE;
+	ip_local_out(&init_net, NULL, skb);
+}
+
+/*
+ * nss_ipsecmgr_dev_rx_route_v6()
+ *	NSS IPsec manager device send IPv6 packet for routing
+ */
+static void nss_ipsecmgr_dev_rx_route_v6(struct sk_buff *skb)
+{
+	struct ipv6hdr *ip6h = ipv6_hdr(skb);
+	struct dst_entry *dst;
+	struct flowi6 fl6;
+
+	memset(&fl6, 0, sizeof(fl6));
+	memcpy(&fl6.daddr, &ip6h->daddr, sizeof(fl6.daddr));
+	memcpy(&fl6.saddr, &ip6h->saddr, sizeof(fl6.saddr));
+
+	dst = ip6_route_output(&init_net, NULL, &fl6);
+	if (unlikely(IS_ERR(dst))) {
+		nss_ipsecmgr_warn("%pK: No route, drop packet.\n", skb);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+
+	/*
+	 * Sets the 'dst' entry for SKB and sends the packet out directly to the physical
+	 * device associated with the IPsec tunnel interface.
+	 */
+	skb_dst_set(skb, dst);
+	skb->ip_summed = CHECKSUM_COMPLETE;
+	ip6_local_out(&init_net, NULL, skb);
+}
+
+/*
  * nss_ipsecmgr_ref_init()
  *	initiaize the reference object
  */
@@ -488,6 +543,7 @@ void nss_ipsecmgr_dev_rx_outer(struct net_device *dev, struct sk_buff *skb, stru
 	struct nss_ipsecmgr_flow_outer outer = {0};
 	struct nss_ipsecmgr_sa_entry *sa_entry;
 	struct nss_ipsec_tuple tuple = {0};
+	void (*rx_route)(struct sk_buff *) = NULL;
 
 	skb_reset_mac_header(skb);
 	skb_reset_network_header(skb);
@@ -504,6 +560,7 @@ void nss_ipsecmgr_dev_rx_outer(struct net_device *dev, struct sk_buff *skb, stru
 		outer.src_ip[0] = ntohl(iph->saddr);
 		outer.dest_ip[0] = ntohl(iph->daddr);
 		outer.ip_version = IPVERSION;
+		rx_route = nss_ipsecmgr_dev_rx_route_v4;
 
 		/*
 		 * Process only ESP or UDP/NAT-T packets
@@ -524,6 +581,7 @@ void nss_ipsecmgr_dev_rx_outer(struct net_device *dev, struct sk_buff *skb, stru
 	case 6:	{
 		struct ipv6hdr *ip6h = ipv6_hdr(skb);
 		skb->protocol = ETH_P_IPV6;
+		rx_route = nss_ipsecmgr_dev_rx_route_v6;
 
 		if (ip6h->nexthdr == IPPROTO_ESP) {
 			nss_ipsecmgr_ntoh_v6addr(outer.src_ip, ip6h->saddr.s6_addr32);
@@ -558,16 +616,17 @@ void nss_ipsecmgr_dev_rx_outer(struct net_device *dev, struct sk_buff *skb, stru
 	}
 
 	skb->dev = sa_entry->priv->dev;
+	skb->skb_iif = skb->dev->ifindex;
 	read_unlock(&ipsecmgr_drv->lock);
 
 	/*
 	 * Reaching this point means the outer ECM rule is non-existant
-	 * whereas the IPsec rules are still present in FW. We need to flush
-	 * all SA and its associated flow rules related to this.
+	 * whereas the IPsec rules are still present in FW. So, this is an ESP
+	 * encapsulated packet that has been exceptioned to host from NSS.
+	 * We can send it to Linux IPstack for further routing.
 	 */
-	nss_ipsecmgr_sa_del(skb->dev, &outer);
-	dev_kfree_skb_any(skb);
-	return;
+	BUG_ON(!rx_route);
+	rx_route(skb);
 }
 
 /*

@@ -161,7 +161,7 @@ struct debug_box {		// this overlays with profile_common (RD) or profile_session
 	uint32_t hd_magic;	// cmd + MAGIC for packet and endianess check
 
 	uint32_t opts;
-	uint32_t *base_addr;
+	int32_t base_addr;	/* Ubi32 is 32-bit */
 	int32_t	dlen;		// in 4B words
 	uint32_t data[MAX_DB_RD];
 };

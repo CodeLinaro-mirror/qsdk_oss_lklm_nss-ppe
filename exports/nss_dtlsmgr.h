@@ -30,6 +30,7 @@
 #define NSS_DTLSMGR_CIPHER_MODE_GCM 0x0008		/**< Cipher mode is GCM */
 #define NSS_DTLSMGR_OUTER_UDPLITE_CSUM 0x00010000	/**< checksum UDP-Lite header */
 #define NSS_DTLSMGR_INNER_ACCEPT_ALL 0x00020000		/**< Send all error packets after DECAP */
+#define NSS_DTLSMGR_METADATA_MAGIC 0x8993		/**< Magic in DTLS metadata */
 
 /**
  * NSS DTLS manager status
@@ -226,6 +227,8 @@ struct nss_dtlsmgr_metadata {
 	uint8_t ctype;		/**< Type of DTLS packet. */
 	uint8_t result;		/**< Error during DTLS decapsulation. */
 	uint16_t len;		/**< Length of DTLS payload. */
+	uint16_t magic;		/**< Magic. */
+	uint16_t res[2];	/**< Reserved. */
 };
 
 /**
@@ -254,6 +257,20 @@ static inline enum nss_dtlsmgr_metadata_ctype nss_dtlsmgr_metadata_get_ctype(str
 static inline enum nss_dtlsmgr_metadata_result nss_dtlsmgr_metadata_get_result(struct nss_dtlsmgr_metadata *ndm)
 {
 	return ndm->result;
+}
+
+/**
+ * nss_dtlsmgr_metadata_verify_magic
+ *	Returns true if magic pattern matches
+ *
+ * @param ndm[IN] DTLS metadata header
+ *
+ * @return
+ * true for success
+ */
+static inline bool nss_dtlsmgr_metadata_verify_magic(struct nss_dtlsmgr_metadata *ndm)
+{
+	return ndm->magic == NSS_DTLSMGR_METADATA_MAGIC;
 }
 
 /**

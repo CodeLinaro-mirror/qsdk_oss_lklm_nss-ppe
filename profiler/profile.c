@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014,2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014,2016,2018 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -144,7 +144,8 @@ int profile_register_performance_counter(volatile unsigned int *counter, char *n
 }
 
 /*
- * make a packet full of sample data
+ * profile_make_data_packet
+ *	Make a packet full of sample data
  */
 static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 {
@@ -190,7 +191,9 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 	ph.pph.sample_stack_words = PROFILE_STACK_WORDS;
 
 	ns = (blen - sizeof(ph)) / sizeof(struct profile_sample);
-	profileInfo("%X: blen %d ns = %d psc_hd count %d ssets %d phs %d pss %d\n", pn->profile_sequence_num, blen, ns, psc_hd->count, psc_hd->exh.sample_sets, sizeof(ph), sizeof(struct profile_sample));
+	profileInfo("%X: blen %d ns = %d psc_hd count %d ssets %d phs %lu pss %lu\n",
+		pn->profile_sequence_num, blen, ns, psc_hd->count,
+		psc_hd->exh.sample_sets, sizeof(ph), sizeof(struct profile_sample));
 	if (ns > psc_hd->count)
 		ns = psc_hd->count;
 	if (ns == 0) {
@@ -218,7 +221,7 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 	buf += sizeof(ph.pph);
 
 	/*
-	 *	ph.exh is unused dummy; and psc_hd->exh is used directly to avoid double mem copy
+	 * ph.exh is unused dummy; and psc_hd->exh is used directly to avoid double mem copy
 	 */
 	if (copy_to_user(buf, &psc_hd->exh, sizeof(psc_hd->exh)) != 0) {
 		return -EFAULT;
@@ -266,7 +269,8 @@ struct profile_counter profile_builtin_stats[] =
 };
 
 /*
- * make a packet full of performance counters (software)
+ * profile_make_stats_packet
+ *	make a packet full of performance counters (software)
  */
 static int profile_make_stats_packet(char *buf, int bytes, struct profile_io *pn)
 {
@@ -330,6 +334,10 @@ static int profile_make_stats_packet(char *buf, int bytes, struct profile_io *pn
  */
 static struct profile_io *node[NSS_MAX_CORES];
 
+/*
+ * profile_open
+ *	open function of system call
+ */
 static int profile_open(struct inode *inode, struct file *filp)
 {
 	int	n;
@@ -346,20 +354,30 @@ static int profile_open(struct inode *inode, struct file *filp)
 		return -ENOENT;
 	}
 
+	profileInfo("_open: mode %x flag %x\n", filp->f_mode, filp->f_flags);
 	if (!pn->pnc.enabled && nss_get_state(pn->ctx) == NSS_STATE_INITIALIZED) {
-		nss_tx_status_t ret;
-
 		/*
 		 * sw_ksp_ptr is used as event flag. NULL means normal I/O
 		 */
 		pn->sw_ksp_ptr = NULL;
 		pn->pnc.enabled = 1;
 		pn->profile_first_packet = 1;
-		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
-		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
+
+		/*
+		 * If profiler is opened in read only mode, it is done by START_MSG
+		 * via debug interface (IF), which reads NSS-FW all registered NSS
+		 * variables.
+		 * Do not start engine (no sampling required) for debug IF.
+		 */
+		if (FMODE_READ & filp->f_mode) {
+			nss_tx_status_t ret;
+
+			pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
+			ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
 				sizeof(pn->pnc.un), profiler_handle_reply, pn);
-		profileInfo("%s: %d -- %p: ccl %p sp %p\n", __func__, ret,
-			pn, pn->ccl, pn->pnc.samples);
+			profileInfo("%s: %d -- %p: ccl %p sp %p\n", __func__, ret,
+				pn, pn->ccl, pn->pnc.samples);
+		}
 		filp->private_data = pn;
 		return 0;
 	}
@@ -370,6 +388,9 @@ static int profile_open(struct inode *inode, struct file *filp)
 }
 
 /*
+ * profile_read
+ *	read syscall
+ *
  * return a udp packet ready to send to the profiler tool
  * when there are no packets left to make, return 0
  */
@@ -438,7 +459,8 @@ static ssize_t profile_read(struct file *filp, char *buf, size_t count, loff_t *
 }
 
 /*
- * the close function paired with profiler_open
+ * profile_release
+ *	the close syscall paired with profiler_open
  */
 static int profile_release(struct inode *inode, struct file *filp)
 {
@@ -460,6 +482,139 @@ static int profile_release(struct inode *inode, struct file *filp)
 	profileWarn("%s: attempt closing non-open dev %p\n", __func__, pn);
 	pn->profile_first_packet = 1;
 	return -EBADF;
+}
+
+#ifndef	__aarch64__
+/*
+ * counter_rate_by_uint32
+ *	helper function for handling 64-bit calculation in 32-bit mode
+ *
+ * 32-bit kernel does not have 64-bit div function;
+ * to avoid overflow and underflow, use if branch
+ * to overcome this problem: slower bur more accurate.
+ */
+static void counter_rate_by_uint32(struct profile_common *pnc)
+{
+	static uint32_t prev_cnts[32];
+	static uint32_t last_uclk;
+	uint32_t mclk, uclk, ubi32_freq;
+	int n = pnc->un.num_counters;
+
+	ubi32_freq = htonl(pnc->un.cpu_freq) / 1000000;
+	uclk = pnc->un.rate - last_uclk;
+	last_uclk = pnc->un.rate;
+	printk("%d nss counters:	clk dif %u freq %u\n", n, uclk, ubi32_freq);
+
+	/*
+	 * exactly 4G? make it maximum
+	 */
+	if (!uclk)
+		uclk--;
+	while (n--) {
+		uint32_t v_dif;
+		uint32_t v = ntohl(pnc->un.counters[n].value);
+		uint32_t pv = prev_cnts[n];
+
+		prev_cnts[n] = v;
+		v_dif = v - pv;
+
+		/*
+		 * threshold	= MAX_UINT32 / MAX_Ubi32CPU_CLK (MHz)
+		 * if counter diff is less then this threshold,
+		 * 32-bit calculation can be directly applied w/o o/u flow;
+		 * otherwise, tick diff (uclk) adjust needs to be done before
+		 * calculating the rate to avoid over/under flow.
+		 */
+		if (v_dif < (UINT_MAX / ubi32_freq)) {
+			v_dif = (v_dif * ubi32_freq) / (uclk / 1000000);
+		} else {
+			/*
+			 * assume fast polling is 200ms, @ 500MHz, the minimum
+			 * uclk value is 0.5M * 200 = 10M, so reduce by 1M
+			 * it will still have value in 10, not zero (0).
+			 * in 2.3GHz and 1 sec interval, the residual is 2300.
+			 * The maximum polling interval is 2 sec for 2.3GHz,
+			 * and 3 sec for 1.7GHz.
+			 */
+			if (uclk > 1000000) {
+				mclk = uclk / 1000000;
+				v_dif = (v_dif / mclk) * ubi32_freq;
+			} else {
+				mclk = uclk / 1000;
+				v_dif = (v_dif / mclk) * ubi32_freq * 1000;
+			}
+		}
+		printk("%-32s 0x%08X	%10u :	%u/s\n",
+			pnc->un.counters[n].name, v, v, v_dif);
+	}
+}
+#endif
+
+/*
+ * profiler_handle_counter_event_reply()
+ *	get reply from firmware for current FW stat event counter configurations
+ *
+ * Based on firmware CPU clock (cpu_freq), calculate the counter change rate in
+ * second and print both counter value and its rate.
+ */
+static void profiler_handle_counter_event_reply(struct nss_ctx_instance *nss_ctx,
+						struct nss_cmn_msg *ncm)
+{
+	struct profile_io *pio = (struct profile_io *) ncm->app_data;
+	struct profile_common *pnc = &pio->pnc;
+
+#ifndef __aarch64__
+	counter_rate_by_uint32(pnc);
+#else
+	static uint32_t prev_cnts[32];
+	static uint32_t last_uclk;
+	uint32_t ubi32_freq;
+	uint32_t uclk;
+	int n = pnc->un.num_counters;
+
+	ubi32_freq = htonl(pnc->un.cpu_freq);
+	uclk = pnc->un.rate - last_uclk;
+	last_uclk = pnc->un.rate;
+	printk("%d nss counters:	clk dif %u freq %u\n", n, uclk, ubi32_freq);
+	while (n--) {
+		uint32_t v = ntohl(pnc->un.counters[n].value);
+		uint32_t pv = prev_cnts[n];
+
+		prev_cnts[n] = v;
+
+		printk("%-32s 0x%08X	%10u :	%llu/s\n",
+			pnc->un.counters[n].name, v, v,
+			(uint64_t)(v - pv) * ubi32_freq / uclk);
+	}
+#endif
+}
+
+/*
+ * parseDbgCmd()
+ *	process debugging command(s).
+ *
+ * Currently supported command:
+ *	"=show-nss-counter"	display all values of nss variables registered
+ *				by profile_register_performance_counter(&v, name)
+ */
+#define	SHOW_COUNTER_CMD "show-nss-counter"
+static int parseDbgCmd(const char *buf, size_t count,
+			struct debug_box *db, struct profile_io *pio)
+{
+	int result;
+
+	if (strncmp(buf, SHOW_COUNTER_CMD, min(sizeof(SHOW_COUNTER_CMD)-1, count))) {
+		printk(KERN_ERR "%s: unsupported cmd %s %zu\n",
+			__func__, buf, strlen(buf));
+		return -EINVAL;
+	}
+
+	db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_COUNTERS_MSG;
+	result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
+					sizeof(pio->pnc.un),
+					profiler_handle_counter_event_reply, pio);
+	profileInfo("%s: %d\n", __func__, result);
+	return result == NSS_TX_SUCCESS ? count : -EFAULT;
 }
 
 /*
@@ -503,7 +658,7 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 	if (count < 19) /* minimum data for sys_stat_event request */
 		return	-EINVAL;
 
-	if (strncmp(buf, "get-sys-stat-events", 19) == 0) {
+	if (strcmp(buf, "get-sys-stat-events") == 0) {
 		db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_GET_SYS_STAT_EVENT;
 		result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
 					sizeof(pio->pnc.un),
@@ -582,7 +737,7 @@ static int parseDbgData(const char *buf, size_t count, struct debug_box *db)
 	char *cp;
 	int n;
 
-	printk("%p: buf (%s) cnt %zd\n", buf, buf, count);
+	printk("%p %p: buf (%s) cnt %zd\n", db, buf, buf, count);
 	if (sscanf(buf, "%x", (uint32_t *)&db->base_addr) != 1) {
 		printk("%s: cannot get base addr\n", __func__);
 		return	-EINVAL;
@@ -605,7 +760,7 @@ noea:		printk("%s: no enough arguments\n", __func__);
 	}
 
 	while (isspace(*cp)) cp++;
-	printk("base addr %p -- %s\n", db->base_addr, cp);
+	printk("base addr %X -- %s", db->base_addr, cp);
 
 	if (!strncmp(cp, "read", 4)) {
 		cp = strchr(cp, ' ');
@@ -631,7 +786,8 @@ noea:		printk("%s: no enough arguments\n", __func__);
 }
 
 /*
- * display memory content read from Phy addr
+ * debug_if_show
+ *	display memory content read from Phy addr
  */
 static void debug_if_show(struct debug_box *db, int buf_len)
 {
@@ -639,14 +795,15 @@ static void debug_if_show(struct debug_box *db, int buf_len)
 
 	for (i=0; i < db->dlen; i++) {
 		if ((i & 3) == 0)
-			printk("\n%p: ", db->base_addr + i);
+			printk("\n%zX: ", db->base_addr + i * sizeof(db->base_addr));
 		printk("%9x", db->data[i]);
 	}
 	printk("\ndumped %d (extra 1) blen %d\n", db->dlen, buf_len);
 }
 
 /*
- * show debug message we requested from NSS
+ * profiler_handle_debug_reply
+ *	show debug message we requested from NSS
  */
 static void profiler_handle_debug_reply(struct nss_ctx_instance *nss_ctx, struct nss_cmn_msg *ncm)
 {
@@ -654,7 +811,8 @@ static void profiler_handle_debug_reply(struct nss_ctx_instance *nss_ctx, struct
 }
 
 /*
- * a generic Krait <--> NSS debug interface
+ * debug_if
+ *	a generic Krait <--> NSS debug interface
  */
 static ssize_t debug_if(struct file *filp,
 			const char __user *ubuf, size_t count, loff_t *f_pos)
@@ -681,10 +839,23 @@ static ssize_t debug_if(struct file *filp,
 		printk(KERN_ERR "copy_from_user\n");
 		return -EIO;
 	}
+	buf[count-1] = 0;
 
 	db = (struct debug_box *) &pio->pnc;
 	db->dlen = db->opts = 0;
 
+	/*
+	 * process possible commands
+	 */
+	if (buf[0] == '=') {
+		result = parseDbgCmd(buf+1, count, db, pio);
+		kfree(buf);
+		return result;
+	}
+
+	/*
+	 * process stat_event request: display/change
+	 */
 	if (!isdigit(buf[0])) {
 		result = parse_sys_stat_event_req(buf, count, db, pio);
 		kfree(buf);
@@ -698,6 +869,9 @@ static ssize_t debug_if(struct file *filp,
 		return	result;
 	}
 
+	/*
+	 * process memory I/O for debug
+	 */
 	result = parseDbgData(buf, count, db);
 	kfree(buf);
 	if (result < 0) {
@@ -759,14 +933,15 @@ static const struct file_operations profile_rate_fops = {
 };
 
 /*
- * hex dump for debug
+ * hexdump
+ *	hex dump for debug
  */
 static void kxdump(void *buf, int len, const char *who)
 {
-	int *ip = (int*) buf;
+	int32_t *ip = (int32_t *) buf;
 	int lns = len >> 5;	/* 32-B each line */
-	if (lns > 4)
-		lns = 4;
+	if (lns > 8)
+		lns = 8;
 	printk("%p: kxdump %s: len %d\n", buf, who, len);
 	do {
 		printk("%x %x %x %x %x %x %x %x\n", ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]);
@@ -775,7 +950,9 @@ static void kxdump(void *buf, int len, const char *who)
 }
 
 /*
- * check magic # and detect Endian.
+ * profiler_magic_verify
+ *	check magic # and detect Endian.
+ *
  * negtive return means failure.
  * return 1 means need to ntoh swap.
  */
@@ -785,7 +962,8 @@ static int profiler_magic_verify(struct profile_sample_ctrl_header *psc_hd, int 
 	if ((psc_hd->hd_magic & UBI32_PROFILE_HD_MMASK) != UBI32_PROFILE_HD_MAGIC) {
 		if ((psc_hd->hd_magic & UBI32_PROFILE_HD_MMASK_REV) != UBI32_PROFILE_HD_MAGIC_REV) {
 			kxdump(psc_hd, buf_len, "bad profile packet");
-			printk("bad profile packet %x : %d\n", psc_hd->hd_magic, buf_len);
+			printk("bad profile HD magic 0x%x : %d\n",
+				psc_hd->hd_magic, buf_len);
 			return -1;
 		}
 		profileDebug("Profile data in different Endian type %x\n", psc_hd->hd_magic);
@@ -796,7 +974,8 @@ static int profiler_magic_verify(struct profile_sample_ctrl_header *psc_hd, int 
 }
 
 /*
- * process profile sample data from NSS
+ * profile_handle_nss_data
+ *	process profile sample data from NSS
  */
 static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 {
@@ -819,6 +998,7 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 	}
 
 	pn = (struct profile_io *)arg;
+	profileDebug("PN %p CM msg %d len %d\n", pn, npm->cm.type, buf_len);
 	profileInfo("%s: dlen %d swap %d cmd %x - %d\n", __func__, buf_len, swap, npm->cm.type, (pn->ccl_read - pn->ccl_write) & (CCL_SIZE-1));
 	//kxdump(buf, buf_len, "process profile packet");
 
@@ -878,7 +1058,8 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 }
 
 /*
- * process N2H reply for message we sent to NSS -- currently no action
+ * profiler_handle_reply
+ *	process N2H reply for message we sent to NSS -- currently no action
  */
 static void profiler_handle_reply(struct nss_ctx_instance *nss_ctx, struct nss_cmn_msg *ncm)
 {
@@ -894,7 +1075,8 @@ static void profiler_handle_reply(struct nss_ctx_instance *nss_ctx, struct nss_c
 }
 
 /*
- * initialize basic profile data structure
+ * profile_init
+ *	initialize basic profile data structure
  */
 static void profile_init(struct profile_io *node)
 {
@@ -924,7 +1106,8 @@ static void profile_init(struct profile_io *node)
 static struct proc_dir_entry *pdir;
 
 /*
- * init_module cannot call exit_MODULE, so use this wrapper
+ * netap_profile_release_resource
+ *	init_module cannot call exit_MODULE, so use this wrapper
  */
 void netap_profile_release_resource(void)
 {
@@ -939,7 +1122,8 @@ void netap_profile_release_resource(void)
 }
 
 /*
- * kernel module entry
+ * netap_profile_init_module
+ *	kernel module entry
  */
 int __init netap_profile_init_module(void)
 {
@@ -1000,7 +1184,8 @@ int __init netap_profile_init_module(void)
 }
 
 /*
- * kernel module exit
+ * netap_profile_exit_module
+ *	kernel module exit
  */
 void __exit netap_profile_exit_module(void)
 {
