@@ -292,24 +292,24 @@ static inline bool nss_ipsecmgr_tuple_match(struct nss_ipsec_tuple *tuple, struc
 {
 	uint8_t status = 0;
 
-	status += !(tuple->dst_addr[0] ^ match->dst_addr[0]);
-	status += !(tuple->dst_addr[1] ^ match->dst_addr[1]);
-	status += !(tuple->dst_addr[2] ^ match->dst_addr[2]);
-	status += !(tuple->dst_addr[3] ^ match->dst_addr[3]);
+	status += !!(tuple->dst_addr[0] ^ match->dst_addr[0]);
+	status += !!(tuple->dst_addr[1] ^ match->dst_addr[1]);
+	status += !!(tuple->dst_addr[2] ^ match->dst_addr[2]);
+	status += !!(tuple->dst_addr[3] ^ match->dst_addr[3]);
 
-	status += !(tuple->src_addr[0] ^ match->src_addr[0]);
-	status += !(tuple->src_addr[1] ^ match->src_addr[1]);
-	status += !(tuple->src_addr[2] ^ match->src_addr[2]);
-	status += !(tuple->src_addr[3] ^ match->src_addr[3]);
+	status += !!(tuple->src_addr[0] ^ match->src_addr[0]);
+	status += !!(tuple->src_addr[1] ^ match->src_addr[1]);
+	status += !!(tuple->src_addr[2] ^ match->src_addr[2]);
+	status += !!(tuple->src_addr[3] ^ match->src_addr[3]);
 
-	status += !(tuple->esp_spi ^ match->esp_spi);
-	status += !(tuple->dst_port ^ match->dst_port);
-	status += !(tuple->src_port ^ match->src_port);
+	status += !!(tuple->esp_spi ^ match->esp_spi);
+	status += !!(tuple->dst_port ^ match->dst_port);
+	status += !!(tuple->src_port ^ match->src_port);
 
-	status += !(tuple->proto_next_hdr ^ match->proto_next_hdr);
-	status += !(tuple->ip_ver ^ match->ip_ver);
+	status += !!(tuple->proto_next_hdr ^ match->proto_next_hdr);
+	status += !!(tuple->ip_ver ^ match->ip_ver);
 
-	return !!status;
+	return !status;
 }
 
 /*
