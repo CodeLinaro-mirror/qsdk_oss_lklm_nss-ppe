@@ -55,6 +55,16 @@ enum nss_dtlsmgr_dtlsver {
 };
 
 /**
+ * DTLS interface type
+ */
+enum nss_dtlsmgr_interface_type {
+	NSS_DTLSMGR_INTERFACE_TYPE_NONE,
+	NSS_DTLSMGR_INTERFACE_TYPE_INNER,	/**< DTLS encapsulation interface */
+	NSS_DTLSMGR_INTERFACE_TYPE_OUTER,	/**< DTLS decapsulation interface */
+	NSS_DTLSMGR_INTERFACE_TYPE_MAX
+};
+
+/**
  * NSS DTLS manager supported cryptographic algorithms
  */
 enum nss_dtlsmgr_algo {
@@ -343,4 +353,15 @@ bool nss_dtlsmgr_session_switch_encap(struct net_device *dev);
  * @return TRUE for success
  */
 bool nss_dtlsmgr_session_switch_decap(struct net_device *dev);
+
+/**
+ * nss_dtlmsgr_get_interface
+ *	Get the NSS interface number for encap/decap interface.
+ *
+ * @param dev[in] DTLS network device
+ * @param type[in] DTLS interface type
+ *
+ * @return interface number for success
+ */
+int32_t nss_dtlsmgr_get_interface(struct net_device *dev, enum nss_dtlsmgr_interface_type type);
 #endif /* _NSS_DTLSMGR_H_ */

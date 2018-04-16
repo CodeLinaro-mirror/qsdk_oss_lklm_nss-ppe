@@ -65,14 +65,14 @@ static netdev_tx_t nss_dtlsmgr_session_xmit(struct sk_buff *skb,
 
 	switch (skb->protocol) {
 	case htons(ETH_P_IP):
-		if (s->flags & NSS_DTLSMGR_IPV6_ENCAP) {
+		if (s->flags & NSS_DTLSMGR_HDR_IPV6) {
 			nss_dtlsmgr_info("%p: NSS DTLS I/F %d: skb(%p) invalid L3 protocol 0x%x\n", dev, s->nss_dtls_if, skb, ETH_P_IP);
 			return NETDEV_TX_BUSY;
 		}
 		break;
 
 	case htons(ETH_P_IPV6):
-		if (!(s->flags & NSS_DTLSMGR_IPV6_ENCAP)) {
+		if (!(s->flags & NSS_DTLSMGR_HDR_IPV6)) {
 			nss_dtlsmgr_info("%p: NSS DTLS I/F %d: skb(%p) invalid L3 protocol 0x%x\n", dev, s->nss_dtls_if, skb, ETH_P_IPV6);
 			return NETDEV_TX_BUSY;
 		}

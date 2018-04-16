@@ -826,3 +826,34 @@ bool nss_dtlsmgr_session_switch_decap(struct net_device *dev)
 	return true;
 }
 EXPORT_SYMBOL(nss_dtlsmgr_session_switch_decap);
+
+/*
+ * nss_dtlsmgr_get_interface()
+ *	Returns NSS DTLS interface number for encap/decap on success.
+ */
+int32_t nss_dtlsmgr_get_interface(struct net_device *dev, enum nss_dtlsmgr_interface_type type)
+{
+	int32_t ifnum;
+
+	switch (type) {
+	case NSS_DTLSMGR_INTERFACE_TYPE_INNER:
+		ifnum = nss_cmn_get_interface_number_by_dev_and_type(dev, NSS_DYNAMIC_INTERFACE_TYPE_DTLS_CMN_INNER);
+		break;
+
+	case NSS_DTLSMGR_INTERFACE_TYPE_OUTER:
+		ifnum = nss_cmn_get_interface_number_by_dev_and_type(dev, NSS_DYNAMIC_INTERFACE_TYPE_DTLS_CMN_OUTER);
+		break;
+
+	default:
+		nss_dtlsmgr_warn("%p: invalid interface type %d", dev, type);
+		return -EINVAL;
+	}
+
+	if (ifnum < 0) {
+		nss_dtlsmgr_warn("%p: couldn't find DTLS interface number (%d)", dev, ifnum);
+		return ifnum;
+	}
+
+	return nss_dtls_cmn_get_ifnum(ifnum);
+}
+EXPORT_SYMBOL(nss_dtlsmgr_get_interface);

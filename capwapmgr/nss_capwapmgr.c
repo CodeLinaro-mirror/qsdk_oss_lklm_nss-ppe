@@ -1365,16 +1365,15 @@ nss_capwapmgr_status_t nss_capwapmgr_configure_dtls(struct net_device *dev, uint
 			}
 
 			/* Store the DTLS encap and decap interface numbers */
-			t->capwap_rule.dtls_inner_if_num = nss_cmn_get_interface_number_by_dev_and_type(t->dtls_dev,
-										NSS_DYNAMIC_INTERFACE_TYPE_DTLS_CMN_INNER);
+			t->capwap_rule.dtls_inner_if_num = nss_dtlsmgr_get_interface(t->dtls_dev,
+										     NSS_DTLSMGR_INTERFACE_TYPE_INNER);
 			t->capwap_rule.mtu_adjust = t->dtls_dev->needed_headroom + t->dtls_dev->needed_tailroom;
 			nss_capwapmgr_info("%p: created dtls node for tunnel: %d if_num: %d mtu_adjust: %d\n",
 					   dev, tunnel_id, t->capwap_rule.dtls_inner_if_num, t->capwap_rule.mtu_adjust);
 		}
 
-		ip_if_num = nss_cmn_get_interface_number_by_dev_and_type(t->dtls_dev,
-									 NSS_DYNAMIC_INTERFACE_TYPE_DTLS_CMN_OUTER);
-		ip_if_num = nss_dtls_cmn_get_ifnum(ip_if_num);
+		ip_if_num = nss_dtlsmgr_get_interface(t->dtls_dev, NSS_DTLSMGR_INTERFACE_TYPE_OUTER);
+
 		capwapmsg.msg.dtls.enable = 1;
 		capwapmsg.msg.dtls.dtls_inner_if_num = t->capwap_rule.dtls_inner_if_num;
 		capwapmsg.msg.dtls.mtu_adjust = t->capwap_rule.mtu_adjust;
@@ -1825,12 +1824,9 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 			(void)nss_dynamic_interface_dealloc_node(capwap_if_num, NSS_DYNAMIC_INTERFACE_TYPE_CAPWAP);
 			return NSS_CAPWAPMGR_FAILURE_DI_ALLOC_FAILED;
 		}
-		capwap_rule->dtls_inner_if_num = nss_cmn_get_interface_number_by_dev_and_type(t->dtls_dev,
-										NSS_DYNAMIC_INTERFACE_TYPE_DTLS_CMN_INNER);
+		capwap_rule->dtls_inner_if_num = nss_dtlsmgr_get_interface(t->dtls_dev, NSS_DTLSMGR_INTERFACE_TYPE_INNER);
+		forward_if_num = nss_dtlsmgr_get_interface(t->dtls_dev, NSS_DTLSMGR_INTERFACE_TYPE_OUTER);
 		capwap_rule->mtu_adjust = t->dtls_dev->needed_headroom + t->dtls_dev->needed_tailroom;
-		forward_if_num = nss_cmn_get_interface_number_by_dev_and_type(t->dtls_dev,
-									      NSS_DYNAMIC_INTERFACE_TYPE_DTLS_CMN_OUTER);
-		forward_if_num = nss_dtls_cmn_get_ifnum(forward_if_num);
 	}
 
 	if (outer_trustsec_enabled) {

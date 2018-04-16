@@ -40,6 +40,33 @@
  */
 static struct nss_dtlsmgr_ctx g_ctx;
 
+static struct nss_dtlsmgr_crypto_algo dtlsmgr_algo[NSS_DTLSMGR_ALGO_MAX] = {
+	[NSS_DTLSMGR_ALGO_AES_CBC_SHA1_HMAC] = {
+		.cipher_algo = NSS_CRYPTO_CIPHER_AES_CBC,
+		.auth_algo = NSS_CRYPTO_AUTH_SHA1_HMAC,
+		.hash_len = NSS_CRYPTO_MAX_HASHLEN_SHA1 ,
+		.iv_len = NSS_CRYPTO_MAX_IVLEN_AES,
+	},
+	[NSS_DTLSMGR_ALGO_AES_CBC_SHA256_HMAC] = {
+		.cipher_algo = NSS_CRYPTO_CIPHER_AES_CBC,
+		.auth_algo = NSS_CRYPTO_AUTH_SHA256_HMAC,
+		.hash_len = NSS_CRYPTO_MAX_HASHLEN_SHA256 ,
+		.iv_len = NSS_CRYPTO_MAX_IVLEN_AES,
+	},
+	[NSS_DTLSMGR_ALGO_3DES_CBC_SHA1_HMAC] = {
+		.cipher_algo = NSS_CRYPTO_CIPHER_DES,
+		.auth_algo = NSS_CRYPTO_AUTH_SHA1_HMAC,
+		.hash_len = NSS_CRYPTO_MAX_HASHLEN_SHA1 ,
+		.iv_len = NSS_CRYPTO_MAX_IVLEN_DES,
+	},
+	[NSS_DTLSMGR_ALGO_3DES_CBC_SHA256_HMAC] = {
+		.cipher_algo = NSS_CRYPTO_CIPHER_DES,
+		.auth_algo = NSS_CRYPTO_AUTH_SHA256_HMAC,
+		.hash_len = NSS_CRYPTO_MAX_HASHLEN_SHA256,
+		.iv_len = NSS_CRYPTO_MAX_IVLEN_DES,
+	}
+};
+
 /*
  * nss_dtlsmgr_session_insert()
  *	Insert a DTLS session into global list of sessions.
@@ -243,7 +270,7 @@ static void nss_connmgr_dtls_data_receive(struct net_device *dev,
 	skb->pkt_type = PACKET_HOST;
 	skb->skb_iif = dev->ifindex;
 	skb->dev = dev;
-	if (s->flags & NSS_DTLSMGR_IPV6_ENCAP)
+	if (s->flags & NSS_DTLSMGR_HDR_IPV6)
 		skb->protocol = htons(ETH_P_IPV6);
 	else
 		skb->protocol = htons(ETH_P_IP);
@@ -323,90 +350,78 @@ static void nss_connmgr_dtls_event_receive(void *if_ctx,
 }
 
 /*
- * nss_dtlsmgr_get_cipher_iv_len()
- *	Get cipher IV length.
+ * nss_dtlsmgr_alloc_crypto()
+ *	Allocate a crypto session and update encrypt/decrypt session parameters.
  */
-static uint32_t nss_dtlsmgr_get_cipher_iv_len(uint32_t cipher_algo)
+nss_dtlsmgr_status_t nss_dtlsmgr_alloc_crypto(struct nss_dtlsmgr_crypto *crypto, uint32_t *crypto_idx, bool encrypt)
 {
-	switch (cipher_algo) {
-	case NSS_CRYPTO_CIPHER_AES_CBC:
-	case NSS_CRYPTO_CIPHER_AES_CTR:
-		return NSS_CRYPTO_MAX_IVLEN_AES;
-
-	case NSS_CRYPTO_CIPHER_DES:
-		return NSS_CRYPTO_MAX_IVLEN_DES;
-
-	case NSS_CRYPTO_CIPHER_NULL:
-	default:
-		return NSS_CRYPTO_MAX_IVLEN_NULL;
-	}
-}
-
-/*
- * nss_dtlsmgr_get_auth_hash_len()
- *	Get auth hash length.
- */
-static uint32_t nss_dtlsmgr_get_auth_hash_len(uint32_t auth_algo)
-{
-	switch (auth_algo) {
-	case NSS_CRYPTO_AUTH_SHA1_HMAC:
-		return NSS_CRYPTO_MAX_HASHLEN_SHA1;
-
-	case NSS_CRYPTO_AUTH_SHA256_HMAC:
-		return NSS_CRYPTO_MAX_HASHLEN_SHA256;
-
-	case NSS_CRYPTO_AUTH_NULL:
-	default:
-		return NSS_CRYPTO_MAX_HASHLEN;
-	}
-}
-
-/*
- * nss_dtlsmgr_session_create_with_crypto()
- *	Create DTLS session and associated crypto sessions.
- */
-nss_dtlsmgr_status_t nss_dtlsmgr_session_create_with_crypto(struct nss_dtlsmgr_session_create_config *in_data, struct nss_dtlsmgr_return_data *out_data)
-{
-	nss_crypto_status_t crypto_status;
-	struct nss_dtlsmgr_session *ds;
+	struct nss_dtlsmgr_crypto_algo *algo;
 	struct nss_crypto_params params;
-	struct nss_dtls_msg dtlsmsg;
-	int32_t i = 0;
 	struct nss_crypto_key cipher;
 	struct nss_crypto_key auth;
+
+	memset(&cipher, 0, sizeof(struct nss_crypto_key));
+	memset(&auth, 0, sizeof(struct nss_crypto_key));
+
+	if (crypto->algo >= NSS_DTLSMGR_ALGO_MAX) {
+		nss_dtlsmgr_info("%p: invalid algorithm type %d", &g_ctx, crypto->algo);
+		return NSS_DTLSMGR_FAIL_NOCRYPTO;
+	}
+
+	algo = &dtlsmgr_algo[crypto->algo];
+
+	cipher.algo = algo->cipher_algo;
+	cipher.key = crypto->cipher_key.data;
+	cipher.key_len = crypto->cipher_key.len;
+
+	auth.algo = algo->auth_algo;
+	auth.key = crypto->auth_key.data;
+	auth.key_len = crypto->auth_key.len;
+
+	if (nss_crypto_session_alloc(g_ctx.crypto_hdl, &cipher, &auth, crypto_idx) != NSS_CRYPTO_STATUS_OK) {
+		nss_dtlsmgr_info("%p: DTLS crypto alloc failed\n", &g_ctx);
+		return NSS_DTLSMGR_FAIL_NOCRYPTO;
+	}
+
+	/*
+	 * Update crypto session
+	 */
+	memset(&params, 0, sizeof(struct nss_crypto_params));
+	params.cipher_skip = NSS_DTLSMGR_HDR_LEN + algo->iv_len;
+	params.auth_skip = 0;
+	params.req_type = (encrypt ? NSS_CRYPTO_REQ_TYPE_ENCRYPT : NSS_CRYPTO_REQ_TYPE_DECRYPT);
+	params.req_type |= NSS_CRYPTO_REQ_TYPE_AUTH;
+
+	if (nss_crypto_session_update(g_ctx.crypto_hdl, *crypto_idx, &params) != NSS_CRYPTO_STATUS_OK) {
+		nss_dtlsmgr_info("%p: failed to update crypto session %d", &g_ctx, *crypto_idx);
+		nss_crypto_session_free(g_ctx.crypto_hdl, *crypto_idx);
+		return NSS_DTLSMGR_FAIL_NOCRYPTO;
+	}
+
+	nss_dtlsmgr_info("%p: auth_skip:%d cipher_skip:%d\n", &g_ctx, params.auth_skip, params.cipher_skip);
+	return NSS_DTLSMGR_OK;
+}
+
+/*
+ * nss_dtlsmgr_session_create()
+ *	Create DTLS session and associated crypto sessions.
+ */
+struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
+{
+	struct nss_dtlsmgr_session *ds;
+	struct nss_dtls_msg dtlsmsg;
+	int32_t i = 0;
+	struct nss_dtlsmgr_crypto_algo *encap_algo, *decap_algo;
 	struct nss_dtls_session_configure *scfg;
 	nss_tx_status_t status;
+	nss_crypto_status_t crypto_status;
 	enum nss_dtlsmgr_status ret = NSS_DTLSMGR_FAIL;
 	uint32_t features = 0;
-	uint32_t encap_iv_len = 0;
-	uint32_t decap_iv_len = 0;
-	uint32_t hash_len_encap = 0;
-	uint32_t hash_len_decap = 0;
+	uint32_t mtu_adjust;
 
-	if ((in_data->encap.ver != NSS_DTLSMGR_VERSION_1_0)
-	    && (in_data->encap.ver != NSS_DTLSMGR_VERSION_1_2)) {
+	if ((cfg->encap.ver != NSS_DTLSMGR_VERSION_1_0) && (cfg->encap.ver != NSS_DTLSMGR_VERSION_1_2)) {
 		nss_dtlsmgr_warn("%p: Invalid DTLS version\n", &g_ctx);
-		return NSS_DTLSMGR_INVALID_VERSION;
-	}
-
-	if ((in_data->encap.cipher_type >= NSS_CRYPTO_CIPHER_MAX)
-	    || (in_data->decap.cipher_type >= NSS_CRYPTO_CIPHER_MAX)) {
-		nss_dtlsmgr_warn("%p: Invalid cipher algorithm\n", &g_ctx);
-		return NSS_DTLSMGR_INVALID_CIPHER;
-	}
-
-	if ((in_data->encap.auth_type >= NSS_CRYPTO_AUTH_MAX)
-	    || (in_data->decap.auth_type >= NSS_CRYPTO_AUTH_MAX)) {
-		nss_dtlsmgr_warn("%p: Invalid auth algorithm\n", &g_ctx);
-		return NSS_DTLSMGR_INVALID_AUTH;
-	}
-
-	if ((in_data->encap.cipher_key == NULL)
-	    || (in_data->encap.auth_key == NULL)
-	    || (in_data->decap.cipher_key == NULL)
-	    || (in_data->decap.auth_key == NULL)) {
-		nss_dtlsmgr_warn("%p: Invalid cipher/auth key\n", &g_ctx);
-		return NSS_DTLSMGR_INVALID_KEY;
+		return NULL;
 	}
 
 	/*
@@ -415,94 +430,26 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_create_with_crypto(struct nss_dtlsmgr_s
 	ds = kzalloc(sizeof(struct nss_dtlsmgr_session), GFP_KERNEL);
 	if (!ds) {
 		nss_dtlsmgr_info("%p: DTLS client allocation failed\n", &g_ctx);
-		return NSS_DTLSMGR_FAIL;
+		return NULL;
 	}
 
 	/*
 	 * Create crypto session for encap
 	 */
-	memset(&cipher, 0, sizeof(struct nss_crypto_key));
-	memset(&auth, 0, sizeof(struct nss_crypto_key));
-
-	cipher.algo = in_data->encap.cipher_type;
-	cipher.key_len = in_data->encap.cipher_key_len;
-	cipher.key = in_data->encap.cipher_key;
-	auth.algo = in_data->encap.auth_type;
-	auth.key_len = in_data->encap.auth_key_len;
-	auth.key = in_data->encap.auth_key;
-
-	crypto_status = nss_crypto_session_alloc(g_ctx.crypto_hdl, &cipher,
-						 &auth, &ds->crypto_idx_encap);
-	if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-		nss_dtlsmgr_info("%p: DTLS encap crypto alloc failed\n", &g_ctx);
-		ret = NSS_DTLSMGR_CRYPTO_FAILED;
+	ret = nss_dtlsmgr_alloc_crypto(&cfg->encap.crypto, &ds->crypto_idx_encap, true);
+	if (ret != NSS_DTLSMGR_OK) {
+		nss_dtlsmgr_info("failed to create encap session %d", ret);
 		goto dtls_crypto_encap_alloc_fail;
 	}
-
-	encap_iv_len = nss_dtlsmgr_get_cipher_iv_len(cipher.algo);
-	hash_len_encap = nss_dtlsmgr_get_auth_hash_len(auth.algo);
-
-	/*
-	 * Update crypto session for encap
-	 */
-	memset(&params, 0, sizeof(struct nss_crypto_params));
-	params.cipher_skip = NSS_DTLSMGR_HDR_LEN + encap_iv_len;
-	params.auth_skip = 0;
-	params.req_type |= (NSS_CRYPTO_REQ_TYPE_ENCRYPT
-			   | NSS_CRYPTO_REQ_TYPE_AUTH);
-	crypto_status = nss_crypto_session_update(g_ctx.crypto_hdl,
-						  ds->crypto_idx_encap,
-						  &params);
-	if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-		ret = NSS_DTLSMGR_CRYPTO_FAILED;
-		goto dtls_crypto_decap_alloc_fail;
-	}
-
-	nss_dtlsmgr_info("%p: encap: auth_skip:%d cipher_skip:%d\n",
-			 &g_ctx, params.auth_skip, params.cipher_skip);
 
 	/*
 	 * Create crypto session for decap
 	 */
-	memset(&cipher, 0, sizeof(struct nss_crypto_key));
-	memset(&auth, 0, sizeof(struct nss_crypto_key));
-
-	cipher.algo = in_data->decap.cipher_type;
-	cipher.key_len = in_data->decap.cipher_key_len;
-	cipher.key = in_data->decap.cipher_key;
-	auth.algo = in_data->decap.auth_type;
-	auth.key_len = in_data->decap.auth_key_len;
-	auth.key = in_data->decap.auth_key;
-
-	crypto_status = nss_crypto_session_alloc(g_ctx.crypto_hdl,
-						 &cipher,
-						 &auth,
-						 &ds->crypto_idx_decap);
-	if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-		nss_dtlsmgr_info("%p: DTLS decap crypto alloc failed\n", &g_ctx);
-		ret = NSS_DTLSMGR_CRYPTO_FAILED;
+	ret = nss_dtlsmgr_alloc_crypto(&cfg->decap.crypto, &ds->crypto_idx_decap, false);
+	if (ret != NSS_DTLSMGR_OK) {
+		nss_dtlsmgr_info("failed to create decap session %d", ret);
 		goto dtls_crypto_decap_alloc_fail;
 	}
-
-	decap_iv_len = nss_dtlsmgr_get_cipher_iv_len(cipher.algo);
-	hash_len_decap = nss_dtlsmgr_get_auth_hash_len(auth.algo);
-
-	/* call nss_crypto_session_update() for decap session */
-	memset(&params, 0, sizeof(struct nss_crypto_params));
-	params.cipher_skip = NSS_DTLSMGR_HDR_LEN + decap_iv_len;
-	params.auth_skip = 0;
-	params.req_type |= (NSS_CRYPTO_REQ_TYPE_DECRYPT
-			   | NSS_CRYPTO_REQ_TYPE_AUTH);
-	crypto_status = nss_crypto_session_update(g_ctx.crypto_hdl,
-						  ds->crypto_idx_decap,
-						  &params);
-	if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-		ret = NSS_DTLSMGR_CRYPTO_FAILED;
-		goto dtls_dynamic_if_alloc_fail;
-	}
-
-	nss_dtlsmgr_info("%p: decap: auth_skip:%d cipher_skip:%d\n",
-			 &g_ctx, params.auth_skip, params.cipher_skip);
 
 	/*
 	 * Allocate NSS dynamic interface
@@ -538,27 +485,27 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_create_with_crypto(struct nss_dtlsmgr_s
 	 * Initialize DTLS manager session
 	 */
 	ds->magic = NSS_DTLSMGR_SESSION_MAGIC;
-	ds->flags = in_data->flags;
-	ds->ver = in_data->encap.ver;
-	ds->sport = in_data->encap.sport;
-	ds->dport = in_data->encap.dport;
-	ds->epoch = in_data->encap.epoch;
-	ds->ip_ttl = in_data->encap.ip_ttl;
-	ds->nss_app_if = in_data->decap.app_if;
-	ds->window_size = in_data->decap.replay_window_size;
-	ds->stats_update_cb = in_data->cb;
+	ds->flags = cfg->flags;
+	ds->ver = cfg->encap.ver;
+	ds->sport = cfg->encap.sport;
+	ds->dport = cfg->encap.dport;
+	ds->epoch = cfg->encap.epoch;
+	ds->ip_ttl = cfg->encap.ip_ttl;
+	ds->nss_app_if = cfg->decap.nexthop_ifnum;
+	ds->window_size = cfg->decap.window_size;
+	ds->stats_update_cb = NULL; /* TODO */
 	ds->cidx_encap_pending = NSS_CRYPTO_MAX_IDXS;
 	ds->cidx_decap_pending = NSS_CRYPTO_MAX_IDXS;
 	atomic_set(&ds->ref, 1);
 
-	if (ds->flags & NSS_DTLSMGR_IPV6_ENCAP) {
+	if (ds->flags & NSS_DTLSMGR_HDR_IPV6) {
 		for (i = 0; i < 4 ; i++) {
-			ds->sip.ipv6[i] = in_data->encap.sip.ipv6[i];
-			ds->dip.ipv6[i] = in_data->encap.dip.ipv6[i];
+			ds->sip.ipv6[i] = cfg->encap.sip[i];
+			ds->dip.ipv6[i] = cfg->encap.dip[i];
 		}
 	} else {
-		ds->sip.ipv4 = in_data->encap.sip.ipv4;
-		ds->dip.ipv4 = in_data->encap.dip.ipv4;
+		ds->sip.ipv4 = cfg->encap.sip[0];
+		ds->dip.ipv4 = cfg->encap.dip[0];
 	}
 
 	/*
@@ -580,19 +527,22 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_create_with_crypto(struct nss_dtlsmgr_s
 			  sizeof(struct nss_dtls_session_configure),
 			  NULL, NULL);
 
+	encap_algo = &dtlsmgr_algo[cfg->encap.crypto.algo];
+	decap_algo = &dtlsmgr_algo[cfg->decap.crypto.algo];
+
 	scfg = &dtlsmsg.msg.cfg;
 	scfg->ver = ds->ver;
 	scfg->flags = ds->flags;
 	scfg->crypto_idx_encap = ds->crypto_idx_encap;
 	scfg->crypto_idx_decap = ds->crypto_idx_decap;
-	scfg->iv_len_encap = encap_iv_len;
-	scfg->iv_len_decap = decap_iv_len;
-	scfg->hash_len_encap = hash_len_encap;
-	scfg->hash_len_decap = hash_len_decap;
-	scfg->cipher_algo_encap = in_data->encap.cipher_type;
-	scfg->cipher_algo_decap = in_data->decap.cipher_type;
-	scfg->auth_algo_encap = in_data->encap.auth_type;
-	scfg->auth_algo_decap = in_data->decap.auth_type;
+	scfg->iv_len_encap = encap_algo->iv_len;
+	scfg->iv_len_decap = decap_algo->iv_len;
+	scfg->hash_len_encap = encap_algo->hash_len;
+	scfg->hash_len_decap = decap_algo->hash_len;
+	scfg->cipher_algo_encap = encap_algo->cipher_algo;
+	scfg->cipher_algo_decap = decap_algo->cipher_algo;
+	scfg->auth_algo_encap = encap_algo->auth_algo;
+	scfg->auth_algo_decap = decap_algo->auth_algo;
 	scfg->nss_app_if = ds->nss_app_if;
 	scfg->sport = ds->sport;
 	scfg->dport = ds->dport;
@@ -600,7 +550,7 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_create_with_crypto(struct nss_dtlsmgr_s
 	scfg->window_size = ds->window_size;
 	scfg->oip_ttl = ds->ip_ttl;
 
-	if (ds->flags & NSS_DTLSMGR_IPV6_ENCAP) {
+	if (ds->flags & NSS_DTLSMGR_HDR_IPV6) {
 		for (i = 0; i < 4; i++) {
 			scfg->sip[i] = ds->sip.ipv6[i];
 			scfg->dip[i] = ds->dip.ipv6[i];
@@ -617,31 +567,27 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_create_with_crypto(struct nss_dtlsmgr_s
 	}
 
 	/*
-	 * Initialize return parameters
-	 */
-	out_data->dtls_if = ds->nss_dtls_if;
-	out_data->mtu_adjust = NSS_DTLSMGR_HDR_LEN;
-	out_data->mtu_adjust += sizeof(struct udphdr);
-
-	if (ds->flags & NSS_DTLSMGR_IPV6_ENCAP)
-		out_data->mtu_adjust += sizeof(struct ipv6hdr);
-	else
-		out_data->mtu_adjust += sizeof(struct iphdr);
-
-	if (ds->flags & NSS_DTLSMGR_CAPWAP)
-		out_data->mtu_adjust += NSS_DTLSMGR_CAPWAPHDR_LEN;
-
-	out_data->mtu_adjust += ((encap_iv_len * 2) + hash_len_encap);
-
-	/*
 	 * Adjust MTU of netdev
 	 */
-	ds->netdev->mtu -= out_data->mtu_adjust;
+	mtu_adjust = NSS_DTLSMGR_HDR_LEN;
+	mtu_adjust += sizeof(struct udphdr);
+
+	if (ds->flags & NSS_DTLSMGR_HDR_IPV6)
+		mtu_adjust += sizeof(struct ipv6hdr);
+	else
+		mtu_adjust += sizeof(struct iphdr);
+
+	if (ds->flags & NSS_DTLSMGR_HDR_CAPWAP)
+		mtu_adjust += NSS_DTLSMGR_CAPWAPHDR_LEN;
+
+	mtu_adjust += ((scfg->iv_len_encap * 2) + scfg->hash_len_encap);
+
+	ds->netdev->mtu -= mtu_adjust;
 
 	nss_dtlsmgr_info("%p: NSS DTLS session I/F:%d(%s) created\n",
 			 &g_ctx, ds->nss_dtls_if, ds->netdev->name);
 
-	return NSS_DTLSMGR_OK;
+	return ds->netdev;
 
 dtls_msg_tx_fail:
 	spin_lock_bh(&g_ctx.lock);
@@ -675,26 +621,23 @@ dtls_crypto_decap_alloc_fail:
 dtls_crypto_encap_alloc_fail:
 	ds->magic = 0;
 	kfree(ds);
-	return ret;
+	return NULL;
 }
-EXPORT_SYMBOL(nss_dtlsmgr_session_create_with_crypto);
+EXPORT_SYMBOL(nss_dtlsmgr_session_create);
 
 /*
  * nss_dtlsmgr_session_destroy()
  *	Destroy DTLS session
  */
-nss_dtlsmgr_status_t nss_dtlsmgr_session_destroy(uint32_t dtls_if)
+nss_dtlsmgr_status_t nss_dtlsmgr_session_destroy(struct net_device *dev)
 {
+	struct nss_dtlsmgr_netdev_priv *priv;
 	struct nss_dtlsmgr_session *ds;
 	nss_tx_status_t nss_status;
 	struct nss_dtls_msg dtlsmsg;
 
-	/*
-	 * Search DTLS session in session list
-	 */
-	spin_lock_bh(&g_ctx.lock);
-	ds = nss_dtlsmgr_session_find(dtls_if);
-	spin_unlock_bh(&g_ctx.lock);
+	priv = netdev_priv(dev);
+	ds = priv->s;
 
 	if (!ds) {
 		return NSS_DTLSMGR_FAIL;
@@ -715,7 +658,7 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_destroy(uint32_t dtls_if)
 	}
 
 	spin_lock_bh(&g_ctx.lock);
-	ds = nss_dtlsmgr_session_remove(dtls_if);
+	ds = nss_dtlsmgr_session_remove(ds->nss_dtls_if);
 	spin_unlock_bh(&g_ctx.lock);
 
 	if (!ds) {
@@ -727,36 +670,29 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_destroy(uint32_t dtls_if)
 	 */
 	nss_dtlsmgr_session_ref_dec(ds);
 
-	nss_dtlsmgr_info("%p: DTLS session I/F %u disabled\n", &g_ctx, dtls_if);
+	nss_dtlsmgr_info("%p: DTLS session I/F %u disabled\n", &g_ctx, ds->nss_dtls_if);
 
 	return NSS_DTLSMGR_OK;
 }
 EXPORT_SYMBOL(nss_dtlsmgr_session_destroy);
 
 /*
- * nss_dtlsmgr_rekey_rx_cipher_update()
- *	Update pending Rx cipher of a DTLS session.
+ * nss_dtlsmgr_session_update_decap()
+ *	Update pending decap cipher of a DTLS session.
  */
-nss_dtlsmgr_status_t nss_dtlsmgr_rekey_rx_cipher_update(uint32_t dtls_if, struct nss_dtlsmgr_session_update_config *udata)
+nss_dtlsmgr_status_t nss_dtlsmgr_session_update_decap(struct net_device *dev, struct nss_dtlsmgr_config_update *udata)
 {
+	struct nss_dtlsmgr_netdev_priv *priv;
 	struct nss_dtlsmgr_session *ds;
 	nss_tx_status_t nss_status;
 	nss_crypto_status_t crypto_status;
+	enum nss_dtlsmgr_status ret;
 	struct nss_dtls_msg dtlsmsg;
 	struct nss_dtls_session_cipher_update *update;
-	struct nss_crypto_key cipher;
-	struct nss_crypto_key auth;
-	struct nss_crypto_params params;
-	uint32_t decap_iv_len = 0;
-	uint32_t hash_len_decap = 0;
+	struct nss_dtlsmgr_crypto_algo *decap_algo;
 
-	/*
-	 * Search DTLS session in session list
-	 */
-	spin_lock_bh(&g_ctx.lock);
-	ds = nss_dtlsmgr_session_find_and_ref(dtls_if);
-	spin_unlock_bh(&g_ctx.lock);
-
+	priv = netdev_priv(dev);
+	ds = priv->s;
 	if (!ds) {
 		return NSS_DTLSMGR_FAIL;
 	}
@@ -767,56 +703,27 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_rx_cipher_update(uint32_t dtls_if, struct
 	 * were subsequently not used for packet processing.
 	 */
 	if (ds->cidx_decap_pending != NSS_CRYPTO_MAX_IDXS) {
-		crypto_status = nss_crypto_session_free(g_ctx.crypto_hdl,
-							ds->cidx_decap_pending);
+		crypto_status = nss_crypto_session_free(g_ctx.crypto_hdl, ds->cidx_decap_pending);
 		if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-			nss_dtlsmgr_info("%p: dtls I/F:%u, unable to free crypto session id:%d\n", &g_ctx, ds->nss_dtls_if, ds->cidx_decap_pending);
+			nss_dtlsmgr_info("%p: dtls I/F:%u, unable to free crypto session id:%d\n",
+					 &g_ctx, ds->nss_dtls_if, ds->cidx_decap_pending);
 		}
 
 		ds->cidx_decap_pending = NSS_CRYPTO_MAX_IDXS;
 	}
 
-	memset(&cipher, 0, sizeof(struct nss_crypto_key));
-	memset(&auth, 0, sizeof(struct nss_crypto_key));
-	cipher.algo = udata->cipher_type;
-	cipher.key_len = udata->cipher_key_len;
-	cipher.key = udata->cipher_key;
-	auth.algo = udata->auth_type;
-	auth.key_len = udata->auth_key_len;
-	auth.key = udata->auth_key;
-	crypto_status = nss_crypto_session_alloc(g_ctx.crypto_hdl,
-						 &cipher,
-						 &auth,
-						 &ds->cidx_decap_pending);
-	if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-		nss_dtlsmgr_info("%p: DTLS rekey decap crypto alloc failed\n", &g_ctx);
-		nss_dtlsmgr_session_ref_dec(ds);
-		return NSS_DTLSMGR_CRYPTO_FAILED;
-	}
-
-	decap_iv_len = nss_dtlsmgr_get_cipher_iv_len(cipher.algo);
-	hash_len_decap = nss_dtlsmgr_get_auth_hash_len(auth.algo);
-
 	/*
-	 * Update crypto session
+	 * Alloc crypto session for decap
 	 */
-	memset(&params, 0, sizeof(struct nss_crypto_params));
-	params.cipher_skip = NSS_DTLSMGR_HDR_LEN + decap_iv_len;
-	params.auth_skip = 0;
-	params.req_type |= (NSS_CRYPTO_REQ_TYPE_DECRYPT
-			   | NSS_CRYPTO_REQ_TYPE_AUTH);
-	crypto_status = nss_crypto_session_update(g_ctx.crypto_hdl,
-						  ds->cidx_decap_pending,
-						  &params);
-	if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-		nss_crypto_session_free(g_ctx.crypto_hdl,
-					ds->cidx_decap_pending);
+	ret = nss_dtlsmgr_alloc_crypto(&udata->crypto, &ds->cidx_decap_pending, false);
+	if (ret != NSS_DTLSMGR_OK) {
+		nss_dtlsmgr_info("failed to rekey decap session %d", ret);
 		ds->cidx_decap_pending = NSS_CRYPTO_MAX_IDXS;
-
-		nss_dtlsmgr_info("%p: DTLS rekey decap crypto update failed\n", &g_ctx);
 		nss_dtlsmgr_session_ref_dec(ds);
-		return NSS_DTLSMGR_CRYPTO_FAILED;
+		return NSS_DTLSMGR_FAIL_NOCRYPTO;
 	}
+
+	decap_algo = &dtlsmgr_algo[udata->crypto.algo];
 
 	/*
 	 * Initialize DTLS session Rx cipher update message
@@ -824,11 +731,11 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_rx_cipher_update(uint32_t dtls_if, struct
 	memset(&dtlsmsg, 0, sizeof(struct nss_dtls_msg));
 	update = &dtlsmsg.msg.cipher_update;
 	update->crypto_idx = ds->cidx_decap_pending;
-	update->iv_len = decap_iv_len;
-	update->hash_len = hash_len_decap;
-	update->cipher_algo = cipher.algo;
-	update->auth_algo = auth.algo;
 	update->epoch = udata->epoch;
+	update->iv_len = decap_algo->iv_len;
+	update->hash_len = decap_algo->hash_len;
+	update->auth_algo = decap_algo->auth_algo;
+	update->cipher_algo = decap_algo->cipher_algo;
 
 	nss_dtls_msg_init(&dtlsmsg, (uint16_t)ds->nss_dtls_if,
 			  NSS_DTLS_MSG_REKEY_DECAP_CIPHER_UPDATE,
@@ -849,32 +756,25 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_rx_cipher_update(uint32_t dtls_if, struct
 	nss_dtlsmgr_session_ref_dec(ds);
 	return NSS_DTLSMGR_OK;
 }
-EXPORT_SYMBOL(nss_dtlsmgr_rekey_rx_cipher_update);
+EXPORT_SYMBOL(nss_dtlsmgr_session_update_decap);
 
 /*
- * nss_dtlsmgr_rekey_tx_cipher_update()
- *	Update pending Tx cipher of a DTLS session.
+ * nss_dtlsmgr_session_update_encap()
+ *	Update pending encap cipher of a DTLS session.
  */
-nss_dtlsmgr_status_t nss_dtlsmgr_rekey_tx_cipher_update(uint32_t dtls_if, struct nss_dtlsmgr_session_update_config *udata)
+nss_dtlsmgr_status_t nss_dtlsmgr_session_update_encap(struct net_device *dev, struct nss_dtlsmgr_config_update *udata)
 {
+	struct nss_dtlsmgr_netdev_priv *priv;
 	struct nss_dtlsmgr_session *ds;
 	nss_tx_status_t nss_status;
 	nss_crypto_status_t crypto_status;
+	enum nss_dtlsmgr_status ret;
 	struct nss_dtls_msg dtlsmsg;
 	struct nss_dtls_session_cipher_update *update;
-	struct nss_crypto_key cipher;
-	struct nss_crypto_key auth;
-	struct nss_crypto_params params;
-	uint32_t encap_iv_len = 0;
-	uint32_t hash_len_encap = 0;
+	struct nss_dtlsmgr_crypto_algo *encap_algo;
 
-	/*
-	 * Search DTLS session in session list
-	 */
-	spin_lock_bh(&g_ctx.lock);
-	ds = nss_dtlsmgr_session_find_and_ref(dtls_if);
-	spin_unlock_bh(&g_ctx.lock);
-
+	priv = netdev_priv(dev);
+	ds = priv->s;
 	if (!ds) {
 		return NSS_DTLSMGR_FAIL;
 	}
@@ -894,45 +794,18 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_tx_cipher_update(uint32_t dtls_if, struct
 		ds->cidx_encap_pending = NSS_CRYPTO_MAX_IDXS;
 	}
 
-	memset(&cipher, 0, sizeof(struct nss_crypto_key));
-	memset(&auth, 0, sizeof(struct nss_crypto_key));
-	cipher.algo = udata->cipher_type;
-	cipher.key_len = udata->cipher_key_len;
-	cipher.key = udata->cipher_key;
-	auth.algo = udata->auth_type;
-	auth.key_len = udata->auth_key_len;
-	auth.key = udata->auth_key;
-	crypto_status = nss_crypto_session_alloc(g_ctx.crypto_hdl,
-						 &cipher,
-						 &auth,
-						 &ds->cidx_encap_pending);
-	if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-		nss_dtlsmgr_info("%p: DTLS rekey encap crypto alloc failed\n", &g_ctx);
-		nss_dtlsmgr_session_ref_dec(ds);
-		return NSS_DTLSMGR_CRYPTO_FAILED;
-	}
-
-	encap_iv_len = nss_dtlsmgr_get_cipher_iv_len(cipher.algo);
-	hash_len_encap = nss_dtlsmgr_get_auth_hash_len(auth.algo);
-
-	/* Update crypto session */
-	memset(&params, 0, sizeof(struct nss_crypto_params));
-	params.cipher_skip = NSS_DTLSMGR_HDR_LEN + encap_iv_len;
-	params.auth_skip = 0;
-	params.req_type |= (NSS_CRYPTO_REQ_TYPE_ENCRYPT
-			   | NSS_CRYPTO_REQ_TYPE_AUTH);
-	crypto_status = nss_crypto_session_update(g_ctx.crypto_hdl,
-						  ds->cidx_encap_pending,
-						  &params);
-	if (crypto_status != NSS_CRYPTO_STATUS_OK) {
-		nss_crypto_session_free(g_ctx.crypto_hdl,
-					ds->cidx_encap_pending);
+	/*
+	 * Alloc crypto session for decap
+	 */
+	ret = nss_dtlsmgr_alloc_crypto(&udata->crypto, &ds->cidx_encap_pending, true);
+	if (ret != NSS_DTLSMGR_OK) {
+		nss_dtlsmgr_info("failed to rekey encap session %d", ret);
 		ds->cidx_encap_pending = NSS_CRYPTO_MAX_IDXS;
-
-		nss_dtlsmgr_info("%p: DTLS rekey encap crypto update failed\n", &g_ctx);
 		nss_dtlsmgr_session_ref_dec(ds);
-		return NSS_DTLSMGR_CRYPTO_FAILED;
+		return NSS_DTLSMGR_FAIL_NOCRYPTO;
 	}
+
+	encap_algo = &dtlsmgr_algo[udata->crypto.algo];
 
 	/*
 	 * Initialize DTLS session Tx cipher update message
@@ -940,11 +813,11 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_tx_cipher_update(uint32_t dtls_if, struct
 	memset(&dtlsmsg, 0, sizeof(struct nss_dtls_msg));
 	update = &dtlsmsg.msg.cipher_update;
 	update->crypto_idx = ds->cidx_encap_pending;
-	update->iv_len = encap_iv_len;
-	update->hash_len = hash_len_encap;
-	update->cipher_algo = cipher.algo;
-	update->auth_algo = auth.algo;
 	update->epoch = udata->epoch;
+	update->iv_len = encap_algo->iv_len;
+	update->hash_len = encap_algo->hash_len;
+	update->auth_algo = encap_algo->auth_algo;
+	update->cipher_algo = encap_algo->cipher_algo;
 
 	nss_dtls_msg_init(&dtlsmsg, (uint16_t)ds->nss_dtls_if,
 			  NSS_DTLS_MSG_REKEY_ENCAP_CIPHER_UPDATE,
@@ -965,33 +838,29 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_tx_cipher_update(uint32_t dtls_if, struct
 	nss_dtlsmgr_session_ref_dec(ds);
 	return NSS_DTLSMGR_OK;
 }
-EXPORT_SYMBOL(nss_dtlsmgr_rekey_tx_cipher_update);
+EXPORT_SYMBOL(nss_dtlsmgr_session_update_encap);
 
 /*
- * nss_dtlsmgr_rekey_rx_cipher_switch()
- *	Set pending Rx cipher state of a DTLS session to current.
+ * nss_dtlsmgr_session_switch_decap()
+ *	Set pending decap cipher state of a DTLS session to current.
  */
-nss_dtlsmgr_status_t nss_dtlsmgr_rekey_rx_cipher_switch(uint32_t dtls_if)
+bool nss_dtlsmgr_session_switch_decap(struct net_device *dev)
 {
+	struct nss_dtlsmgr_netdev_priv *priv;
 	struct nss_dtlsmgr_session *ds;
 	nss_tx_status_t nss_status;
 	struct nss_dtls_msg dtlsmsg;
 
+	priv = netdev_priv(dev);
+	ds = priv->s;
+	if (!ds) {
+		return false;
+	}
+
 	memset(&dtlsmsg, 0, sizeof(struct nss_dtls_msg));
-	nss_dtls_msg_init(&dtlsmsg, (uint16_t)dtls_if,
+	nss_dtls_msg_init(&dtlsmsg, (uint16_t)ds->nss_dtls_if,
 			  NSS_DTLS_MSG_REKEY_DECAP_CIPHER_SWITCH,
 			  0, NULL, NULL);
-
-	/*
-	 * Search DTLS session in session list
-	 */
-	spin_lock_bh(&g_ctx.lock);
-	ds = nss_dtlsmgr_session_find_and_ref(dtls_if);
-	spin_unlock_bh(&g_ctx.lock);
-
-	if (!ds) {
-		return NSS_DTLSMGR_FAIL;
-	}
 
 	/*
 	 * Send DTLS session Rx cipher switch command to FW
@@ -999,42 +868,38 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_rx_cipher_switch(uint32_t dtls_if)
 	nss_status = nss_dtls_tx_msg_sync(ds->nss_ctx, &dtlsmsg);
 	if (nss_status != NSS_TX_SUCCESS) {
 		nss_dtlsmgr_session_ref_dec(ds);
-		return NSS_DTLSMGR_FAIL;
+		return false;
 	}
 
 	ds->crypto_idx_decap = ds->cidx_decap_pending;
 	ds->cidx_decap_pending = NSS_CRYPTO_MAX_IDXS;
 
 	nss_dtlsmgr_session_ref_dec(ds);
-	return NSS_DTLSMGR_OK;
+	return true;
 }
-EXPORT_SYMBOL(nss_dtlsmgr_rekey_rx_cipher_switch);
+EXPORT_SYMBOL(nss_dtlsmgr_session_switch_decap);
 
 /*
- * nss_dtlsmgr_rekey_tx_cipher_switch()
- *	Set pending Tx cipher state of a DTLS session to current.
+ * nss_dtlsmgr_session_switch_encap()
+ *	Set pending encap cipher state of a DTLS session to current.
  */
-nss_dtlsmgr_status_t nss_dtlsmgr_rekey_tx_cipher_switch(uint32_t dtls_if)
+bool nss_dtlsmgr_session_switch_encap(struct net_device *dev)
 {
+	struct nss_dtlsmgr_netdev_priv *priv;
 	struct nss_dtlsmgr_session *ds;
 	nss_tx_status_t nss_status;
 	struct nss_dtls_msg dtlsmsg;
 
+	priv = netdev_priv(dev);
+	ds = priv->s;
+	if (!ds) {
+		return false;
+	}
+
 	memset(&dtlsmsg, 0, sizeof(struct nss_dtls_msg));
-	nss_dtls_msg_init(&dtlsmsg, (uint16_t)dtls_if,
+	nss_dtls_msg_init(&dtlsmsg, (uint16_t)ds->nss_dtls_if,
 			  NSS_DTLS_MSG_REKEY_ENCAP_CIPHER_SWITCH,
 			  0, NULL, NULL);
-
-	/*
-	 * Search DTLS session in session list
-	 */
-	spin_lock_bh(&g_ctx.lock);
-	ds = nss_dtlsmgr_session_find_and_ref(dtls_if);
-	spin_unlock_bh(&g_ctx.lock);
-
-	if (!ds) {
-		return NSS_DTLSMGR_FAIL;
-	}
 
 	/*
 	 * Send DTLS session Tx cipher switch command to FW
@@ -1042,16 +907,41 @@ nss_dtlsmgr_status_t nss_dtlsmgr_rekey_tx_cipher_switch(uint32_t dtls_if)
 	nss_status = nss_dtls_tx_msg_sync(ds->nss_ctx, &dtlsmsg);
 	if (nss_status != NSS_TX_SUCCESS) {
 		nss_dtlsmgr_session_ref_dec(ds);
-		return NSS_DTLSMGR_FAIL;
+		return false;
 	}
 
 	ds->crypto_idx_encap = ds->cidx_encap_pending;
 	ds->cidx_encap_pending = NSS_CRYPTO_MAX_IDXS;
 
 	nss_dtlsmgr_session_ref_dec(ds);
-	return NSS_DTLSMGR_OK;
+	return true;
 }
-EXPORT_SYMBOL(nss_dtlsmgr_rekey_tx_cipher_switch);
+EXPORT_SYMBOL(nss_dtlsmgr_session_switch_encap);
+
+/*
+ * nss_dtlsmgr_get_interface()
+ *	Returns NSS DTLS interface number for encap/decap on success.
+ */
+int32_t nss_dtlsmgr_get_interface(struct net_device *dev, enum nss_dtlsmgr_interface_type type)
+{
+	int32_t ifnum;
+
+	if (type > NSS_DTLSMGR_INTERFACE_TYPE_MAX) {
+		nss_dtlsmgr_warn("%p: invalid interface type %d", dev, type);
+		return -EINVAL;
+	}
+
+	ifnum = nss_cmn_get_interface_number_by_dev_and_type(dev, NSS_DYNAMIC_INTERFACE_TYPE_DTLS);
+	if (ifnum < 0) {
+		nss_dtlsmgr_warn("%p: couldn't find DTLS interface number (%d)", dev, ifnum);
+		return ifnum;
+	}
+
+	ifnum = nss_dtls_get_ifnum_with_coreid(ifnum);
+
+	return ifnum;
+}
+EXPORT_SYMBOL(nss_dtlsmgr_get_interface);
 
 /*
  * nss_dtls_crypto_attach()

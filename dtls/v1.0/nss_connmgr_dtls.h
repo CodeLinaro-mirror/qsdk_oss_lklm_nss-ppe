@@ -21,7 +21,7 @@
 #ifndef _NSS_CONNMGR_DTLS_H_
 #define _NSS_CONNMGR_DTLS_H_
 
-#include "nss_dtlsmgr.h"
+#include <nss_dtlsmgr.h>
 #include <nss_crypto_if.h>
 
 /*
@@ -90,6 +90,78 @@
  * DTLS metadata error types
  */
 #define NSS_DTLSMGR_METADATA_ERROR_OK 0
+
+/**
+ * NSS DTLS crypto data
+ */
+struct nss_dtlsmgr_crypto_algo {
+	enum nss_crypto_cipher cipher_algo;
+	enum nss_crypto_auth auth_algo;
+	uint32_t iv_len;
+	uint32_t hash_len;
+};
+
+/**
+ * NSS DTLS session stats update
+ */
+struct nss_dtlsmgr_session_stats_update {
+	uint32_t tx_pkts;		/**< Tx packets */
+	uint32_t rx_pkts;		/**< Rx packets */
+	uint32_t rx_dropped;		/**< Rx drops */
+	uint32_t tx_auth_done;		/**< Tx authentication done */
+	uint32_t rx_auth_done;		/**< Rx successful authentication */
+	uint32_t tx_cipher_done;	/**< Tx cipher done */
+	uint32_t rx_cipher_done;	/**< Rx cipher done */
+	uint32_t tx_cbuf_alloc_fail;	/**< Tx crypto buffer allocation fail */
+	uint32_t rx_cbuf_alloc_fail;	/**< Rx crypto buffer allocation fail */
+	uint32_t tx_cenqueue_fail;	/**< Tx crypto enqueue fail */
+	uint32_t rx_cenqueue_fail;	/**< Rx crypto enqueue fail */
+	uint32_t tx_dropped_hroom;	/**< Tx drop due to
+					     insufficient headroom */
+	uint32_t tx_dropped_troom;	/**< Tx drop due to
+					     insufficient tailroom */
+	uint32_t tx_forward_enqueue_fail;
+					/**< Enqueue failed to forwarding
+					     node after encap */
+	uint32_t rx_forward_enqueue_fail;
+					/**< Enqueue failed to receiving
+					     node after decap */
+	uint32_t rx_invalid_version;	/**< Rx invalid DTLS version */
+	uint32_t rx_invalid_epoch;	/**< Rx invalid DTLS epoch */
+	uint32_t rx_malformed;		/**< Rx malformed DTLS record */
+	uint32_t rx_cipher_fail;	/**< Rx cipher fail */
+	uint32_t rx_auth_fail;		/**< Rx authentication fail */
+	uint32_t rx_capwap_classify_fail;
+					/**< Rx CAPWAP classification fail */
+	uint32_t rx_replay_fail;	/**< Rx anti-replay failures */
+	uint32_t rx_replay_duplicate;	/**< Rx anti-replay fail for
+					     duplicate record */
+	uint32_t rx_replay_out_of_window;
+					/**< Rx anti-replay fail for out
+					     of window record */
+	uint32_t outflow_queue_full;	/**< Tx drop due to encap queue full */
+	uint32_t decap_queue_full;	/**< Rx drop due to decap queue full */
+	uint32_t pbuf_alloc_fail;	/**< Buffer allocation fail */
+	uint32_t pbuf_copy_fail;	/**< Buffer copy fail */
+	uint16_t epoch;			/**< Current Epoch */
+	uint16_t tx_seq_high;		/**< Upper 16-bits of current
+					     sequence number */
+	uint32_t tx_seq_low;		/**< Lower 32-bits of current
+					     sequence number */
+};
+
+/**
+ * NSS DTLS session stats update callback
+ */
+typedef void (*nss_dtlsmgr_session_stats_update_cb_t)(uint32_t dtls_if, struct nss_dtlsmgr_session_stats_update *supdate);
+
+/**
+ *  * @brief IPv4/IPv6 address
+ *   */
+union nss_dtlsmgr_ip {
+        uint32_t ipv4;                  /**< IPv4 address */
+        uint32_t ipv6[4];               /**< IPv6 address */
+};
 
 /*
  * DTLS Manager session
