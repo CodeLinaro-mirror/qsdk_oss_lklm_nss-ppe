@@ -175,12 +175,45 @@ static struct rtnl_link_stats64 *nss_ipsecmgr_dev_stats64(struct net_device *dev
 }
 
 /*
+ * nss_ipsecmgr_dev_mtu_update()
+ *	Update tunnel max MTU
+ */
+static void nss_ipsecmgr_dev_mtu_update(struct list_head *head)
+{
+	struct nss_ipsecmgr_priv *priv;
+	uint16_t max_mtu = 0;
+	bool update_mtu = false;
+
+	write_lock(&ipsecmgr_drv->lock);
+	list_for_each_entry(priv, head, list) {
+		if (priv->dev->mtu > max_mtu)
+			max_mtu = priv->dev->mtu;
+	}
+
+	if (ipsecmgr_drv->max_mtu != max_mtu) {
+		ipsecmgr_drv->max_mtu = max_mtu;
+		update_mtu = true;
+	}
+
+	write_unlock(&ipsecmgr_drv->lock);
+
+#ifdef NSS_IPSECMGR_PPE_SUPPORT
+	/*
+	 * Set PPE inline port's MTU.
+	 */
+	if (ipsecmgr_drv->ipsec_inline && update_mtu)
+		nss_ipsec_ppe_mtu_update(ipsecmgr_drv->nss_ctx, ipsecmgr_drv->data_ifnum, max_mtu, max_mtu);
+#endif
+}
+
+/*
  * nss_ipsecmgr_dev_mtu()
  *	Change device MTU
  */
 static int nss_ipsecmgr_dev_mtu(struct net_device *dev, int mtu)
 {
 	dev->mtu = mtu;
+	nss_ipsecmgr_dev_mtu_update(&ipsecmgr_drv->tun_db);
 	return 0;
 }
 
@@ -954,7 +987,11 @@ void nss_ipsecmgr_tunnel_del(struct net_device *dev)
 	 */
 	write_lock_bh(&ipsecmgr_drv->lock);
 	nss_ipsecmgr_ref_free(&priv->ref);
+
+	list_del(&priv->list);
 	write_unlock_bh(&ipsecmgr_drv->lock);
+
+	nss_ipsecmgr_dev_mtu_update(&ipsecmgr_drv->tun_db);
 
 	/*
 	 * The unregister should start here but the expectation is that the free would
@@ -982,11 +1019,12 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 
 	priv = netdev_priv(dev);
 	priv->dev = dev;
+	INIT_LIST_HEAD(&priv->list);
 	memcpy(&priv->cb, cb, sizeof(priv->cb));
 	memset(&priv->stats, 0, sizeof(priv->stats));
 
 	/*
-	 * Use Hlos netdev if it is loaded in the callback context;
+	 * Use HLOS netdev if it is loaded in the callback context;
 	 * else use the NSS netdev
 	 */
 	if (!cb->skb_dev)
@@ -1001,6 +1039,11 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 		return NULL;
 	}
 
+	write_lock(&ipsecmgr_drv->lock);
+	list_add(&priv->list, &ipsecmgr_drv->tun_db);
+	write_unlock(&ipsecmgr_drv->lock);
+
+	nss_ipsecmgr_dev_mtu(dev, priv->cb.skb_dev->mtu);
 	return dev;
 }
 EXPORT_SYMBOL(nss_ipsecmgr_tunnel_add);
@@ -1011,6 +1054,7 @@ EXPORT_SYMBOL(nss_ipsecmgr_tunnel_add);
  */
 static int __init nss_ipsecmgr_dev_init(void)
 {
+	struct nss_ipsecmgr_priv *priv;
 	struct net_device *dev;
 	uint32_t features = 0;
 	int status;
@@ -1031,11 +1075,15 @@ static int __init nss_ipsecmgr_dev_init(void)
 	ipsecmgr_drv->ipsec_inline = enable_ipsec_inline;
 #endif
 
-	dev = alloc_netdev(0, NSS_IPSECMGR_DEFAULT_TUN_NAME, NET_NAME_UNKNOWN, nss_ipsecmgr_dev_dummy_setup);
+	dev = alloc_netdev(sizeof(*priv), NSS_IPSECMGR_DEFAULT_TUN_NAME, NET_NAME_UNKNOWN, nss_ipsecmgr_dev_dummy_setup);
 	if (!dev) {
 		nss_ipsecmgr_warn("%p: Failed to allocate dummy netdevice", ipsecmgr_drv);
 		goto free;
 	}
+
+	priv = netdev_priv(dev);
+	priv->dev = dev;
+	INIT_LIST_HEAD(&priv->list);
 
 	dev->netdev_ops = &nss_ipsecmgr_dummy_ndev_ops;
 
@@ -1053,6 +1101,7 @@ static int __init nss_ipsecmgr_dev_init(void)
 	rwlock_init(&ipsecmgr_drv->lock);
 	nss_ipsecmgr_init_sa_db(ipsecmgr_drv->sa_db);
 	nss_ipsecmgr_init_flow_db(ipsecmgr_drv->flow_db);
+	nss_ipsecmgr_init_tun_db(&ipsecmgr_drv->tun_db);
 
 	nss_ipsec_data_register(ipsecmgr_drv->data_ifnum, nss_ipsecmgr_dev_rx, ipsecmgr_drv->dev, features);
 	nss_ipsec_notify_register(ipsecmgr_drv->encap_ifnum, nss_ipsecmgr_dev_rx_notify, ipsecmgr_drv);
@@ -1083,6 +1132,12 @@ static int __init nss_ipsecmgr_dev_init(void)
 	 */
 	nss_ipsecmgr_dev_configure(&ipsecmgr_drv->cfg_work.work);
 
+	write_lock(&ipsecmgr_drv->lock);
+	list_add(&priv->list, &ipsecmgr_drv->tun_db);
+
+	ipsecmgr_drv->max_mtu = dev->mtu;
+	write_unlock(&ipsecmgr_drv->lock);
+
 	nss_ipsecmgr_info("NSS IPsec manager loaded: %s\n", NSS_CLIENT_BUILD_ID);
 	return 0;
 
@@ -1105,6 +1160,8 @@ free:
  */
 static void __exit nss_ipsecmgr_dev_exit(void)
 {
+	struct nss_ipsecmgr_priv *priv;
+
 	if (!ipsecmgr_drv) {
 		nss_ipsecmgr_warn("IPsec manager driver context empty");
 		return;
@@ -1114,6 +1171,16 @@ static void __exit nss_ipsecmgr_dev_exit(void)
 		nss_ipsecmgr_warn("%p: NSS Context empty", ipsecmgr_drv);
 		goto free;
 	}
+
+	priv = netdev_priv(ipsecmgr_drv->dev);
+
+	write_lock(&ipsecmgr_drv->lock);
+	list_del(&priv->list);
+
+	ipsecmgr_drv->max_mtu = U16_MAX;
+	write_unlock(&ipsecmgr_drv->lock);
+
+	BUG_ON(!list_empty(&ipsecmgr_drv->tun_db));
 
 	/*
 	 * Unregister the callbacks from the HLOS as we are no longer

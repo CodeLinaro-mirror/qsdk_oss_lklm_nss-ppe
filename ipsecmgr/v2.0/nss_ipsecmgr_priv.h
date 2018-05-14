@@ -193,6 +193,7 @@ struct nss_ipsecmgr_sa_entry {
  * IPsec manager private context
  */
 struct nss_ipsecmgr_priv {
+	struct list_head list;			/* List node */
 	struct net_device *dev;			/* back pointer to tunnel device */
 	struct nss_ipsecmgr_ref ref;		/* SA objects under the tunnel */
 	struct nss_ipsecmgr_callback cb;	/* Callback entry */
@@ -209,6 +210,7 @@ struct nss_ipsecmgr_drv {
 	rwlock_t lock;					/* lock for all DB operations. */
 	struct list_head sa_db[NSS_IPSECMGR_SA_MAX];	/* SA database. */
 	struct list_head flow_db[NSS_IPSECMGR_FLOW_MAX];/* Flow database. */
+	struct list_head tun_db;			/* Tunnel database */
 
 	int encap_ifnum;			/* NSS encap interface. */
 	int decap_ifnum;			/* NSS decap interface. */
@@ -217,9 +219,24 @@ struct nss_ipsecmgr_drv {
 	struct nss_ctx_instance *nss_ctx;	/* NSS context. */
 	struct delayed_work cfg_work;		/* Configure node work */
 	bool ipsec_inline;			/* IPsec inline mode */
+	uint16_t max_mtu;			/* Maximum MTU supported */
 
 	struct nss_ipsecmgr_node_stats node_stats;	/* Node stats */
 };
+
+/*
+ * nss_ipsecmgr_init_tun_db()
+ *	Initialize the tunnel databases
+ */
+static inline void nss_ipsecmgr_init_tun_db(struct list_head *db)
+{
+	struct list_head *head = db;
+
+	/*
+	 * initialize the tunnel database
+	 */
+	INIT_LIST_HEAD(head);
+}
 
 /*
  * nss_ipsecmgr_init_flow_db()
