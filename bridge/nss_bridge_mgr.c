@@ -75,9 +75,11 @@
 /*
  * nss interface check
  */
+#define NSS_BRIDGE_MGR_PHY_PORT_MIN 1
+#define NSS_BRIDGE_MGR_PHY_PORT_MAX 6
 #define NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(if_num) \
-	(((if_num) >= NSS_PHYSICAL_IF_START) && \
-	((if_num) < (NSS_PHYSICAL_IF_START + NSS_MAX_PHYSICAL_INTERFACES)))
+	(((if_num) >= NSS_BRIDGE_MGR_PHY_PORT_MIN) && \
+	((if_num) <= NSS_BRIDGE_MGR_PHY_PORT_MAX))
 
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
 #define NSS_BRIDGE_MGR_SWITCH_ID	0
@@ -103,8 +105,8 @@ struct nss_bridge_pvt {
 	uint32_t ifnum;				/* Dynamic interface for bridge */
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
 	uint32_t vsi;				/* VSI set for bridge */
-	uint32_t port_vsi[NSS_MAX_PHYSICAL_INTERFACES];	/* port VSI set for physical interfaces	*/
-	uint32_t lag_ports[NSS_MAX_PHYSICAL_INTERFACES]; /* List of slave ports in LAG */
+	uint32_t port_vsi[NSS_BRIDGE_MGR_PHY_PORT_MAX];	/* port VSI set for physical interfaces	*/
+	uint32_t lag_ports[NSS_BRIDGE_MGR_PHY_PORT_MAX]; 	/* List of slave ports in LAG */
 	int bond_slave_num;			/* Total number of bond devices added into
 						   bridge device */
 #endif

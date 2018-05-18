@@ -370,7 +370,7 @@ static int nss_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct net_de
 	int ret = 0;
 	struct net_device *slave;
 	int32_t port;
-	int vlan_mgr_bond_port_role;
+	int vlan_mgr_bond_port_role = -1;
 
 	if (ppe_vsi_alloc(NSS_VLAN_MGR_SWITCH_ID, &vsi)) {
 		nss_vlan_mgr_warn("%s: failed to allocate VSI for bond vlan device", bond_dev->name);
@@ -383,7 +383,8 @@ static int nss_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct net_de
 	}
 
 	/*
-	 * set vlan_mgr_bond_port_role
+	 * Set vlan_mgr_bond_port_role and check
+	 * if all the bond slaves are physical ports
 	 */
 	rcu_read_lock();
 	for_each_netdev_in_bond_rcu(bond_dev, slave) {
@@ -397,10 +398,18 @@ static int nss_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct net_de
 		/*
 		 * vlan_mgr_bond_port_role is same for all the slaves in the bond group
 		 */
-		vlan_mgr_bond_port_role = vlan_mgr_ctx.port_role[port];
-		break;
+		if (vlan_mgr_bond_port_role == -1) {
+			vlan_mgr_bond_port_role = vlan_mgr_ctx.port_role[port];
+		}
 	}
 	rcu_read_unlock();
+
+	/*
+	 * In case the bond interface has no slaves, we do not want to proceed further
+	 */
+	if (vlan_mgr_bond_port_role == -1) {
+		goto free_vsi;
+	}
 
 	/*
 	 * Calculate ppe cvid and svid
@@ -1562,7 +1571,7 @@ int nss_vlan_mgr_add_bond_slave(struct net_device *bond_dev,
 	bondid = bond_get_id(bond_dev);
 #endif
 	if (bondid < 0) {
-		nss_vlan_mgr_warn("%p: Invalid LAG group id 0x%x\n", v, bondid);
+		nss_vlan_mgr_warn("%s: Invalid LAG group id 0x%x\n", bond_dev->name, bondid);
 		return -1;
 	}
 	bond_ifnum = bondid + NSS_LAG0_INTERFACE_NUM;
