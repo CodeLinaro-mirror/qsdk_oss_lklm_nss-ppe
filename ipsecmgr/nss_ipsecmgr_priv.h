@@ -1,6 +1,6 @@
 /*
  * ********************************************************************************
- * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -120,6 +120,8 @@
 #define NSS_IPSECMGR_ESP_PAD_SZ 14 /* maximum amount of padding */
 #define NSS_IPSECMGR_IPV4_MIN_MTU 576 /* Minimum PMTU value for IPv4 */
 
+#define NSS_IPSECMGR_ESP_LOOP_MAGIC 0xA5A5
+
 struct nss_ipsecmgr_ref;
 struct nss_ipsecmgr_key;
 struct nss_ipsecmgr_priv;
@@ -219,6 +221,7 @@ struct nss_ipsecmgr_sa_pkt_stats {
 	uint32_t fail_hash;
 	uint32_t fail_replay;
 	uint32_t fail_hash_cont;		/* Continous fail hash count */
+	uint32_t fail_queue_h2n;		/* Slow path NSS queue full */
 };
 
 /*
@@ -230,6 +233,8 @@ struct nss_ipsecmgr_node_stats {
 	uint64_t linearized;		/* linearized the packet */
 	uint64_t exceptioned;		/* packets exception from NSS */
 	uint64_t fail_enqueue;		/* packets failed to enqueue */
+	uint64_t fail_sa;		/* dropped in Host due to SA lookup failure */
+	uint64_t fail_loop;		/* loop back from NSS after SA lookup failure */
 };
 
 /*

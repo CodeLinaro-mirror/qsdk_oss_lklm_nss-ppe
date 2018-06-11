@@ -124,7 +124,8 @@ static ssize_t nss_ipsecmgr_sa_dump(struct nss_ipsecmgr_sa_entry *sa, char *buf,
 	len += snprintf(buf + len, max_len - len, "no_buf: %d\n", sa->pkts.no_buf);
 	len += snprintf(buf + len, max_len - len, "fail_queue: %d\n", sa->pkts.fail_queue);
 	len += snprintf(buf + len, max_len - len, "fail_hash: %d\n", sa->pkts.fail_hash);
-	len += snprintf(buf + len, max_len - len, "fail_replay: %d\n\n\n", sa->pkts.fail_replay);
+	len += snprintf(buf + len, max_len - len, "fail_replay: %d\n", sa->pkts.fail_replay);
+	len += snprintf(buf + len, max_len - len, "fail_queue_h2n: %d\n\n\n", sa->pkts.fail_queue_h2n);
 
 	return len;
 }

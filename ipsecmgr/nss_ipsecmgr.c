@@ -547,6 +547,43 @@ static struct nss_ipsecmgr_tunnel_entry *nss_ipsecmgr_tunnel_dev_index2entry(int
 }
 
 /*
+ * nss_ipsecmgr_check_rx_loop()
+ * 	check whether the SKB is a looped back from NSS as exception.
+ */
+static inline bool nss_ipsecmgr_check_rx_loop(struct sk_buff *skb)
+{
+	uint16_t *magic = (uint16_t *)skb->cb;
+	if (*magic == NSS_IPSECMGR_ESP_LOOP_MAGIC) {
+		*magic = 0;
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * nss_ipsecmgr_rx_init_loop()
+ * 	Stamp SKB with magic number. We will check the magic in the exception
+ * 	path, whether the packet is successfully decrypted or not.
+ */
+static inline void nss_ipsecmgr_rx_init_loop(struct sk_buff *skb)
+{
+	uint16_t *magic = (uint16_t *)skb->cb;
+	*magic = NSS_IPSECMGR_ESP_LOOP_MAGIC;
+}
+
+/*
+ * nss_ipsecmgr_rx_reset_loop()
+ * 	check whether packet has magic set in SKB CB and clear it
+ */
+static inline void nss_ipsecmgr_rx_reset_loop(struct sk_buff *skb)
+{
+	uint16_t *magic = (uint16_t *)skb->cb;
+	if (*magic == NSS_IPSECMGR_ESP_LOOP_MAGIC)
+		*magic = 0;
+}
+
+/*
  * nss_ipsecmgr_tunnel_rx_local()
  * 	ESP exception packets from NSS should be delivered through local_out.
  *
@@ -567,6 +604,22 @@ static bool nss_ipsecmgr_tunnel_rx_local(struct sk_buff *skb)
 		skb_set_transport_header(skb, sizeof(*iph));
 		if ((iph->protocol == IPPROTO_UDP) && (udp_hdr(skb)->dest != ntohs(NSS_IPSECMGR_NATT_PORT_DATA)))
 			return false;
+
+		/*
+		 * Packets sent from IPSec Manager ESP protocol handler can
+		 * land here, if there are no SAs present in NSS. Check for
+		 * SKB_CB magic and drop the packets here.
+		 */
+		if (nss_ipsecmgr_check_rx_loop(skb)) {
+			nss_ipsecmgr_info("received ingress ESP packet from NSS\n");
+
+			write_lock(&ipsecmgr_ctx->lock);
+			ipsecmgr_ctx->dec_stats.fail_loop++;
+			write_unlock(&ipsecmgr_ctx->lock);
+
+			dev_kfree_skb_any(skb);
+			return true;
+		}
 
 		/*
 		 * ESP packet received here, since routing rule is absent.
@@ -606,6 +659,22 @@ static bool nss_ipsecmgr_tunnel_rx_local(struct sk_buff *skb)
 
 		if (ipv6_hdr(skb)->nexthdr != IPPROTO_ESP)
 			return false;
+
+		/*
+		 * Packets sent from IPSec Manager ESP protocol handler can
+		 * land here, if there are no SAs present in NSS. Check for
+		 * SKB_CB magic and drop the packets here.
+		 */
+		if (nss_ipsecmgr_check_rx_loop(skb)) {
+			nss_ipsecmgr_info("received ingress ESP packet from NSS\n");
+
+			write_lock(&ipsecmgr_ctx->lock);
+			ipsecmgr_ctx->dec_stats.fail_loop++;
+			write_unlock(&ipsecmgr_ctx->lock);
+
+			dev_kfree_skb_any(skb);
+			return true;
+		}
 
 		/*
 		 * - Connection Tracker reference should not be retained from
@@ -880,6 +949,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 			nss_ipsecmgr_v6addr_swap(tuple->dst_addr, tuple->dst_addr);
 			nss_ipsecmgr_v6addr_swap(tuple->src_addr, tuple->src_addr);
 		}
+
 		nss_ipsecmgr_sa_tuple2key(tuple, &key);
 
 		write_lock(&ipsecmgr_ctx->lock);
@@ -962,6 +1032,8 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 
 	case NSS_IPSEC_MSG_TYPE_SYNC_NODE_STATS:
 
+		write_lock(&ipsecmgr_ctx->lock);
+
 		drv_stats = &ipsecmgr_ctx->enc_stats;
 		if (unlikely(nim->type == NSS_IPSEC_TYPE_DECAP)) {
 			drv_stats = &ipsecmgr_ctx->dec_stats;
@@ -973,6 +1045,8 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 		drv_stats->linearized += node_stats->linearized;
 		drv_stats->exceptioned += node_stats->exceptioned;
 		drv_stats->fail_enqueue += node_stats->fail_enqueue;
+
+		write_unlock(&ipsecmgr_ctx->lock);
 
 		break;
 
@@ -1007,6 +1081,8 @@ static ssize_t nss_ipsecmgr_node_stats_read(struct file *fp, char __user *ubuf, 
 	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_completed: %lld\n", dec_stats->completed);
 	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_exceptioned: %lld\n", dec_stats->exceptioned);
 	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_enqueue_failed: %lld\n", dec_stats->fail_enqueue);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_fail_sa: %lld\n", dec_stats->fail_sa);
+	len += snprintf(local + len, NSS_IPSECMGR_MAX_BUF_SZ - len, "\tdecap_fail_loop: %lld\n", dec_stats->fail_loop);
 
 	ret = simple_read_from_buffer(ubuf, sz, ppos, local, len + 1);
 
@@ -1320,7 +1396,7 @@ static int nss_ipsecmgr_update_pmtu_v6 (struct notifier_block *this, unsigned lo
 	dst = ip6_route_output(&init_net, NULL, &fl6);
 	if (dst->error) {
 		dst_release(dst);
-		goto exit;
+		return 0;
 	}
 
 	/*
@@ -1337,7 +1413,6 @@ static int nss_ipsecmgr_update_pmtu_v6 (struct notifier_block *this, unsigned lo
 		}
 	}
 
-exit:
 	dst_release(dst);
 	read_unlock(&ipsecmgr_ctx->lock);
 	return 0;
@@ -1352,6 +1427,199 @@ static struct notifier_block nss_ipsecmgr_pmtu_notify_handler_v4 = {
 
 static struct notifier_block nss_ipsecmgr_pmtu_notify_handler_v6 = {
 	.notifier_call = nss_ipsecmgr_update_pmtu_v6,
+};
+
+/*
+ * nss_ipsecmgr_tunnel_rx_esp4()
+ *	IPv4 Receive handler for ESP protocol
+ */
+static int nss_ipsecmgr_tunnel_rx_esp4(struct sk_buff *skb)
+{
+	struct ip_esp_hdr *esph = ip_esp_hdr(skb);
+	struct nss_ipsecmgr_sa_entry *sa;
+	struct iphdr *iph = ip_hdr(skb);
+	struct nss_ipsec_tuple tuple;
+	struct nss_ipsecmgr_ref *ref;
+	struct nss_ipsecmgr_key key;
+
+	/*
+	 * push the data pointer to network header
+	 */
+	skb_push(skb, sizeof(struct iphdr));
+
+	/*
+	 * check whether SA for this SKB is present in SAD
+	 * if there are no rules, then send the packet along
+	 */
+	nss_ipsecmgr_v4_hdr2tuple(iph, &tuple);
+	tuple.esp_spi = ntohl(esph->spi);
+	nss_ipsecmgr_sa_tuple2key(&tuple, &key);
+
+	ref = nss_ipsecmgr_sa_lookup(&key);
+	if (!ref) {
+		nss_ipsecmgr_info("unable to find SA (%p)\n", skb);
+		write_lock(&ipsecmgr_ctx->lock);
+		ipsecmgr_ctx->dec_stats.fail_sa++;
+		write_unlock(&ipsecmgr_ctx->lock);
+		goto drop;
+	}
+
+	/*
+	 * Clear DST references before giving packet to NSS for decapsulation.
+	 * As NSS will strip of the outer IP header
+	 */
+	skb_dst_drop(skb);
+
+	/*
+	 * NSS can exception this packet, if the SKB doesnot match any of SAD entry.
+	 * So, stamp the packet to discriminate when NSS exceptions without
+	 * decapsulating.
+	 */
+	nss_ipsecmgr_rx_init_loop(skb);
+
+	/*
+	 * send packet to NSS for decapsulation
+	 */
+	if (nss_ipsec_tx_buf(skb, ipsecmgr_ctx->decap_ifnum) != NSS_TX_SUCCESS) {
+		nss_ipsecmgr_info("unable to queue the buffer to NSS (%p)\n", skb);
+
+		/*
+		 * update the stats in SA
+		 */
+		sa = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
+		write_lock(&ipsecmgr_ctx->lock);
+		sa->pkts.fail_queue_h2n++;
+		write_unlock(&ipsecmgr_ctx->lock);
+
+		nss_ipsecmgr_rx_reset_loop(skb);
+		goto drop;
+	}
+
+	return 0;
+
+drop:
+	dev_kfree_skb_any(skb);
+	return 0;
+}
+
+/*
+ * nss_ipsecmgr_esp4_err()
+ *	IPv4 Error handler for ESP protocol
+ */
+static void nss_ipsecmgr_tunnel_error_esp4(struct sk_buff *skb, uint32_t mtu)
+{
+	/*
+	 * Any error related to ESP packets will land here.
+	 * Since PMTU error is handled in generic implementation
+	 * we simply return from here.
+	 */
+	return;
+}
+
+/*
+ * protocol handler for IPv4 ESP
+ */
+static const struct net_protocol nss_ipsecmgr_proto_esp4 = {
+	.handler     = nss_ipsecmgr_tunnel_rx_esp4,
+	.err_handler = nss_ipsecmgr_tunnel_error_esp4,
+	.netns_ok    = 1,
+};
+
+/*
+ * nss_ipsecmgr_tunnel_x_resp6()
+ *	IPV6 Receive handler for ESP protocol
+ */
+static int nss_ipsecmgr_tunnel_rx_esp6(struct sk_buff *skb)
+{
+	struct ipv6hdr *ip6h = ipv6_hdr(skb);
+	struct nss_ipsecmgr_sa_entry *sa;
+	struct nss_ipsec_tuple tuple;
+	struct nss_ipsecmgr_ref *ref;
+	struct nss_ipsecmgr_key key;
+	struct ip_esp_hdr *esph = ip_esp_hdr(skb);
+
+	/*
+	 * push the data pointer to network header
+	 */
+	skb_push(skb, sizeof(struct ipv6hdr));
+
+	/*
+	 * check whether SA for this SKB is present in SAD
+	 * if there are no rules, then send the packet along
+	 */
+	nss_ipsecmgr_v6_hdr2tuple(ip6h, &tuple);
+	tuple.esp_spi = ntohl(esph->spi);
+	nss_ipsecmgr_sa_tuple2key(&tuple, &key);
+
+	ref = nss_ipsecmgr_sa_lookup(&key);
+	if (!ref) {
+		nss_ipsecmgr_info("unable to find SA (%p)\n", skb);
+		write_lock(&ipsecmgr_ctx->lock);
+		ipsecmgr_ctx->dec_stats.fail_sa++;
+		write_unlock(&ipsecmgr_ctx->lock);
+		goto drop;
+	}
+
+	/*
+	 * Clear DST references before giving packet to NSS for decapsulation.
+	 * As NSS will strip of the outer IP header
+	 */
+	skb_dst_drop(skb);
+
+	/*
+	 * NSS can exception this packet, if the SKB doesnot match any of SAD entry.
+	 * So, stamp the packet to discriminate when NSS exceptions without
+	 * decapsulating.
+	 */
+	nss_ipsecmgr_rx_init_loop(skb);
+
+	/*
+	 * send packet to NSS for decapsulation
+	 */
+	if (nss_ipsec_tx_buf(skb, ipsecmgr_ctx->decap_ifnum) != NSS_TX_SUCCESS) {
+		nss_ipsecmgr_info("unable to queue the buffer to NSS (%p)\n", skb);
+
+		/*
+		 * update the stats in SA
+		 */
+		sa = container_of(ref, struct nss_ipsecmgr_sa_entry, ref);
+		write_lock(&ipsecmgr_ctx->lock);
+		sa->pkts.fail_queue_h2n++;
+		write_unlock(&ipsecmgr_ctx->lock);
+
+		nss_ipsecmgr_rx_reset_loop(skb);
+		goto drop;
+	}
+
+	return 0;
+
+drop:
+	dev_kfree_skb_any(skb);
+	return 0;
+}
+
+/*
+ * nss_ipsecmgr_tunnel_error_esp6()
+ *	IPv4 Error handler for ESP protocol
+ */
+static void nss_ipsecmgr_tunnel_error_esp6(struct sk_buff *skb, struct inet6_skb_parm *opt, uint8_t type,
+					uint8_t code, int32_t offset, uint32_t mtu)
+{
+	/*
+	 * Any error related to ESP packets will land here.
+	 * Since PMTU error is handled in generic implementation
+	 * we simple return from here.
+	 */
+	return;
+}
+
+/*
+ * protocol handler for IPv6 ESP
+ */
+static struct inet6_protocol nss_ipsecmgr_proto_esp6 = {
+	.handler        =       nss_ipsecmgr_tunnel_rx_esp6,
+	.err_handler    =       nss_ipsecmgr_tunnel_error_esp6,
+	.flags          =       INET6_PROTO_NOPOLICY,
 };
 #endif
 
@@ -1424,9 +1692,8 @@ static int __init nss_ipsecmgr_init(void)
 
 	ipsecmgr_ctx->stats_dentry = debugfs_create_dir("stats", ipsecmgr_ctx->dentry);
 	if (!ipsecmgr_ctx->stats_dentry) {
-		debugfs_remove_recursive(ipsecmgr_ctx->dentry);
 		nss_ipsecmgr_info("Creating debug directory failed\n");
-		goto unregister_dev;
+		goto debugfs_free;
 
 	}
 
@@ -1435,14 +1702,41 @@ static int __init nss_ipsecmgr_init(void)
 	 */
 	if (nss_ipsecmgr_init_stats_debugfs(ipsecmgr_ctx->stats_dentry)) {
 		nss_ipsecmgr_info("Creating debug tree failed\n");
-		debugfs_remove_recursive(ipsecmgr_ctx->dentry);
-		goto unregister_dev;
+		goto debugfs_free;
 
 	}
 
 #if defined NSS_IPSECMGR_PMTU_SUPPORT
-	icmp_register_notifier(&nss_ipsecmgr_pmtu_notify_handler_v4, ICMP_DEST_UNREACH);
+	if (icmp_register_notifier(&nss_ipsecmgr_pmtu_notify_handler_v4, ICMP_DEST_UNREACH)) {
+		nss_ipsecmgr_info("Failed to register for IPv4 PMTU notifier\n");
+		goto debugfs_free;
+	}
+
 	icmpv6_register_notifier(&nss_ipsecmgr_pmtu_notify_handler_v6, ICMPV6_PKT_TOOBIG);
+
+	/*
+	 * Over-ride the default IPv4 ESP protocol handler with IPsecmgr handler
+	 */
+	status = inet_add_protocol(&nss_ipsecmgr_proto_esp4, IPPROTO_ESP);
+	if (status < 0) {
+		nss_ipsecmgr_info("Failed to register protocol handler for ESP-4\n");
+		icmpv6_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v6, ICMPV6_PKT_TOOBIG);
+		icmp_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v4, ICMP_DEST_UNREACH);
+		goto debugfs_free;
+	}
+
+	/*
+	 * Over-ride the default IPv6 ESP protocol handler with IPsecmgr handler
+	 */
+	status = inet6_add_protocol(&nss_ipsecmgr_proto_esp6, IPPROTO_ESP);
+	if (status < 0) {
+		nss_ipsecmgr_info("Failed to register protocol handler for ESP-6\n");
+		icmpv6_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v6, ICMPV6_PKT_TOOBIG);
+		icmp_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v4, ICMP_DEST_UNREACH);
+		inet_del_protocol(&nss_ipsecmgr_proto_esp4, IPPROTO_ESP);
+		goto debugfs_free;
+	}
+
 #endif
 
 	init_completion(&ipsecmgr_ctx->complete);
@@ -1451,6 +1745,9 @@ static int __init nss_ipsecmgr_init(void)
 
 	nss_ipsecmgr_info_always("NSS IPsec manager loaded: %s\n", NSS_CLIENT_BUILD_ID);
 	return 0;
+
+debugfs_free:
+	debugfs_remove_recursive(ipsecmgr_ctx->dentry);
 
 unregister_dev:
 	rtnl_is_locked() ? unregister_netdevice(ipsecmgr_ctx->ndev) : unregister_netdev(ipsecmgr_ctx->ndev);
@@ -1495,6 +1792,9 @@ static void __exit nss_ipsecmgr_exit(void)
 #if defined NSS_IPSECMGR_PMTU_SUPPORT
 	icmp_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v4, ICMP_DEST_UNREACH);
 	icmpv6_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v6, ICMPV6_PKT_TOOBIG);
+
+	inet_del_protocol(&nss_ipsecmgr_proto_esp4, IPPROTO_ESP);
+	inet6_del_protocol(&nss_ipsecmgr_proto_esp6, IPPROTO_ESP);
 #endif
 
 	if (ipsecmgr_ctx->ndev) {
