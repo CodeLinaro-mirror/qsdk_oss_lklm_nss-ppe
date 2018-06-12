@@ -1621,6 +1621,96 @@ static struct inet6_protocol nss_ipsecmgr_proto_esp6 = {
 	.err_handler    =       nss_ipsecmgr_tunnel_error_esp6,
 	.flags          =       INET6_PROTO_NOPOLICY,
 };
+
+/*
+ * PMTU expiry notifier handler for IPv4
+ * 	Once the PMTU has expired, restore/update the outer_dst_mtu of Tunnel.
+ */
+static int nss_ipsecmgr_ipv4_pmtu_expiry_handler(struct notifier_block *nb, unsigned long event, void *ptr)
+{
+	struct nss_ipsecmgr_tunnel_db *tun_db = &ipsecmgr_ctx->tun_db;
+	struct nss_ipsecmgr_tunnel_entry *entry;
+	uint32_t dest_addr = *(uint32_t *)ptr;
+
+	if (!atomic_read(&tun_db->num_entries))
+		return NOTIFY_DONE;
+
+	/*
+	 * Search the tunnel DB for the destination whose PMTU is expired
+	 */
+	write_lock(&ipsecmgr_ctx->lock);
+	list_for_each_entry(entry, &tun_db->entries, node) {
+		if (entry->dest_addr[0] == dest_addr) {
+			/*
+			 * Matching entry found
+			 */
+			struct nss_ipsecmgr_priv *priv;
+			struct dst_entry *dst;
+
+			priv = container_of(entry, struct nss_ipsecmgr_priv, tun_entry);
+
+			dst = (struct dst_entry *)ip_route_output(&init_net, dest_addr, 0, 0, 0);
+			if (!IS_ERR(dst)) {
+				atomic_set(&priv->outer_dst_mtu, dst_mtu(dst));
+				dst_release(dst);
+			}
+		}
+	}
+
+	write_unlock(&ipsecmgr_ctx->lock);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block nss_ipsecmgr_ipv4_pmtu_expiry_nb = {
+	.notifier_call = nss_ipsecmgr_ipv4_pmtu_expiry_handler,
+};
+
+/*
+ * PMTU expiry notifier handler for IPv6
+ * 	Once the PMTU has expired, restore/update the outer_dst_mtu of Tunnel.
+ */
+static int nss_ipsecmgr_ipv6_pmtu_expiry_handler(struct notifier_block *nb, unsigned long event, void *ptr)
+{
+	struct nss_ipsecmgr_tunnel_db *tun_db = &ipsecmgr_ctx->tun_db;
+	struct nss_ipsecmgr_tunnel_entry *entry;
+
+	if (!atomic_read(&tun_db->num_entries))
+		return NOTIFY_DONE;
+
+	/*
+	 * Search the tunnel DB for the destination whose PMTU is expired
+	 */
+	write_lock(&ipsecmgr_ctx->lock);
+	list_for_each_entry(entry, &tun_db->entries, node) {
+		if (!memcmp(entry->dest_addr, ptr, sizeof(entry->dest_addr))) {
+			/*
+			 * Matching entry found
+			 */
+			struct nss_ipsecmgr_priv *priv;
+			struct dst_entry *dst;
+			struct flowi6 fl6;
+
+			priv = container_of(entry, struct nss_ipsecmgr_priv, tun_entry);
+
+			memcpy(&fl6.daddr, entry->dest_addr, sizeof(fl6.daddr));
+			dst = ip6_route_output(&init_net, NULL, &fl6);
+			if (!dst->error) {
+				atomic_set(&priv->outer_dst_mtu, dst_mtu(dst));
+			}
+
+			dst_release(dst);
+		}
+	}
+
+	write_unlock(&ipsecmgr_ctx->lock);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block nss_ipsecmgr_ipv6_pmtu_expiry_nb = {
+	.notifier_call = nss_ipsecmgr_ipv6_pmtu_expiry_handler,
+};
 #endif
 
 /*
@@ -1737,6 +1827,8 @@ static int __init nss_ipsecmgr_init(void)
 		goto debugfs_free;
 	}
 
+	ip_rt_register_pmtu_expiry_notifier(&nss_ipsecmgr_ipv4_pmtu_expiry_nb);
+	rt6_register_pmtu_expiry_notifier(&nss_ipsecmgr_ipv6_pmtu_expiry_nb);
 #endif
 
 	init_completion(&ipsecmgr_ctx->complete);
@@ -1790,6 +1882,9 @@ static void __exit nss_ipsecmgr_exit(void)
 	nss_ipsec_notify_unregister(ipsecmgr_ctx->nss_ctx, ipsecmgr_ctx->decap_ifnum);
 
 #if defined NSS_IPSECMGR_PMTU_SUPPORT
+	ip_rt_unregister_pmtu_expiry_notifier(&nss_ipsecmgr_ipv4_pmtu_expiry_nb);
+	rt6_unregister_pmtu_expiry_notifier(&nss_ipsecmgr_ipv6_pmtu_expiry_nb);
+
 	icmp_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v4, ICMP_DEST_UNREACH);
 	icmpv6_unregister_notifier(&nss_ipsecmgr_pmtu_notify_handler_v6, ICMPV6_PKT_TOOBIG);
 
