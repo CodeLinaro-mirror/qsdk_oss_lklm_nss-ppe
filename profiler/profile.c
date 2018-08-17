@@ -152,16 +152,16 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 	int sp_samples = 0;	/* separated samples if any */
 	int ns;		/* number of samples requested */
 	struct profile_header ph;
-	struct profile_sample_ctrl_header *psc_hd = &pn->pnc.pn2h->psc_header;
+	struct nss_profile_sample_ctrl *psc_hd = &pn->pnc.pn2h->psc_header;
 
-	if (blen < sizeof(ph) + sizeof(struct profile_sample)) {
+	if (blen < sizeof(ph) + sizeof(struct nss_profile_sample)) {
 		return -EINVAL;
 	}
 
-	profileDebug("%p stat %x cnt %d %p\n", pn->pnc.pn2h, pn->pnc.pn2h->mh.md_type, psc_hd->count, pn->ccl);
+	profileDebug("%p stat %x cnt %d %p\n", pn->pnc.pn2h, pn->pnc.pn2h->mh.md_type, psc_hd->ps_count, pn->ccl);
 
-	if (pn->pnc.pn2h->mh.md_type == PINGPONG_EMPTY || psc_hd->count < 1) {
-		struct profile_n2h_sample_buf *nsb;
+	if (pn->pnc.pn2h->mh.md_type == PINGPONG_EMPTY || psc_hd->ps_count < 1) {
+		struct nss_profile_n2h_sample_buf *nsb;
 		ns = (pn->ccl_read + 1) & (CCL_SIZE-1);
 		nsb = pn->ccl + ns;
 		if (ns == pn->ccl_write || nsb->mh.md_type != PINGPONG_FULL) {
@@ -188,31 +188,31 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 	ph.pph.ddr_freq = pn->pnc.un.ddr_freq;
 	ph.pph.cpu_id = pn->pnc.un.cpu_id;
 	ph.pph.seq_num = htonl(pn->profile_sequence_num);
-	ph.pph.sample_stack_words = PROFILE_STACK_WORDS;
+	ph.pph.sample_stack_words = NSS_PROFILE_STACK_WORDS;
 
-	ns = (blen - sizeof(ph)) / sizeof(struct profile_sample);
+	ns = (blen - sizeof(ph)) / sizeof(struct nss_profile_sample);
 	profileInfo("%X: blen %d ns = %d psc_hd count %d ssets %d phs %lu pss %lu\n",
-		pn->profile_sequence_num, blen, ns, psc_hd->count,
-		psc_hd->exh.sample_sets, sizeof(ph), sizeof(struct profile_sample));
-	if (ns > psc_hd->count)
-		ns = psc_hd->count;
+		pn->profile_sequence_num, blen, ns, psc_hd->ps_count,
+		psc_hd->ex_hd.sample_sets, sizeof(ph), sizeof(struct nss_profile_sample));
+	if (ns > psc_hd->ps_count)
+		ns = psc_hd->ps_count;
 	if (ns == 0) {
-		printk("NS should not be 0: rlen %d hd cnt %d\n", blen, psc_hd->count);
+		printk("NS should not be 0: rlen %d hd cnt %d\n", blen, psc_hd->ps_count);
 		return 0;
 	}
 
 	/*
 	 * if buf cannot hold all samples, then samples must be separated by set.
 	 */
-	if (ns < psc_hd->count) {
-		ph.exh.sets_map = psc_hd->exh.sets_map;	/* save for separating sets */
+	if (ns < psc_hd->ps_count) {
+		ph.exh.sets_map = psc_hd->ex_hd.sets_map;	/* save for separating sets */
 		do {
-			sp_samples += psc_hd->exh.sets_map & 0x0F;
-			psc_hd->exh.sets_map >>= 4;	/* remove the last set */
-			psc_hd->exh.sample_sets--;
+			sp_samples += psc_hd->ex_hd.sets_map & 0x0F;
+			psc_hd->ex_hd.sets_map >>= 4;	/* remove the last set */
+			psc_hd->ex_hd.sample_sets--;
 			ph.exh.sample_sets++;		/* save for restore later */
-		} while ((psc_hd->count - sp_samples) > ns);
-		ns = psc_hd->count - sp_samples;
+		} while ((psc_hd->ps_count - sp_samples) > ns);
+		ns = psc_hd->ps_count - sp_samples;
 	}
 	ph.pph.sample_count = ns;
 	if (copy_to_user(buf, &ph.pph, sizeof(ph.pph)) != 0) {
@@ -221,35 +221,35 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 	buf += sizeof(ph.pph);
 
 	/*
-	 * ph.exh is unused dummy; and psc_hd->exh is used directly to avoid double mem copy
+	 * ph.exh is unused dummy; and psc_hd->ex_hd is used directly to avoid double mem copy
 	 */
-	if (copy_to_user(buf, &psc_hd->exh, sizeof(psc_hd->exh)) != 0) {
+	if (copy_to_user(buf, &psc_hd->ex_hd, sizeof(psc_hd->ex_hd)) != 0) {
 		return -EFAULT;
 	}
-	buf += sizeof(psc_hd->exh);
+	buf += sizeof(psc_hd->ex_hd);
 
-	blen = ns * sizeof(struct profile_sample);
-	profileDebug("-profile_make_data_packet %p slen %d cur %d dcped %d + %d\n", pn->pnc.samples, blen, pn->pnc.cur, sizeof(ph.pph), sizeof(psc_hd->exh));
+	blen = ns * sizeof(struct nss_profile_sample);
+	profileDebug("-profile_make_data_packet %p slen %d cur %d dcped %d + %d\n", pn->pnc.samples, blen, pn->pnc.cur, sizeof(ph.pph), sizeof(psc_hd->ex_hd));
 	if (copy_to_user(buf, &pn->pnc.samples[pn->pnc.cur], blen) != 0) {
 		return -EFAULT;
 	}
 	pn->pnc.cur += ns;
-	psc_hd->count -= ns;
-	if (psc_hd->count < 1)
+	psc_hd->ps_count -= ns;
+	if (psc_hd->ps_count < 1)
 		pn->pnc.pn2h->mh.md_type = PINGPONG_EMPTY;
 
 	/*
 	 * restore left over sample counts; 0s for no one
 	 */
 	if (sp_samples) {
-		profileDebug("%d sps %d %d: sets %d : %d map %x <> %x\n", psc_hd->count, ns, sp_samples, psc_hd->exh.sample_sets, ph.exh.sample_sets, psc_hd->exh.sets_map, ph.exh.sets_map);
-		psc_hd->exh.sample_sets = ph.exh.sample_sets;
-		psc_hd->exh.sets_map = ph.exh.sets_map;
+		profileDebug("%d sps %d %d: sets %d : %d map %x <> %x\n", psc_hd->ps_count, ns, sp_samples, psc_hd->ex_hd.sample_sets, ph.exh.sample_sets, psc_hd->ex_hd.sets_map, ph.exh.sets_map);
+		psc_hd->ex_hd.sample_sets = ph.exh.sample_sets;
+		psc_hd->ex_hd.sets_map = ph.exh.sets_map;
 	}
 
 	pn->profile_sequence_num++;
 	blen += sizeof(ph);
-	profileDebug("+profile_make_data_packet %d phd len %d nsp %p rd %d cnt %d\n", blen, sizeof(ph), pn->pnc.pn2h, pn->ccl_read, psc_hd->count);
+	profileDebug("+profile_make_data_packet %d phd len %d nsp %p rd %d cnt %d\n", blen, sizeof(ph), pn->pnc.pn2h, pn->ccl_read, psc_hd->ps_count);
 	return blen;
 }
 
@@ -274,16 +274,16 @@ struct profile_counter profile_builtin_stats[] =
  */
 static int profile_make_stats_packet(char *buf, int bytes, struct profile_io *pn)
 {
-	static char prof_pkt[PROFILE_MAX_PACKET_SIZE];
+	static char prof_pkt[NSS_PROFILE_MAX_PACKET_SIZE];
 
 	char *ptr;
 	int n;
 	struct profile_counter *counter_ptr;
 	struct profile_header_counters *hdr = (struct profile_header_counters *)prof_pkt;
-	struct profile_sample_ctrl_header *psc_hd = &pn->pnc.pn2h->psc_header;
+	struct nss_profile_sample_ctrl *psc_hd = &pn->pnc.pn2h->psc_header;
 
-	if (bytes > PROFILE_MAX_PACKET_SIZE) {
-		bytes = PROFILE_MAX_PACKET_SIZE;
+	if (bytes > NSS_PROFILE_MAX_PACKET_SIZE) {
+		bytes = NSS_PROFILE_MAX_PACKET_SIZE;
 	}
 	n = sizeof(profile_builtin_stats) + (pn->pnc.un.num_counters + profile_num_counters) * sizeof(*counter_ptr);
 
@@ -295,8 +295,8 @@ static int profile_make_stats_packet(char *buf, int bytes, struct profile_io *pn
 	hdr->magic = htons(PROF_MAGIC_COUNTERS);
 	hdr->ultra_count = htons(pn->pnc.un.num_counters);
 	hdr->linux_count = htonl(profile_num_counters + sizeof(profile_builtin_stats) / sizeof(*counter_ptr));
-	hdr->ultra_sample_time = psc_hd->exh.clocks;
-	hdr->linux_sample_time = psc_hd->exh.clocks; /* QSDK has no time func */
+	hdr->ultra_sample_time = psc_hd->ex_hd.clocks;
+	hdr->linux_sample_time = psc_hd->ex_hd.clocks; /* QSDK has no time func */
 
 	n = pn->pnc.un.num_counters;	/* copy NSS counters */
 	n *= sizeof(pn->pnc.un.counters[0]);
@@ -372,7 +372,7 @@ static int profile_open(struct inode *inode, struct file *filp)
 		if (FMODE_READ & filp->f_mode) {
 			nss_tx_status_t ret;
 
-			pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
+			pn->pnc.un.hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
 			ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
 				sizeof(pn->pnc.un), profiler_handle_reply, pn);
 			profileInfo("%s: %d -- %p: ccl %p sp %p\n", __func__, ret,
@@ -448,7 +448,7 @@ static ssize_t profile_read(struct file *filp, char *buf, size_t count, loff_t *
 	if (pn->pnc.enabled < 0) {
 		nss_tx_status_t ret;
 		pn->pnc.enabled = 1;
-		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
+		pn->pnc.un.hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
 		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un, sizeof(pn->pnc.un),
 						profiler_handle_reply, pn);
 		profileWarn("%s: restart %d -- %p: ccl %p sp %p\n", __func__,
@@ -473,7 +473,7 @@ static int profile_release(struct inode *inode, struct file *filp)
 		nss_tx_status_t ret;
 		pn->sw_ksp_ptr = NULL;
 		pn->pnc.enabled = 0;
-		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_STOP_MSG;
+		pn->pnc.un.hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_STOP_MSG;
 		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
 				sizeof(pn->pnc.un), profiler_handle_reply, pn);
 		profileInfo("%s: %p %d\n", __func__, pn, ret);
@@ -493,7 +493,7 @@ static int profile_release(struct inode *inode, struct file *filp)
  * to avoid overflow and underflow, use if branch
  * to overcome this problem: slower bur more accurate.
  */
-static void counter_rate_by_uint32(struct profile_common *pnc)
+static void counter_rate_by_uint32(struct nss_profile_common *pnc)
 {
 	static uint32_t prev_cnts[32];
 	static uint32_t last_uclk;
@@ -561,7 +561,7 @@ static void profiler_handle_counter_event_reply(struct nss_ctx_instance *nss_ctx
 						struct nss_cmn_msg *ncm)
 {
 	struct profile_io *pio = (struct profile_io *) ncm->app_data;
-	struct profile_common *pnc = &pio->pnc;
+	struct nss_profile_common *pnc = &pio->pnc;
 
 #ifndef __aarch64__
 	counter_rate_by_uint32(pnc);
@@ -609,7 +609,7 @@ static int parseDbgCmd(const char *buf, size_t count,
 		return -EINVAL;
 	}
 
-	db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_COUNTERS_MSG;
+	db->hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_COUNTERS_MSG;
 	result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
 					sizeof(pio->pnc.un),
 					profiler_handle_counter_event_reply, pio);
@@ -658,8 +658,8 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 	if (count < 19) /* minimum data for sys_stat_event request */
 		return	-EINVAL;
 
-	if (strcmp(buf, "get-sys-stat-events") == 0) {
-		db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_GET_SYS_STAT_EVENT;
+	if (strncmp(buf, "get-sys-stat-events", 19) == 0) {
+		db->hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_GET_SYS_STAT_EVENT;
 		result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
 					sizeof(pio->pnc.un),
 					profiler_handle_stat_event_reply, pio);
@@ -717,7 +717,7 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 		db->data[idx] = event;
 		cp = strchr(cp, ' ');
 	} while (cp);
-	db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_SET_SYS_STAT_EVENT;
+	db->hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_SET_SYS_STAT_EVENT;
 	result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un, sizeof(pio->pnc.un),
 				profiler_handle_stat_event_reply, pio);
 	profileInfo("%p: %zd send cmd %x to FW ret %d\n",
@@ -879,9 +879,9 @@ static ssize_t debug_if(struct file *filp,
 	}
 
 	if (!result) {
-		db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_DEBUG_RD_MSG;
+		db->hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_DEBUG_RD_MSG;
 	} else {
-		db->hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_DEBUG_WR_MSG;
+		db->hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_DEBUG_WR_MSG;
 		db->dlen = result;
 	}
 	result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un,
@@ -904,9 +904,9 @@ static int profile_rate_show(struct seq_file *m, void *v)
 {
 	struct profile_io *pn = node[0];
 	if (pn) {
-		struct profile_sample_ctrl_header *psc_hd = &pn->pnc.pn2h->psc_header;
+		struct nss_profile_sample_ctrl *psc_hd = &pn->pnc.pn2h->psc_header;
 		seq_printf(m, "%d samples per second.  %d ultra, %d linux virtual counters.  %d dropped samples.  %d queued of %d max sampels.  %d sent packets.\n",
-			pn->pnc.un.rate, pn->pnc.un.num_counters, profile_num_counters, psc_hd->dropped_samples, psc_hd->count, psc_hd->max_samples, pn->profile_sequence_num);
+			pn->pnc.un.rate, pn->pnc.un.num_counters, profile_num_counters, psc_hd->ps_dropped, psc_hd->ps_count, psc_hd->ps_max_samples, pn->profile_sequence_num);
 	} else {
 		seq_printf(m, "Profiler is not initialized.\n");
 	}
@@ -956,19 +956,19 @@ static void kxdump(void *buf, int len, const char *who)
  * negtive return means failure.
  * return 1 means need to ntoh swap.
  */
-static int profiler_magic_verify(struct profile_sample_ctrl_header *psc_hd, int buf_len)
+static int profiler_magic_verify(struct nss_profile_sample_ctrl *psc_hd, int buf_len)
 {
 	int swap = 0;
-	if ((psc_hd->hd_magic & UBI32_PROFILE_HD_MMASK) != UBI32_PROFILE_HD_MAGIC) {
-		if ((psc_hd->hd_magic & UBI32_PROFILE_HD_MMASK_REV) != UBI32_PROFILE_HD_MAGIC_REV) {
+	if ((psc_hd->psc_magic & NSS_PROFILE_HD_MMASK) != NSS_PROFILE_HD_MAGIC) {
+		if ((psc_hd->psc_magic & NSS_PROFILE_HD_MMASK_REV) != NSS_PROFILE_HD_MAGIC_REV) {
 			kxdump(psc_hd, buf_len, "bad profile packet");
 			printk("bad profile HD magic 0x%x : %d\n",
-				psc_hd->hd_magic, buf_len);
+				psc_hd->psc_magic, buf_len);
 			return -1;
 		}
-		profileDebug("Profile data in different Endian type %x\n", psc_hd->hd_magic);
+		profileDebug("Profile data in different Endian type %x\n", psc_hd->psc_magic);
 		swap = 1;
-		psc_hd->hd_magic = ntohl(psc_hd->hd_magic);
+		psc_hd->psc_magic = ntohl(psc_hd->psc_magic);
 	}
 	return swap;
 }
@@ -982,12 +982,12 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 	int buf_len = npm->cm.len;
 	void *buf = &npm->payload;
 	struct profile_io *pn;
-	struct profile_n2h_sample_buf *nsb;
-	struct profile_sample_ctrl_header *psc_hd = (struct profile_sample_ctrl_header *)buf;
+	struct nss_profile_n2h_sample_buf *nsb;
+	struct nss_profile_sample_ctrl *psc_hd = (struct nss_profile_sample_ctrl *)buf;
 	int	ret, wr;
 	int	swap = 0;	/* only for header and info data, not samples */
 
-	if (buf_len < (sizeof(struct profile_session) - sizeof(struct profile_counter) * (PROFILE_MAX_APP_COUNTERS))) {
+	if (buf_len < (sizeof(struct nss_profile_session) - sizeof(struct profile_counter) * (PROFILE_MAX_APP_COUNTERS))) {
 		printk("profile data packet is too small to be useful %d\n", buf_len);
 		return;
 	}
@@ -1003,7 +1003,7 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 	//kxdump(buf, buf_len, "process profile packet");
 
 	if (npm->cm.type == NSS_PROFILER_FIXED_INFO_MSG) {
-		struct profile_session *pTx = (struct profile_session *)buf;
+		struct nss_profile_session *pTx = (struct nss_profile_session *)buf;
 		if (swap) {
 			pn->pnc.un.rate = ntohl(pTx->rate);
 			pn->pnc.un.cpu_id = ntohl(pTx->cpu_id);
@@ -1024,7 +1024,7 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 	if (nsb->mh.md_type != PINGPONG_EMPTY || (swap && swap < 5)) {
 		if (pn->pnc.enabled > 0) {
 			pn->pnc.enabled = -1;
-			pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_STOP_MSG;
+			pn->pnc.un.hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_STOP_MSG;
 			ret = nss_profiler_if_tx_buf(pn->ctx,
 					&pn->pnc.un, sizeof(pn->pnc.un),
 					profiler_handle_reply, pn);
@@ -1048,7 +1048,7 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 	 * ask for perf_counters (software counters) update every 32 samples
 	 */
 	if (!wr) {
-		pn->pnc.un.hd_magic = UBI32_PROFILE_HD_MAGIC | NSS_PROFILER_COUNTERS_MSG;
+		pn->pnc.un.hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_COUNTERS_MSG;
 		ret = nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
 				sizeof(pn->pnc.un), profiler_handle_reply, pn);
 		if (ret == NSS_TX_FAILURE)
@@ -1090,7 +1090,7 @@ static void profile_init(struct profile_io *node)
 
 	for (n = 0; n < CCL_SIZE; n++) {
 		node->ccl[n].mh.md_type = PINGPONG_EMPTY;
-		node->ccl[n].psc_header.count = 0;
+		node->ccl[n].psc_header.ps_count = 0;
 	}
 
 	/*
@@ -1099,8 +1099,11 @@ static void profile_init(struct profile_io *node)
 	node->sw_ksp_ptr = sw_ksp;
 	 */
 	node->sw_ksp_ptr = NULL;
-	node->task_offset = offsetof(struct thread_info, task);
-	node->pid_offset = offsetof(struct task_struct, tgid);
+	/*
+	 * Old profile info: unused by now
+	 * node->task_offset = offsetof(struct thread_info, task);
+	 * node->pid_offset = offsetof(struct task_struct, tgid);
+	 */
 }
 
 static struct proc_dir_entry *pdir;
