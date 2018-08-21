@@ -39,6 +39,7 @@
 #include <net/icmp.h>
 
 #include <crypto/aead.h>
+#include <crypto/skcipher.h>
 #include <crypto/internal/hash.h>
 
 #include <nss_api_if.h>

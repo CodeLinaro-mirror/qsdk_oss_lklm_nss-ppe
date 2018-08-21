@@ -1978,7 +1978,7 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 	 * This is to prevent mixing NSS and PPE qdisc with linux qdisc.
 	 */
 	if ((parent != TC_H_ROOT) && (root->ops->owner != THIS_MODULE)) {
-		nss_qdisc_warning("NSS qdisc %p (type %d) used along with non-NSS/PPE qdiscs,"
+		nss_qdisc_warning("NSS qdisc %p (type %d) used along with non-nss qdiscs,"
 			" or the interface is currently down", nq->qdisc, nq->type);
 	}
 

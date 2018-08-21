@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -39,6 +39,7 @@
 #include <crypto/authenc.h>
 #include <crypto/des.h>
 #include <crypto/sha.h>
+#include <crypto/skcipher.h>
 
 #include <nss_api_if.h>
 #include <nss_dynamic_interface.h>
