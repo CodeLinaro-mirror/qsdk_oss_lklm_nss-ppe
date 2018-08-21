@@ -162,11 +162,13 @@ static void nss_ipsecmgr_flow_free(struct nss_ipsecmgr_ref *ref)
  */
 void nss_ipsecmgr_flow_inner2tuple(struct nss_ipsecmgr_flow_inner *inner, struct nss_ipsec_tuple *tuple)
 {
+	ssize_t hdr_sz = (inner->ip_version == IPVERSION) ? sizeof(tuple->dst_addr[0]) : sizeof(tuple->dst_addr);
+
 	/*
 	 * copy IP addresses
 	 */
-	memcpy(tuple->dst_addr, inner->dest_ip, sizeof(tuple->dst_addr));
-	memcpy(tuple->src_addr, inner->src_ip, sizeof(tuple->src_addr));
+	memcpy(tuple->dst_addr, inner->dest_ip, hdr_sz);
+	memcpy(tuple->src_addr, inner->src_ip, hdr_sz);
 
 	tuple->proto_next_hdr = inner->proto_next_hdr;
 	tuple->esp_spi = 0;
@@ -182,11 +184,13 @@ void nss_ipsecmgr_flow_inner2tuple(struct nss_ipsecmgr_flow_inner *inner, struct
  */
 void nss_ipsecmgr_flow_outer2tuple(struct nss_ipsecmgr_flow_outer *outer, struct nss_ipsec_tuple *tuple)
 {
+	ssize_t hdr_sz = (outer->ip_version == IPVERSION) ? sizeof(tuple->dst_addr[0]) : sizeof(tuple->dst_addr);
+
 	/*
 	 * copy IP addresses
 	 */
-	memcpy(tuple->dst_addr, outer->dest_ip, sizeof(tuple->dst_addr));
-	memcpy(tuple->src_addr, outer->src_ip, sizeof(tuple->src_addr));
+	memcpy(tuple->dst_addr, outer->dest_ip, hdr_sz);
+	memcpy(tuple->src_addr, outer->src_ip, hdr_sz);
 
 	tuple->proto_next_hdr = IPPROTO_ESP;
 	tuple->esp_spi = outer->spi_index;
