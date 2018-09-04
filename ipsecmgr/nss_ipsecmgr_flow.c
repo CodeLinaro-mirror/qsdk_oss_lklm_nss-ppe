@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -962,8 +962,7 @@ send_icmp:
 		memcpy(&fl6.daddr, &ipv6_hdr(skb)->saddr, sizeof(fl6.daddr));
 
 		dst = ip6_route_output(&init_net, NULL, &fl6);
-		if (dst->error) {
-			dst_release(dst);
+		if (IS_ERR(dst)) {
 			return false;
 		}
 

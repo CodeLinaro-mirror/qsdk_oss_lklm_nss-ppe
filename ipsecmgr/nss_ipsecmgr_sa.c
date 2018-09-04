@@ -777,8 +777,7 @@ bool nss_ipsecmgr_encap_add(struct net_device *tun, struct nss_ipsecmgr_encap_fl
 		 * generated for the Tunnel.
 		 */
 		dst = ip6_route_output(&init_net, NULL, &fl6);
-		if (dst->error) {
-			dst_release(dst);
+		if (IS_ERR(dst)) {
 			return false;
 		}
 		info.dst_mtu = dst_mtu(dst);
