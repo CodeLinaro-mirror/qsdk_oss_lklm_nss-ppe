@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -530,6 +530,9 @@ void nss_ipsecmgr_sa_tuple2key(struct nss_ipsec_tuple *tuple, struct nss_ipsecmg
 	case 6:
 		nss_ipsecmgr_key_write_8(key, 6 /* v6 */, NSS_IPSECMGR_KEY_POS_IP_VER);
 		nss_ipsecmgr_key_write_8(key, IPPROTO_ESP, NSS_IPSECMGR_KEY_POS_IP_PROTO);
+
+		nss_ipsecmgr_v6addr_swap(tuple->dst_addr, tuple->dst_addr);
+		nss_ipsecmgr_v6addr_swap(tuple->src_addr, tuple->src_addr);
 
 		for (i  = 0; i < 4; i++) {
 			nss_ipsecmgr_key_write_32(key, tuple->dst_addr[i], NSS_IPSECMGR_KEY_POS_IPV6_DST + (i * 32));

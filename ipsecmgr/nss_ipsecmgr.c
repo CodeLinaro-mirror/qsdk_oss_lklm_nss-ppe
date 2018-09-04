@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -547,96 +547,6 @@ static struct nss_ipsecmgr_tunnel_entry *nss_ipsecmgr_tunnel_dev_index2entry(int
 }
 
 /*
- * nss_ipsecmgr_tunnel_rx_local()
- * 	ESP exception packets from NSS should be delivered through local_out.
- *
- * note: This function will return false, if the packet is not consumed.
- */
-static bool nss_ipsecmgr_tunnel_rx_local(struct sk_buff *skb)
-{
-	switch (ip_hdr(skb)->version) {
-	case IPVERSION:
-	{
-		struct dst_entry *dst = NULL;
-		struct iphdr *iph = ip_hdr(skb);
-		uint8_t proto = iph->protocol;
-
-		if ((proto != IPPROTO_ESP) && (proto != IPPROTO_UDP))
-			return false;
-
-		skb_set_transport_header(skb, sizeof(*iph));
-		if ((iph->protocol == IPPROTO_UDP) && (udp_hdr(skb)->dest != ntohs(NSS_IPSECMGR_NATT_PORT_DATA)))
-			return false;
-
-		/*
-		 * ESP packet received here, since routing rule is absent.
-		 *
-		 * Before sending to higher layer, make basic sanity of packets.
-		 * - IP Header Checksum should be set
-		 * - Connection Tracker reference should not be retained from
-		 *   clear text packet.
-		 */
-		if (!iph->check)
-			ip_send_check(iph);
-
-		if (skb->nfct)
-			nf_reset(skb);
-
-		/*
-		 * set dst for the packet, before injecting into the stack
-		 */
-		dst = (struct dst_entry *)ip_route_output(&init_net, iph->daddr, 0, 0, 0);
-		if (IS_ERR(dst)) {
-			nss_ipsecmgr_info("dst could not be retrived\n");
-			dev_kfree_skb_any(skb);
-			return true;
-		}
-
-		skb_dst_drop(skb);
-		skb_dst_set(skb, dst);
-		ip_local_out(skb);
-		return true;
-	}
-
-	case 6:
-	{
-		struct ipv6hdr *ip6h = ipv6_hdr(skb);
-		struct dst_entry *dst = NULL;
-		struct flowi6 fl6;
-
-		if (ipv6_hdr(skb)->nexthdr != IPPROTO_ESP)
-			return false;
-
-		/*
-		 * - Connection Tracker reference should not be retained from
-		 *   clear text packet.
-		 */
-		if (skb->nfct)
-			nf_reset(skb);
-
-		memset(&fl6, 0, sizeof(fl6));
-		memcpy(&fl6.daddr, &ip6h->daddr, sizeof(fl6.daddr));
-
-		dst = ip6_route_output(&init_net, NULL, &fl6);
-		if (dst->error) {
-			nss_ipsecmgr_info("dst could not be retrived\n");
-			dst_release(dst);
-			dev_kfree_skb_any(skb);
-			return true;
-		}
-
-		skb_dst_drop(skb);
-		skb_dst_set(skb, dst);
-		ip6_local_out(skb);
-		return true;
-	}
-
-	default:
-		BUG_ON(true);
-	}
-}
-
-/*
  * nss_ipsecmgr_tunnel_get_dev()
  *	Get the net_device associated with the packet.
  */
@@ -708,8 +618,7 @@ static struct net_device *nss_ipsecmgr_tunnel_get_dev(struct sk_buff *skb)
 			memcpy(&fl6.daddr, &ip6h->saddr, sizeof(fl6.daddr));
 
 			dst = ip6_route_output(&init_net, NULL, &fl6);
-			if (dst->error) {
-				dst_release(dst);
+			if (IS_ERR(dst)) {
 				return NULL;
 			}
 
@@ -778,14 +687,7 @@ static void nss_ipsecmgr_tunnel_rx(struct net_device *dummy, struct sk_buff *skb
 	 */
 	entry = nss_ipsecmgr_tunnel_dev_index2entry(dev->ifindex);
 	if (!entry || !entry->data) {
-
-		/*
-		 * ESP packets exceptioned here are egress packets and should be sent to local_out
-		 * Clear text/decrypted packets are ingress packets and injected to stack.
-		 */
-		if (!nss_ipsecmgr_tunnel_rx_local(skb))
-			netif_receive_skb(skb);
-
+		netif_receive_skb(skb);
 		goto done;
 	}
 
@@ -808,6 +710,22 @@ static void nss_ipsecmgr_tunnel_update_stats(struct nss_ipsecmgr_priv *priv, str
 
 	tun_stats = &priv->stats;
 	pkts = &nim->msg.stats.sa;
+
+	if (nim->type == NSS_IPSEC_TYPE_ENCAP) {
+		/*
+		 * update tunnel specific stats
+		 */
+		tun_stats->tx_bytes += pkts->bytes;
+		tun_stats->tx_packets += pkts->count;
+
+		tun_stats->tx_dropped += pkts->no_headroom;
+		tun_stats->tx_dropped += pkts->no_tailroom;
+		tun_stats->tx_dropped += pkts->no_resource;
+		tun_stats->tx_dropped += pkts->fail_queue;
+		tun_stats->tx_dropped += pkts->fail_hash;
+		tun_stats->tx_dropped += pkts->fail_replay;
+		return;
+	}
 
 	/*
 	 * update tunnel specific stats
@@ -850,7 +768,6 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 	struct nss_ipsec_sa_stats *pkts;
 	struct nss_ipsecmgr_priv *priv;
 	nss_ipsecmgr_event_cb_t cb_fn;
-	struct nss_ipsec_tuple *tuple;
 	struct nss_ipsecmgr_ref *ref;
 	struct nss_ipsecmgr_key key;
 	bool reset_fail_hash;
@@ -875,12 +792,7 @@ static void nss_ipsecmgr_tunnel_notify(__attribute((unused))void *app_data, stru
 		/*
 		 * prepare and lookup sa based on selector sent from nss
 		 */
-		tuple = &nim->tuple;
-		if (tuple->ip_ver == 6) {
-			nss_ipsecmgr_v6addr_swap(tuple->dst_addr, tuple->dst_addr);
-			nss_ipsecmgr_v6addr_swap(tuple->src_addr, tuple->src_addr);
-		}
-		nss_ipsecmgr_sa_tuple2key(tuple, &key);
+		nss_ipsecmgr_sa_tuple2key(&nim->tuple, &key);
 
 		write_lock(&ipsecmgr_ctx->lock);
 
@@ -1318,10 +1230,8 @@ static int nss_ipsecmgr_update_pmtu_v6 (struct notifier_block *this, unsigned lo
 	 */
 	memcpy(&fl6.daddr, &iph->daddr, sizeof(fl6.daddr));
 	dst = ip6_route_output(&init_net, NULL, &fl6);
-	if (dst->error) {
-		dst_release(dst);
+	if (IS_ERR(dst))
 		goto exit;
-	}
 
 	/*
 	 * retrieve the tunnel corresponding to the destination address
