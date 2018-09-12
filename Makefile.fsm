@@ -15,5 +15,8 @@ obj-y+= ipsecmgr/
 #NSS NETLINK
 obj-y+= netlink/
 
+# Danipc
+obj-y+= cranipc/
+
 obj ?= .
 
