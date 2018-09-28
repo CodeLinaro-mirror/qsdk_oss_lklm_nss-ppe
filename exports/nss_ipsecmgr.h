@@ -199,6 +199,9 @@ struct nss_ipsecmgr_flow_outer {
 	uint32_t src_ip[4];	/**< IPv6 source IP. */
 	uint32_t dest_ip[4];	/**< IPv6 destination IP. */
 	uint32_t spi_index;	/**< SPI index of the encapsulating security payload (ESP). */
+	uint16_t sport;		/**< Source Port (unused). */
+	uint16_t dport;		/**< Destination Port (unused). */
+	uint8_t proto_next_hdr; /**< Transport layer protocol. */
 	uint8_t ip_version;	/**< IP version 4/6. */
 };
 
