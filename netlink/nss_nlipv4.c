@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -238,9 +238,15 @@ static int nss_nlipv4_verify_5tuple(struct nss_ipv4_5tuple *tuple)
 		return -EINVAL;
 	}
 
-	/* Validate the port number */
+	/*
+	 * Validate the port number
+	 * */
 	switch (tuple->protocol) {
 	case IPPROTO_UDP:
+		/*
+		 * Dont check port numbrs for UDP
+		 */
+		return 0;
 	case IPPROTO_TCP:
 	case IPPROTO_SCTP:
 		ident_check = true;
