@@ -2,7 +2,7 @@ ccflags-y := -I$(obj)/../exports -I$(srctree)/net/bridge -DNSS_QDISC_DEBUG_LEVEL
 
 # If NSS_QDISC_PPE_SUPPORT is removed, then remove/disable
 # nss_ppe.o nss_ppe_mc.o from qca-nss-qdisc-objs list.
-ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64))
+ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64 ipq60xx ipq60xx_64))
 ccflags-y += -DNSS_QDISC_PPE_SUPPORT -DNSS_QDISC_BRIDGE_SUPPORT
 endif
 
@@ -18,7 +18,7 @@ qca-nss-qdisc-objs := 	nss_qdisc.o \
 			nss_blackhole.o \
 			nss_wred.o
 
-ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64))
+ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64 ipq60xx ipq60xx_64))
 qca-nss-qdisc-objs += 	nss_ppe.o \
 			nss_ppe_mc.o
 endif

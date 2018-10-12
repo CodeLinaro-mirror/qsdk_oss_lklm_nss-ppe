@@ -462,6 +462,7 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_encap(struct nss_ipsecmgr_pri
 	struct nss_ipsec_rule_oip *oip;
 	struct nss_ipsec_tuple tuple = {0};
 	uint32_t index;
+	size_t hdr_sz;
 
 	nss_ipsecmgr_flow_outer2tuple(outer, &tuple);
 
@@ -528,10 +529,19 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_encap(struct nss_ipsecmgr_pri
 	 */
 	oip = &sa->oip;
 	oip->esp_spi = outer->spi_index;
+	oip->proto_next_hdr = outer->proto_next_hdr;
+
+	if (outer->proto_next_hdr == IPPROTO_UDP) {
+		oip->src_port = outer->sport ? outer->sport : NSS_IPSECMGR_NATT_PORT_DATA;
+		oip->dst_port = outer->dport ? outer->dport : NSS_IPSECMGR_NATT_PORT_DATA;
+	}
+
 	oip->ip_ver = outer->ip_version;
 	oip->ttl_hop_limit = sa_data->encap.ttl_hop_limit;
-	memcpy(&oip->dst_addr, outer->dest_ip, sizeof(oip->dst_addr));
-	memcpy(&oip->src_addr, outer->src_ip, sizeof(oip->src_addr));
+
+	hdr_sz = (outer->ip_version == IPVERSION) ? sizeof(oip->dst_addr[0]) : sizeof(oip->dst_addr);
+	memcpy(&oip->dst_addr, outer->dest_ip, hdr_sz);
+	memcpy(&oip->src_addr, outer->src_ip, hdr_sz);
 
 	INIT_LIST_HEAD(&sa->list);
 	nss_ipsecmgr_ref_init(&sa->ref, nss_ipsecmgr_sa_free);
@@ -579,6 +589,7 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_decap(struct nss_ipsecmgr_pri
 	struct nss_ipsec_rule_data *data;
 	struct nss_ipsec_rule_oip *oip;
 	uint32_t index;
+	size_t hdr_sz;
 
 	nss_ipsecmgr_flow_outer2tuple(outer, &tuple);
 
@@ -638,9 +649,17 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_decap(struct nss_ipsecmgr_pri
 	 * Fill outer IP related information
 	 */
 	oip = &sa->oip;
-	memcpy(&oip->dst_addr, outer->dest_ip, sizeof(oip->dst_addr));
-	memcpy(&oip->src_addr, outer->src_ip, sizeof(oip->src_addr));
+	hdr_sz = (outer->ip_version == IPVERSION) ? sizeof(oip->dst_addr[0]) : sizeof(oip->dst_addr);
+	memcpy(&oip->dst_addr, outer->dest_ip, hdr_sz);
+	memcpy(&oip->src_addr, outer->src_ip, hdr_sz);
 	oip->esp_spi = outer->spi_index;
+	oip->proto_next_hdr = outer->proto_next_hdr;
+
+	if (outer->proto_next_hdr == IPPROTO_UDP) {
+		oip->src_port = outer->sport ? outer->sport : NSS_IPSECMGR_NATT_PORT_DATA;
+		oip->dst_port = outer->dport ? outer->dport : NSS_IPSECMGR_NATT_PORT_DATA;
+	}
+
 	oip->ip_ver = outer->ip_version;
 	oip->ttl_hop_limit = 0;
 

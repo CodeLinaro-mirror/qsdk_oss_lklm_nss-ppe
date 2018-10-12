@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -430,6 +430,9 @@ void nss_ipsecmgr_copy_v4_sa(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v
 	oip->ttl_hop_limit = sa->ttl;
 	oip->esp_spi = sa->spi_index;
 	oip->ip_ver = IPVERSION;
+	oip->dst_port = 0;
+	oip->src_port = 0;
+	oip->proto_next_hdr = 0;
 }
 
 /*
@@ -449,6 +452,9 @@ void nss_ipsecmgr_copy_v6_sa(struct nss_ipsec_msg *nim, struct nss_ipsecmgr_sa_v
 	oip->esp_spi = sa->spi_index;
 	oip->ttl_hop_limit = sa->hop_limit;
 	oip->ip_ver = 6;
+	oip->dst_port = 0;
+	oip->src_port = 0;
+	oip->proto_next_hdr = 0;
 }
 
 /*

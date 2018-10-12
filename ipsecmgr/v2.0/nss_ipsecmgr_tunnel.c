@@ -696,9 +696,12 @@ void nss_ipsecmgr_tunnel_rx_notify(void *app_data, struct nss_ipsec_msg *nim)
 		struct nss_ipsec_tuple tuple = {0};
 		struct nss_ipsecmgr_sa_entry *sa;
 		bool send_event = false;
+		size_t hdr_sz;
 
-		memcpy(tuple.dst_addr, nim->tuple.dst_addr, sizeof(tuple.dst_addr));
-		memcpy(tuple.src_addr, nim->tuple.src_addr, sizeof(tuple.src_addr));
+		hdr_sz = (nim->tuple.ip_ver == IPVERSION) ? sizeof(tuple.dst_addr[0]) : sizeof(tuple.dst_addr);
+
+		memcpy(tuple.dst_addr, nim->tuple.dst_addr, hdr_sz);
+		memcpy(tuple.src_addr, nim->tuple.src_addr, hdr_sz);
 
 		tuple.esp_spi = nim->tuple.esp_spi;
 		tuple.ip_ver = nim->tuple.ip_ver;

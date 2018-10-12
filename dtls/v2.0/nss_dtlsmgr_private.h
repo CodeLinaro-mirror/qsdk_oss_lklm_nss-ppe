@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -82,13 +82,11 @@
 #endif
 
 /*
- * DTLS algorithm infomation
+ * DTLS algorithm information
  */
 struct nss_dtlsmgr_algo_info {
-	const char name[CRYPTO_MAX_ALG_NAME];	/* Cryptographic algorithm name. */
-	uint16_t max_cipher_keylen;		/* Cipher key length. */
-	uint16_t max_auth_keylen;		/* Authentication key length. */
-	uint16_t max_nonce_size;		/* Nonce size. */
+	char *name;				/* Linux crypto algorithm string. */
+	uint32_t rta_key_size;			/* RTA key attribute size. */
 };
 
 /*

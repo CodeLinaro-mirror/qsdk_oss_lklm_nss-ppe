@@ -51,16 +51,16 @@
 
 #include "nss_dtlsmgr_private.h"
 
+#define NSS_DTLSMGR_KEY_PARAM_SIZE RTA_SPACE(sizeof(struct crypto_authenc_key_param))
+
 extern struct nss_dtlsmgr g_dtls;
 
-/*
- * Linux crypto algorithm names.
- */
-static const char *g_dtls_algo_name[NSS_DTLSMGR_ALGO_MAX] = {
-	"echainiv(authenc(hmac(sha1),cbc(aes)))",
-	"echainiv(authenc(hmac(sha256),cbc(aes)))",
-	"echainiv(authenc(hmac(sha1),cbc(des3_ede)))",
-	"echainiv(authenc(hmac(sha256),cbc(des3_ede)))"
+static struct nss_dtlsmgr_algo_info dtlsmgr_algo_info[NSS_DTLSMGR_ALGO_MAX] = {
+	{"echainiv(authenc(hmac(sha1),cbc(aes)))", NSS_DTLSMGR_KEY_PARAM_SIZE},
+	{"echainiv(authenc(hmac(sha256),cbc(aes)))", NSS_DTLSMGR_KEY_PARAM_SIZE},
+	{"echainiv(authenc(hmac(sha1),cbc(des3_ede)))", NSS_DTLSMGR_KEY_PARAM_SIZE},
+	{"echainiv(authenc(hmac(sha256),cbc(des3_ede)))", NSS_DTLSMGR_KEY_PARAM_SIZE},
+	{"rfc4106(gcm(aes))", 0}
 };
 
 /*
@@ -71,27 +71,31 @@ static int nss_dtlsmgr_ctx_alloc_crypto(struct nss_dtlsmgr_ctx *ctx, struct nss_
 					struct nss_dtlsmgr_crypto *crypto)
 {
 	struct crypto_authenc_key_param *key_param;
+	struct nss_dtlsmgr_algo_info *info;
 	struct rtattr *rta;
 	char *keys, *p;
 	uint16_t keylen;
 
-	if (crypto->algo >= ARRAY_SIZE(g_dtls_algo_name)) {
+	if (crypto->algo >= ARRAY_SIZE(dtlsmgr_algo_info)) {
 		nss_dtlsmgr_warn("%p: invalid crypto algorithm", ctx);
 		return -EINVAL;
 	}
 
-	dtls->aead = crypto_alloc_aead(g_dtls_algo_name[crypto->algo], 0, 0);
+	info = &dtlsmgr_algo_info[crypto->algo];
+	dtls->aead = crypto_alloc_aead(info->name, 0, 0);
 	if (IS_ERR(dtls->aead)) {
 		nss_dtlsmgr_warn("%p: failed to allocate crypto aead context", ctx);
 		return -ENOMEM;
 	}
 
-	nss_dtlsmgr_trace("cipher_keylen:%d auth_keylen:%d\n", crypto->cipher_key.len, crypto->auth_key.len);
+	nss_dtlsmgr_trace("cipher_keylen:%d auth_keylen:%d nonce_len:%d\n",
+			  crypto->cipher_key.len, crypto->auth_key.len, crypto->nonce.len);
+
 
 	/*
 	 * Construct keys
 	 */
-	keylen = RTA_SPACE(sizeof(*key_param));
+	keylen = info->rta_key_size;
 	keylen += crypto->cipher_key.len;
 	keylen += crypto->auth_key.len;
 	keylen += crypto->nonce.len;
@@ -101,6 +105,13 @@ static int nss_dtlsmgr_ctx_alloc_crypto(struct nss_dtlsmgr_ctx *ctx, struct nss_
 		nss_dtlsmgr_warn("%p: failed to allocate key memory", ctx);
 		crypto_free_aead(dtls->aead);
 		return -ENOMEM;
+	}
+
+	if (crypto->algo == NSS_DTLSMGR_ALGO_AES_GCM) {
+		memcpy(keys, crypto->cipher_key.data, crypto->cipher_key.len);
+		/* Copy nonce after the key */
+		memcpy(keys + crypto->cipher_key.len, crypto->nonce.data, crypto->nonce.len);
+		goto setkey;
 	}
 
 	p = keys;
@@ -121,6 +132,8 @@ static int nss_dtlsmgr_ctx_alloc_crypto(struct nss_dtlsmgr_ctx *ctx, struct nss_
 	 */
 	key_param->enckeylen = cpu_to_be32(crypto->cipher_key.len);
 	memcpy(p, crypto->cipher_key.data, crypto->cipher_key.len);
+
+setkey:
 
 	if (crypto_aead_setkey(dtls->aead, keys, keylen)) {
 		nss_dtlsmgr_warn("%p: failed to configure keys", ctx);
