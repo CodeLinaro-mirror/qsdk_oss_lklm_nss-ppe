@@ -18,6 +18,7 @@
  * nss_bridge_mgr.c
  *	NSS to HLOS Bridge Interface manager
  */
+#include <linux/sysctl.h>
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/of.h>
@@ -27,6 +28,9 @@
 #include <nss_vlan_mgr.h>
 #include <fal/fal_fdb.h>
 #include <fal/fal_stp.h>
+#include <fal/fal_acl.h>
+#include <fal/fal_api.h>
+#include <fal/fal_port_ctrl.h>
 #endif
 #include <nss_api_if.h>
 
@@ -86,6 +90,17 @@
 #define NSS_BRIDGE_MGR_SPANNING_TREE_ID	0
 #define NSS_BRIDGE_MGR_DISABLE_PPE_EXCEPTION	0
 #define NSS_BRIDGE_MGR_ENABLE_PPE_EXCEPTION	1
+
+#define NSS_BRIDGE_MGR_ACL_DEV_ID 0
+#define NSS_BRIDGE_MGR_ACL_LIST_ID 61
+#define NSS_BRIDGE_MGR_ACL_LIST_PRIORITY 0
+#define NSS_BRIDGE_MGR_ACL_RULE_NR 1
+#define NSS_BRIDGE_MGR_ACL_FRAG_RULE_ID 0
+#define NSS_BRIDGE_MGR_ACL_FIN_RULE_ID 1
+#define NSS_BRIDGE_MGR_ACL_SYN_RULE_ID 2
+#define NSS_BRIDGE_MGR_ACL_RST_RULE_ID 3
+#define NSS_BRIDGE_MGR_ACL_SERVICE_CODE 10
+
 #endif
 
 /*
@@ -94,6 +109,11 @@
 struct nss_bridge_mgr_context {
 	struct list_head list;		/* List of bridge instance */
 	spinlock_t lock;		/* Lock to protect bridge instance */
+#if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
+	int32_t wan_if_num;		/* WAN interface number */
+	char wan_ifname[IFNAMSIZ];	/* WAN interface name */
+	struct ctl_table_header *nss_bridge_mgr_header;	/* bridge sysctl */
+#endif
 } br_mgr_ctx;
 
 /*
@@ -109,6 +129,8 @@ struct nss_bridge_pvt {
 	uint32_t lag_ports[NSS_BRIDGE_MGR_PHY_PORT_MAX]; 	/* List of slave ports in LAG */
 	int bond_slave_num;			/* Total number of bond devices added into
 						   bridge device */
+	bool wan_if_enabled;			/* Is WAN interface enabled? */
+	int32_t wan_if_num;			/* WAN interface number, if enabled */
 #endif
 	uint32_t mtu;				/* MTU for bridge */
 	uint8_t dev_addr[ETH_ALEN];		/* MAC address for bridge */
@@ -579,6 +601,182 @@ cleanup:
 
 	return NOTIFY_BAD;
 }
+
+/*
+ * nss_bridge_mgr_l2_exception_acl_enable()
+ *	Create ACL rule to enable L2 exception.
+ */
+static bool nss_bridge_mgr_l2_exception_acl_enable(void)
+{
+	sw_error_t error;
+	fal_acl_rule_t rule;
+
+	memset(&rule, 0, sizeof(rule));
+	error = fal_acl_list_creat(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_LIST_PRIORITY);
+	if (error != SW_OK) {
+		pr_err("List creation failed with error = %d\n", error);
+		return false;
+	}
+
+	/*
+	 * Enable excpetion for packets with fragments.
+	 */
+	rule.rule_type = FAL_ACL_RULE_IP4;
+	rule.is_fragement_mask = 1;
+	rule.is_fragement_val = A_TRUE;
+	FAL_FIELD_FLG_SET(rule.field_flg, FAL_ACL_FIELD_L3_FRAGMENT);
+	FAL_ACTION_FLG_SET(rule.action_flg, FAL_ACL_ACTION_RDTCPU);
+
+	error = fal_acl_rule_add(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_FRAG_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR, &rule);
+	if (error != SW_OK) {
+		pr_err("Could not add fragment acl rule, error = %d\n", error);
+		goto frag_fail;
+	}
+
+	/*
+	 * Enable excpetion for TCP FIN.
+	 */
+	memset(&rule, 0, sizeof(rule));
+
+	rule.rule_type = FAL_ACL_RULE_IP4;
+	rule.tcp_flag_val = 0x1 & 0x3f;
+	rule.tcp_flag_mask = 0x1 & 0x3f;
+	FAL_FIELD_FLG_SET(rule.field_flg, FAL_ACL_FIELD_TCP_FLAG);
+	FAL_ACTION_FLG_SET(rule.action_flg, FAL_ACL_ACTION_RDTCPU);
+
+	error = fal_acl_rule_add(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_FIN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR, &rule);
+	if (error != SW_OK) {
+		pr_err("Could not add TCP FIN rule, error = %d\n", error);
+		goto fin_fail;
+	}
+
+	/*
+	 * Enable excpetion for TCP SYN.
+	 */
+	memset(&rule, 0, sizeof(rule));
+
+	rule.rule_type = FAL_ACL_RULE_IP4;
+	rule.tcp_flag_val = 0x2 & 0x3f;
+	rule.tcp_flag_mask = 0x2 & 0x3f;
+	FAL_FIELD_FLG_SET(rule.field_flg, FAL_ACL_FIELD_TCP_FLAG);
+	FAL_ACTION_FLG_SET(rule.action_flg, FAL_ACL_ACTION_RDTCPU);
+
+	error = fal_acl_rule_add(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_SYN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR, &rule);
+	if (error != SW_OK) {
+		pr_err("Could not add TCP SYN rule, error = %d\n", error);
+		goto syn_fail;
+	}
+
+	/*
+	 * Enable excpetion for TCP RST.
+	 */
+	memset(&rule, 0, sizeof(rule));
+
+	rule.rule_type = FAL_ACL_RULE_IP4;
+	rule.tcp_flag_val = 0x4 & 0x3f;
+	rule.tcp_flag_mask = 0x4 & 0x3f;
+	FAL_FIELD_FLG_SET(rule.field_flg, FAL_ACL_FIELD_TCP_FLAG);
+	FAL_ACTION_FLG_SET(rule.action_flg, FAL_ACL_ACTION_RDTCPU);
+
+	error = fal_acl_rule_add(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_RST_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR, &rule);
+	if (error != SW_OK) {
+		pr_err("Could not add TCP RST rule, error = %d\n", error);
+		goto rst_fail;
+	}
+
+	/*
+	 * Bind ACL list with service code
+	 */
+	error = fal_acl_list_bind(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				FAL_ACL_DIREC_IN, FAL_ACL_BIND_SERVICE_CODE, NSS_BRIDGE_MGR_ACL_SERVICE_CODE);
+	if (error != SW_OK) {
+		pr_err("Could not bind ACL list, error = %d\n", error);
+		goto bind_fail;
+	}
+
+	pr_info("Created ACL rule\n");
+	return true;
+
+bind_fail:
+	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_RST_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
+	if (error != SW_OK) {
+		pr_err("TCP RST rule deletion failed, error %d\n", error);
+	}
+
+rst_fail:
+	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_SYN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
+	if (error != SW_OK) {
+		pr_err("TCP SYN rule deletion failed, error %d\n", error);
+	}
+
+syn_fail:
+	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_FIN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
+	if (error != SW_OK) {
+		pr_err("TCP FIN rule deletion failed, error %d\n", error);
+	}
+
+fin_fail:
+	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_FRAG_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
+	if (error != SW_OK) {
+		pr_err("IP fragmentation rule deletion failed, error %d\n", error);
+	}
+
+frag_fail:
+	error = fal_acl_list_destroy(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID);
+	if (error != SW_OK) {
+		pr_err("ACL list destroy failed, error %d\n", error);
+	}
+
+	return false;
+}
+
+/*
+ * nss_bridge_mgr_l2_exception_acl_disable()
+ *	Destroy ACL list and rule created by the driver.
+ */
+static void nss_bridge_mgr_l2_exception_acl_disable(void)
+{
+	sw_error_t error;
+
+	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_SYN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
+	if (error != SW_OK) {
+		pr_err("TCP SYN rule deletion failed, error %d\n", error);
+	}
+
+	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_FIN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
+	if (error != SW_OK) {
+		pr_err("TCP FIN rule deletion failed, error %d\n", error);
+	}
+
+	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_RST_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
+	if (error != SW_OK) {
+		pr_err("TCP RST rule deletion failed, error %d\n", error);
+	}
+
+	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
+				NSS_BRIDGE_MGR_ACL_FRAG_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
+	if (error != SW_OK) {
+		pr_err("IP fragmentation rule deletion failed, error %d\n", error);
+	}
+
+	error = fal_acl_list_destroy(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID);
+	if (error != SW_OK) {
+		pr_err("ACL list destroy failed, error %d\n", error);
+	}
+}
+
 #endif
 
 /*
@@ -592,6 +790,22 @@ static int nss_bridge_mgr_join_bridge(struct net_device *dev, struct nss_bridge_
 	struct net_device *real_dev;
 
 	if (NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(ifnum)) {
+		/*
+		 * If there is a wan interface added in bridge, create a
+		 * separate VSI for it, hence avoiding FDB based forwarding.
+		 * This is done by not sending join message to the bridge in NSS.
+		 */
+		if (br_mgr_ctx.wan_if_num == ifnum) {
+			if (!nss_bridge_mgr_l2_exception_acl_enable()) {
+				nss_bridge_mgr_warn("%p: failed to enable ACL\n", br);
+				return -1;
+			}
+			br->wan_if_enabled = true;
+			br->wan_if_num = ifnum;
+			nss_bridge_mgr_info("if_num %d is added as WAN interface \n", ifnum);
+			return 0;
+		}
+
 		if (ppe_port_vsi_get(NSS_BRIDGE_MGR_SWITCH_ID, port_num, &br->port_vsi[port_num - 1])) {
 			nss_bridge_mgr_warn("%p: failed to save port VSI of physical interface\n", br);
 			return -1;
@@ -669,6 +883,19 @@ static int nss_bridge_mgr_leave_bridge(struct net_device *dev, struct nss_bridge
 	struct net_device *real_dev;
 
 	if (NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(ifnum)) {
+		/*
+		 * If there is a wan interface added in bridge, a separate
+		 * VSI is created for it by not sending join message to NSS.
+		 * Hence a leave message should also be avaoided.
+		 */
+		if ((br->wan_if_enabled) && (br->wan_if_num == ifnum)) {
+			nss_bridge_mgr_l2_exception_acl_disable();
+			br->wan_if_enabled = false;
+			br->wan_if_num = -1;
+			nss_bridge_mgr_info("if_num %d is added as WAN interface\n", ifnum);
+			return 0;
+		}
+
 		if (fal_stp_port_state_set(NSS_BRIDGE_MGR_SWITCH_ID, NSS_BRIDGE_MGR_SPANNING_TREE_ID, port_num, FAL_STP_FORWARDING)) {
 			nss_bridge_mgr_warn("%p: faied to set the STP state to forwarding\n", br);
 			return -1;
@@ -978,6 +1205,8 @@ static int nss_bridge_mgr_register_event(struct netdev_notifier_info *info)
 	 */
 	b_pvt->ifnum = ifnum;
 	b_pvt->mtu = dev->mtu;
+	b_pvt->wan_if_num = -1;
+	b_pvt->wan_if_enabled = false;
 	ether_addr_copy(b_pvt->dev_addr, dev->dev_addr);
 	spin_lock(&br_mgr_ctx.lock);
 	list_add(&b_pvt->list, &br_mgr_ctx.list);
@@ -1026,9 +1255,10 @@ static int nss_bridge_mgr_unregister_event(struct netdev_notifier_info *info)
 	 * sequence of free:
 	 * 1. issue VSI unassign to NSS
 	 * 2. free VSI
-	 * 3. unregister bridge netdevice from data plane
-	 * 4. deallocate dynamic interface associated with bridge netdevice
-	 * 5. free bridge netdevice
+	 * 3. flush bridge FDB table
+	 * 4. unregister bridge netdevice from data plane
+	 * 5. deallocate dynamic interface associated with bridge netdevice
+	 * 6. free bridge netdevice
 	 */
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
 	/*
@@ -1042,6 +1272,14 @@ static int nss_bridge_mgr_unregister_event(struct netdev_notifier_info *info)
 		nss_bridge_mgr_warn("%p: failed to unassign vsi\n", b_pvt);
 
 	ppe_vsi_free(NSS_BRIDGE_MGR_SWITCH_ID, b_pvt->vsi);
+
+	/*
+	 * It may happen that the same VSI is allocated again,
+	 * so there is a need to flush bridge FDB table.
+	 */
+	if (fal_fdb_entry_del_byfid(NSS_BRIDGE_MGR_SWITCH_ID, b_pvt->vsi, FAL_FDB_DEL_STATIC)) {
+		nss_bridge_mgr_warn("%p: Failed to flush FDB table for vsi:%d in PPE\n", b_pvt, b_pvt->vsi);
+	}
 #endif
 
 	nss_bridge_mgr_trace("%p: Bridge %s unregsitered. Freeing bridge di %d\n", b_pvt, dev->name, b_pvt->ifnum);
@@ -1201,6 +1439,126 @@ static int nss_bridge_mgr_fdb_update_callback(struct notifier_block *notifier,
 static struct notifier_block nss_bridge_mgr_fdb_update_notifier = {
 	.notifier_call = nss_bridge_mgr_fdb_update_callback,
 };
+
+/*
+ * nss_bridge_mgr_wan_inf_add_handler
+ *	Marks an interface as a WAN interface for special handling by bridge.
+ */
+static int nss_bridge_mgr_wan_intf_add_handler(struct ctl_table *table,
+						int write, void __user *buffer,
+						size_t *lenp, loff_t *ppos)
+{
+	struct net_device *dev;
+	char *dev_name;
+	char *if_name;
+	int ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret)
+		return ret;
+
+	if (!write)
+		return ret;
+
+	if_name = br_mgr_ctx.wan_ifname;
+	dev_name = strsep(&if_name, " ");
+	dev = dev_get_by_name(&init_net, dev_name);
+	if (!dev) {
+		nss_bridge_mgr_warn("Cannot find the net device associated with %s\n", dev_name);
+		return -ENODEV;
+	}
+
+	uint32_t if_num = nss_cmn_get_interface_number_by_dev(dev);
+	if (!NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(if_num)) {
+		nss_bridge_mgr_warn("Only physical interfaces can be marked as WAN interface: if_num %d\n", if_num);
+		return -ENOMSG;
+	}
+
+	if (br_mgr_ctx.wan_if_num != -1) {
+		nss_bridge_mgr_warn("Cannot overwrite a pre-existing wan interface\n");
+		return -ENOMSG;
+	}
+
+	br_mgr_ctx.wan_if_num = if_num;
+	printk("For adding if_num: %d as WAN interface, do a network restart\n", if_num);
+	return ret;
+}
+
+/*
+ * nss_bridge_mgr_wan_inf_del_handler
+ *	Un-marks an interface as a WAN interface.
+ */
+ssize_t nss_bridge_mgr_wan_intf_del_handler(struct ctl_table *table,
+						int write, void __user *buffer,
+						size_t *lenp, loff_t *ppos)
+{
+	struct net_device *dev;
+	char *dev_name;
+	char *if_name;
+	int ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret)
+		return ret;
+
+	if (!write)
+		return ret;
+
+	if_name = br_mgr_ctx.wan_ifname;
+	dev_name = strsep(&if_name, " ");
+	dev = dev_get_by_name(&init_net, dev_name);
+	if (!dev) {
+		nss_bridge_mgr_warn("Cannot find the net device associated with %s\n", dev_name);
+		return -ENODEV;
+	}
+
+	uint32_t if_num = nss_cmn_get_interface_number_by_dev(dev);
+	if (!NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(if_num)) {
+		nss_bridge_mgr_warn("Only physical interfaces can be marked/unmarked, if_num: %d\n", if_num);
+		return -ENOMSG;
+	}
+
+	if (br_mgr_ctx.wan_if_num != if_num) {
+		nss_bridge_mgr_warn("This interface is not marked as a WAN interface\n");
+		return -ENOMSG;
+	}
+
+	br_mgr_ctx.wan_if_num = -1;
+	printk("For deleting if_num: %d as WAN interface, do a network restart\n", if_num);
+	return ret;
+}
+
+static struct ctl_table nss_bridge_mgr_table[] = {
+	{
+		.procname	= "add_wanif",
+		.data           = &br_mgr_ctx.wan_ifname,
+		.maxlen         = sizeof(char) * IFNAMSIZ,
+		.mode           = 0644,
+		.proc_handler   = &nss_bridge_mgr_wan_intf_add_handler,
+	},
+	{
+		.procname	= "del_wanif",
+		.data           = &br_mgr_ctx.wan_ifname,
+		.maxlen         = sizeof(char) * IFNAMSIZ,
+		.mode           = 0644,
+		.proc_handler   = &nss_bridge_mgr_wan_intf_del_handler,
+	},
+	{ }
+};
+
+static struct ctl_table nss_bridge_mgr_dir[] = {
+	{
+		.procname	= "bridge_mgr",
+		.mode		= 0555,
+		.child		= nss_bridge_mgr_table,
+	},
+	{ }
+};
+
+static struct ctl_table nss_bridge_mgr_root_dir[] = {
+	{
+		.procname	= "nss",
+		.mode		= 0555,
+		.child		= nss_bridge_mgr_dir,
+	},
+	{ }
+};
 #endif
 
 /*
@@ -1220,7 +1578,9 @@ int __init nss_bridge_mgr_init_module(void)
 	register_netdevice_notifier(&nss_bridge_mgr_netdevice_nb);
 	nss_bridge_mgr_info("Module (Build %s) loaded\n", NSS_CLIENT_BUILD_ID);
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
+	br_mgr_ctx.wan_if_num = -1;
 	br_fdb_update_register_notify(&nss_bridge_mgr_fdb_update_notifier);
+	br_mgr_ctx.nss_bridge_mgr_header = register_sysctl_table(nss_bridge_mgr_root_dir);
 #endif
 	return 0;
 }
@@ -1235,6 +1595,10 @@ void __exit nss_bridge_mgr_exit_module(void)
 	nss_bridge_mgr_info("Module unloaded\n");
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
 	br_fdb_update_unregister_notify(&nss_bridge_mgr_fdb_update_notifier);
+
+	if (br_mgr_ctx.nss_bridge_mgr_header) {
+		unregister_sysctl_table(br_mgr_ctx.nss_bridge_mgr_header);
+	}
 #endif
 }
 
