@@ -256,6 +256,7 @@ int nss_tunipip6_dev_up(struct net_device *netdev)
 	 * Flow Label In kernel is stored in big endian format.
 	 */
 	tnlcfg->flowlabel = fl6->flowlabel;
+	tnlcfg->draft03 = tunnel->parms.draft03;
 
 	/*
 	 * Configure FMR table up to MAX_FMR_NUMBER, the rest will be forwarded to BR
