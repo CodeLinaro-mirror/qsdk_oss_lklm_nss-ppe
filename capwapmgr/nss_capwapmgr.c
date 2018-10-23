@@ -198,6 +198,15 @@ static netdev_tx_t nss_capwapmgr_start_xmit(struct sk_buff *skb, struct net_devi
 		return NETDEV_TX_OK;
 	}
 
+	/*
+	 * We use the lowest bit in the inner flow_id to determine which Tx ring
+	 * to use (drv uses queue mapping to select Tx ring).
+	 *
+	 * This ring distribution will in turn get used in NSS firmware
+	 * for better thread distribution of encap operation.
+	 */
+	skb_set_queue_mapping(skb, pre->flow_id & 0x1);
+
 	status = nss_capwap_tx_buf(priv->nss_ctx, skb, if_num);
 	if (unlikely(status != NSS_TX_SUCCESS)) {
 		if (status == NSS_TX_FAILURE_QUEUE) {
