@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -274,6 +274,7 @@ static void nss_connmgr_pptp_exception(struct net_device *dev,
 {
 	struct iphdr *iph_outer;
 	struct nss_connmgr_pptp_session_entry *session_info;
+	struct flowi4 fl4;
 #if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 8, 0))
 	struct hlist_node *node;
 #endif
@@ -320,7 +321,8 @@ static void nss_connmgr_pptp_exception(struct net_device *dev,
 				 * This is a PPTP encapsulated packet that has been exceptioned to host from NSS.
 				 * We can send it directly to the physical device
 				 */
-				rt = ip_route_output(&init_net, tunnel_peer_ip, tunnel_local_ip, 0, session_info->phy_dev->ifindex);
+				rt = ip_route_output_ports(&init_net, &fl4, NULL, tunnel_peer_ip,
+						tunnel_local_ip, 0, 0, IPPROTO_GRE, RT_TOS(0), 0);
 				if (unlikely(IS_ERR(rt))) {
 					nss_connmgr_pptp_info("%p: Martian packets, drop\n", session_info);
 					nss_connmgr_pptp_info("%p: No route or out dev, drop packet...\n", session_info);
