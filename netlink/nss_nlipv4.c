@@ -533,7 +533,7 @@ static void nss_nlipv4_process_notify(void *app_data, struct nss_ipv4_msg *nim)
 }
 
 /*
- * nss_nlipv4_resp_create_rule()
+ * nss_nlipv4_process_resp()
  * 	handle response for create rule
  */
 static void nss_nlipv4_process_resp(void *app_data, struct nss_ipv4_msg *nim)
@@ -575,7 +575,6 @@ static int nss_nlipv4_ops_create_rule(struct sk_buff *skb, struct genl_info *inf
 	struct nss_nlcmn *nl_cm;
 	struct nss_ipv4_msg *nim;
 	nss_tx_status_t tx_status;
-	struct sk_buff *resp;
 	uint32_t pid;
 	int error;
 
@@ -675,29 +674,19 @@ static int nss_nlipv4_ops_create_rule(struct sk_buff *skb, struct genl_info *inf
 	}
 
 	/*
-	 * copy the NL message for response
-	 */
-	resp = nss_nl_copy_msg(skb);
-	if (!resp) {
-		nss_nl_error("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
-		goto done;
-	}
-
-	/*
 	 * Initialize the common message
 	 */
 	nss_ipv4_msg_init(nim,					/* ipv4 message */
 			NSS_IPV4_RX_INTERFACE,			/* interface number */
 			NSS_IPV4_TX_CREATE_RULE_MSG,		/* rule */
 			sizeof(struct nss_ipv4_rule_create_msg),/* message size */
-			nss_nlipv4_process_resp,		/* response callback */
-			(void *)resp);				/* app context */
+			NULL,					/* response callback */
+			NULL);					/* app context */
 
 	/*
 	 * Push Rule to NSS
 	 */
-	tx_status = nss_ipv4_tx(gbl_ctx.nss, nim);
+	tx_status = nss_ipv4_tx_sync(gbl_ctx.nss, nim);
 	if (tx_status != NSS_TX_SUCCESS) {
 		nss_nl_error("%d:unable to send IPv4 rule create, status(%d)\n", pid, tx_status);
 		error = -EBUSY;
