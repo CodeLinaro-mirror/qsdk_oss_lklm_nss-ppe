@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -33,6 +33,7 @@
 #include "nss_nlcrypto_if.h"
 #include "nss_nlipsec_if.h"
 #include "nss_nloam_if.h"
+#include "nss_nlcranipc_if.h"
 
 #include "nss_nl.h"
 #include "nss_nlipv4.h"
@@ -40,6 +41,7 @@
 #include "nss_nlcrypto.h"
 #include "nss_nlipsec.h"
 #include "nss_nloam.h"
+#include "nss_nlcranipc.h"
 
 /*
  * nss_nl.c
@@ -104,6 +106,15 @@ static struct nss_nl_family family_handlers[] = {
 		.entry = NSS_NLIPV6_INIT,		/* init */
 		.exit = NSS_NLIPV6_EXIT,		/* exit */
 		.valid = CONFIG_NSS_NLIPV6		/* 1 or 0 */
+	},
+	{
+		/*
+		 * NSS_NLCRANIPC
+		 */
+		.name = NSS_NLCRANIPC_FAMILY,		/* ipv6 */
+		.entry = NSS_NLCRANIPC_INIT,		/* init */
+		.exit = NSS_NLCRANIPC_EXIT,		/* exit */
+		.valid = CONFIG_NSS_NLCRANIPC		/* 1 or 0 */
 	},
 
 };

@@ -9,11 +9,14 @@ ccflags-y += -DCONFIG_NSS_NLIPV4=1
 ccflags-y += -DCONFIG_NSS_NLIPV6=1
 ccflags-y += -DCONFIG_NSS_NLIPSEC=1
 ccflags-y += -DCONFIG_NSS_NLOAM=1
+ccflags-y += -DCONFIG_NSS_NLCRANIPC=1
+
 
 obj-m += qca-nss-netlink.o
 
 qca-nss-netlink-objs := nss_nl.o
 qca-nss-netlink-objs += nss_nlcrypto.o
+qca-nss-netlink-objs += nss_nlcranipc.o
 qca-nss-netlink-objs += nss_nlipv4.o
 qca-nss-netlink-objs += nss_nlipv6.o
 qca-nss-netlink-objs += nss_nlipsec.o
