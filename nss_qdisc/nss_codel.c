@@ -117,8 +117,6 @@ static void nss_codel_reset(struct Qdisc *sch)
  */
 static void nss_codel_flow_queues_free(struct nss_codel_sched_data *q)
 {
-	struct net_device *dev = qdisc_dev(q->nq.qdisc);
-
 	if (!q->flow_queue_mem) {
 		return;
 	}
@@ -126,9 +124,9 @@ static void nss_codel_flow_queues_free(struct nss_codel_sched_data *q)
 	/*
 	 * If DMA mapping was successful, unmap it.
 	 */
-	if (!dma_mapping_error(&dev->dev, q->dma_mapped_mem)) {
+	if (!dma_mapping_error(nss_shaper_get_dev(), q->dma_mapped_mem)) {
 		nss_qdisc_trace("Unmapping flow queue memory\n");
-		dma_unmap_single(&dev->dev, q->dma_mapped_mem, q->flow_queue_sz * q->flows, DMA_FROM_DEVICE);
+		dma_unmap_single(nss_shaper_get_dev(), q->dma_mapped_mem, q->flow_queue_sz * q->flows, DMA_FROM_DEVICE);
 	}
 
 	free_pages(q->flow_queue_mem, get_order(q->flow_queue_sz * q->flows));
@@ -322,8 +320,8 @@ static int nss_codel_change(struct Qdisc *sch, struct nlattr *opt)
 			return -ENOMEM;
 		}
 
-		q->dma_mapped_mem = dma_map_single(&dev->dev, (void *)q->flow_queue_mem, sz, DMA_TO_DEVICE);
-		if (unlikely(dma_mapping_error(&dev->dev, q->dma_mapped_mem))) {
+		q->dma_mapped_mem = dma_map_single(nss_shaper_get_dev(), (void *)q->flow_queue_mem, sz, DMA_TO_DEVICE);
+		if(unlikely(dma_mapping_error(nss_shaper_get_dev(), q->dma_mapped_mem))) {
 			nss_qdisc_warning("DMA map failed for virtual address = %lu\n", q->flow_queue_mem);
 			nss_codel_flow_queues_free(q);
 			return -ENOMEM;
