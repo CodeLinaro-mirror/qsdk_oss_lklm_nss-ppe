@@ -289,7 +289,7 @@ static int nss_connmgr_pppoe_connect(struct net_device *dev)
 			nss_connmgr_pppoe_warn("%p: Invalid LAG group id 0x%x\n", dev, bondid);
 			goto connect_fail3;
 		}
-		npm_create->phy_if_num = bondid + NSS_LAG0_INTERFACE_NUM;
+		npm_create->base_if_num = bondid + NSS_LAG0_INTERFACE_NUM;
 	} else if (opt.dev->priv_flags & IFF_EBRIDGE) {
 		/*
 		 * Device is bridge. We need to get the actual physical port.
@@ -304,25 +304,23 @@ static int nss_connmgr_pppoe_connect(struct net_device *dev)
 		}
 
 		/*
-		 * Get the interface number of the physical interface.
+		 * Get the interface number of the base interface.
 		 */
-		npm_create->phy_if_num = nss_cmn_get_interface_number_by_dev(port);
-		nss_connmgr_pppoe_info("local_mac: %pM server_mac: %pM opt.dev: %s phy_if: %d\n",
-					info->local_mac, info->server_mac, opt.dev->name, npm_create->phy_if_num);
+		npm_create->base_if_num = nss_cmn_get_interface_number_by_dev(port);
+		nss_connmgr_pppoe_info("local_mac: %pM server_mac: %pM opt.dev: %s base_if: %d\n",
+					info->local_mac, info->server_mac, opt.dev->name, npm_create->base_if_num);
 		/*
 		 * Release the port which was held by the br_port_dev_get() call.
 		 */
 		dev_put(port);
 	} else {
 		/*
-		 * PPPoE session is created on an actual physical interface like ethX.
+		 * PPPoE sessions can be created over either a physical or virtual interface. They may not be
+		 * created over a LAG or bridge interface. This interface is the base interface which will be used
+		 * for HW next_hop. On SoCs, which do not have HW acceleration, this interface number is not used
+		 * and -1 is returned.
 		 */
-		npm_create->phy_if_num = nss_cmn_get_interface_number_by_dev(opt.dev);
-	}
-
-	if (npm_create->phy_if_num < 0) {
-		nss_connmgr_pppoe_warn("%p: Unable to get the nss interface number for %s\n", dev, opt.dev->name);
-		goto connect_fail3;
+		npm_create->base_if_num = nss_cmn_get_interface_number_by_dev(opt.dev);
 	}
 
 	ether_addr_copy(npm_create->server_mac, info->server_mac);
@@ -330,9 +328,9 @@ static int nss_connmgr_pppoe_connect(struct net_device *dev)
 	npm_create->mtu = dev->mtu;
 
 	nss_connmgr_pppoe_info("%p: pppoe info\n", dev);
-	nss_connmgr_pppoe_info("%p: session_id %d server_mac %pM local_mac %pM phy_if %s (%d)\n",
+	nss_connmgr_pppoe_info("%p: session_id %d server_mac %pM local_mac %pM base_if %s (%d)\n",
 			       dev, npm_create->session_id,
-			       npm_create->server_mac, npm_create->local_mac, opt.dev->name, npm_create->phy_if_num);
+			       npm_create->server_mac, npm_create->local_mac, opt.dev->name, npm_create->base_if_num);
 	nss_connmgr_pppoe_info("%p: Sending pppoe session create command to NSS\n", dev);
 
 	nss_pppoe_msg_init(&npm, if_number, NSS_PPPOE_MSG_SESSION_CREATE, sizeof(struct nss_pppoe_create_msg), NULL, NULL);
