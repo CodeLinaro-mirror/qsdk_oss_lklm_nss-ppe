@@ -570,10 +570,11 @@ static void nss_connmgr_gre_event_receive(void *if_ctx, struct nss_gre_msg *tnlm
 	struct net_device *dev = if_ctx;
 	struct nss_cmn_node_stats *stats = &tnlmsg->msg.sstats.node_stats;
 	struct pcpu_sw_netstats *tstats;
-	enum nss_dynamic_interface_type interface_type = nss_dynamic_interface_get_type((struct nss_ctx_instance *)if_ctx, tnlmsg->cm.interface);
+	enum nss_dynamic_interface_type interface_type;
 
 	switch (tnlmsg->cm.type) {
 	case NSS_GRE_MSG_SESSION_STATS:
+		interface_type = nss_dynamic_interface_get_type(nss_gre_get_context(), tnlmsg->cm.interface);
 		tstats = this_cpu_ptr(dev->tstats);
 		u64_stats_update_begin(&tstats->syncp);
 		if (interface_type == NSS_DYNAMIC_INTERFACE_TYPE_GRE_INNER) {
