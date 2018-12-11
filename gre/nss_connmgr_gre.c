@@ -570,22 +570,21 @@ static void nss_connmgr_gre_event_receive(void *if_ctx, struct nss_gre_msg *tnlm
 	struct net_device *dev = if_ctx;
 	struct nss_cmn_node_stats *stats = &tnlmsg->msg.sstats.node_stats;
 	struct pcpu_sw_netstats *tstats;
+	enum nss_dynamic_interface_type interface_type = nss_dynamic_interface_get_type((struct nss_ctx_instance *)if_ctx, tnlmsg->cm.interface);
 
 	switch (tnlmsg->cm.type) {
 	case NSS_GRE_MSG_SESSION_STATS:
-		dev->stats.rx_packets += stats->rx_packets;
-		dev->stats.rx_bytes += stats->rx_bytes;
-		dev->stats.tx_packets += stats->tx_packets;
-		dev->stats.tx_bytes += stats->tx_bytes;
-		dev->stats.rx_dropped += nss_cmn_rx_dropped_sum(stats);
-
 		tstats = this_cpu_ptr(dev->tstats);
 		u64_stats_update_begin(&tstats->syncp);
-		tstats->rx_packets += stats->rx_packets;
-		tstats->rx_bytes += stats->rx_bytes;
-		tstats->tx_packets += stats->tx_packets;
-		tstats->tx_bytes += stats->tx_bytes;
+		if (interface_type == NSS_DYNAMIC_INTERFACE_TYPE_GRE_INNER) {
+			tstats->tx_packets += stats->tx_packets;
+			tstats->tx_bytes += stats->tx_bytes;
+		} else if (interface_type == NSS_DYNAMIC_INTERFACE_TYPE_GRE_OUTER) {
+			tstats->rx_packets += stats->rx_packets;
+			tstats->rx_bytes += stats->rx_bytes;
+		}
 		u64_stats_update_end(&tstats->syncp);
+		dev->stats.rx_dropped += nss_cmn_rx_dropped_sum(stats);
 		break;
 
 	case NSS_GRE_MSG_BASE_STATS:
