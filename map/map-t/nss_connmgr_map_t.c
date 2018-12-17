@@ -90,10 +90,18 @@
 #define MAP_T_LONG_LONG_TO_HEX 16
 #define MAP_T_RULE_SZ ((MAP_T_INT_TO_DEC) + (MAP_T_LONG_LONG_TO_HEX) + 5)
 
+#define MAP_T_IPV6_CLASS_SHIFT 20
+#define MAP_T_IPV6_CLASS_MASK  0x0FF00000
+
 /*
  * Max map-t interfaces supported = NSS_MAX_MAP_T_DYNAMIC_INTERFACES
  */
 static int mapt_interfaces_count;
+
+/*
+ * MAP-T flags.
+ */
+static uint8_t map_t_flags;
 
 /*
  * client code check for correctness of rule. This debug stats helps in
@@ -376,6 +384,31 @@ static bool nss_connmgr_mapt_check_correctness_of_mapt_rule(struct net_device *d
 	return true;
 }
 
+ /*
+ * nss_connmgr_map_t_ipv6_get_tclass()
+ * 	Get traffic class from IPv6 header.
+ */
+static inline uint8_t nss_connmgr_map_t_ipv6_get_tclass(struct ipv6hdr *ip6hdr)
+{
+	uint32_t verclassflow = ntohl(*(uint32_t *)ip6hdr);
+	return  (verclassflow & MAP_T_IPV6_CLASS_MASK) >>
+		 MAP_T_IPV6_CLASS_SHIFT;
+}
+
+/*
+ * nss_connmgr_map_t_ipv6_set_tclass()
+ * 	Set traffic class in IPv6 header.
+ */
+static inline void nss_connmgr_map_t_ipv6_set_tclass(struct ipv6hdr *ip6hdr, uint8_t tclass)
+{
+	uint32_t *ptr = (uint32_t *)ip6hdr;
+	uint32_t verclassflow = ntohl(*ptr);
+
+	verclassflow &= (uint32_t)~MAP_T_IPV6_CLASS_MASK;
+	verclassflow |= (tclass << MAP_T_IPV6_CLASS_SHIFT) & MAP_T_IPV6_CLASS_MASK;
+	*ptr = htonl(verclassflow);
+}
+
 /*
  * nss_connmgr_map_t_decap_exception()
  *	Exception handler registered to NSS for handling map_t ipv6 pkts
@@ -389,8 +422,11 @@ static void nss_connmgr_map_t_decap_exception(struct net_device *dev,
 	struct ipv6hdr *ip6_hdr;
 	uint32_t v4saddr = 0, v4daddr = 0;
 	struct ipv6hdr ip6_hdr_r;
-	uint8_t l4_proto, hop_limit;
+	uint8_t next_hdr, hop_limit, tclass, l4_proto;
 	int total_len;
+	uint32_t identifier;
+	bool df_bit = false;
+	uint16_t skip_sz = 0;
 
 	/* discard L2 header */
 	skb_pull(skb, sizeof(struct ethhdr));
@@ -417,11 +453,30 @@ static void nss_connmgr_map_t_decap_exception(struct net_device *dev,
 		return;
 	}
 
-	l4_proto = ip6_hdr->nexthdr;
+	next_hdr = ip6_hdr->nexthdr;
 	total_len = sizeof(struct iphdr) + ntohs(ip6_hdr->payload_len);
 	hop_limit = ip6_hdr->hop_limit;
+	tclass = nss_connmgr_map_t_ipv6_get_tclass(ip6_hdr);
 
-	skb_pull(skb, sizeof(struct ipv6hdr) - sizeof(struct iphdr));
+	if (likely(next_hdr != NEXTHDR_FRAGMENT)) {
+		df_bit = true;
+		l4_proto = next_hdr;
+	} else {
+		struct frag_hdr tmp_fh, *fh;
+		const __be32 *fh_addr = skb_header_pointer(skb, sizeof(struct ipv6hdr), sizeof(struct frag_hdr), &tmp_fh);
+		skip_sz = sizeof(struct frag_hdr);
+		if (!fh_addr) {
+			nss_connmgr_map_t_warning("%p: Not able to offset to frag header while v6 -->v4 xlate\n", dev);
+			dev_kfree_skb_any(skb);
+			return;
+		}
+
+		fh = (struct frag_hdr *)fh_addr;
+		identifier = ntohl(fh->identification);
+		l4_proto = fh->nexthdr;
+	}
+
+	skb_pull(skb, sizeof(struct ipv6hdr) + skip_sz - sizeof(struct iphdr));
 	skb_reset_network_header(skb);
 	skb_reset_mac_header(skb);
 
@@ -433,11 +488,17 @@ static void nss_connmgr_map_t_decap_exception(struct net_device *dev,
 
 	ip4_hdr->ihl = 5;
 	ip4_hdr->version = 4;
-	ip4_hdr->tot_len = htons(total_len);
+	ip4_hdr->tot_len = htons(total_len - skip_sz);
 	ip4_hdr->ttl = hop_limit;
 	ip4_hdr->protocol = l4_proto;
 	ip4_hdr->saddr = v4daddr;
 	ip4_hdr->daddr = v4saddr;
+	ip4_hdr->tos = tclass;
+	if (unlikely(df_bit)) {
+		ip4_hdr->frag_off = htons(IP_DF);
+	} else {
+		ip4_hdr->id = htons(identifier & 0xffff);
+	}
 
 	skb->pkt_type = PACKET_HOST;
 	skb->skb_iif = dev->ifindex;
@@ -467,8 +528,12 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	struct udphdr *v4_udp_hdr = NULL;
 	struct iphdr ip4_hdr_r;
 	__be16 sport, dport;
-	uint8_t nexthdr, hop_limit;
+	uint8_t nexthdr, hop_limit, tos;
 	int payload_len;
+	bool df_bit = false;
+	uint16_t append_hdr_sz = 0;
+	uint16_t identifier;
+
 
 	/* discard L2 header */
 	skb_pull(skb, sizeof(struct ethhdr));
@@ -512,30 +577,57 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	nexthdr = ip4_hdr->protocol;
 	payload_len = ntohs(ip4_hdr->tot_len) - sizeof(struct iphdr);
 	hop_limit = ip4_hdr->ttl;
+	tos = ip4_hdr->tos;
+	identifier = ntohs(ip4_hdr->id);
 
-	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr) - sizeof(struct iphdr))) {
+	if (ip4_hdr->frag_off & htons(IP_DF)) {
+		df_bit = true;
+	}  else if (map_t_flags & MAPT_FLAG_ADD_DUMMY_HDR) {
+		append_hdr_sz = sizeof(struct frag_hdr);
+	}
+
+	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr) + append_hdr_sz - sizeof(struct iphdr))) {
 		nss_connmgr_map_t_warning("%p: Not enough headroom for ipv6 packet...Freeing the packet\n", dev);
 		dev_kfree_skb_any(skb);
 		return;
 	}
 
-	skb_push(skb, sizeof(struct ipv6hdr) - sizeof(struct iphdr));
+	skb_push(skb, sizeof(struct ipv6hdr) + append_hdr_sz - sizeof(struct iphdr));
 	skb_reset_network_header(skb);
 	skb_reset_mac_header(skb);
+
+	skb->protocol = htons(ETH_P_IPV6);
 
 	ip6_hdr = ipv6_hdr(skb);
 	memset(ip6_hdr, 0, sizeof(struct ipv6hdr));
 
-	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
-	skb->protocol = htons(ETH_P_IPV6);
-
 	ip6_hdr->version = 6;
-	ip6_hdr->payload_len = htons(payload_len);
-	ip6_hdr->nexthdr = nexthdr;
+	ip6_hdr->payload_len = htons(payload_len + append_hdr_sz);
 	ip6_hdr->hop_limit = hop_limit;
 
+	nss_connmgr_map_t_ipv6_set_tclass(ip6_hdr, tos);
 	memcpy(&ip6_hdr->daddr, v6saddr, sizeof(struct in6_addr));
 	memcpy(&ip6_hdr->saddr, v6daddr, sizeof(struct in6_addr));
+
+	if (unlikely(df_bit) || !(map_t_flags & MAPT_FLAG_ADD_DUMMY_HDR))  {
+		ip6_hdr->nexthdr = nexthdr;
+	} else {
+		struct frag_hdr tmp_fh, *fh;
+		const __be32 *fh_addr = skb_header_pointer(skb, sizeof(struct ipv6hdr), sizeof(struct frag_hdr), &tmp_fh);
+		if (!fh_addr) {
+			nss_connmgr_map_t_warning("%p: Not able to offset to frag header\n", dev);
+			dev_kfree_skb_any(skb);
+			return;
+		}
+		fh = (struct frag_hdr *)fh_addr;
+		memset(fh, 0, sizeof(struct frag_hdr));
+		fh->identification = htonl(identifier);
+		fh->nexthdr = nexthdr;
+		ip6_hdr->nexthdr = NEXTHDR_FRAGMENT;
+	}
+
+	skb_set_transport_header(skb, sizeof(struct ipv6hdr) + append_hdr_sz);
+
 
 	skb->pkt_type = PACKET_HOST;
 	skb->skb_iif = dev->ifindex;
@@ -608,9 +700,9 @@ static int nss_connmgr_map_t_dev_up(struct net_device *dev)
 	uint64_t map_t_rule_validation_stats;
 
 	/*
-	 * Get config
+	 * Get MAP-T interface's information.
 	 */
-	if (!nat46_get_rule_config(dev, &rule_pairs, &rule_pair_count)) {
+	if (!nat46_get_info(dev, &rule_pairs, &rule_pair_count, &map_t_flags)) {
 		nss_connmgr_map_t_warning("%p: Failed to get ruleset on map-t netdevice (%s)\n", dev, dev->name);
 		return NOTIFY_DONE;
 	}
@@ -751,6 +843,11 @@ static int nss_connmgr_map_t_dev_up(struct net_device *dev)
 		 * set the sibling interface number
 		 */
 		maptcfg->sibling_if = if_outer;
+
+		/*
+		 * set MAP-T flags
+		 */
+		maptcfg->flags = map_t_flags;
 
 		/*
 		 * Send configure message to MAP-T encap interface.
