@@ -29,8 +29,6 @@ obj-$(vlan-mgr)+= vlan/
 obj-$(pppoe)+= pppoe/
 
 #NSS NETLINK
-ifneq ($(findstring 3.4, $(KERNELVERSION)),)
-obj-y+= netlink/
-endif
+obj-$(netlink)+= netlink/
 
 obj ?= .

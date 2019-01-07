@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016,2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/netlink.h>
+#include <linux/version.h>
 
 #include <net/genetlink.h>
 #include <nss_api_if.h>
@@ -95,8 +96,8 @@ static struct genl_family nss_nloam_family = {
 	.post_doit = NULL,
 };
 
-static struct genl_multicast_group nss_nloam_mcgrp = {
-	.name = NSS_NLOAM_MCAST_GRP,
+static struct genl_multicast_group nss_nloam_mcgrp[] = {
+	{.name = NSS_NLOAM_MCAST_GRP},
 };
 
 /*
@@ -339,16 +340,10 @@ bool nss_nloam_init(void)
 	/*
 	 * register with the family
 	 */
-	error = genl_register_family_with_ops(&nss_nloam_family, nss_nloam_ops, NSS_NLOAM_OPS_SZ);
+	error = genl_register_family_with_ops_groups(&nss_nloam_family, nss_nloam_ops, nss_nloam_mcgrp);
 	if (error != 0) {
 		nss_nl_info_always("unable to register OAM family\n");
 		return false;
-	}
-
-	error = genl_register_mc_group(&nss_nloam_family, &nss_nloam_mcgrp);
-	if (error != 0) {
-		nss_nl_info_always("unable to register OAM NL mcast group\n");
-		goto unreg_ops;
 	}
 
 	/*
@@ -357,13 +352,10 @@ bool nss_nloam_init(void)
 	global_nloam_ctx.nss_ctx = nss_oam_notify_register(nss_nloam_process_notify, NULL);
 	if (!global_nloam_ctx.nss_ctx) {
 		nss_nl_error("Error in retreiving the NSS Context\n");
-		goto unreg_mc_group;
+		goto unreg_ops;
 	}
 
 	return true;
-
-unreg_mc_group:
-	genl_unregister_mc_group(&nss_nloam_family, &nss_nloam_mcgrp);
 
 unreg_ops:
 	genl_unregister_family(&nss_nloam_family);
@@ -383,11 +375,6 @@ bool nss_nloam_exit(void)
 	 * Unregister the device callback handler for oam
 	 */
 	nss_oam_notify_unregister();
-
-	/*
-	 * unregister with the family
-	 */
-	genl_unregister_mc_group(&nss_nloam_family, &nss_nloam_mcgrp);
 
 	/*
 	 * unregister with the family

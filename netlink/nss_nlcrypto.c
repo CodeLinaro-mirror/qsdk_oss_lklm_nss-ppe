@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -24,7 +24,6 @@
 #include <linux/types.h>
 #include <linux/version.h>
 
-#include <nss_crypto_if.h>
 #include <linux/netlink.h>
 #include <linux/version.h>
 #include <net/genetlink.h>
@@ -33,7 +32,7 @@
 #include <nss_cmn.h>
 #include <nss_nl_if.h>
 #include "nss_nlcmn_if.h"
-#include "nss_crypto_if.h"
+#include "nss_crypto_defines.h"
 #include "nss_nlcrypto_if.h"
 #include "nss_nl.h"
 

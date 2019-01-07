@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016,2018 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -25,19 +25,23 @@
 
 #include <nss_api_if.h>
 #include <nss_nl_if.h>
-#include "nss_ipsecmgr.h"
+#include <nss_ipsecmgr.h>
 #include "nss_nlcmn_if.h"
-#include "nss_crypto_if.h"
+#include "nss_crypto_defines.h"
 #include "nss_nlipv4_if.h"
 #include "nss_nlipv6_if.h"
-#include "nss_nlcrypto_if.h"
 #include "nss_nlipsec_if.h"
 #include "nss_nloam_if.h"
-
+#if defined (CONFIG_NSS_NLCRYPTO)
+#include "nss_nlcrypto_if.h"
+#else
+#include "nss_nlcryptov2_if.h"
+#endif
 #include "nss_nl.h"
 #include "nss_nlipv4.h"
 #include "nss_nlipv6.h"
 #include "nss_nlcrypto.h"
+#include "nss_nlcryptov2.h"
 #include "nss_nlipsec.h"
 #include "nss_nloam.h"
 
@@ -60,6 +64,8 @@ struct nss_nl_family {
  * Family handler table
  */
 static struct nss_nl_family family_handlers[] = {
+	/* crypto v1 is not generic */
+#if defined (CONFIG_NSS_NLCRYPTO)
 	{
 		/*
 		 * NSS_NLCRYPTO
@@ -68,6 +74,16 @@ static struct nss_nl_family family_handlers[] = {
 		.entry = NSS_NLCRYPTO_INIT,		/* init */
 		.exit = NSS_NLCRYPTO_EXIT,		/* exit */
 		.valid = CONFIG_NSS_NLCRYPTO		/* 1 or 0 */
+	},
+#endif
+	{
+		/*
+		 * NSS_NLCRYPTOV2
+		 */
+		.name = NSS_NLCRYPTOV2_FAMILY,		/* crypto */
+		.entry = NSS_NLCRYPTOV2_INIT,		/* init */
+		.exit = NSS_NLCRYPTOV2_EXIT,		/* exit */
+		.valid = CONFIG_NSS_NLCRYPTOV2		/* 1 or 0 */
 	},
 	{
 		/*
@@ -191,6 +207,22 @@ void  *nss_nl_get_data(struct sk_buff *skb)
  *
  * Note: It will free the message buffer if there is no space left to end
  */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0))
+int nss_nl_mcast_event(struct genl_family *family, struct sk_buff *skb)
+{
+	struct nss_nlcmn *cm;
+
+	cm = genlmsg_data(NLMSG_DATA(skb->data));
+
+	/*
+	 * End the message as no more updates are left to happen.
+	 * After this, the message is assunmed to be read-only
+	 */
+	genlmsg_end(skb, cm);
+
+	return genlmsg_multicast(family, skb, cm->pid, 0, GFP_ATOMIC);
+}
+#else
 int nss_nl_mcast_event(struct genl_multicast_group *grp, struct sk_buff *skb)
 {
 	struct nss_nlcmn *cm;
@@ -201,14 +233,11 @@ int nss_nl_mcast_event(struct genl_multicast_group *grp, struct sk_buff *skb)
 	 * End the message as no more updates are left to happen.
 	 * After this, the message is assunmed to be read-only
 	 */
-	if (genlmsg_end(skb, cm) < 0) {
-		nss_nl_error("%s: unable to close generic mcast message\n", grp->family->name);
-		nlmsg_free(skb);
-		return -ENOMEM;
-	}
+	genlmsg_end(skb, cm);
 
 	return genlmsg_multicast(skb, cm->pid, grp->id, GFP_ATOMIC);
 }
+#endif
 
 /*
  * nss_nl_ucast_resp()
@@ -230,11 +259,15 @@ int nss_nl_ucast_resp(struct sk_buff *skb)
 	 * End the message as no more updates are left to happen
 	 * After this message is assumed to be read-only
 	 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+	genlmsg_end(skb, cm);
+#else
 	if (genlmsg_end(skb, cm) < 0) {
 		nss_nl_error("%d: unable to close generic ucast message\n", cm->pid);
 		nlmsg_free(skb);
 		return -ENOMEM;
 	}
+#endif
 
 	return genlmsg_unicast(net, skb, cm->pid);
 }
@@ -271,7 +304,7 @@ struct nss_nlcmn *nss_nl_get_msg(struct genl_family *family, struct genl_info *i
 	}
 
 	cm->pid = pid;
-	cm->sock_data = (uint32_t)genl_info_net(info);
+	cm->sock_data = (nss_ptr_t)genl_info_net(info);
 
 	return cm;
 }

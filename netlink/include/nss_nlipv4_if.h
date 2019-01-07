@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016,2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -38,6 +38,9 @@ struct nss_nlipv4_rule {
 
 	char flow_ifname[IFNAMSIZ];	/**< ingress interface name */
 	char return_ifname[IFNAMSIZ];	/**< egress interface name */
+
+	uint16_t flow_if_type;            /**< ingress interface type */
+	uint16_t return_if_type;            /**< egress interface type */
 
 	struct nss_ipv4_msg nim;	/**< rule message */
 };

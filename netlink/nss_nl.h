@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015,2018, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -121,6 +121,9 @@ int nss_nl_ucast_resp(struct sk_buff *skb);
 /*
  * multicast response to the user
  */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+int nss_nl_mcast_event(struct genl_family *family, struct sk_buff *skb);
+#else
 int nss_nl_mcast_event(struct genl_multicast_group *grp, struct sk_buff *skb);
-
+#endif
 #endif /* __NSS_NL_H */

@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014 - 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014 - 2015,2018 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -22,9 +22,6 @@
 #define __NSS_NLCRYPTO_H
 
 
-bool nss_nlcrypto_init(void);
-bool nss_nlcrypto_exit(void);
-
 #if defined(CONFIG_NSS_NLCRYPTO)
 #define NSS_NLCRYPTO_INIT nss_nlcrypto_init
 #define NSS_NLCRYPTO_EXIT nss_nlcrypto_exit
@@ -32,5 +29,8 @@ bool nss_nlcrypto_exit(void);
 #define NSS_NLCRYPTO_INIT 0
 #define NSS_NLCRYPTO_EXIT 0
 #endif /* !CONFIG_NSS_NLCRYPTO */
+
+bool nss_nlcrypto_init(void);
+bool nss_nlcrypto_exit(void);
 
 #endif /* __NSS_NLCRYPTO_H */

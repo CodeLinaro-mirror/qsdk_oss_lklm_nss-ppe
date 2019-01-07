@@ -329,12 +329,14 @@ static int nss_bridge_mgr_add_bond_slave(struct net_device *bond_master,
 	int port_id;
 	int32_t ifnum;
 	int32_t lagid = 0;
-	int32_t bondid = 0;
+	int32_t bondid = -1;
 
 	/*
 	 * Figure out the aggregation id of this slave
 	 */
+#if IS_ENABLED(CONFIG_BONDING)
 	bondid = bond_get_id(bond_master);
+#endif
 	if (bondid < 0) {
 		nss_bridge_mgr_warn("%p: Invalid LAG group id 0x%x\n",
 				b_pvt, bondid);
@@ -410,12 +412,14 @@ static int nss_bridge_mgr_del_bond_slave(struct net_device *bond_master,
 	int port_id;
 	int32_t ifnum;
 	int32_t lagid = 0;
-	int32_t bondid = 0;
+	int32_t bondid = -1;
 
 	/*
 	 * Figure out the aggregation id of this slave
 	 */
+#if IS_ENABLED(CONFIG_BONDING)
 	bondid = bond_get_id(bond_master);
+#endif
 	if (bondid < 0) {
 		nss_bridge_mgr_warn("%p: Invalid LAG group id 0x%x\n",
 				b_pvt, bondid);

@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015,2018 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -24,24 +24,22 @@
 
 /*
  * @file nss_nlipsec_if.h
- *	NSS Netlink IPsec headers
- */
+ *	NSS Netlink IPsec headers */
 
 #define NSS_NLIPSEC_FAMILY "nss_nlipsec"	/**< IPsec family */
+#define NSS_NLIPSEC_MAX_TUNNELS 16		/**< Max tunnels */
 
 /**
  * @brief ipsec commands types
  */
 enum nss_nlipsec_cmd {
-	NSS_NLIPSEC_CMD_UNSPEC = 0,		/**< unspecified cmd */
-	NSS_NLIPSEC_CMD_CREATE_TUNNEL = 1,	/**< create tunnel */
-	NSS_NLIPSEC_CMD_DESTROY_TUNNEL = 2,	/**< destroy tunnel */
-	NSS_NLIPSEC_CMD_CREATE_ENCAP_FLOW = 3,	/**< create encap flow rule */
-	NSS_NLIPSEC_CMD_DESTROY_ENCAP_FLOW = 4,	/**< delete encap flow rule */
-	NSS_NLIPSEC_CMD_DESTROY_ENCAP_SA = 5,	/**< flush encap SA */
-	NSS_NLIPSEC_CMD_CREATE_DECAP_SA = 6,	/**< create decap flow rule */
-	NSS_NLIPSEC_CMD_DESTROY_DECAP_SA = 7,	/**< delete decap flow rule */
-
+	NSS_NLIPSEC_CMD_UNSPEC,			/**< Unspecified cmd. */
+	NSS_NLIPSEC_CMD_CREATE_TUNNEL,		/**< Create tunnel. */
+	NSS_NLIPSEC_CMD_DESTROY_TUNNEL,		/**< Destroy tunnel. */
+	NSS_NLIPSEC_CMD_ADD_SA,			/**< Add Security AssociationA. */
+	NSS_NLIPSEC_CMD_DEL_SA,			/**< Delete Security Association. */
+	NSS_NLIPSEC_CMD_ADD_FLOW,		/**< Add flow. */
+	NSS_NLIPSEC_CMD_DEL_FLOW,		/**< Delete flow. */
 	NSS_NLIPSEC_CMD_MAX
 };
 
@@ -49,17 +47,15 @@ enum nss_nlipsec_cmd {
  * @brief IPsec message
  */
 struct nss_nlipsec_rule {
-	struct nss_nlcmn cm;				/**< common message header */
+	struct nss_nlcmn cm;			/**< Common message header. */
+	uint8_t ifname[IFNAMSIZ];		/**< IPSec interface name. */
+	struct nss_ipsecmgr_flow_outer outer;	/**< Outer flow data. */
 
-	uint8_t ifname[IFNAMSIZ];			/**< IPsec tunnel interface name */
-
-	struct {
-		struct nss_ipsecmgr_encap_flow flow;
-		struct nss_ipsecmgr_sa sa;
-		struct nss_ipsecmgr_sa_data data;
-	} msg;
-
-	struct nss_ipsecmgr_event event;		/**< IPsec event */
+	union {
+		struct nss_ipsecmgr_sa sa;		/**< Security Association data. */
+		struct nss_ipsecmgr_flow_inner flow;	/**< Inner flow.  */
+		struct nss_ipsecmgr_event event;	/**< IPsec event. */
+	} data;
 };
 
 /**
