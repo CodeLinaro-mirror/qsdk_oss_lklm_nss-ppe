@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -40,6 +40,7 @@
 
 #include <nss_api_if.h>
 #include "nss_cranipc_def.h"
+#include <nss_gmac_api_if.h>
 
 /*
  **********************
@@ -156,6 +157,7 @@ int nss_cranipc_config(struct nss_cranipc_msg *msg)
 {
 	nss_tx_status_t nss_tx_status;
 	struct nss_ctx_instance *nss_ctx;
+	int32_t ret;
 
 	if (!nss_cranipc_is_cran_enabled())
 		return -1;
@@ -167,6 +169,17 @@ int nss_cranipc_config(struct nss_cranipc_msg *msg)
 	nss_tx_status = nss_cranipc_tx(nss_ctx, msg);
 	if (nss_tx_status != NSS_TX_SUCCESS) {
 		nss_cran_warn("%p: Unable to send config message to NSS FW\n", nss_ctx);
+		return -1;
+	}
+
+	/*
+	 * We enable timestamping feature of GMAC IP.
+	 * The Hardware timestamp values of GMAC Registers are used to calculate ul/dl min/max
+	 * latencies as UL and DL traffic flows through the cran ipc package
+	 */
+	ret = nss_gmac_tstamp_enable();
+	if (ret < 0) {
+		nss_cran_warn("%p: GMAC timestamp enabling failed\n", nss_ctx);
 		return -1;
 	}
 
