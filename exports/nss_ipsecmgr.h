@@ -161,6 +161,7 @@ struct nss_ipsecmgr_sa_cmn {
  *    - dscp = <0 to 63>
  */
 struct nss_ipsecmgr_sa_encap {
+	uint32_t seq_start;	/**< Starting sequence number (Not used) */
 	uint8_t ttl_hop_limit;	/**< Time-to-Live or hop limit. */
 	uint8_t dscp;		/**< Default DSCP value of the security association. */
 	uint8_t df;		/**< Don't-Fragment value for the outer header, if nocopy is selected. */

@@ -550,15 +550,30 @@ static int32_t nss_ipsec_klips_trap_encap(struct sk_buff *skb, struct nss_cfi_cr
 	}
 
 	sa_entry = nss_ipsec_klips_sa_lookup(tun, crypto_idx);
-	if (sa_entry)
-		goto flow_add;
-
-	sa_entry = kzalloc(sizeof(*sa_entry), GFP_ATOMIC);
 	if (!sa_entry) {
-		write_unlock(&tunnel_map.lock);
-		dev_put(nss_dev);
-		return -ENOMEM;
+		/*
+		 * Allocate a new Entry
+		 */
+		sa_entry = kzalloc(sizeof(*sa_entry), GFP_ATOMIC);
+		if (!sa_entry) {
+			write_unlock(&tunnel_map.lock);
+			dev_put(nss_dev);
+			return -ENOMEM;
+		}
+
+		sa_entry->sid = crypto_idx;
+		memcpy(&sa_entry->outer, &sa_tuple, sizeof(sa_entry->outer));
+
+		INIT_LIST_HEAD(&sa_entry->list);
+		list_add_tail(&sa_entry->list, &tun->sa_list);
 	}
+
+	/*
+	 * We blindly attempt an add to the IPsec manager database
+	 * If, this is a duplicate entry then it will return a status then we
+	 * move forward with flow add. Otherwise we have stale entry
+	 * in our database which needs to be removed
+	 */
 
 	status = nss_ipsecmgr_sa_add(nss_dev, &sa_tuple, &sa, &if_num);
 
@@ -566,26 +581,15 @@ static int32_t nss_ipsec_klips_trap_encap(struct sk_buff *skb, struct nss_cfi_cr
 	 * If, SA add fails then there is no need to add the flow
 	 */
 	if ((status != NSS_IPSECMGR_OK) && (status != NSS_IPSECMGR_DUPLICATE_SA)) {
-		write_unlock(&tunnel_map.lock);
-		goto sa_free;
-	}
-
-	sa_entry->sid = crypto_idx;
-	memcpy(&sa_entry->outer, &sa_tuple, sizeof(sa_entry->outer));
-
-	INIT_LIST_HEAD(&sa_entry->list);
-	list_add_tail(&sa_entry->list, &tun->sa_list);
-
-flow_add:
-
-	/*
-	 * If flow add fails due to lack of an IPsec manager SA entry, we need to remove
-	 * IPsec SA entry too and unwind any previous SA programming
-	 */
-	if (nss_ipsecmgr_flow_add(nss_dev, &flow_tuple, &sa_tuple) == NSS_IPSECMGR_FAIL_SA) {
 		list_del_init(&sa_entry->list);
 		write_unlock(&tunnel_map.lock);
-		goto sa_free;
+		goto sa_add_fail;
+	}
+
+	if (nss_ipsecmgr_flow_add(nss_dev, &flow_tuple, &sa_tuple) == NSS_IPSECMGR_FAIL_SA) {
+		write_unlock(&tunnel_map.lock);
+		nss_ipsec_klips_trace("%p: Encap flow add failed due to unavailability of SA\n", tun);
+		goto flow_add_fail;
 	}
 
 	dev_put(nss_dev);
@@ -594,8 +598,9 @@ flow_add:
 	nss_ipsec_klips_dbg("Encap SA rule pushed successfully\n");
 	return 0;
 
-sa_free:
+sa_add_fail:
 	kfree(sa_entry);
+flow_add_fail:
 	dev_put(nss_dev);
 	return -EINVAL;
 }
@@ -680,15 +685,30 @@ static int32_t nss_ipsec_klips_trap_decap(struct sk_buff *skb, struct nss_cfi_cr
 	}
 
 	sa_entry = nss_ipsec_klips_sa_lookup(tun, crypto_idx);
-	if (sa_entry)
-		goto flow_add;
-
-	sa_entry = kzalloc(sizeof(*sa_entry), GFP_ATOMIC);
 	if (!sa_entry) {
-		write_unlock(&tunnel_map.lock);
-		dev_put(nss_dev);
-		return -ENOMEM;
+		/*
+		 * Allocate a new Entry
+		 */
+		sa_entry = kzalloc(sizeof(*sa_entry), GFP_ATOMIC);
+		if (!sa_entry) {
+			write_unlock(&tunnel_map.lock);
+			dev_put(nss_dev);
+			return -ENOMEM;
+		}
+
+		sa_entry->sid = crypto_idx;
+		memcpy(&sa_entry->outer, &sa_tuple, sizeof(sa_entry->outer));
+
+		INIT_LIST_HEAD(&sa_entry->list);
+		list_add_tail(&sa_entry->list, &tun->sa_list);
 	}
+
+	/*
+	 * We blindly attempt an add to the IPsec manager database
+	 * If, this is a duplicate entry then it will return a status then we
+	 * move forward with flow add. Otherwise we have stale entry
+	 * in our database which needs to be removed
+	 */
 
 	status = nss_ipsecmgr_sa_add(nss_dev, &sa_tuple, &sa, &if_num);
 
@@ -696,26 +716,16 @@ static int32_t nss_ipsec_klips_trap_decap(struct sk_buff *skb, struct nss_cfi_cr
 	 * If, SA add fails then there is no need to add the flow
 	 */
 	if ((status != NSS_IPSECMGR_OK) && (status != NSS_IPSECMGR_DUPLICATE_SA)) {
-		write_unlock(&tunnel_map.lock);
-		goto sa_free;
-	}
-
-	sa_entry->sid = crypto_idx;
-	memcpy(&sa_entry->outer, &sa_tuple, sizeof(sa_entry->outer));
-
-	INIT_LIST_HEAD(&sa_entry->list);
-	list_add_tail(&sa_entry->list, &tun->sa_list);
-
-flow_add:
-
-	/*
-	 * If flow add fails due to lack of an IPsec manager SA entry,
-	 * we need to remove IPsec SA entry too
-	 */
-	if (nss_ipsecmgr_flow_add(nss_dev, &flow_tuple, &sa_tuple) == NSS_IPSECMGR_FAIL_SA) {
 		list_del_init(&sa_entry->list);
 		write_unlock(&tunnel_map.lock);
-		goto sa_free;
+		goto sa_add_fail;
+	}
+
+	if (nss_ipsecmgr_flow_add(nss_dev, &flow_tuple, &sa_tuple) == NSS_IPSECMGR_FAIL_SA) {
+		write_unlock(&tunnel_map.lock);
+		nss_ipsec_klips_trace("%p: Decap flow add failed due to unavailability of SA\n", tun);
+		goto flow_add_fail;
+
 	}
 
 	dev_put(nss_dev);
@@ -724,8 +734,9 @@ flow_add:
 	nss_ipsec_klips_dbg("Decap SA rule pushed successfully\n");
 	return 0;
 
-sa_free:
+sa_add_fail:
 	kfree(sa_entry);
+flow_add_fail:
 	dev_put(nss_dev);
 	return -EINVAL;
 }

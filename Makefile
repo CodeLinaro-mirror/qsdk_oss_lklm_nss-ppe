@@ -27,6 +27,7 @@ obj-$(tun6rd)+= qca-nss-tun6rd.o
 obj-$(qdisc)+= nss_qdisc/
 obj-$(vlan-mgr)+= vlan/
 obj-$(pppoe)+= pppoe/
+obj-$(ovpn-mgr)+= openvpn/
 
 #NSS NETLINK
 obj-$(netlink)+= netlink/
