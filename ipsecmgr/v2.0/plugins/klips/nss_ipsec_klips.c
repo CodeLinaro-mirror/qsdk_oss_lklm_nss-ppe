@@ -124,9 +124,13 @@ static int32_t nss_ipsec_klips_get_blk_len(enum nss_crypto_cmn_algo algo)
 	case NSS_CRYPTO_CMN_ALGO_AES128_CBC_SHA160_HMAC:
 	case NSS_CRYPTO_CMN_ALGO_AES192_CBC_SHA160_HMAC:
 	case NSS_CRYPTO_CMN_ALGO_AES256_CBC_SHA160_HMAC:
+	case NSS_CRYPTO_CMN_ALGO_AES128_CBC_MD5_HMAC:
+	case NSS_CRYPTO_CMN_ALGO_AES192_CBC_MD5_HMAC:
+	case NSS_CRYPTO_CMN_ALGO_AES256_CBC_MD5_HMAC:
 		return AES_BLOCK_SIZE;
 
 	case NSS_CRYPTO_CMN_ALGO_3DES_CBC_SHA160_HMAC:
+	case NSS_CRYPTO_CMN_ALGO_3DES_CBC_MD5_HMAC:
 		return DES_BLOCK_SIZE;
 
 	case NSS_CRYPTO_CMN_ALGO_NULL:
@@ -149,8 +153,16 @@ static enum nss_ipsecmgr_algo nss_ipsec_klips_get_algo(enum nss_crypto_cmn_algo 
 	case NSS_CRYPTO_CMN_ALGO_AES256_CBC_SHA160_HMAC:
 		return NSS_IPSECMGR_ALGO_AES_CBC_SHA1_HMAC;
 
+	case NSS_CRYPTO_CMN_ALGO_AES128_CBC_MD5_HMAC:
+	case NSS_CRYPTO_CMN_ALGO_AES192_CBC_MD5_HMAC:
+	case NSS_CRYPTO_CMN_ALGO_AES256_CBC_MD5_HMAC:
+		return NSS_IPSECMGR_ALGO_AES_CBC_MD5_HMAC;
+
 	case NSS_CRYPTO_CMN_ALGO_3DES_CBC_SHA160_HMAC:
 		return NSS_IPSECMGR_ALGO_3DES_CBC_SHA1_HMAC;
+
+	case NSS_CRYPTO_CMN_ALGO_3DES_CBC_MD5_HMAC:
+		return NSS_IPSECMGR_ALGO_3DES_CBC_MD5_HMAC;
 
 	default:
 		nss_ipsec_klips_err("Invalid algorithm\n");
@@ -340,8 +352,8 @@ static void *nss_ipsec_klips_outer2sa_tuple(uint8_t *outer, bool natt, struct ns
 
 		tuple->src_ip[0] = ntohl(ip4h->saddr);
 		tuple->dest_ip[0] = ntohl(ip4h->daddr);
-		tuple->protocol = ip4h->protocol;
-		tuple->ip_ver = IPVERSION;
+		tuple->proto_next_hdr = ip4h->protocol;
+		tuple->ip_version = IPVERSION;
 		*ttl = ip4h->ttl;
 
 		/*
@@ -349,9 +361,9 @@ static void *nss_ipsec_klips_outer2sa_tuple(uint8_t *outer, bool natt, struct ns
 		 * support for loading programmed ports by user
 		 */
 		if (natt) {
-			tuple->src_port = NSS_IPSECMGR_NATT_PORT_DATA;
-			tuple->dest_port = NSS_IPSECMGR_NATT_PORT_DATA;
-			tuple->protocol = IPPROTO_UDP;
+			tuple->sport = NSS_IPSECMGR_NATT_PORT_DATA;
+			tuple->dport = NSS_IPSECMGR_NATT_PORT_DATA;
+			tuple->proto_next_hdr = IPPROTO_UDP;
 
 			/*
 			 * TODO: Find out why we need decap flag
@@ -374,9 +386,9 @@ static void *nss_ipsec_klips_outer2sa_tuple(uint8_t *outer, bool natt, struct ns
 	nss_ipsec_klips_v6addr_ntoh(tuple->dest_ip, ip6h->daddr.s6_addr32);
 
 	tuple->spi_index = ntohl(esph->spi);
-	tuple->protocol = IPPROTO_ESP;
+	tuple->proto_next_hdr = IPPROTO_ESP;
 	*ttl = ip6h->hop_limit;
-	tuple->ip_ver = 6;
+	tuple->ip_version = 6;
 
 	return outer + sizeof(*esph);
 }
@@ -398,13 +410,13 @@ static bool nss_ipsec_klips_outer2flow_tuple(uint8_t *outer, bool natt, struct n
 
 		tuple->src_ip[0] = ntohl(ip4h->saddr);
 		tuple->dest_ip[0] = ntohl(ip4h->daddr);
-		tuple->protocol = ip4h->protocol;
-		tuple->ip_ver = IPVERSION;
+		tuple->proto_next_hdr = ip4h->protocol;
+		tuple->ip_version = IPVERSION;
 
 		if (natt) {
-			tuple->src_port = NSS_IPSECMGR_NATT_PORT_DATA;
-			tuple->dest_port = NSS_IPSECMGR_NATT_PORT_DATA;
-			tuple->protocol = IPPROTO_UDP;
+			tuple->sport = NSS_IPSECMGR_NATT_PORT_DATA;
+			tuple->dport = NSS_IPSECMGR_NATT_PORT_DATA;
+			tuple->proto_next_hdr = IPPROTO_UDP;
 			outer += sizeof(struct udphdr);
 		}
 
@@ -424,8 +436,8 @@ static bool nss_ipsec_klips_outer2flow_tuple(uint8_t *outer, bool natt, struct n
 	nss_ipsec_klips_v6addr_ntoh(tuple->dest_ip, ip6h->daddr.s6_addr32);
 
 	tuple->spi_index = ntohl(esph->spi);
-	tuple->protocol = IPPROTO_ESP;
-	tuple->ip_ver = 6;
+	tuple->proto_next_hdr = IPPROTO_ESP;
+	tuple->ip_version = 6;
 	return true;
 }
 
@@ -445,15 +457,15 @@ static void nss_ipsec_klips_inner2flow_tuple(uint8_t *inner, struct nss_ipsecmgr
 	 * them and then allow adding or deleting of 3-tuple correctly
 	 */
 
-	tuple->src_port = 0;
-	tuple->dest_port = 0;
-	tuple->user_pattern = 0;
+	tuple->sport = 0;
+	tuple->dport = 0;
+	tuple->use_pattern = 0;
 
 	if (iph->version == IPVERSION) {
 		tuple->src_ip[0] = ntohl(iph->saddr);
 		tuple->dest_ip[0] = ntohl(iph->daddr);
-		tuple->protocol = iph->protocol;
-		tuple->ip_ver = IPVERSION;
+		tuple->proto_next_hdr = iph->protocol;
+		tuple->ip_version = IPVERSION;
 		return;
 	}
 
@@ -461,12 +473,12 @@ static void nss_ipsec_klips_inner2flow_tuple(uint8_t *inner, struct nss_ipsecmgr
 
 	nss_ipsec_klips_v6addr_ntoh(tuple->src_ip, ip6h->saddr.s6_addr32);
 	nss_ipsec_klips_v6addr_ntoh(tuple->dest_ip, ip6h->daddr.s6_addr32);
-	tuple->protocol = ip6h->nexthdr;
-	tuple->ip_ver = 6;
+	tuple->proto_next_hdr = ip6h->nexthdr;
+	tuple->ip_version = 6;
 
 	if (ip6h->nexthdr == NEXTHDR_FRAGMENT) {
 		struct frag_hdr *fragh = (struct frag_hdr *)(inner + sizeof(*ip6h));
-		tuple->protocol = fragh->nexthdr;
+		tuple->proto_next_hdr = fragh->nexthdr;
 	}
 }
 

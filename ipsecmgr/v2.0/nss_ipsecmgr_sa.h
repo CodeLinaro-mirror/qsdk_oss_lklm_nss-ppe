@@ -172,10 +172,10 @@ static inline void nss_ipsecmgr_sa_tuple2sa(struct nss_ipsec_cmn_sa_tuple *tuple
 	memcpy(sa->dest_ip, tuple->dest_ip, sizeof(sa->dest_ip));
 	memcpy(sa->src_ip, tuple->src_ip, sizeof(sa->src_ip));
 	sa->spi_index = tuple->spi_index;
-	sa->protocol = tuple->protocol;
-	sa->ip_ver = tuple->ip_ver;
-	sa->src_port = tuple->src_port;
-	sa->dest_port = tuple->dest_port;
+	sa->proto_next_hdr = tuple->protocol;
+	sa->ip_version = tuple->ip_ver;
+	sa->sport = tuple->src_port;
+	sa->dport = tuple->dest_port;
 }
 
 /*
@@ -187,10 +187,10 @@ static inline void nss_ipsecmgr_sa2tuple(struct nss_ipsecmgr_sa_tuple *sa, struc
 	memcpy(tuple->dest_ip, sa->dest_ip, sizeof(tuple->dest_ip));
 	memcpy(tuple->src_ip, sa->src_ip, sizeof(tuple->src_ip));
 	tuple->spi_index = sa->spi_index;
-	tuple->protocol = sa->protocol;
-	tuple->ip_ver = sa->ip_ver;
-	tuple->src_port = sa->src_port;
-	tuple->dest_port = sa->dest_port;
+	tuple->protocol = sa->proto_next_hdr;
+	tuple->ip_ver = sa->ip_version;
+	tuple->src_port = sa->sport;
+	tuple->dest_port = sa->dport;
 }
 
 /*

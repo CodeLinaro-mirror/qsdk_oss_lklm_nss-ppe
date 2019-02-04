@@ -131,11 +131,11 @@ static inline void nss_ipsecmgr_flow2tuple(struct nss_ipsecmgr_flow_tuple *f, st
 	memcpy(t->dest_ip, f->dest_ip, sizeof(t->dest_ip));
 	memcpy(t->src_ip, f->src_ip, sizeof(t->src_ip));
 	t->spi_index = f->spi_index;
-	t->protocol = f->protocol;
-	t->ip_ver = f->ip_ver;
-	t->src_port = f->src_port;
-	t->dst_port = f->dest_port;
-	t->user_pattern = f->user_pattern;
+	t->protocol = f->proto_next_hdr;
+	t->ip_ver = f->ip_version;
+	t->src_port = f->sport;
+	t->dst_port = f->dport;
+	t->user_pattern = f->use_pattern;
 }
 
 /*
