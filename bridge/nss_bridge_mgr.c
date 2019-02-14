@@ -882,6 +882,11 @@ static int nss_bridge_mgr_leave_bridge(struct net_device *dev, struct nss_bridge
 	struct net_device *real_dev;
 
 	if (NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(ifnum)) {
+		if (fal_stp_port_state_set(NSS_BRIDGE_MGR_SWITCH_ID, NSS_BRIDGE_MGR_SPANNING_TREE_ID, port_num, FAL_STP_FORWARDING)) {
+			nss_bridge_mgr_warn("%p: faied to set the STP state to forwarding\n", br);
+			return -1;
+		}
+
 		/*
 		 * If there is a wan interface added in bridge, a separate
 		 * VSI is created for it by not sending join message to NSS.
@@ -895,10 +900,6 @@ static int nss_bridge_mgr_leave_bridge(struct net_device *dev, struct nss_bridge
 			return 0;
 		}
 
-		if (fal_stp_port_state_set(NSS_BRIDGE_MGR_SWITCH_ID, NSS_BRIDGE_MGR_SPANNING_TREE_ID, port_num, FAL_STP_FORWARDING)) {
-			nss_bridge_mgr_warn("%p: faied to set the STP state to forwarding\n", br);
-			return -1;
-		}
 		if (ppe_port_vsi_set(NSS_BRIDGE_MGR_SWITCH_ID, port_num, br->port_vsi[port_num - 1])) {
 			nss_bridge_mgr_warn("%p: failed to restore port VSI of physical interface\n", br);
 			fal_stp_port_state_set(NSS_BRIDGE_MGR_SWITCH_ID, NSS_BRIDGE_MGR_SPANNING_TREE_ID, port_num, FAL_STP_DISABLED);
