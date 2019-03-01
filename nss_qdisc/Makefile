@@ -6,6 +6,8 @@ ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64 ipq60xx ipq60xx_64))
 ccflags-y += -DNSS_QDISC_PPE_SUPPORT -DNSS_QDISC_BRIDGE_SUPPORT
 endif
 
+ccflags-y += -Werror
+
 obj-m += qca-nss-qdisc.o
 qca-nss-qdisc-objs := 	nss_qdisc.o \
 			nss_fifo.o \

@@ -119,7 +119,17 @@ typedef enum {
 	NSS_CAPWAPMGR_FAILURE_INVALID_TYPE_FLAG,	/**< Invalid type */
 	NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG,		/**< Invalid DTLS configuration */
 	NSS_CAPWAPMGR_FAILURE_CONFIGURE_TRUSTSEC_TX,	/**< Failed to configure trustsectx */
-	NSS_CAPWAPMGR_FAILURE_UNCONFIGURE_TRUSTSEC_TX,    /**< Failed to umconfigure trustsectx */
+	NSS_CAPWAPMGR_FAILURE_UNCONFIGURE_TRUSTSEC_TX,	/**< Failed to unconfigure trustsectx */
+	NSS_CAPWAPMGR_FAILURE_CONFIGURE_DSCP_MAP,	/**< Failed to configure dscp_map */
+	NSS_CAPWAPMGR_FAILURE_CREATE_UDF_PROFILE,	/**< Failed creating user defined profile */
+	NSS_CAPWAPMGR_FAILURE_ACL_RULE_ALREADY_EXIST,	/**< ACL rule already exist */
+	NSS_CAPWAPMGR_FAILURE_ADD_ACL_RULE,		/**< Failed adding ACL rule */
+	NSS_CAPWAPMGR_FAILURE_BIND_ACL_LIST,		/**< Failed binding ACL list */
+	NSS_CAPWAPMGR_FAILURE_ACL_UNAVAILABLE,		/**< ACL rule unavailable */
+	NSS_CAPWAPMGR_FAILURE_MEM_UNAVAILABLE,		/**< Failed to alloc memory */
+	NSS_CAPWAPMGR_FAILURE_DSCP_RULE_ID_INVALID,	/**< DSCP rule ID invalid */
+	NSS_CAPWAPMGR_FAILURE_DSCP_RULE_ID_NOT_IN_USE,	/**< DSCP rule not in use */
+	NSS_CAPWAPMGR_FAILURE_DSCP_RULE_DELETE_FAILED,	/**< DSCP rule delete failed */
 } nss_capwapmgr_status_t;
 
 /**
@@ -200,6 +210,27 @@ extern nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *d
  * @return nss_capwapmgr_status_t
  */
 nss_capwapmgr_status_t nss_capwapmgr_update_dest_mac_addr(struct net_device *dev, uint8_t tunnel_id, uint8_t *mac_addr);
+
+/**
+ * @brief Delete a DSCP prioritization rule that was created.
+ *
+ * @param Rule ID
+ *
+ * @return nss_capwapmgr_status_t
+ */
+extern nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_destroy(uint8_t id);
+
+/**
+ * @brief Prioritize packets with certain dscp value. 0 - lowest priority, 3 - highest priority.
+ *
+ * @param DSCP value
+ * @param DSCP mask
+ * @param Priority[0-3]
+ * @param[out] Return rule ID
+ *
+ * @return nss_capwapmgr_status_t
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_create(uint8_t dscp_value, uint8_t dscp_mask, uint8_t pri, uint8_t *id);
 
 /**
  * @brief Get the DTLS net_device associated to the CAPWAP tunnel

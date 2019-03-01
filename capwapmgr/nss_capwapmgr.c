@@ -41,6 +41,8 @@
 #include <nss_capwap.h>
 #include <nss_capwapmgr.h>
 #include <nss_capwap_user.h>
+#include <fal/fal_qos.h>
+#include <fal/fal_acl.h>
 
 #define NSS_CAPWAPMGR_NETDEV_NAME	"nsscapwap"
 
@@ -60,8 +62,47 @@
  */
 
 /*
- * NSS capwap mgr debug macros
+ * NSS capwap mgr macros
  */
+#define NSS_CAPWAPMGR_NORMAL_FRAME_MTU 1500
+
+/*
+ * Ethernet types.
+ */
+#define NSS_CAPWAPMGR_ETH_TYPE_MASK 0xFFFF
+#define NSS_CAPWAPMGR_ETH_TYPE_TRUSTSEC 0x8909
+#define NSS_CAPWAPMGR_ETH_TYPE_IPV4 ETH_P_IP
+#define NSS_CAPWAPMGR_ETH_TYPE_IPV6 ETH_P_IPV6
+#define NSS_CAPWAPMGR_DSCP_MAX 64
+
+/*
+ * ACL specific parameters.
+ */
+#define NSS_CAPWAPMGR_ETH_HDR_OFFSET 6
+#define NSS_CAPWAPMGR_IPV4_OFFSET 8
+#define NSS_CAPWAPMGR_DSCP_MASK_IPV4_SHIFT 2
+#define NSS_CAPWAPMGR_DSCP_MASK_IPV6_SHIFT 6
+#define NSS_CAPWAPMGR_DEV_ID 0
+#define NSS_CAPWAPMGR_GROUP_ID 0
+#define NSS_CAPWAPMGR_RULE_NR 1
+
+/*
+ * ACL rule bind bitmap for all physical ports (1 through 6)
+ */
+#define NSS_CAPWAPMGR_BIND_BITMAP 0x7E
+
+/*
+ * The number of rules supported by a list is 4. Since we need 2 rules for every
+ * dscp classification (v4 and v6). We set this value to 2.
+ */
+#define NSS_CAPWAPMGR_ACL_RULES_PER_LIST 2
+
+/*
+ * We currently have list-id 60 and 61 reserved for this purpose.
+ * TODO: Find a better approach to reserve list-id.
+ */
+#define NSS_CAPWAPMGR_ACL_LIST_START 60
+#define NSS_CAPWAPMGR_ACL_LIST_CNT 2
 
 #define NSS_CAPWAPMGR_NORMAL_FRAME_MTU 1500
 
@@ -113,9 +154,36 @@ static struct nss_capwapmgr_ip_response {
 } ip_response;
 
 /*
- * Stats of tunnels which don't exists anymore.
+ * nss_capwapmgr_acl
+ *	Object containing rule related info.
  */
-static struct nss_capwap_tunnel_stats tunneld;
+struct nss_capwapmgr_acl {
+	bool in_use;			/* Set when rule is in use. */
+	uint8_t uid;			/* Unique ID for this rule object. */
+	uint8_t list_id;		/* List on which this rule resides. */
+	uint8_t rule_id;		/* Rule-id of this rule. */
+	uint8_t dscp_value;		/* DSCP value */
+	uint8_t dscp_mask;		/* DSCP mask */
+};
+
+/*
+ * nss_capwapmgr_acl_list
+ */
+struct nss_capwapmgr_acl_list {
+	struct nss_capwapmgr_acl rule[NSS_CAPWAPMGR_ACL_RULES_PER_LIST];
+					/* Rules on this ACL list. */
+};
+
+/*
+ * nss_capwapmgr_global
+ *	Global structure for capwapmgr.
+ */
+static struct nss_capwapmgr_global {
+	uint32_t count;				/* Counter for driver queue selection. */
+	struct nss_capwap_tunnel_stats tunneld;	/* What tunnels that don't exist any more. */
+	struct nss_capwapmgr_acl_list acl_list[NSS_CAPWAPMGR_ACL_LIST_CNT];
+						/* Set when ACL rule is in use. */
+} global;
 
 static void nss_capwapmgr_receive_pkt(struct net_device *dev, struct sk_buff *skb, struct napi_struct *napi);
 
@@ -267,7 +335,7 @@ static struct rtnl_link_stats64 *nss_capwapmgr_get_tunnel_stats(struct net_devic
 	atomic_long_set(&dev->rx_dropped, 0);
 
 	memset(stats, 0, sizeof (struct rtnl_link_stats64));
-	nss_capwapmgr_fill_up_stats(stats, &tunneld);
+	nss_capwapmgr_fill_up_stats(stats, &global.tunneld);
 
 	for (i = NSS_DYNAMIC_IF_START; i <= (NSS_DYNAMIC_IF_START + NSS_MAX_DYNAMIC_INTERFACES); i++) {
 		if (nss_capwap_get_stats(i, &tstats) == false) {
@@ -805,9 +873,11 @@ static nss_tx_status_t nss_capwapmgr_create_ipv4_rule(void *ctx, struct nss_ipv4
 	/*
 	 * Copy over the qos rules and set the QOS_VALID flag
 	 */
-	nircm->qos_rule.flow_qos_tag = unic->flow_qos_tag;
-	nircm->qos_rule.return_qos_tag = unic->return_qos_tag;
-	nircm->valid_flags |= NSS_IPV4_RULE_CREATE_QOS_VALID;
+	if (unic->flags & NSS_IPV6_CREATE_FLAG_QOS_VALID) {
+		nircm->qos_rule.flow_qos_tag = unic->flow_qos_tag;
+		nircm->qos_rule.return_qos_tag = unic->return_qos_tag;
+		nircm->valid_flags |= NSS_IPV4_RULE_CREATE_QOS_VALID;
+	}
 
 	if (unic->flags & NSS_IPV4_CREATE_FLAG_NO_SEQ_CHECK) {
 		nircm->rule_flags |= NSS_IPV4_RULE_CREATE_FLAG_NO_SEQ_CHECK;
@@ -949,9 +1019,11 @@ static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6
 	/*
 	 * Copy over the qos rules and set the QOS_VALID flag
 	 */
-	nircm->qos_rule.flow_qos_tag = unic->flow_qos_tag;
-	nircm->qos_rule.return_qos_tag = unic->return_qos_tag;
-	nircm->valid_flags |= NSS_IPV6_RULE_CREATE_QOS_VALID;
+	if (unic->flags & NSS_IPV6_CREATE_FLAG_QOS_VALID) {
+		nircm->qos_rule.flow_qos_tag = unic->flow_qos_tag;
+		nircm->qos_rule.return_qos_tag = unic->return_qos_tag;
+		nircm->valid_flags |= NSS_IPV6_RULE_CREATE_QOS_VALID;
+	}
 
 	if (unic->flags & NSS_IPV6_CREATE_FLAG_NO_SEQ_CHECK) {
 		nircm->rule_flags |= NSS_IPV6_RULE_CREATE_FLAG_NO_SEQ_CHECK;
@@ -1352,6 +1424,332 @@ nss_capwapmgr_status_t nss_capwapmgr_update_dest_mac_addr(struct net_device *dev
 	return status;
 }
 EXPORT_SYMBOL(nss_capwapmgr_update_dest_mac_addr);
+
+/*
+ * nss_capwapmgr_dscp_rule_destroy()
+ *	API to destroy previously created DSCP rule.
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_destroy(uint8_t id)
+{
+	sw_error_t rv;
+	fal_qos_cosmap_t cosmap;
+	struct nss_capwapmgr_acl *acl_rule;
+	uint8_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint8_t rule_nr = NSS_CAPWAPMGR_RULE_NR;
+	uint8_t group_id = NSS_CAPWAPMGR_GROUP_ID;
+	uint8_t i, j, list_id, v4_rule_id, v6_rule_id, dscp_value, dscp_mask;
+
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_LIST_CNT; i++) {
+		for (j = 0; j < NSS_CAPWAPMGR_ACL_RULES_PER_LIST; j++) {
+			if (global.acl_list[i].rule[j].uid == id) {
+				acl_rule = &global.acl_list[i].rule[j];
+				goto found;
+			}
+		}
+	}
+
+	nss_capwapmgr_warn("Invalid id: %u\n", id);
+	return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_ID_INVALID;
+
+found:
+	if (!acl_rule->in_use) {
+		nss_capwapmgr_warn("Rule matching id: %d not in use\n", id);
+		return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_ID_NOT_IN_USE;
+	}
+
+	dscp_value = acl_rule->dscp_value;
+	dscp_mask = acl_rule->dscp_mask;
+
+	/*
+	 * Reset all classification fields on cosmap table.
+	 */
+	cosmap.internal_pcp = 0;
+	cosmap.internal_dei = 0;
+	cosmap.internal_pri = 0;
+	cosmap.internal_dscp = 0;
+	cosmap.internal_dp = 0;
+
+	for (i = 0; i < NSS_CAPWAPMGR_DSCP_MAX; i++) {
+		if ((i & dscp_mask) != dscp_value) {
+			continue;
+		}
+
+		nss_capwapmgr_trace("dscpmap: resetting for dscp %u\n", i);
+		rv = fal_qos_cosmap_dscp_set(dev_id, group_id, i, &cosmap);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to reset cosmap for dscp %d - code: %d\n", i, rv);
+			return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_DELETE_FAILED;
+		}
+	}
+
+	/*
+	 * Since we use 2 ACL entries per rule (i.e. v4/v6) we multiply by
+	 * two to get rule_ids.
+	 */
+	v4_rule_id = acl_rule->rule_id * 2;
+	v6_rule_id = v4_rule_id + 1;
+	list_id = NSS_CAPWAPMGR_ACL_LIST_START + acl_rule->list_id;
+
+	rv = fal_acl_rule_delete(dev_id, list_id, v6_rule_id, rule_nr);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to del ACL v6_rule %d from list %d - code: %d\n", v6_rule_id, list_id, rv);
+		return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_DELETE_FAILED;
+	}
+
+	rv = fal_acl_rule_delete(dev_id, list_id, v4_rule_id, rule_nr);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to del ACL v4_rule %d from list %d - code: %d\n", v4_rule_id, list_id, rv);
+		return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_DELETE_FAILED;
+	}
+
+	acl_rule->in_use = false;
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dscp_rule_destroy);
+
+/*
+ * nss_capwapmgr_dscp_rule_create()
+ *	API to prioritize packets based on DSCP.
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_create(uint8_t dscp_value, uint8_t dscp_mask, uint8_t pri, uint8_t *id)
+{
+	sw_error_t rv;
+	fal_qos_cosmap_t cosmap;
+	fal_qos_cosmap_t *orig_cosmap;
+	fal_acl_rule_t *acl_rule;
+	uint8_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint8_t group_id = NSS_CAPWAPMGR_GROUP_ID;
+	uint8_t rule_nr = NSS_CAPWAPMGR_RULE_NR;
+	uint8_t list_id, v4_rule_id, v6_rule_id;
+	uint8_t lid, rid, i, j;
+	int8_t err, fail_dscp;
+	int8_t uid = -1;
+
+	nss_capwapmgr_info("Setting priority %u for dscp %u mask %u\n", pri, dscp_value, dscp_mask);
+
+	orig_cosmap = kzalloc(NSS_CAPWAPMGR_DSCP_MAX * sizeof(*orig_cosmap), GFP_KERNEL);
+	if (!orig_cosmap) {
+		nss_capwapmgr_warn("Failed to alloc memory for orig_cosmap\n");
+		return NSS_CAPWAPMGR_FAILURE_MEM_UNAVAILABLE;
+	}
+
+	acl_rule = kzalloc(sizeof(*acl_rule), GFP_KERNEL);
+	if (!acl_rule) {
+		nss_capwapmgr_warn("Failed to alloc memory for acl_rule\n");
+		kfree(orig_cosmap);
+		return NSS_CAPWAPMGR_FAILURE_MEM_UNAVAILABLE;
+	}
+
+	/*
+	 * Get an empty acl rule.
+	 */
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_LIST_CNT; i++) {
+		for (j = 0; j < NSS_CAPWAPMGR_ACL_RULES_PER_LIST; j++) {
+			if (global.acl_list[i].rule[j].in_use) {
+				continue;
+			}
+
+			uid = global.acl_list[i].rule[j].uid;
+			rid = global.acl_list[i].rule[j].rule_id;
+			lid = global.acl_list[i].rule[j].list_id;
+			goto found;
+		}
+	}
+
+found:
+	if (uid < 0) {
+		nss_capwapmgr_warn("No free ACL rules available\n");
+		err = NSS_CAPWAPMGR_FAILURE_ACL_UNAVAILABLE;
+		goto fail1;
+	};
+
+	/*
+	 * Since we use 2 ACL entries per rule (i.e. v4/v6) we multiply rid by
+	 * two to get rule_id.
+	 */
+	v4_rule_id = rid * 2;
+	v6_rule_id = v4_rule_id + 1;
+	list_id = NSS_CAPWAPMGR_ACL_LIST_START + lid;
+
+	nss_capwapmgr_info("Using ACL rules: %d & %d from list: %d\n", v4_rule_id, v6_rule_id, list_id);
+
+	/*
+	 * Prioritize packets with the dscp value. For trustsec packets, we need to specify
+	 * the location of the dscp value with ACL configuration.
+	 * ACL rule always start from the L2 header. It will be trustsec header for our case.
+	 * We need two user defined profile to set beginning of the
+	 * Profile 0 is for start of the ethernet type.
+	 * Profile 1 is for the start of the ip header.
+	 */
+	rv = fal_acl_udf_profile_set(dev_id, FAL_ACL_UDF_NON_IP, 0, FAL_ACL_UDF_TYPE_L3, NSS_CAPWAPMGR_ETH_HDR_OFFSET);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to create UDF 0 Map - code: %d\n", rv);
+		err = NSS_CAPWAPMGR_FAILURE_CREATE_UDF_PROFILE;
+		goto fail1;
+	}
+
+	rv = fal_acl_udf_profile_set(dev_id, FAL_ACL_UDF_NON_IP, 1, FAL_ACL_UDF_TYPE_L3, NSS_CAPWAPMGR_IPV4_OFFSET);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to create UDF 1 Map - code: %d\n", rv);
+		err = NSS_CAPWAPMGR_FAILURE_CREATE_UDF_PROFILE;
+		goto fail1;
+	}
+
+	acl_rule->rule_type = FAL_ACL_RULE_MAC;
+
+	/*
+	 * Sets valid flags for the acl rule.
+	 * Following rules are valid:
+	 * - Ethernet type
+	 * - User defined field 0. Correspond to ethernet type (ipv4/ipv6)
+	 * - User defined field 1. Correspond to DSCP value (dscp_value)
+	 */
+	FAL_FIELD_FLG_SET(acl_rule->field_flg, FAL_ACL_FIELD_MAC_ETHTYPE);
+	FAL_FIELD_FLG_SET(acl_rule->field_flg, FAL_ACL_FIELD_UDF0);
+	FAL_FIELD_FLG_SET(acl_rule->field_flg, FAL_ACL_FIELD_UDF1);
+	FAL_ACTION_FLG_SET(acl_rule->action_flg, FAL_ACL_ACTION_PERMIT);
+	FAL_ACTION_FLG_SET(acl_rule->action_flg, FAL_ACL_ACTION_ENQUEUE_PRI);
+
+	/*
+	 * Set common parameters for ipv4/ipv6
+	 */
+	acl_rule->ethtype_val = NSS_CAPWAPMGR_ETH_TYPE_TRUSTSEC;
+	acl_rule->ethtype_mask = NSS_CAPWAPMGR_ETH_TYPE_MASK;
+	acl_rule->udf0_op = FAL_ACL_FIELD_MASK;
+	acl_rule->udf1_op = FAL_ACL_FIELD_MASK;
+	acl_rule->enqueue_pri = pri;
+
+	/*
+	 * Create ACL rule for IPv4
+	 */
+	acl_rule->udf0_val = NSS_CAPWAPMGR_ETH_TYPE_IPV4;
+	acl_rule->udf0_mask = NSS_CAPWAPMGR_ETH_TYPE_MASK;
+	acl_rule->udf1_val = dscp_value << NSS_CAPWAPMGR_DSCP_MASK_IPV4_SHIFT;
+	acl_rule->udf1_mask = dscp_mask << NSS_CAPWAPMGR_DSCP_MASK_IPV4_SHIFT;
+
+	rv = fal_acl_rule_query(dev_id, list_id, v4_rule_id, acl_rule);
+	if (rv != SW_NOT_FOUND) {
+		nss_capwapmgr_warn("ACL rule already exist for list_id: %u, rule_id: %u - code: %d\n", list_id, v4_rule_id, rv);
+		err = NSS_CAPWAPMGR_FAILURE_ACL_RULE_ALREADY_EXIST;
+		goto fail1;
+	}
+
+	rv = fal_acl_list_unbind(dev_id, list_id, FAL_ACL_DIREC_IN, FAL_ACL_BIND_PORTBITMAP, NSS_CAPWAPMGR_BIND_BITMAP);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to unbind list: %d - code: %d\n", list_id, rv);
+		err = NSS_CAPWAPMGR_FAILURE_ADD_ACL_RULE;
+		goto fail1;
+	}
+
+	rv = fal_acl_rule_add(dev_id, list_id, v4_rule_id, rule_nr, acl_rule);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to add ACL v4_rule: %d - code: %d\n", rv, v4_rule_id);
+		err = NSS_CAPWAPMGR_FAILURE_ADD_ACL_RULE;
+		goto fail1;
+	}
+
+	/*
+	 * Create ACL rule for IPv6
+	 */
+	acl_rule->udf0_val = NSS_CAPWAPMGR_ETH_TYPE_IPV6;
+	acl_rule->udf0_mask = NSS_CAPWAPMGR_ETH_TYPE_MASK;
+	acl_rule->udf1_val = dscp_value << NSS_CAPWAPMGR_DSCP_MASK_IPV6_SHIFT;
+	acl_rule->udf1_mask = dscp_mask << NSS_CAPWAPMGR_DSCP_MASK_IPV6_SHIFT;
+
+	rv = fal_acl_rule_add(dev_id, list_id, v6_rule_id, rule_nr, acl_rule);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to add ACL v6_rule: %d - code: %d\n", rv, v6_rule_id);
+		err = NSS_CAPWAPMGR_FAILURE_ADD_ACL_RULE;
+		goto fail2;
+	}
+
+	/*
+	 * Bind list to all ethernet ports
+	 */
+	rv = fal_acl_list_bind(dev_id, list_id, FAL_ACL_DIREC_IN, FAL_ACL_BIND_PORTBITMAP, NSS_CAPWAPMGR_BIND_BITMAP);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to bind ACL list: %d - code: %d\n", list_id, rv);
+		err = NSS_CAPWAPMGR_FAILURE_BIND_ACL_LIST;
+		goto fail3;
+	}
+
+	/*
+	 * Set ACL as in_use and save dscp value and mask.
+	 */
+	global.acl_list[lid].rule[rid].in_use = true;
+	global.acl_list[lid].rule[rid].dscp_value = dscp_value;
+	global.acl_list[lid].rule[rid].dscp_mask = dscp_mask;
+
+	/*
+	 * Prioritize packets with the dscp value is dscp_value for non trustsec packets.
+	 * These packets do not require any ACL Rule.
+	 */
+	cosmap.internal_pcp = 0;
+	cosmap.internal_dei = 0;
+	cosmap.internal_pri = pri;
+	cosmap.internal_dscp = 0;
+	cosmap.internal_dp = 0;
+	for (i = 0; i < NSS_CAPWAPMGR_DSCP_MAX; i++) {
+		if ((i & dscp_mask) != dscp_value) {
+			continue;
+		}
+
+		rv = fal_qos_cosmap_dscp_get(dev_id, group_id, i, &orig_cosmap[i]);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("dscpmap: failed to get cosmap for dscp %d\n", i);
+			err = NSS_CAPWAPMGR_FAILURE_CONFIGURE_DSCP_MAP;
+			goto fail4;
+		}
+
+		nss_capwapmgr_trace("dscpmap: setting priority %u for dscp %u\n", pri, i);
+		rv = fal_qos_cosmap_dscp_set(dev_id, group_id, i, &cosmap);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to configure cosmap for dscp %d - code: %d\n", i, rv);
+			err = NSS_CAPWAPMGR_FAILURE_CONFIGURE_DSCP_MAP;
+			goto fail4;
+		}
+	}
+
+	kfree(acl_rule);
+	kfree(orig_cosmap);
+
+	*id = uid;
+
+	return NSS_CAPWAPMGR_SUCCESS;
+
+fail4:
+	fail_dscp = i;
+	for (i = 0; i < fail_dscp; i++) {
+		if ((i & dscp_mask) != dscp_value) {
+			continue;
+		}
+
+		nss_capwapmgr_trace("dscpmap: resetting to priority %u for dscp %u\n", orig_cosmap[i].internal_pri, i);
+		rv = fal_qos_cosmap_dscp_set(dev_id, group_id, i, &orig_cosmap[i]);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to reset cosmap for dscp %d - code: %d\n", i, rv);
+		}
+	}
+
+fail3:
+	rv = fal_acl_rule_delete(dev_id, list_id, v6_rule_id, rule_nr);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to del ACL v6_rule %d from list %d - code: %d\n", v6_rule_id, list_id, rv);
+	}
+
+fail2:
+	rv = fal_acl_rule_delete(dev_id, list_id, v4_rule_id, rule_nr);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to del ACL v4_rule %d from list %d - code: %d\n", v4_rule_id, list_id, rv);
+	}
+
+fail1:
+	kfree(orig_cosmap);
+	kfree(acl_rule);
+
+	return err;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dscp_rule_create);
 
 /*
  * nss_capwapmgr_configure_dtls
@@ -2150,7 +2548,7 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	}
 
 	if (nss_capwap_get_stats(if_num, &stats) == true) {
-		nss_capwapmgr_tunnel_save_stats(&tunneld, &stats);
+		nss_capwapmgr_tunnel_save_stats(&global.tunneld, &stats);
 	}
 
 	/*
@@ -2411,6 +2809,47 @@ static void nss_capwapmgr_receive_pkt(struct net_device *dev, struct sk_buff *sk
 	dev_put(dev);
 }
 
+/*
+ * nss_capwapmgr_acl_init()
+ *	Initializes ACL related tables and objects.
+ */
+bool nss_capwapmgr_acl_init(void)
+{
+	sw_error_t rv;
+	int i, j, uid = 0;
+
+	/*
+	 * Create and bind the ACL list we will be using for dscp prioritization.
+	 */
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_LIST_CNT; i++) {
+		int list_id = NSS_CAPWAPMGR_ACL_LIST_START + i;
+		rv = fal_acl_list_creat(0, list_id, 0);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to create ACL list err:%d\n", rv);
+			return false;
+		}
+
+		rv = fal_acl_list_bind(0, list_id, FAL_ACL_DIREC_IN, FAL_ACL_BIND_PORTBITMAP, NSS_CAPWAPMGR_BIND_BITMAP);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to bind ACL list err:%d\n", rv);
+			return false;
+		}
+	}
+
+	/*
+	 * Initialize the globacl ACL table.
+	 */
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_LIST_CNT; i++) {
+		for (j = 0; j < NSS_CAPWAPMGR_ACL_RULES_PER_LIST; j++) {
+			global.acl_list[i].rule[j].uid = uid++;
+			global.acl_list[i].rule[j].rule_id = j;
+			global.acl_list[i].rule[j].list_id = i;
+		}
+	}
+
+	return true;
+}
+
 #if defined(NSS_CAPWAPMGR_ONE_NETDEV)
 /*
  * nss_capwapmgr_get_netdev()
@@ -2504,7 +2943,6 @@ struct notifier_block nss_capwapmgr_netdev_notifier = {
  */
 int __init nss_capwapmgr_init_module(void)
 {
-
 #ifdef CONFIG_OF
 	/*
 	 * If the node is not compatible, don't do anything.
@@ -2530,7 +2968,15 @@ int __init nss_capwapmgr_init_module(void)
 	}
 #endif
 
-	memset(&tunneld, 0, sizeof (struct nss_capwap_tunnel_stats));
+	memset(&global.tunneld, 0, sizeof(struct nss_capwap_tunnel_stats));
+
+	/*
+	 * Initialize ACL related objects and tables.
+	 */
+	if (!nss_capwapmgr_acl_init()) {
+		nss_capwapmgr_warn("Couldn't initialize ACL objects/tables\n");
+		return -1;
+	}
 
 	sema_init(&ip_response.sem, 1);
 	init_waitqueue_head(&ip_response.wq);
@@ -2544,6 +2990,10 @@ int __init nss_capwapmgr_init_module(void)
  */
 void __exit nss_capwapmgr_exit_module(void)
 {
+#if defined(NSS_CAPWAPMGR_ONE_NETDEV)
+	struct nss_capwapmgr_priv *priv;
+	uint8_t i;
+#endif
 
 #ifdef CONFIG_OF
 	/*
@@ -2553,10 +3003,8 @@ void __exit nss_capwapmgr_exit_module(void)
 		return;
 	}
 #endif
-#if defined(NSS_CAPWAPMGR_ONE_NETDEV)
-	struct nss_capwapmgr_priv *priv;
-	uint8_t i;
 
+#if defined(NSS_CAPWAPMGR_ONE_NETDEV)
 	priv = netdev_priv(nss_capwapmgr_ndev);
 	for (i = 0; i < NSS_CAPWAPMGR_MAX_TUNNELS; i++) {
 		(void) nss_capwapmgr_disable_tunnel(nss_capwapmgr_ndev, i);

@@ -43,7 +43,7 @@ static struct net_device *nss_connmgr_gre_v4_get_tx_dev(uint32_t dest_ip)
 {
 	struct rtable *rt;
 	struct net_device *dev;
-	uint32_t ip_addr = ntohl(dest_ip);
+	uint32_t ip_addr __attribute__ ((unused)) = ntohl(dest_ip);
 
 	rt = ip_route_output(&init_net, htonl(dest_ip), 0, 0, 0);
 	if (IS_ERR(rt)) {

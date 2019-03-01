@@ -105,7 +105,7 @@ static int nss_connmgr_gre_test(char *src_ip, char *dest_ip, char *next_dev_name
  * nss_connmgr_gre_test_write_proc()
  *	Write call back for proc entry.
  */
-static int nss_connmgr_gre_test_write_proc(struct file *file, const char __user *buf, size_t count, loff_t *offset)
+static ssize_t nss_connmgr_gre_test_write_proc(struct file *file, const char __user *buf, size_t count, loff_t *offset)
 {
 	char *token;
 	struct net_device *dev;

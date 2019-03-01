@@ -60,9 +60,9 @@ static const char *ipsecmgr_algo_name[NSS_IPSECMGR_ALGO_MAX] = {
 	"echainiv(authenc(hmac(sha256),cbc(des3_ede)))",
 	"hmac(sha1)",
 	"hmac(sha256)",
-	"seqiv(rfc4106(gcm(aes)))"
+	"seqiv(rfc4106(gcm(aes)))",
 	"echainiv(authenc(hmac(md5),cbc(aes)))",
-	"echainiv(authenc(hmac(md5),cbc(des3_ede)))",
+	"echainiv(authenc(hmac(md5),cbc(des3_ede)))"
 };
 
 /*
