@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -173,6 +173,7 @@ void nss_ipsecmgr_flow_inner2tuple(struct nss_ipsecmgr_flow_inner *inner, struct
 	tuple->proto_next_hdr = inner->proto_next_hdr;
 	tuple->esp_spi = 0;
 	tuple->ip_ver = inner->ip_version;
+	tuple->pattern = !!inner->use_pattern;
 
 	tuple->dst_port = inner->dport;
 	tuple->src_port = inner->sport;
@@ -273,10 +274,12 @@ void nss_ipsecmgr_flow_del(struct net_device *tun, struct nss_ipsecmgr_flow_inne
 		return;
 	}
 
+	flow->nim.msg.rule.data.use_pattern = inner->use_pattern;
+
 	/*
 	 * Free the flow entry and reference.
 	 */
-	nss_ipsecmgr_flow_free(&flow->ref);
+	nss_ipsecmgr_ref_free(&flow->ref);
 	write_unlock_bh(&ipsecmgr_drv->lock);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_flow_del);

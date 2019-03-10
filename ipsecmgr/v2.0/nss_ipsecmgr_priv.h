@@ -1,6 +1,6 @@
 /*
  * ********************************************************************************
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -131,6 +131,7 @@ static inline uint32_t nss_ipsecmgr_tuple2index(struct nss_ipsec_tuple *tuple, u
 
 	val ^= tuple->proto_next_hdr;
 	val ^= tuple->ip_ver;
+	val ^= tuple->pattern;
 
 	return val & (max - 1);
 }
@@ -159,6 +160,7 @@ static inline bool nss_ipsecmgr_tuple_match(struct nss_ipsec_tuple *tuple, struc
 
 	status += !!(tuple->proto_next_hdr ^ match->proto_next_hdr);
 	status += !!(tuple->ip_ver ^ match->ip_ver);
+	status += !!(tuple->pattern ^ match->pattern);
 
 	return !status;
 }
