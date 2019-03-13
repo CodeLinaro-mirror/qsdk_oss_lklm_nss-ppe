@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -326,7 +326,7 @@ static int nss_bridge_mgr_add_bond_slave(struct net_device *bond_master,
 		struct net_device *slave, struct nss_bridge_pvt *b_pvt)
 {
 	uint32_t *port_vsi;
-	int port_id;
+	int32_t port_id;
 	int32_t ifnum;
 	int32_t lagid = 0;
 	int32_t bondid = 0;
@@ -393,7 +393,7 @@ static int nss_bridge_mgr_add_bond_slave(struct net_device *bond_master,
 	}
 
 	spin_lock(&br_mgr_ctx.lock);
-	b_pvt->lag_ports[port_id] = lagid;
+	b_pvt->lag_ports[port_id - 1] = lagid;
 	spin_unlock(&br_mgr_ctx.lock);
 
 	return 0;
@@ -407,7 +407,7 @@ static int nss_bridge_mgr_del_bond_slave(struct net_device *bond_master,
 		struct net_device *slave, struct nss_bridge_pvt *b_pvt)
 {
 	uint32_t *port_vsi;
-	int port_id;
+	int32_t port_id;
 	int32_t ifnum;
 	int32_t lagid = 0;
 	int32_t bondid = 0;
@@ -450,7 +450,7 @@ static int nss_bridge_mgr_del_bond_slave(struct net_device *bond_master,
 	spin_lock(&br_mgr_ctx.lock);
 	port_vsi = &b_pvt->port_vsi[port_id - 1];
 
-	if (b_pvt->lag_ports[port_id] != lagid) {
+	if (b_pvt->lag_ports[port_id - 1] != lagid) {
 		spin_unlock(&br_mgr_ctx.lock);
 		return -1;
 	}
@@ -471,7 +471,7 @@ static int nss_bridge_mgr_del_bond_slave(struct net_device *bond_master,
 	}
 
 	spin_lock(&br_mgr_ctx.lock);
-	b_pvt->lag_ports[port_id] = 0;
+	b_pvt->lag_ports[port_id - 1] = 0;
 	spin_unlock(&br_mgr_ctx.lock);
 
 	/*
@@ -1451,7 +1451,10 @@ static int nss_bridge_mgr_wan_intf_add_handler(struct ctl_table *table,
 	struct net_device *dev;
 	char *dev_name;
 	char *if_name;
-	int ret = proc_dostring(table, write, buffer, lenp, ppos);
+	int32_t if_num;
+	int ret;
+
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
 	if (ret)
 		return ret;
 
@@ -1466,7 +1469,7 @@ static int nss_bridge_mgr_wan_intf_add_handler(struct ctl_table *table,
 		return -ENODEV;
 	}
 
-	uint32_t if_num = nss_cmn_get_interface_number_by_dev(dev);
+	if_num = nss_cmn_get_interface_number_by_dev(dev);
 	if (!NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(if_num)) {
 		nss_bridge_mgr_warn("Only physical interfaces can be marked as WAN interface: if_num %d\n", if_num);
 		return -ENOMSG;
@@ -1486,14 +1489,17 @@ static int nss_bridge_mgr_wan_intf_add_handler(struct ctl_table *table,
  * nss_bridge_mgr_wan_inf_del_handler
  *	Un-marks an interface as a WAN interface.
  */
-ssize_t nss_bridge_mgr_wan_intf_del_handler(struct ctl_table *table,
+static int nss_bridge_mgr_wan_intf_del_handler(struct ctl_table *table,
 						int write, void __user *buffer,
 						size_t *lenp, loff_t *ppos)
 {
 	struct net_device *dev;
 	char *dev_name;
 	char *if_name;
-	int ret = proc_dostring(table, write, buffer, lenp, ppos);
+	int32_t if_num;
+	int ret;
+
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
 	if (ret)
 		return ret;
 
@@ -1508,7 +1514,7 @@ ssize_t nss_bridge_mgr_wan_intf_del_handler(struct ctl_table *table,
 		return -ENODEV;
 	}
 
-	uint32_t if_num = nss_cmn_get_interface_number_by_dev(dev);
+	if_num = nss_cmn_get_interface_number_by_dev(dev);
 	if (!NSS_BRIDGE_MGR_IF_IS_TYPE_PHYSICAL(if_num)) {
 		nss_bridge_mgr_warn("Only physical interfaces can be marked/unmarked, if_num: %d\n", if_num);
 		return -ENOMSG;
