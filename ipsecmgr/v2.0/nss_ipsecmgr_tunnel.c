@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -683,7 +683,7 @@ void nss_ipsecmgr_tunnel_rx_notify(void *app_data, struct nss_ipsec_msg *nim)
 	 */
 	dev = dev_get_by_index(&init_net, nim->tunnel_id);
 	if (!dev) {
-		nss_ipsecmgr_warn("%p: Failed to find the NETDEV(%d) associated with the message", nim, nim->tunnel_id);
+		nss_ipsecmgr_info("%p: Failed to find the NETDEV(%d) associated with the message", nim, nim->tunnel_id);
 		return;
 	}
 
