@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2019 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -1887,6 +1887,11 @@ int nss_qdisc_init(struct Qdisc *sch, struct nss_qdisc *nq, nss_shaper_node_type
 	init_waitqueue_head(&nq->wait_queue);
 
 	/*
+	 * Add NSS flag to the qdisc
+	 */
+	sch->flags |= TCQ_F_NSS;
+
+	/*
 	 * Record our qdisc, mode and type in the private region for handy use
 	 */
 	nq->qdisc = sch;
@@ -2557,12 +2562,13 @@ static int nss_qdisc_if_event_cb(struct notifier_block *unused,
 		/*
 		 * Ensure we have nss qdisc configured on the bridge
 		 */
-		nq = (struct nss_qdisc *)qdisc_priv(br_qdisc);
-		if ((nq->mode != NSS_QDISC_MODE_NSS) && (nq->mode != NSS_QDISC_MODE_PPE)) {
-			nss_qdisc_info("No action taken since nss qdisc is not configured on %s interface\n",
-					br->name);
+		if (!(br_qdisc->flags & TCQ_F_NSS)) {
+			nss_qdisc_info("NSS qdisc is not configured on %s interface, "
+					"qdisc id: %s", br->name, br_qdisc->ops->id);
 			break;
 		}
+
+		nq = (struct nss_qdisc *)qdisc_priv(br_qdisc);
 
 		/*
 		 * Call attach or detach according as per event type.
