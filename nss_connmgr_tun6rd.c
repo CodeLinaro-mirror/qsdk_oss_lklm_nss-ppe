@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014, 2016-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2016-2019 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -295,28 +295,11 @@ static int nss_tun6rd_dev_up(struct net_device *netdev)
 	 */
 	memset(&msg_tunnel, 0, sizeof(struct nss_tun6rd_msg));
 	cfg_tunnel = &msg_tunnel.msg.tunnel;
-	cfg_tunnel->prefixlen = ip6rd->prefixlen;
-	cfg_tunnel->relay_prefix = ip6rd->relay_prefix;
-	cfg_tunnel->relay_prefixlen = ip6rd->relay_prefixlen;
 	cfg_tunnel->saddr = ntohl(tiph->saddr);
 	cfg_tunnel->daddr = ntohl(tiph->daddr);
-	cfg_tunnel->prefix[0] = ntohl(ip6rd->prefix.s6_addr32[0]);
-	cfg_tunnel->prefix[1] = ntohl(ip6rd->prefix.s6_addr32[1]);
-	cfg_tunnel->prefix[2] = ntohl(ip6rd->prefix.s6_addr32[2]);
-	cfg_tunnel->prefix[3] = ntohl(ip6rd->prefix.s6_addr32[3]);
 	cfg_tunnel->ttl = tiph->ttl;
 	cfg_tunnel->tos = tiph->tos;
 	cfg_tunnel->sibling_if_num = outer_if;
-
-	nss_tun6rd_trace("%p: 6rd Tunnel info\n", netdev);
-	nss_tun6rd_trace("%p: saddr %x daddr %d ttl %x  tos %x\n",
-			netdev, tiph->saddr, tiph->daddr, tiph->ttl, tiph->tos);
-	nss_tun6rd_trace("%p: Prefix %x:%x:%x:%x  Prefix len %d\n", netdev,
-			ip6rd->prefix.s6_addr32[0], ip6rd->prefix.s6_addr32[1],
-			ip6rd->prefix.s6_addr32[2], ip6rd->prefix.s6_addr32[3],
-			ip6rd->prefixlen);
-	nss_tun6rd_trace("%p: Relay Prefix %x Len %d\n", netdev,
-			ip6rd->relay_prefix, ip6rd->relay_prefixlen);
 
 	nss_tun6rd_trace("%p: Sending 6rd tunnel i/f up command to NSS %p\n",
 			netdev, nss_ctx);

@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2016,2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016,2018-2019 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -86,8 +86,8 @@ static struct genl_family nss_nlipsec_family = {
 /*
  * Multicast group for sending message status & events
  */
-static struct genl_multicast_group nss_nlipsec_mcgrp[] = {
-	{.name = NSS_NLIPSEC_FAMILY},
+static const struct genl_multicast_group nss_nlipsec_mcgrp[] = {
+	{.name = NSS_NLIPSEC_MCAST_GRP},
 };
 
 /*

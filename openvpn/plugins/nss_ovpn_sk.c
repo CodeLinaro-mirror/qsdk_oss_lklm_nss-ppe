@@ -293,7 +293,6 @@ static int nss_ovpn_sk_tun_add(struct socket *sock, unsigned long argp)
 	}
 
 	dev_put(tun_dev);
-
 	/*
 	 * Bring up tunnel device.
 	 */
@@ -451,6 +450,11 @@ static int nss_ovpn_sk_sendmsg(struct socket *sock, struct msghdr *msg, size_t l
 	 * Extract control message into pkt_info.
 	 */
 	cmsg = CMSG_FIRSTHDR(msg);
+	if (!cmsg) {
+		nss_ovpn_sk_warn("%p: Control message is invalid\n", sock);
+		return -EINVAL;
+	}
+
 	if (!CMSG_OK(msg, cmsg)) {
 		nss_ovpn_sk_warn("%p: Incorrect message format\n", sock);
 		return -EINVAL;
@@ -539,6 +543,11 @@ static int nss_ovpn_sk_recvmsg(struct socket *sock, struct msghdr *msg, size_t s
 	 * Extract control message into pkt_info.
 	 */
 	cmsg = CMSG_FIRSTHDR(msg);
+	if (!cmsg) {
+		nss_ovpn_sk_warn("%p: Control message is invalid\n", sock);
+		return -EINVAL;
+	}
+
 	if (!CMSG_OK(msg, cmsg)) {
 		nss_ovpn_sk_warn("%p: Incorrect message format\n", sock);
 		return -EINVAL;

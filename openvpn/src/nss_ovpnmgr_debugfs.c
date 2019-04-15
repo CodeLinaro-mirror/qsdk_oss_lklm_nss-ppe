@@ -190,7 +190,7 @@ void nss_ovpnmgr_debugfs_create(struct nss_ovpnmgr_app *app)
 {
 	char dentry_name[NSS_OVPNMGR_DEBUGFS_MAX_NAME_SIZE];
 
-	sprintf(dentry_name, "ovpn_app_%s", app->dev->name);
+	scnprintf(dentry_name, sizeof(dentry_name), "ovpn_app_%s", app->dev->name);
 
 	/*
 	 * Create debugfs entries for SA, flow and subnet

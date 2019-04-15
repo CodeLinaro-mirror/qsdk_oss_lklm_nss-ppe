@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -287,7 +287,7 @@ static bool nss_connmgr_mapt_validate_rule_style_mapt(struct net_device *dev, st
 	 */
 	if (rule->ea_len < 0 || rule->ea_len > 48) {
 		nss_connmgr_map_t_warning("%p: mapt rule %d is invalid as ea_len < 0 or ea_len > 48\n", dev, rule_num);
-		*stats |= 1 << is_local_rule ? MAP_T_LOCAL_EA_BITS_LEN_IS_INVALID : MAP_T_REMOTE_EA_BITS_LEN_IS_INVALID;
+		*stats |= 1 << (is_local_rule ? MAP_T_LOCAL_EA_BITS_LEN_IS_INVALID : MAP_T_REMOTE_EA_BITS_LEN_IS_INVALID);
 		return false;
 	}
 
@@ -299,7 +299,7 @@ static bool nss_connmgr_mapt_validate_rule_style_mapt(struct net_device *dev, st
 
 	if (psid_len + rule->psid_offset > 16) {
 		nss_connmgr_map_t_warning("%p: mapt rule %d is invalid as psid offset + psid len > 16\n", dev, rule_num);
-		*stats |= 1 << is_local_rule ? MAP_T_LOCAL_PSID_LEN_PLUS_PSID_OFFSET_IS_GREATER_THAN_16 : MAP_T_REMOTE_PSID_LEN_PLUS_REMOTE_PSID_OFFSET_IS_GREATER_THAN_16;
+		*stats |= 1 << (is_local_rule ? MAP_T_LOCAL_PSID_LEN_PLUS_PSID_OFFSET_IS_GREATER_THAN_16 : MAP_T_REMOTE_PSID_LEN_PLUS_REMOTE_PSID_OFFSET_IS_GREATER_THAN_16);
 		return false;
 	}
 
@@ -316,7 +316,7 @@ static bool nss_connmgr_mapt_validate_rule_style_rfc6052(struct net_device *dev,
 	      rule->v6_pref_len == 48 || rule->v6_pref_len == 56 ||
 	      rule->v6_pref_len == 64 || rule->v6_pref_len == 96)) {
 		nss_connmgr_map_t_warning("%p: mapt rule %d is invalid as rfc6052 end user prefix is invalid\n", dev, rule_num);
-		*stats |= 1 << is_local_rule ? MAP_T_LOCAL_IPV6_PREFIX_LEN_IS_NOT_32_40_48_56_64_OR_96 : MAP_T_REMOTE_IPV6_PREFIX_LEN_IS_NOT_32_40_48_56_64_OR_96;
+		*stats |= 1 << (is_local_rule ? MAP_T_LOCAL_IPV6_PREFIX_LEN_IS_NOT_32_40_48_56_64_OR_96 : MAP_T_REMOTE_IPV6_PREFIX_LEN_IS_NOT_32_40_48_56_64_OR_96);
 		return false;
 	}
 

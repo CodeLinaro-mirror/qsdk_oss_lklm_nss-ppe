@@ -1057,6 +1057,16 @@ int nss_ovpnmgr_tun_tx(uint32_t tunnel_id, struct nss_ovpnmgr_metadata *mdata, s
 	nhead = tun_dev->needed_headroom;
 	ntail = tun_dev->needed_tailroom;
 
+	read_lock_bh(&ovpnmgr_ctx.lock);
+	if (mdata->flags & NSS_OVPNMGR_METADATA_FLAG_PKT_DECAP) {
+		ifnum = tun->outer.ifnum;
+		stats = &tun->outer.stats;
+	} else {
+		ifnum = tun->inner.ifnum;
+		stats = &tun->inner.stats;
+	}
+	read_unlock_bh(&ovpnmgr_ctx.lock);
+
 	/*
 	 * Check if skb is shared
 	 */
@@ -1078,18 +1088,6 @@ int nss_ovpnmgr_tun_tx(uint32_t tunnel_id, struct nss_ovpnmgr_metadata *mdata, s
 		err = -ENOMEM;
 		goto free;
 	}
-
-	read_lock_bh(&ovpnmgr_ctx.lock);
-
-	if (mdata->flags & NSS_OVPNMGR_METADATA_FLAG_PKT_DECAP) {
-		ifnum = tun->outer.ifnum;
-		stats = &tun->outer.stats;
-	} else {
-		ifnum = tun->inner.ifnum;
-		stats = &tun->inner.stats;
-	}
-
-	read_unlock_bh(&ovpnmgr_ctx.lock);
 
 	/*
 	 * Dump IPv4/v6 header (40) + transport header (8) + ovpn header (4)
@@ -1183,7 +1181,7 @@ uint32_t nss_ovpnmgr_tun_add(struct net_device *app_dev,
 	 */
 	status = nss_ovpnmgr_tun_config_verify(tun_hdr, tun_cfg);
 	if (status < 0) {
-		nss_ovpnmgr_warn("%p: Tunnel configuration parameters are invalid, status=%d.\n", app, status);
+		nss_ovpnmgr_warn("%p: Tunnel configuration parameters are invalid, status=%d.\n", app_dev, status);
 		return 0;
 	}
 

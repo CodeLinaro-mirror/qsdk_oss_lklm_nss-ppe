@@ -202,6 +202,16 @@ int nss_ovpnmgr_route_add(uint32_t tunnel_id, struct nss_ovpnmgr_route_tuple *rt
 
 	tun = netdev_priv(tun_dev);
 
+	/*
+	 * Check if route is available.
+	 */
+	route = nss_ovpnmgr_route_find(&tun->route_list, rt);
+	if (route) {
+		nss_ovpnmgr_warn("%p: Route is available\n", tun);
+		dev_put(tun_dev);
+		return -EEXIST;
+	}
+
 	route = kzalloc(sizeof(*route), GFP_KERNEL);
 	if (!route) {
 		nss_ovpnmgr_warn("%p: Couldn't allocate memory for new route\n", tun);

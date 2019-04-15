@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -637,7 +637,7 @@ static int nss_nlipv4_ops_create_rule(struct sk_buff *skb, struct genl_info *inf
 	 * check connection rule
 	 */
 	error = nss_nlipv4_verify_conn_rule(&nim->msg.rule_create, flow_dev, return_dev,
-					nl_rule->flow_if_type, nl_rule->return_if_type);
+					nl_rule->flow_iftype, nl_rule->return_iftype);
 	if (error < 0) {
 		nss_nl_error("%d:invalid conn rule information passed\n", pid);
 		goto done;
