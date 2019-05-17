@@ -67,17 +67,19 @@ enum nss_ipsecmgr_event_type {
 typedef enum nss_ipsecmgr_status {
 	NSS_IPSECMGR_OK,		/**< Status ok. */
 	NSS_IPSECMGR_FAIL,		/**< Failed due to unknown reason. */
-	NSS_IPSECMGR_FAIL_SA,		/**< Failed to find the SA. */
 	NSS_IPSECMGR_FAIL_NOMEM,	/**< Failed to allocate memory. */
 	NSS_IPSECMGR_FAIL_NOCRYPTO,	/**< Failed to allocate crypto resource. */
 	NSS_IPSECMGR_FAIL_MESSAGE,	/**< Failed to message the NSS. */
+	NSS_IPSECMGR_FAIL_ADD_DB,	/**< Failed to add to database. */
 	NSS_IPSECMGR_FAIL_FLOW_ALLOC,	/**< Failed to alloc flow. */
+	NSS_IPSECMGR_FAIL_FLOW,		/**< Failed to find the flow. */
 	NSS_IPSECMGR_INVALID_CTX,	/**< Invalid context */
 	NSS_IPSECMGR_INVALID_ALGO,	/**< Invalid algorithm. */
 	NSS_IPSECMGR_INVALID_IPVER,	/**< Invalid IP version. */
 	NSS_IPSECMGR_INVALID_CRYPTO_IDX,/**< Invalid crypto index */
 	NSS_IPSECMGR_INVALID_KEYLEN,	/**< Invalid key length for cipher or authentication. */
 	NSS_IPSECMGR_INVALID_WINDOW,	/**< Invalid window size. */
+	NSS_IPSECMGR_INVALID_SA,	/**< Ivalid SA. */
 	NSS_IPSECMGR_DUPLICATE_SA,	/**< Duplicate SA allocation. */
 	NSS_IPSECMGR_DUPLICATE_FLOW,	/**< Duplicate flow allocation. */
 } nss_ipsecmgr_status_t;
@@ -162,8 +164,8 @@ struct nss_ipsecmgr_sa_cmn {
  *    - dscp_copy = 0
  *    - dscp = <0 to 63>
  * - Transmit default
- * 	SA with TX default is used when host originating flows don't have
- * 	an explicit inner flow rule programmed for IPsec.
+ *	SA with TX default is used when host originating flows don't have
+ *	an explicit inner flow rule programmed for IPsec.
  */
 struct nss_ipsecmgr_sa_encap {
 	uint32_t seq_start;	/**< Starting sequence number (Not used) */
@@ -446,6 +448,26 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_add(struct net_device *tun, struct nss_ips
 				struct nss_ipsecmgr_sa_data *data, uint32_t *if_num);
 
 /**
+ * nss_ipsecmgr_sa_add_sync
+ *	Adds a security association to the offload database synchronously.
+ *
+ * @datatypes
+ * net_device \n
+ * nss_ipsecmgr_sa_tuple \n
+ * nss_ipsecmgr_sa_data \n
+ *
+ * @param[in] tun     Pointer to the network device associated with the tunnel.
+ * @param[in] sa      Pointer to tuple representing the SA.
+ * @param[in] data    Pointer to the security association data to add.
+ * @param[out] if_num Pointer to the IPsec inner or outer interface number.
+ *
+ * @return
+ * nss_ipsecmgr_status.
+ */
+nss_ipsecmgr_status_t nss_ipsecmgr_sa_add_sync(struct net_device *tun, struct nss_ipsecmgr_sa_tuple *sa,
+				struct nss_ipsecmgr_sa_data *data, uint32_t *if_num);
+
+/**
  * nss_ipsecmgr_sa_del
  *	Deletes a security association.
  *
@@ -477,6 +499,25 @@ void nss_ipsecmgr_sa_del(struct net_device *tun, struct nss_ipsecmgr_sa_tuple *t
  * nss_ipsecmgr_status.
  */
 nss_ipsecmgr_status_t nss_ipsecmgr_flow_add(struct net_device *tun, struct nss_ipsecmgr_flow_tuple *flow,
+					struct nss_ipsecmgr_sa_tuple *sa);
+
+/**
+ * nss_ipsecmgr_flow_add_sync
+ *	Adds an encapsulation flow rule to the IPsec offload database.
+ *
+ * @datatypes
+ * net_device \n
+ * nss_ipsecmgr_flow_tuple \n
+ * nss_ipsecmgr_sa_tuple
+ *
+ * @param[in] tun   Pointer to the network device associated with the tunnel.
+ * @param[in] flow  Pointer to the inner flow to add.
+ * @param[in] sa    Pointer to the outer flow of the SA to be added to.
+ *
+ * @return
+ * nss_ipsecmgr_status.
+ */
+nss_ipsecmgr_status_t nss_ipsecmgr_flow_add_sync(struct net_device *tun, struct nss_ipsecmgr_flow_tuple *flow,
 					struct nss_ipsecmgr_sa_tuple *sa);
 
 /**
