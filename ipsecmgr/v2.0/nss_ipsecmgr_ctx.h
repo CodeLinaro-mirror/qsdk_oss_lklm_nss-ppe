@@ -124,11 +124,19 @@ static inline void nss_ipsecmgr_ctx_set_except(struct nss_ipsecmgr_ctx *ctx, uin
 extern const struct file_operations ipsecmgr_ctx_file_ops;
 
 /* API(s) for context specific operations */
+extern void nss_ipsecmgr_ctx_rx_stats(void *app_data, struct nss_cmn_msg *ncm);
+extern void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *skb, struct napi_struct *napi);
+extern void nss_ipsecmgr_ctx_rx_outer(struct net_device *dev, struct sk_buff *skb, struct napi_struct *napi);
+extern void nss_ipsecmgr_ctx_rx_inner(struct net_device *dev, struct sk_buff *skb, struct napi_struct *napi);
+
 extern bool nss_ipsecmgr_ctx_config(struct nss_ipsecmgr_ctx *ctx);
 extern void nss_ipsecmgr_ctx_free(struct nss_ipsecmgr_ctx *ctx);
-extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc_inner(struct nss_ipsecmgr_tunnel *tun);
-extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc_outer(struct nss_ipsecmgr_tunnel *tun);
-extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc_redir(struct nss_ipsecmgr_tunnel *tun);
+extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc(struct nss_ipsecmgr_tunnel *tun,
+							enum nss_ipsec_cmn_ctx_type ctx_type,
+							enum nss_dynamic_interface_type di_type,
+							nss_ipsec_cmn_data_callback_t rx_data,
+							nss_ipsec_cmn_msg_callback_t rx_stats,
+							uint32_t features);
 extern void nss_ipsecmgr_ctx_stats_read(struct nss_ipsecmgr_ctx *ctx, struct rtnl_link_stats64 *dev_stats);
 extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_find(struct nss_ipsecmgr_tunnel *tun, enum nss_ipsec_cmn_ctx_type type);
 
