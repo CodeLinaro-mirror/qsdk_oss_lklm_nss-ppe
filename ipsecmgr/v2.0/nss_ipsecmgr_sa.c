@@ -454,15 +454,14 @@ static void nss_ipsecmgr_sa_free_work(struct work_struct *work)
 	memcpy(&nicm.msg.sa.sa_tuple, &sa->state.tuple, sizeof(nicm.msg.sa.sa_tuple));
 
 	status = nss_ipsec_cmn_tx_msg_sync(sa->nss_ctx, sa->ifnum, type, sizeof(nicm.msg.sa), &nicm);
-
 	if (status != NSS_TX_SUCCESS) {
 		if (status == NSS_TX_FAILURE_QUEUE) {
-			nss_ipsecmgr_trace("%p: Failed to send message(%u) to NSS(%u); queue full\n", sa->nss_ctx, type, status);
+			nss_ipsecmgr_trace("%p: Failed to send message(%u) to NSS(%u)", sa->nss_ctx, type, status);
 			schedule_delayed_work(&sa->free_work, NSS_IPSECMGR_SA_FREE_TIMEOUT);
 			return;
 		}
 
-		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)\n", sa->nss_ctx, type, status);
+		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)", sa->nss_ctx, type, status);
 	}
 
 	if (sa->aead)
@@ -481,15 +480,34 @@ static void nss_ipsecmgr_sa_free_work(struct work_struct *work)
 static void nss_ipsecmgr_sa_free_ref(struct nss_ipsecmgr_ref *ref)
 {
 	struct nss_ipsecmgr_sa *sa = container_of(ref, struct nss_ipsecmgr_sa, ref);
-
-	BUG_ON(write_can_lock(&ipsecmgr_drv->lock));
+	struct nss_ipsecmgr_tunnel *tun = NULL;
+	struct net_device *dev;
 
 	/*
 	 * Linux does not provide any specific API(s) to test for RW locks. The caller
 	 * being internal is assumed to hold write lock before initiating this.
 	 */
+	BUG_ON(write_can_lock(&ipsecmgr_drv->lock));
+
 	list_del_init(&sa->list);
 
+	dev = dev_get_by_index(&init_net, sa->tunnel_id);
+	if (!dev) {
+		nss_ipsecmgr_trace("%p: Failed to find dev for tunnel-ID(%u)", sa, sa->tunnel_id);
+		goto done;
+	}
+
+	/*
+	 * Check the default transmit SA; if it matches then we clear it
+	 */
+	tun = netdev_priv(dev);
+	if (tun->tx_sa == sa) {
+		tun->tx_sa = NULL;
+	}
+
+	dev_put(dev);
+
+done:
 	/*
 	 * The free path can potentailly sleep hence we detach the SA here but
 	 * free it later
@@ -505,12 +523,12 @@ static void nss_ipsecmgr_sa_create_resp(void *app_data, struct nss_cmn_msg *ncm)
 {
 	struct list_head *db = ipsecmgr_drv->sa_db;
 	struct nss_ipsecmgr_sa *sa = app_data;
+	struct nss_ipsecmgr_tunnel *tun;
 	struct nss_ipsecmgr_ctx *ctx;
 	struct net_device *dev;
 	uint32_t hash_idx;
 
 	if (ncm->response != NSS_CMN_RESPONSE_ACK) {
-
 #ifdef NSS_IPSECMGR_DEBUG
 		if (ncm->error == NSS_IPSEC_CMN_MSG_ERROR_SA_DUP) {
 			write_lock_bh(&ipsecmgr_drv->lock);
@@ -531,18 +549,27 @@ static void nss_ipsecmgr_sa_create_resp(void *app_data, struct nss_cmn_msg *ncm)
 	dev = dev_get_by_index(&init_net, sa->tunnel_id);
 	if (!dev) {
 		nss_ipsecmgr_warn("%p: Failed to find tunnel(%d) between SA creation\n", sa, sa->tunnel_id);
-		kfree(sa);
+		schedule_delayed_work(&sa->free_work, NSS_IPSECMGR_SA_FREE_TIMEOUT);
 		return;
 	}
 
+	tun = netdev_priv(dev);
+
 	write_lock_bh(&ipsecmgr_drv->lock);
 
-	ctx = nss_ipsecmgr_ctx_find(netdev_priv(dev), sa->type);
+	ctx = nss_ipsecmgr_ctx_find(tun, sa->type);
 	if (!ctx) {
 		write_unlock_bh(&ipsecmgr_drv->lock);
 		nss_ipsecmgr_warn("%p: Failed to find context (%u) between SA creation\n", sa, sa->type);
-		kfree(sa);
+		schedule_delayed_work(&sa->free_work, NSS_IPSECMGR_SA_FREE_TIMEOUT);
 		goto done;
+	}
+
+	/*
+	 * Save the SA for default TX on tunnel if enabled
+	 */
+	if (sa->state.tx_default) {
+		tun->tx_sa = sa;
 	}
 
 	/*
@@ -637,6 +664,7 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_encap(struct nss_ipsecmgr_tun
 	 */
 	memcpy(&sa->state.tuple, sa_tuple, sizeof(sa->state.tuple));
 	memcpy(&sa->state.data, sa_data, sizeof(sa->state.data));
+	sa->state.tx_default = !!data->encap.tx_default;
 
 	sa->type = ctx->state.type;
 	sa->tunnel_id = tun->dev->ifindex;

@@ -87,9 +87,11 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
 	struct nss_ipsec_cmn_flow_tuple f_tuple = {{0}};
 	struct nss_ipsec_cmn_mdata_encap *mdata;
+	struct nss_ipsec_cmn_sa_tuple *sa_tuple;
 	struct nss_ctx_instance *nss_ctx;
 	struct nss_ipsecmgr_flow *flow;
 	struct nss_ipsecmgr_ctx *ctx;
+	struct nss_ipsecmgr_sa *sa;
 	bool expand_skb = false;
 	int nhead, ntail;
 	uint32_t ifnum;
@@ -155,7 +157,18 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	}
 
 	/*
-	 * We search the flow if this has been programmed prior to sending the packets
+	 * Check if default SA is configured in tunnel. If found, fill sa_tuple in
+	 * metadata to be used for encap.
+	 */
+	sa = tun->tx_sa;
+	if (sa) {
+		sa_tuple = &sa->state.tuple;
+		goto fill_mdata;
+	}
+
+	/*
+	 * We search the flow if this has been programmed prior to sending the packets. If flow
+	 * is found, we send corresponding sa_tuple as metadata for encap, else drop the packet.
 	 */
 	flow = nss_ipsecmgr_flow_find(ipsecmgr_drv->flow_db, &f_tuple);
 	if (!flow) {
@@ -164,10 +177,12 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 		goto free;
 	}
 
+	sa_tuple = &flow->state.sa;
 
+fill_mdata:
 	mdata->flags = 0;
 	mdata->seq_num = 0;
-	mdata->sa = flow->state.sa;
+	mdata->sa = *sa_tuple;
 
 	ifnum = ctx->ifnum;
 	nss_ctx = ctx->nss_ctx;

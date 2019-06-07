@@ -39,6 +39,7 @@ struct nss_ipsecmgr_tunnel {
 	struct dentry *dentry;			/* DebugFS entry */
 	struct list_head ctx_db;		/* Context database */
 	struct nss_ipsecmgr_callback cb;	/* Callback entry */
+	struct nss_ipsecmgr_sa *tx_sa;		/* Default SA for tunnel transmit */
 };
 
 /*
@@ -51,7 +52,7 @@ static inline void *nss_ipsecmgr_tunnel_get_mdata(struct sk_buff *skb)
 	mdata = (struct nss_ipsec_cmn_mdata *)skb_push(skb, sizeof(struct nss_ipsec_cmn_mdata));
 	nss_ipsec_cmn_mdata_init(mdata);
 
-	return &mdata->data;
+	return (void *)&mdata->data;
 }
 
 #endif

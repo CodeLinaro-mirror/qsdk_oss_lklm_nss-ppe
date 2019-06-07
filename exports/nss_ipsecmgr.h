@@ -161,6 +161,9 @@ struct nss_ipsecmgr_sa_cmn {
  * - Fixed mark on outer header:
  *    - dscp_copy = 0
  *    - dscp = <0 to 63>
+ * - Transmit default
+ * 	SA with TX default is used when host originating flows don't have
+ * 	an explicit inner flow rule programmed for IPsec.
  */
 struct nss_ipsecmgr_sa_encap {
 	uint32_t seq_start;	/**< Starting sequence number (Not used) */
@@ -170,6 +173,7 @@ struct nss_ipsecmgr_sa_encap {
 
 	bool copy_dscp;		/**< Copy DSCP from the inner header to the outer header. */
 	bool copy_df;		/**< Copy DF from the inner header to the outer header. */
+	bool tx_default;	/**< TX SA(one per tunnel) for host traffic, without a flow rule.*/
 };
 
 /**

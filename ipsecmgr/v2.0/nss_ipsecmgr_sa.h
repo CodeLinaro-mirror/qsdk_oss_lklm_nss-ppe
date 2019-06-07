@@ -71,6 +71,7 @@ struct nss_ipsecmgr_sa_state {
 	struct nss_ipsec_cmn_sa_tuple tuple;		/* SA tuple */
 	struct nss_ipsec_cmn_sa_data data;		/* SA data */
 	struct nss_ipsec_cmn_sa_replay replay;		/* Per SA replay data */
+	bool tx_default;				/* SA used for tunnel TX */
 };
 
 /*
