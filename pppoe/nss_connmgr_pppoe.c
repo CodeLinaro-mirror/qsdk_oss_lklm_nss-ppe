@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -247,7 +247,7 @@ static int nss_connmgr_pppoe_connect(struct net_device *dev)
 		goto connect_fail1;
 	}
 
-	nss_connmgr_pppoe_info("%p: PPPoE dynamic interface allocation is sucessful with if_number %d\n", dev, if_number);
+	nss_connmgr_pppoe_info("%p: PPPoE dynamic interface allocation is successful with if_number %d\n", dev, if_number);
 
 	entry = nss_connmgr_add_pppoe_session(dev, &opt);
 	if (!entry) {
@@ -293,10 +293,10 @@ static int nss_connmgr_pppoe_connect(struct net_device *dev)
 	} else if (opt.dev->priv_flags & IFF_EBRIDGE) {
 		/*
 		 * Device is bridge. We need to get the actual physical port.
-		 * Searching this physical port in the fdb database with the local mac
+		 * Searching this physical port in the fdb database with the server mac
 		 * address of the session.
 		 */
-		struct net_device *port = br_port_dev_get(opt.dev, info->local_mac, NULL, 0);
+		struct net_device *port = br_port_dev_get(opt.dev, info->server_mac, NULL, 0);
 		if (!port) {
 			nss_connmgr_pppoe_warn("%p: Unable to get the bridge port device from the bridge interface: %s\n",
 						dev, opt.dev->name);
