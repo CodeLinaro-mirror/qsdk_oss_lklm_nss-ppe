@@ -1018,18 +1018,6 @@ static int nss_ipsec_klips_dev_event(struct notifier_block *this, unsigned long 
 }
 
 /*
- * nss_ipsec_klips_in6_to_addr()
- * 	Converts to flow ip from Linux ipv6 addr (host order).
- */
-static inline void nss_ipsec_klips_in6_to_addr(struct in6_addr *in6, uint32_t addr[4])
-{
-	addr[0] = in6->in6_u.u6_addr32[3];
-	addr[1] = in6->in6_u.u6_addr32[2];
-	addr[2] = in6->in6_u.u6_addr32[1];
-	addr[3] = in6->in6_u.u6_addr32[0];
-}
-
-/*
  * nss_ipsec_klips_ecm_conn_to_tuple()
  * 	Converts ecm_notifier_connection_data to nss_ipsecmgr_flow_tuple.
  */
@@ -1038,6 +1026,7 @@ static inline bool nss_ipsec_klips_ecm_conn_to_tuple(struct ecm_notifier_connect
 {
 	struct in6_addr *sip6, *dip6;
 	struct in_addr *sip, *dip;
+	int i;
 
 	memset(tuple, 0, sizeof(*tuple));
 	tuple->ip_version = conn->tuple.ip_ver;
@@ -1066,8 +1055,10 @@ static inline bool nss_ipsec_klips_ecm_conn_to_tuple(struct ecm_notifier_connect
 		break;
 
 	case 6:
-		nss_ipsec_klips_in6_to_addr(dip6, tuple->dest_ip);
-		nss_ipsec_klips_in6_to_addr(sip6, tuple->src_ip);
+		for (i = 0; i < 4; i++) {
+			tuple->dest_ip[i] = dip6->s6_addr32[i];
+			tuple->src_ip[i] = sip6->s6_addr32[i];
+		}
 		break;
 
 	default:

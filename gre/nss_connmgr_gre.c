@@ -976,7 +976,7 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 	}
 
 	memcpy(&ngii->gre_cfg, cfg, sizeof(*cfg));
-	ngii->gre_iftype = NSS_CONNMGR_GRE_IFTYPE_PLUME_GRE;
+	ngii->gre_iftype = NSS_CONNMGR_GRE_IFTYPE_CUSTOM_GRE;
 
 	spin_lock(&gre_connmgr_ctx.lock);
 	list_add(&ngii->list, &gre_connmgr_ctx.list);
@@ -1196,10 +1196,10 @@ static int nss_connmgr_gre_dev_up(struct net_device *dev)
 	struct net_device *next_dev = NULL;
 
 	/*
-	 * If GRE interface instance is found return, dev is Plume GRE interface type.
+	 * If GRE interface instance is found return, dev is Custom GRE interface type.
 	 */
 	if (nss_connmgr_gre_find_instance(dev)) {
-		nss_connmgr_gre_info("%p: Plume GRE interface is up.\n", dev);
+		nss_connmgr_gre_info("%p: Custom GRE interface is up.\n", dev);
 		return NOTIFY_DONE;
 	}
 
@@ -1355,10 +1355,10 @@ static int nss_connmgr_gre_dev_down(struct net_device *dev)
 	nss_tx_status_t status;
 
 	/*
-	 * If GRE interface instance is found return, dev is Plume GRE interface type.
+	 * If GRE interface instance is found return, dev is Custom GRE interface type.
 	 */
 	if (nss_connmgr_gre_find_instance(dev)) {
-		nss_connmgr_gre_info("%p: Plume GRE interface is down.\n", dev);
+		nss_connmgr_gre_info("%p: Custom GRE interface is down.\n", dev);
 		return NOTIFY_DONE;
 	}
 

@@ -29,20 +29,22 @@
 
 #define NSS_NLIPV4_ARPHRD_IPSEC_TUNNEL_TYPE 0x31
 #define NSS_NLIPV4_VLAN_ID_NOT_CONFIGURED 0xFFF
+#define NSS_NLIPV4_MIN_MTU 576
+#define NSS_NLIPV4_MAX_MTU 65535
 
 /**
  * @brief IPv4 rule
  */
 struct nss_nlipv4_rule {
-	struct nss_nlcmn cm;		/**< common message header */
+	struct nss_nlcmn cm;			/**< common message header */
 
-	char flow_ifname[IFNAMSIZ];	/**< ingress interface name */
-	char return_ifname[IFNAMSIZ];	/**< egress interface name */
+	char flow_ifname[IFNAMSIZ];		/**< ingress interface name */
+	char return_ifname[IFNAMSIZ];		/**< egress interface name */
 
-	uint16_t flow_iftype;            /**< ingress interface type */
-	uint16_t return_iftype;            /**< egress interface type */
+	enum nss_nl_iftype flow_iftype;		/**< ingress interface type */
+	enum nss_nl_iftype return_iftype;	/**< egress interface type */
 
-	struct nss_ipv4_msg nim;	/**< rule message */
+	struct nss_ipv4_msg nim;		/**< rule message */
 };
 
 /**

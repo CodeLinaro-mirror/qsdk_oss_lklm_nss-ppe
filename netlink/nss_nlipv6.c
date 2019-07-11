@@ -34,6 +34,7 @@
 #include <linux/completion.h>
 #include <linux/semaphore.h>
 #include <net/addrconf.h>
+#include <linux/in.h>
 
 #include <net/genetlink.h>
 #include <net/route.h>
@@ -47,11 +48,15 @@
 #include <nss_api_if.h>
 #include <nss_cmn.h>
 #include <nss_ipsec.h>
+#include "nss_nlipsec.h"
+#include <nss_ipsec_cmn.h>
 #include <nss_nl_if.h>
 #include "nss_nl.h"
 #include "nss_nlipv6.h"
 #include "nss_nlcmn_if.h"
 #include "nss_nlipv6_if.h"
+#include "nss_ipsecmgr.h"
+#include "nss_nlipsec_if.h"
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 #define DST_NEIGH_LOOKUP(dst, ip_addr) dst_neigh_lookup(dst, ip_addr)
@@ -247,21 +252,26 @@ static int nss_nlipv6_verify_5tuple(struct nss_ipv6_5tuple *tuple)
 		return -EINVAL;
 	}
 
-	/* Validate the port number */
+	/*
+	 * Validate the port number
+	 */
 	switch (tuple->protocol) {
-	case NSS_NLIPV6_UDP:
-	case NSS_NLIPV6_TCP:
-	case NSS_NLIPV6_SCTP:
-		if (!tuple->flow_ident) {
-			nss_nl_info("Empty flow ident\n");
-			return -EINVAL;
-		}
-
-		if (!tuple->return_ident) {
-			nss_nl_info("Empty return ident\n");
+	case IPPROTO_UDP:
+	case IPPROTO_TCP:
+	case IPPROTO_SCTP:
+		if (!tuple->flow_ident || !tuple->return_ident) {
+			nss_nl_error("Empty flow ident or return ident. flow ident:%d return ident:%d protocol:%d\n",
+					tuple->flow_ident, tuple->return_ident, tuple->protocol);
 			return -EINVAL;
 		}
 		break;
+	default:
+		if (tuple->flow_ident || tuple->return_ident) {
+			nss_nl_error("Flow ident and return ident must be empty. flow ident:%u return ident:%u protocol:%u\n",
+					tuple->flow_ident, tuple->return_ident, tuple->protocol);
+
+			return -EINVAL;
+		}
 	}
 
 	return 0;
@@ -272,15 +282,17 @@ static int nss_nlipv6_verify_5tuple(struct nss_ipv6_5tuple *tuple)
  * 	verify and override connection rule entries
  */
 static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, struct net_device *flow_dev,
-					struct net_device *return_dev, uint16_t flow_dev_type, uint16_t return_dev_type)
+					struct net_device *return_dev, enum nss_nl_iftype flow_iftype,
+					enum nss_nl_iftype return_iftype)
 {
 	struct nss_ipv6_connection_rule *conn = &msg->conn_rule;
 	struct nss_ipv6_nexthop *nexthop = &msg->nexthop_rule;
+	struct nss_ipv6_5tuple *tuple = &msg->tuple;
 	const size_t rule_sz = sizeof(struct nss_ipv6_connection_rule);
 	bool valid;
 
 	/*
-	 * connection rule is not valid ignore rest of the checks
+	 * Connection rule is not valid ignore rest of the checks
 	 */
 	valid = msg->valid_flags & NSS_IPV6_RULE_CREATE_CONN_VALID;
 	if (!valid) {
@@ -288,58 +300,122 @@ static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, str
 		return -EINVAL;
 	}
 
+	if ((flow_iftype >= NSS_NL_IFTYPE_MAX) || (return_iftype >= NSS_NL_IFTYPE_MAX)) {
+		nss_nl_error("%p: Invalid interface type (flow:%d, return:%d)\n", msg, flow_iftype, return_iftype);
+		return -EINVAL;
+	}
+
 	/*
-	 * update the flow  & return MAC address
+	 * Update the flow  & return MAC address
 	 */
-	if (nss_nlipv6_get_macaddr(msg->tuple.flow_ip, (uint8_t *)conn->flow_mac)) {
+	if (nss_nlipv6_get_macaddr(tuple->flow_ip, (uint8_t *)conn->flow_mac)) {
 		nss_nl_info("Error in Updating the Flow MAC Address \n");
 		return -EINVAL;
 	}
 
-	if (nss_nlipv6_get_macaddr(msg->tuple.return_ip, (uint8_t *)conn->return_mac)) {
+	if (nss_nlipv6_get_macaddr(tuple->return_ip, (uint8_t *)conn->return_mac)) {
 		nss_nl_info("Error in Updating the Return MAC Address \n");
 		return -EINVAL;
 	}
 
 	/*
-	 * update flow and return interface numbers. Handle Ipsec and vlan interfaces seperately.
+	 * Update flow interface number and flow mtu
 	 */
-	if (flow_dev->type == NSS_IPSEC_ARPHRD_IPSEC)
-		conn->flow_interface_num = nss_ipsec_get_ifnum(nss_ipsec_get_data_interface());
-	else if (is_vlan_dev(flow_dev))
-		conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(vlan_dev_real_dev(flow_dev));
-	else {
-		if (!flow_dev_type)
-			conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(flow_dev);
-		else {
-			conn->flow_interface_num = nss_cmn_get_interface_number_by_dev_and_type(flow_dev, flow_dev_type);
+	switch (flow_iftype) {
+	case NSS_NL_IFTYPE_TUNNEL_IPSEC:
+		conn->flow_interface_num = nss_nlipsec_get_ifnum(flow_dev, tuple->protocol,
+								tuple->return_ident, tuple->flow_ident);
+		if (conn->flow_interface_num < 0 ) {
+			nss_nl_error("%p: Failed to get flow interface number (dev:%s, type:%d)\n",
+					flow_dev, flow_dev->name, flow_iftype);
+			return -EINVAL;
 		}
-			nss_nl_info("flow_interface_num: %d flow_interface_type: %d\n", conn->flow_interface_num, flow_dev_type);
-}
 
-	if (return_dev->type == NSS_IPSEC_ARPHRD_IPSEC)
-		conn->return_interface_num = nss_ipsec_get_ifnum(nss_ipsec_get_data_interface());
-	else if (is_vlan_dev(return_dev))
-		conn->return_interface_num = nss_cmn_get_interface_number_by_dev(vlan_dev_real_dev(return_dev));
-	else {
-		if (!return_dev_type)
-			conn->return_interface_num = nss_cmn_get_interface_number_by_dev(return_dev);
-		else {
-			conn->return_interface_num = nss_cmn_get_interface_number_by_dev_and_type(return_dev, return_dev_type);
+		conn->flow_mtu = nss_nlipsec_get_mtu(flow_dev, 6, tuple->protocol,
+							tuple->return_ident, tuple->flow_ident);
+		break;
+
+	case NSS_NL_IFTYPE_VLAN:
+		conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(vlan_dev_real_dev(flow_dev));
+		if (conn->flow_interface_num < 0 ) {
+			nss_nl_error("%p: Failed to get flow interface number (dev:%s, type:%d)\n",
+					flow_dev, flow_dev->name, flow_iftype);
+			return -EINVAL;
 		}
-                        nss_nl_info("return_interface_num: %d return_interface_type: %d\n", conn->return_interface_num, return_dev_type);
+
+		conn->flow_mtu = flow_dev->mtu;
+		break;
+
+	case NSS_NL_IFTYPE_PHYSICAL:
+		conn->flow_interface_num = nss_cmn_get_interface_number_by_dev(flow_dev);
+		if (conn->flow_interface_num < 0 ) {
+			nss_nl_error("%p: Failed to get flow interface number (dev:%s, type:%d)\n",
+					flow_dev, flow_dev->name, flow_iftype);
+			return -EINVAL;
+		}
+
+		conn->flow_mtu = flow_dev->mtu;
+		break;
+
+	default:
+		nss_nl_error("%p: Unsupported flow interface type (%d)\n", msg, flow_iftype);
+		return -EINVAL;
 	}
+
+	nss_nl_info("%p: dev=%s flow_ifnum:0x%x flow_mtu=%d\n", msg, flow_dev->name,
+			conn->flow_interface_num, conn->flow_mtu);
+
+	/*
+	 * Update return interface number and return mtu
+	 */
+	switch (return_iftype) {
+	case NSS_NL_IFTYPE_TUNNEL_IPSEC:
+		conn->return_interface_num = nss_nlipsec_get_ifnum(return_dev, tuple->protocol,
+									tuple->return_ident, tuple->flow_ident);
+		if (conn->return_interface_num < 0 ) {
+			nss_nl_error("%p: Failed to get return interface number (dev:%s, type:%d)\n",
+					return_dev, return_dev->name, return_iftype);
+			return -EINVAL;
+		}
+
+		conn->return_mtu = nss_nlipsec_get_mtu(return_dev, 6, tuple->protocol,
+							tuple->return_ident, tuple->flow_ident);
+		break;
+
+	case NSS_NL_IFTYPE_VLAN:
+		conn->return_interface_num = nss_cmn_get_interface_number_by_dev(vlan_dev_real_dev(return_dev));
+		if (conn->return_interface_num < 0 ) {
+			nss_nl_error("%p: Failed to get return interface number (dev:%s, type:%d)\n",
+					return_dev, return_dev->name, return_iftype);
+			return -EINVAL;
+		}
+
+		conn->return_mtu = return_dev->mtu;
+		break;
+
+	case NSS_NL_IFTYPE_PHYSICAL:
+		conn->return_interface_num = nss_cmn_get_interface_number_by_dev(return_dev);
+		if (conn->return_interface_num < 0 ) {
+			nss_nl_error("%p: Failed to get return interface number (dev:%s, type:%d)\n",
+					return_dev, return_dev->name, return_iftype);
+			return -EINVAL;
+		}
+
+		conn->return_mtu = return_dev->mtu;
+		break;
+
+	default:
+		nss_nl_error("%p: Unsupported return interface type (%d)\n", msg, flow_iftype);
+		return -EINVAL;
+	}
+
+	nss_nl_info("%p: dev=%s return_ifnum:0x%x return_mtu=%d\n", msg, return_dev->name,
+			conn->return_interface_num, conn->return_mtu);
 
 	nexthop->flow_nexthop = conn->flow_interface_num;
 	nexthop->return_nexthop = conn->return_interface_num;
 
 	nss_nl_info("flow_nexthop:%d return_nexthop:%d\n", nexthop->flow_nexthop, nexthop->return_nexthop);
-
-	/*
-	 * update the flow & return MTU(s)
-	 */
-	conn->flow_mtu = flow_dev->mtu;
-	conn->return_mtu = return_dev->mtu;
 
 	return 0;
 }
@@ -449,8 +525,8 @@ static int nss_nlipv6_verify_dscp_rule(struct nss_ipv6_rule_create_msg *msg)
  * nss_nlipv6_verify_vlan_rule()
  * 	verify and override vlan rule entries
  */
-static int nss_nlipv6_verify_vlan_rule(struct nss_ipv6_rule_create_msg *msg,
-		struct net_device *flow_dev, struct net_device *return_dev)
+static int nss_nlipv6_verify_vlan_rule(struct nss_ipv6_rule_create_msg *msg, struct net_device *flow_dev,
+					struct net_device *return_dev)
 {
 	struct nss_ipv6_vlan_rule *vlan_primary = &msg->vlan_primary_rule;
 	struct nss_ipv6_vlan_rule *vlan_secondary = &msg->vlan_secondary_rule;
@@ -586,14 +662,14 @@ static int nss_nlipv6_ops_create_rule(struct sk_buff *skb, struct genl_info *inf
 	 */
 	flow_dev = dev_get_by_name(&init_net, nl_rule->flow_ifname);
 	if (!flow_dev) {
-		nss_nl_error("%d:flow interface is not available\n", pid);
+		nss_nl_error("%d:flow interface is not available for dev=%s\n", pid, nl_rule->flow_ifname);
 		return -EINVAL;
 	}
 
 	return_dev = dev_get_by_name(&init_net, nl_rule->return_ifname);
 	if (!return_dev) {
 		dev_put(flow_dev);
-		nss_nl_error("%d:return interface is not available\n", pid);
+		nss_nl_error("%d:return interface is not available for dev=%s\n", pid, nl_rule->return_ifname);
 		return -EINVAL;
 	}
 
@@ -606,11 +682,14 @@ static int nss_nlipv6_ops_create_rule(struct sk_buff *skb, struct genl_info *inf
 		goto done;
 	}
 
+	nss_nl_info("Checking rule for flowdev=%s flow_type=%d returndev=%s return_type=%d\n",
+			nl_rule->flow_ifname, nl_rule->flow_iftype, nl_rule->return_ifname, nl_rule->return_iftype);
+
 	/*
 	 * check connection rule
 	 */
 	error = nss_nlipv6_verify_conn_rule(&nim->msg.rule_create, flow_dev, return_dev,
-				nl_rule->flow_iftype, nl_rule->return_iftype);
+						nl_rule->flow_iftype, nl_rule->return_iftype);
 	if (error < 0) {
 		nss_nl_error("%d:invalid conn rule information passed\n", pid);
 		goto done;

@@ -16,7 +16,7 @@ qca-nss-netlink-objs += nss_nlipsec.o
 qca-nss-netlink-objs += nss_nloam.o
 obj-m += qca-nss-netlink.o
 
-ifeq (ipq807x, $(findstring ipq807x, $(SoC)))
+ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64 ipq60xx ipq60xx_64))
 ccflags-y += -DCONFIG_NSS_NLCRYPTOV2=1
 qca-nss-netlink-objs += nss_nlcryptov2.o
 else

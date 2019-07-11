@@ -239,7 +239,10 @@ int nss_ppe_port_res_alloc(void)
 	ppe_qdisc_port[i].max[NSS_PPE_L0_EDRR] = NSS_PPE_LOOPBACK_L0_EDRR_MAX;
 	ppe_qdisc_port[i].base[NSS_PPE_L0_EDRR] = NSS_PPE_LOOPBACK_L0_EDRR_BASE;
 
-	for (type = 0; type < NSS_PPE_L0_SP; type++) {
+	ppe_qdisc_port[i].max[NSS_PPE_L0_SP] = NSS_PPE_LOOPBACK_L0_SP_MAX;
+	ppe_qdisc_port[i].base[NSS_PPE_L0_SP] = NSS_PPE_LOOPBACK_L0_SP_BASE;
+
+	for (type = 0; type <= NSS_PPE_L0_SP; type++) {
 		ppe_qdisc_port[i].res_free[type] = nss_ppe_res_entries_alloc(i, type);
 		if (!ppe_qdisc_port[i].res_free[type]) {
 			nss_qdisc_error("Resource list allocation failed for port:%u type:%u\n", i, type);
@@ -383,16 +386,24 @@ static int nss_ppe_l1_res_free(struct nss_qdisc *nq)
 	uint32_t port_num = nss_ppe_port_num_get(nq);
 	struct nss_ppe_qdisc *npq = &nq->npq;
 
+	if (!npq->l1_valid) {
+		return 0;
+	}
+
 	/*
 	 * Bridge interface will have one level less than the max shaper levels.
 	 * L1 scheduler was configured at init time, so resources were allocated.
 	 */
 	if (nq->is_bridge) {
-		npq->l0spid = 0;
-		return 0;
-	}
+		offset = npq->l0spid - nss_ppe_base_get(port_num, NSS_PPE_L0_SP);
+		if (nss_ppe_res_free(port_num, offset, NSS_PPE_L0_SP) != 0) {
+			nss_qdisc_error("Used res:%d not found for port:%d, type:%d\n", npq->l0spid, port_num, NSS_PPE_L0_SP);
+			return -EINVAL;
+		}
 
-	if (!npq->l1_valid) {
+		npq->l0spid = 0;
+		npq->l1_valid = false;
+		nss_qdisc_trace("loopback resource freed\n");
 		return 0;
 	}
 
@@ -445,6 +456,26 @@ static int nss_ppe_l1_res_alloc(struct nss_qdisc *nq)
 	struct nss_ppe_qdisc *npq = &nq->npq;
 
 	/*
+	 * Get Level 0 SP resource
+	 */
+	l0sp = nss_ppe_res_alloc(port_num, NSS_PPE_L0_SP);
+	if (!l0sp) {
+		nss_qdisc_warning("Free res not found for port:%d, type:%d \n", port_num, NSS_PPE_L0_SP);
+		goto fail;
+	}
+
+	/*
+	 * For bridge, we use loopback which has no dedicated L1 schedulers. L0
+	 * SP is the only resource we need to allocate.
+	 */
+	if (nq->is_bridge) {
+		npq->l0spid = nss_ppe_base_get(port_num, NSS_PPE_L0_SP) + l0sp->offset;
+		npq->l1_valid = true;
+		nss_qdisc_info("Level1 scheduler resource allocation successful\n");
+		return 0;
+	}
+
+	/*
 	 * Get Level 1 DRR resource
 	 */
 	l1c_drr = nss_ppe_res_alloc(port_num, NSS_PPE_L1_CDRR);
@@ -456,15 +487,6 @@ static int nss_ppe_l1_res_alloc(struct nss_qdisc *nq)
 	l1e_drr = nss_ppe_res_alloc(port_num, NSS_PPE_L1_EDRR);
 	if (!l1e_drr) {
 		nss_qdisc_warning("Free res not found for port:%d, type:%d \n", port_num, NSS_PPE_L1_EDRR);
-		goto fail;
-	}
-
-	/*
-	 * Get Level 0 SP resource
-	 */
-	l0sp = nss_ppe_res_alloc(port_num, NSS_PPE_L0_SP);
-	if (!l0sp) {
-		nss_qdisc_warning("Free res not found for port:%d, type:%d \n", port_num, NSS_PPE_L0_SP);
 		goto fail;
 	}
 
@@ -616,22 +638,32 @@ static int nss_ppe_l1_queue_scheduler_set(struct nss_qdisc *nq)
 	 */
 	if (nq->is_bridge) {
 		/*
-		 * Set Res id values in qdisc
+		 * Allocate resource if we have not already done so.
 		 */
-		npq->l0spid = NSS_PPE_LOOPBACK_L0_SP_BASE;
+		if (!npq->l1_valid && nss_ppe_l1_res_alloc(nq) != 0) {
+			nss_qdisc_warning("SSDK level1 queue scheduler configuration failed\n");
+			return -EINVAL;
+		}
 
+		nss_qdisc_info("Allocated spid:%d expected:%d\n", npq->l0spid, NSS_PPE_LOOPBACK_L0_SP_BASE);
+
+		/*
+		 * L0 SP is the only resource we allocate in loopback, and that
+		 * does not require additional configuration. The next level of
+		 * C/E DRR will attach to the right priority slot.
+		 *
+		 * We simply return.
+		 */
 		nss_qdisc_info("SSDK level1 queue scheduler configuration successful\n");
 		return 0;
 	}
 
 	/*
-	 * Allocate new resources only if scheduler is not valid.
+	 * Allocate resources if we have not already done so.
 	 */
-	if (!npq->l1_valid) {
-		if (nss_ppe_l1_res_alloc(nq) != 0) {
-			nss_qdisc_warning("SSDK level1 queue scheduler configuration failed\n");
-			return -EINVAL;
-		}
+	if (!npq->l1_valid && nss_ppe_l1_res_alloc(nq) != 0) {
+		nss_qdisc_warning("SSDK level1 queue scheduler configuration failed\n");
+		return -EINVAL;
 	}
 
 	/*
