@@ -47,12 +47,24 @@ struct nss_ipsecmgr_tunnel {
  */
 static inline void *nss_ipsecmgr_tunnel_get_mdata(struct sk_buff *skb)
 {
-	struct nss_ipsec_cmn_mdata *mdata;
+	struct nss_ipsec_cmn_mdata *mo;
+	uint8_t *data = skb->data;
+	uint16_t len, max_len;
+	uint8_t *mo_ptr;
 
-	mdata = (struct nss_ipsec_cmn_mdata *)skb_push(skb, sizeof(struct nss_ipsec_cmn_mdata));
-	nss_ipsec_cmn_mdata_init(mdata);
+	/*
+	 * Here we go backwards by the size of metadata + alignment
+	 * Then PTR_ALIGN will optionally shift it forward based
+	 * on the current alignment
+	 */
+	max_len = sizeof(*mo) + NSS_IPSEC_CMN_MDATA_ALIGN_SZ;
+	mo_ptr = PTR_ALIGN(data - max_len, NSS_IPSEC_CMN_MDATA_ALIGN_SZ);
 
-	return (void *)&mdata->data;
+	len = data - mo_ptr;
+	mo = (struct nss_ipsec_cmn_mdata *)skb_push(skb, len);
+
+	nss_ipsec_cmn_mdata_init(mo, len);
+	return (void *)&mo->data;
 }
 
 #endif
