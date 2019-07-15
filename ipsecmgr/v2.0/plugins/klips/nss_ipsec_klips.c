@@ -598,7 +598,7 @@ static int32_t nss_ipsec_klips_trap_encap(struct sk_buff *skb, struct nss_cfi_cr
 		goto sa_add_fail;
 	}
 
-	if (nss_ipsecmgr_flow_add(nss_dev, &flow_tuple, &sa_tuple) == NSS_IPSECMGR_FAIL_SA) {
+	if (nss_ipsecmgr_flow_add(nss_dev, &flow_tuple, &sa_tuple) == NSS_IPSECMGR_INVALID_SA) {
 		write_unlock(&tunnel_map.lock);
 		nss_ipsec_klips_trace("%p: Encap flow add failed due to unavailability of SA\n", tun);
 		goto flow_add_fail;
@@ -733,7 +733,7 @@ static int32_t nss_ipsec_klips_trap_decap(struct sk_buff *skb, struct nss_cfi_cr
 		goto sa_add_fail;
 	}
 
-	if (nss_ipsecmgr_flow_add(nss_dev, &flow_tuple, &sa_tuple) == NSS_IPSECMGR_FAIL_SA) {
+	if (nss_ipsecmgr_flow_add(nss_dev, &flow_tuple, &sa_tuple) == NSS_IPSECMGR_INVALID_SA) {
 		write_unlock(&tunnel_map.lock);
 		nss_ipsec_klips_trace("%p: Decap flow add failed due to unavailability of SA\n", tun);
 		goto flow_add_fail;

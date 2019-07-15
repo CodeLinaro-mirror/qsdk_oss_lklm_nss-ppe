@@ -850,6 +850,43 @@ struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_find(struct nss_ipsecmgr_tunnel *tun, 
 }
 
 /*
+ * nss_ipsecmgr_ctx_find_by_sa()
+ *	Find the context for the given type
+ */
+struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_find_by_sa(struct nss_ipsecmgr_tunnel *tun, enum nss_ipsecmgr_sa_type sa_type)
+{
+	struct list_head *head = &tun->ctx_db;
+	enum nss_ipsec_cmn_ctx_type ctx_type;
+	struct nss_ipsecmgr_ctx *ctx;
+
+	switch (sa_type) {
+	case NSS_IPSECMGR_SA_TYPE_ENCAP:
+		ctx_type = NSS_IPSEC_CMN_CTX_TYPE_INNER;
+		break;
+
+	case NSS_IPSECMGR_SA_TYPE_DECAP:
+		ctx_type = NSS_IPSEC_CMN_CTX_TYPE_OUTER;
+		break;
+
+	default:
+		nss_ipsecmgr_warn("%p: Unsupported SA type(%u)", tun, sa_type);
+		return NULL;
+	}
+
+	/*
+	 * Linux does not provide any specific API(s) to test for RW locks. The caller
+	 * being internal is assumed to hold write lock before initiating this.
+	 */
+	list_for_each_entry(ctx, head, list) {
+		if (ctx->state.type == ctx_type) {
+			return ctx;
+		}
+	}
+
+	return NULL;
+}
+
+/*
  * nss_ipsecmgr_ctx_config()
  * 	Configure context
  */

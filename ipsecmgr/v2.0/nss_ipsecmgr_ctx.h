@@ -138,6 +138,9 @@ extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc(struct nss_ipsecmgr_tunne
 							nss_ipsec_cmn_msg_callback_t rx_stats,
 							uint32_t features);
 extern void nss_ipsecmgr_ctx_stats_read(struct nss_ipsecmgr_ctx *ctx, struct rtnl_link_stats64 *dev_stats);
-extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_find(struct nss_ipsecmgr_tunnel *tun, enum nss_ipsec_cmn_ctx_type type);
+extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_find(struct nss_ipsecmgr_tunnel *tun,
+							enum nss_ipsec_cmn_ctx_type type);
+extern struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_find_by_sa(struct nss_ipsecmgr_tunnel *tun,
+							enum nss_ipsecmgr_sa_type sa_type);
 
 #endif /* !__NSS_IPSECMGR_CTX_H */

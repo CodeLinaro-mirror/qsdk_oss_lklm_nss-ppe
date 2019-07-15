@@ -273,8 +273,7 @@ static ssize_t nss_ipsecmgr_sa_print(struct nss_ipsecmgr_ref *ref, char *buf)
  * nss_ipsecmgr_sa_crypto_alloc()
  *	Allocate Crypto resources
  */
-static nss_ipsecmgr_status_t nss_ipsecmgr_sa_crypto_alloc(struct nss_ipsecmgr_tunnel *tun,
-							  struct nss_ipsecmgr_sa *sa,
+static nss_ipsecmgr_status_t nss_ipsecmgr_sa_crypto_alloc(struct nss_ipsecmgr_sa *sa,
 							  struct nss_ipsecmgr_sa_cmn *cmn,
 							  struct nss_ipsec_cmn_sa_tuple *tuple,
 						  	  struct nss_ipsec_cmn_sa_data *data)
@@ -440,6 +439,21 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_crypto_alloc(struct nss_ipsecmgr_tu
 }
 
 /*
+ * nss_ipsecmgr_sa_free()
+ *	Free the SA entry and any associated crypto context
+ */
+static void nss_ipsecmgr_sa_free(struct nss_ipsecmgr_sa *sa)
+{
+	if (sa->aead)
+		crypto_free_aead(sa->aead);
+
+	if (sa->ahash)
+		crypto_free_ahash(sa->ahash);
+
+	kfree(sa);
+}
+
+/*
  * nss_ipsecmgr_sa_free_work()
  *	Free the SA entry in a delayed work context
  */
@@ -464,13 +478,7 @@ static void nss_ipsecmgr_sa_free_work(struct work_struct *work)
 		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)", sa->nss_ctx, type, status);
 	}
 
-	if (sa->aead)
-		crypto_free_aead(sa->aead);
-
-	if (sa->ahash)
-		crypto_free_ahash(sa->ahash);
-
-	kfree(sa);
+	nss_ipsecmgr_sa_free(sa);
 }
 
 /*
@@ -508,25 +516,103 @@ static void nss_ipsecmgr_sa_free_ref(struct nss_ipsecmgr_ref *ref)
 	dev_put(dev);
 
 done:
+
 	/*
-	 * The free path can potentailly sleep hence we detach the SA here but
+	 * The free path can potentially sleep hence we detach the SA here but
 	 * free it later
 	 */
 	schedule_delayed_work(&sa->free_work, NSS_IPSECMGR_SA_FREE_TIMEOUT);
 }
 
 /*
- * nss_ipsecmgr_sa_create_resp()
- * 	SA create response callback
+ * nss_ipsecmgr_sa_alloc()
+ *	Allocate SA and initialize it
  */
-static void nss_ipsecmgr_sa_create_resp(void *app_data, struct nss_cmn_msg *ncm)
+static struct nss_ipsecmgr_sa *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_ctx *ctx)
+{
+	struct nss_ipsecmgr_tunnel *tun = ctx->tun;
+	struct nss_ipsecmgr_sa *sa;
+
+	/*
+	 * Allocate the SA entry
+	 */
+	sa = kzalloc(sizeof(*sa), GFP_ATOMIC);
+	if (!sa) {
+		nss_ipsecmgr_warn("%p: Failed to allocate SA", ctx);
+		return NULL;
+	}
+
+	sa->tunnel_id = tun->dev->ifindex;
+	sa->type = ctx->state.type;
+	sa->nss_ctx = ctx->nss_ctx;
+	sa->ifnum = ctx->ifnum;
+	sa->cb = tun->cb;
+
+	INIT_LIST_HEAD(&sa->list);
+	nss_ipsecmgr_ref_init(&sa->ref, nss_ipsecmgr_sa_free_ref);
+	nss_ipsecmgr_ref_init_print(&sa->ref, nss_ipsecmgr_sa_print_len, nss_ipsecmgr_sa_print);
+	INIT_DELAYED_WORK(&sa->free_work, nss_ipsecmgr_sa_free_work);
+
+	return sa;
+}
+
+/*
+ * nss_ipsecmgr_sa_update_db()
+ *	Update SA database
+ */
+static bool nss_ipsecmgr_sa_update_db(struct nss_ipsecmgr_sa *sa)
 {
 	struct list_head *db = ipsecmgr_drv->sa_db;
-	struct nss_ipsecmgr_sa *sa = app_data;
 	struct nss_ipsecmgr_tunnel *tun;
 	struct nss_ipsecmgr_ctx *ctx;
 	struct net_device *dev;
 	uint32_t hash_idx;
+
+	dev = dev_get_by_index(&init_net, sa->tunnel_id);
+	if (!dev) {
+		nss_ipsecmgr_warn("%p: Failed to find tunnel(%d) between SA creation\n", sa, sa->tunnel_id);
+		return false;
+	}
+
+	tun = netdev_priv(dev);
+
+	write_lock_bh(&ipsecmgr_drv->lock);
+
+	ctx = nss_ipsecmgr_ctx_find(tun, sa->type);
+	if (!ctx) {
+		write_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_warn("%p: Failed to find context (%u) between SA creation\n", sa, sa->type);
+		dev_put(dev);
+		return false;
+	}
+
+	/*
+	 * Save the SA for default TX on tunnel if enabled
+	 */
+	if (sa->state.tx_default) {
+		tun->tx_sa = sa;
+	}
+
+	/*
+	 * Compute the hash index and add SA reference to the context.
+	 */
+	hash_idx = nss_ipsecmgr_sa_tuple2hash(&sa->state.tuple, NSS_IPSECMGR_SA_MAX);
+
+	nss_ipsecmgr_ref_add(&sa->ref, &ctx->ref);
+	list_add(&sa->list, &db[hash_idx]);
+	write_unlock_bh(&ipsecmgr_drv->lock);
+
+	dev_put(dev);
+	return true;
+}
+
+/*
+ * nss_ipsecmgr_sa_create_resp()
+ *	SA create response callback
+ */
+static void nss_ipsecmgr_sa_create_resp(void *app_data, struct nss_cmn_msg *ncm)
+{
+	struct nss_ipsecmgr_sa *sa = app_data;
 
 	if (ncm->response != NSS_CMN_RESPONSE_ACK) {
 #ifdef NSS_IPSECMGR_DEBUG
@@ -538,111 +624,27 @@ static void nss_ipsecmgr_sa_create_resp(void *app_data, struct nss_cmn_msg *ncm)
 			write_unlock_bh(&ipsecmgr_drv->lock);
 		}
 #endif
-
 		nss_ipsecmgr_trace("%p: NSS response error (%u)\n", sa, ncm->error);
-		kfree(sa);
+		nss_ipsecmgr_sa_free(sa);
 		return;
 	}
 
-	hash_idx = nss_ipsecmgr_sa_tuple2hash(&sa->state.tuple, NSS_IPSECMGR_SA_MAX);
-
-	dev = dev_get_by_index(&init_net, sa->tunnel_id);
-	if (!dev) {
-		nss_ipsecmgr_warn("%p: Failed to find tunnel(%d) between SA creation\n", sa, sa->tunnel_id);
-		schedule_delayed_work(&sa->free_work, NSS_IPSECMGR_SA_FREE_TIMEOUT);
+	if (!nss_ipsecmgr_sa_update_db(sa)) {
+		nss_ipsecmgr_warn("%p: Failed to update SA database", sa);
+		nss_ipsecmgr_sa_free(sa);
 		return;
 	}
-
-	tun = netdev_priv(dev);
-
-	write_lock_bh(&ipsecmgr_drv->lock);
-
-	ctx = nss_ipsecmgr_ctx_find(tun, sa->type);
-	if (!ctx) {
-		write_unlock_bh(&ipsecmgr_drv->lock);
-		nss_ipsecmgr_warn("%p: Failed to find context (%u) between SA creation\n", sa, sa->type);
-		schedule_delayed_work(&sa->free_work, NSS_IPSECMGR_SA_FREE_TIMEOUT);
-		goto done;
-	}
-
-	/*
-	 * Save the SA for default TX on tunnel if enabled
-	 */
-	if (sa->state.tx_default) {
-		tun->tx_sa = sa;
-	}
-
-	/*
-	 * Add SA reference to the context.
-	 */
-	nss_ipsecmgr_ref_add(&sa->ref, &ctx->ref);
-	list_add(&sa->list, &db[hash_idx]);
-	write_unlock_bh(&ipsecmgr_drv->lock);
-
-done:
-	dev_put(dev);
 }
 
 /*
- * nss_ipsecmgr_sa_alloc_encap()
- *	Allocate encapsulation SA
+ * nss_ipsecmgr_sa_init_encap()
+ *	Initialize encapsulation SA
  */
-static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_encap(struct nss_ipsecmgr_tunnel *tun,
-							struct nss_ipsecmgr_sa_tuple *tuple,
-							struct nss_ipsecmgr_sa_data *data,
-							uint32_t *ifnum)
+static void nss_ipsecmgr_sa_init_encap(struct nss_ipsecmgr_sa *sa, struct nss_ipsecmgr_sa_data *data,
+					struct nss_ipsec_cmn_msg *nicm)
 {
-	const enum nss_ipsec_cmn_msg_type type = NSS_IPSEC_CMN_MSG_TYPE_SA_CREATE;
-	struct nss_ipsec_cmn_sa_tuple *sa_tuple;
-	struct nss_ipsec_cmn_sa_data *sa_data;
-	struct nss_ipsec_cmn_msg nicm;
-	struct nss_ipsecmgr_ctx *ctx;
-	struct nss_ipsecmgr_sa *sa;
-	nss_tx_status_t status;
-
-	memset(&nicm, 0, sizeof(nicm));
-
-	sa_tuple = &nicm.msg.sa.sa_tuple;
-	sa_data =  &nicm.msg.sa.sa_data;
-
-	nss_ipsecmgr_sa2tuple(tuple, sa_tuple);
-
-	/*
-	 * Check if the SA already exists or not
-	 */
-	read_lock_bh(&ipsecmgr_drv->lock);
-	if (nss_ipsecmgr_sa_find(ipsecmgr_drv->sa_db, sa_tuple)) {
-		read_unlock_bh(&ipsecmgr_drv->lock);
-		nss_ipsecmgr_trace("%p: duplicate SA found\n", tun);
-		return NSS_IPSECMGR_DUPLICATE_SA;
-	}
-
-	ctx = nss_ipsecmgr_ctx_find(tun, NSS_IPSEC_CMN_CTX_TYPE_INNER);
-	if (!ctx) {
-		read_unlock_bh(&ipsecmgr_drv->lock);
-		nss_ipsecmgr_warn("%p: failed to find inner context associated with tunnel\n", tun);
-		return NSS_IPSECMGR_FAIL;
-	}
-
-	read_unlock_bh(&ipsecmgr_drv->lock);
-
-	/*
-	 * Allocate the SA entry
-	 */
-	sa = kzalloc(sizeof(*sa), in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
-	if (!sa) {
-		nss_ipsecmgr_warn("%p: Failed to allocate encap SA\n", ctx);
-		return NSS_IPSECMGR_FAIL_NOMEM;
-	}
-
-	/*
-	 * Allocate crypto resources
-	 */
-	if (nss_ipsecmgr_sa_crypto_alloc(tun, sa, &data->cmn, sa_tuple, sa_data)) {
-		nss_ipsecmgr_warn("%p: Failed to allocate crypto resource for encap SA\n", ctx);
-		kfree(sa);
-		return NSS_IPSECMGR_FAIL_NOCRYPTO;
-	}
+	struct nss_ipsec_cmn_sa_tuple *sa_tuple = &nicm->msg.sa.sa_tuple;
+	struct nss_ipsec_cmn_sa_data *sa_data = &nicm->msg.sa.sa_data;
 
 	sa_data->df = data->encap.df;
 	sa_data->dscp = data->encap.dscp;
@@ -652,7 +654,7 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_encap(struct nss_ipsecmgr_tun
 	sa_data->flags |= data->encap.copy_dscp ? NSS_IPSEC_CMN_FLAG_COPY_DSCP : 0;
 	sa_data->flags |= data->encap.copy_df ? NSS_IPSEC_CMN_FLAG_COPY_DF : 0;
 
-	if (tuple->ip_version == 6) {
+	if (sa_tuple->ip_ver == 6) {
 		sa_data->flags &= ~NSS_IPSEC_CMN_FLAG_HDR_MASK;
 		sa_data->flags |= NSS_IPSEC_CMN_FLAG_IPV6;
 	}
@@ -666,91 +668,18 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_encap(struct nss_ipsecmgr_tun
 	memcpy(&sa->state.data, sa_data, sizeof(sa->state.data));
 	sa->state.tx_default = !!data->encap.tx_default;
 
-	sa->type = ctx->state.type;
-	sa->tunnel_id = tun->dev->ifindex;
-	sa->nss_ctx = ctx->nss_ctx;
-	sa->ifnum = ctx->ifnum;
-	sa->cb = tun->cb;
-
-	INIT_LIST_HEAD(&sa->list);
-	nss_ipsecmgr_ref_init(&sa->ref, nss_ipsecmgr_sa_free_ref);
-	nss_ipsecmgr_ref_init_print(&sa->ref, nss_ipsecmgr_sa_print_len, nss_ipsecmgr_sa_print);
-	INIT_DELAYED_WORK(&sa->free_work, nss_ipsecmgr_sa_free_work);
-
-	nss_ipsec_cmn_msg_init(&nicm, ctx->ifnum, type, sizeof(nicm.msg.sa), nss_ipsecmgr_sa_create_resp, sa);
-
-	status = nss_ipsec_cmn_tx_msg(ctx->nss_ctx, &nicm);
-	if (status != NSS_TX_SUCCESS) {
-		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)\n", ctx, type, status);
-		kfree(sa);
-		return NSS_IPSECMGR_FAIL_MESSAGE;
-	}
-
-	*ifnum = nss_ipsec_cmn_get_ifnum_with_coreid(ctx->ifnum);
-
-	nss_ipsecmgr_trace("%p:encap SA added\n", sa);
-	return NSS_IPSECMGR_OK;
+	nss_ipsecmgr_trace("%p:Encapsulation SA initialized ", sa);
 }
 
 /*
- * nss_ipsecmgr_sa_alloc_decap()
- *	Allocate decapsulation SA
+ * nss_ipsecmgr_sa_init_decap()
+ *	Initialize de-capsulation SA
  */
-static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_decap(struct nss_ipsecmgr_tunnel *tun,
-							struct nss_ipsecmgr_sa_tuple *tuple,
-							struct nss_ipsecmgr_sa_data *data,
-							uint32_t *ifnum)
+static void nss_ipsecmgr_sa_init_decap(struct nss_ipsecmgr_sa *sa, struct nss_ipsecmgr_sa_data *data,
+					struct nss_ipsec_cmn_msg *nicm)
 {
-	const enum nss_ipsec_cmn_msg_type type = NSS_IPSEC_CMN_MSG_TYPE_SA_CREATE;
-	struct nss_ipsec_cmn_sa_tuple *sa_tuple;
-	struct nss_ipsec_cmn_sa_data *sa_data;
-	struct nss_ipsec_cmn_msg nicm;
-	struct nss_ipsecmgr_ctx *ctx;
-	struct nss_ipsecmgr_sa *sa;
-	nss_tx_status_t status;
-
-	memset(&nicm, 0, sizeof(nicm));
-
-	sa_tuple = &nicm.msg.sa.sa_tuple;
-	sa_data =  &nicm.msg.sa.sa_data;
-
-	nss_ipsecmgr_sa2tuple(tuple, sa_tuple);
-
-	/*
-	 * Check if the SA already exists or not
-	 */
-	read_lock_bh(&ipsecmgr_drv->lock);
-	if (nss_ipsecmgr_sa_find(ipsecmgr_drv->sa_db, sa_tuple)) {
-		read_unlock_bh(&ipsecmgr_drv->lock);
-		return NSS_IPSECMGR_DUPLICATE_SA;
-	}
-
-	ctx = nss_ipsecmgr_ctx_find(tun, NSS_IPSEC_CMN_CTX_TYPE_OUTER);
-	if (!ctx) {
-		read_unlock_bh(&ipsecmgr_drv->lock);
-		nss_ipsecmgr_warn("%p: failed to find inner context associated with tunnel\n", tun);
-		return NSS_IPSECMGR_FAIL;
-	}
-
-	read_unlock_bh(&ipsecmgr_drv->lock);
-
-	/*
-	 * Allocate the SA entry
-	 */
-	sa = kzalloc(sizeof(*sa), in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
-	if (!sa) {
-		nss_ipsecmgr_warn("%p: Failed to allocate decap SA\n", ctx);
-		return NSS_IPSECMGR_FAIL_NOMEM;
-	}
-
-	/*
-	 * Allocate crypto resources
-	 */
-	if (nss_ipsecmgr_sa_crypto_alloc(tun, sa, &data->cmn, sa_tuple, sa_data)) {
-		nss_ipsecmgr_warn("%p: Failed to allocate crypto resource for encap SA\n", ctx);
-		kfree(sa);
-		return NSS_IPSECMGR_FAIL_NOCRYPTO;
-	}
+	struct nss_ipsec_cmn_sa_tuple *sa_tuple = &nicm->msg.sa.sa_tuple;
+	struct nss_ipsec_cmn_sa_data *sa_data = &nicm->msg.sa.sa_data;
 
 	sa_data->window_size = data->decap.replay_win;
 
@@ -764,33 +693,13 @@ static nss_ipsecmgr_status_t nss_ipsecmgr_sa_alloc_decap(struct nss_ipsecmgr_tun
 		sa_data->flags |= NSS_IPSEC_CMN_FLAG_IPV6;
 	}
 
-	sa->type = ctx->state.type;
-	sa->tunnel_id = tun->dev->ifindex;
-	sa->nss_ctx = ctx->nss_ctx;
-	sa->ifnum = ctx->ifnum;
-	sa->cb = tun->cb;
-
+	/*
+	 * Copy tuple information for deletion
+	 */
 	memcpy(&sa->state.tuple, sa_tuple, sizeof(sa->state.tuple));
 	memcpy(&sa->state.data, sa_data, sizeof(sa->state.data));
 
-	INIT_LIST_HEAD(&sa->list);
-	nss_ipsecmgr_ref_init(&sa->ref, nss_ipsecmgr_sa_free_ref);
-	nss_ipsecmgr_ref_init_print(&sa->ref, nss_ipsecmgr_sa_print_len, nss_ipsecmgr_sa_print);
-	INIT_DELAYED_WORK(&sa->free_work, nss_ipsecmgr_sa_free_work);
-
-	nss_ipsec_cmn_msg_init(&nicm, ctx->ifnum, type, sizeof(nicm.msg.sa), nss_ipsecmgr_sa_create_resp, sa);
-
-	status = nss_ipsec_cmn_tx_msg(ctx->nss_ctx, &nicm);
-	if (status != NSS_TX_SUCCESS) {
-		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)\n", ctx, type, status);
-		kfree(sa);
-		return NSS_IPSECMGR_FAIL_MESSAGE;
-	}
-
-	*ifnum = nss_ipsec_cmn_get_ifnum_with_coreid(ctx->ifnum);
-
-	nss_ipsecmgr_trace("%p:decap SA added\n", sa);
-	return NSS_IPSECMGR_OK;
+	nss_ipsecmgr_trace("%p:Decapsulation SA initialized ", sa);
 }
 
 /*
@@ -905,23 +814,185 @@ EXPORT_SYMBOL(nss_ipsecmgr_sa_del);
 
 /*
  * nss_ipsecmgr_sa_add()
- *	Add a new SA for encapsulation or decapsulation
+ *	Add a new SA for encapsulation or de-capsulation
  */
 nss_ipsecmgr_status_t nss_ipsecmgr_sa_add(struct net_device *dev, struct nss_ipsecmgr_sa_tuple *tuple,
 					struct nss_ipsecmgr_sa_data *data, uint32_t *ifnum)
 {
+	const enum nss_ipsec_cmn_msg_type type = NSS_IPSEC_CMN_MSG_TYPE_SA_CREATE;
 	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
+	struct nss_ipsec_cmn_sa_tuple *msg_tuple;
+	struct nss_ipsec_cmn_sa_data *msg_data;
+	struct nss_ipsec_cmn_msg nicm = {{0}};
+	struct nss_ipsecmgr_sa *sa = NULL;
+	struct nss_ipsecmgr_ctx *ctx;
+	nss_tx_status_t status;
 
-	switch (data->type) {
-	case NSS_IPSECMGR_SA_TYPE_ENCAP:
-		return nss_ipsecmgr_sa_alloc_encap(tun, tuple, data, ifnum);
+	dev_hold(dev);
 
-	case NSS_IPSECMGR_SA_TYPE_DECAP:
-		return nss_ipsecmgr_sa_alloc_decap(tun, tuple, data, ifnum);
+	msg_tuple = &nicm.msg.sa.sa_tuple;
+	msg_data =  &nicm.msg.sa.sa_data;
 
-	default:
-		nss_ipsecmgr_warn("%p:Unsupported SA type(%u)\n", tun, data->type);
+	nss_ipsecmgr_sa2tuple(tuple, msg_tuple);
+
+	/*
+	 * Check if the SA already exists or not
+	 */
+	read_lock_bh(&ipsecmgr_drv->lock);
+	if (nss_ipsecmgr_sa_find(ipsecmgr_drv->sa_db, msg_tuple)) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_trace("%p: Duplicate SA found", dev);
+		dev_put(dev);
+		return NSS_IPSECMGR_DUPLICATE_SA;
+	}
+
+	ctx = nss_ipsecmgr_ctx_find_by_sa(tun, data->type);
+	if (!ctx) {
+		nss_ipsecmgr_warn("%p: failed to find inner context associated with tunnel", tun);
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		dev_put(dev);
 		return NSS_IPSECMGR_FAIL;
 	}
+
+	/*
+	 * Allocate the SA entry
+	 */
+	sa = nss_ipsecmgr_sa_alloc(ctx);
+	if (!sa) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_warn("%p: Failed to allocate SA for add", ctx);
+		dev_put(dev);
+		return NSS_IPSECMGR_FAIL_NOMEM;
+	}
+
+	/*
+	 * We are done with the net_device release the reference
+	 */
+	dev_put(dev);
+	read_unlock_bh(&ipsecmgr_drv->lock);
+
+	/*
+	 * Allocate crypto resources
+	 */
+	if (nss_ipsecmgr_sa_crypto_alloc(sa, &data->cmn, msg_tuple, msg_data)) {
+		nss_ipsecmgr_warn("%p: Failed to allocate crypto resource for SA add", ctx);
+		nss_ipsecmgr_sa_free(sa);
+		return NSS_IPSECMGR_FAIL_NOCRYPTO;
+	}
+
+	if (data->type == NSS_IPSECMGR_SA_TYPE_ENCAP) {
+		nss_ipsecmgr_sa_init_encap(sa, data, &nicm);
+	} else {
+		nss_ipsecmgr_sa_init_decap(sa, data, &nicm);
+	}
+
+	nss_ipsec_cmn_msg_init(&nicm, sa->ifnum, type, sizeof(nicm.msg.sa), nss_ipsecmgr_sa_create_resp, sa);
+
+	status = nss_ipsec_cmn_tx_msg(sa->nss_ctx, &nicm);
+	if (status != NSS_TX_SUCCESS) {
+		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)\n", ctx, type, status);
+		nss_ipsecmgr_sa_free(sa);
+		return NSS_IPSECMGR_FAIL_MESSAGE;
+	}
+
+	*ifnum = nss_ipsec_cmn_get_ifnum_with_coreid(sa->ifnum);
+	return NSS_IPSECMGR_OK;
 }
 EXPORT_SYMBOL(nss_ipsecmgr_sa_add);
+
+/*
+ * nss_ipsecmgr_sa_add_sync()
+ *	Add a new SA for encapsulation or de-capsulation synchronously
+ */
+nss_ipsecmgr_status_t nss_ipsecmgr_sa_add_sync(struct net_device *dev, struct nss_ipsecmgr_sa_tuple *tuple,
+						struct nss_ipsecmgr_sa_data *data, uint32_t *ifnum)
+{
+	const enum nss_ipsec_cmn_msg_type type = NSS_IPSEC_CMN_MSG_TYPE_SA_CREATE;
+	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
+	struct nss_ipsec_cmn_sa_tuple *msg_tuple;
+	struct nss_ipsec_cmn_sa_data *msg_data;
+	struct nss_ipsec_cmn_msg nicm = {{0}};
+	struct nss_ipsecmgr_sa *sa = NULL;
+	struct nss_ipsecmgr_ctx *ctx;
+	nss_tx_status_t status;
+
+	dev_hold(dev);
+
+	msg_tuple = &nicm.msg.sa.sa_tuple;
+	msg_data =  &nicm.msg.sa.sa_data;
+
+	nss_ipsecmgr_sa2tuple(tuple, msg_tuple);
+
+	/*
+	 * Check if the SA already exists or not
+	 */
+	read_lock_bh(&ipsecmgr_drv->lock);
+	if (nss_ipsecmgr_sa_find(ipsecmgr_drv->sa_db, msg_tuple)) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_trace("%p: Duplicate SA found", dev);
+		dev_put(dev);
+		return NSS_IPSECMGR_DUPLICATE_SA;
+	}
+
+	ctx = nss_ipsecmgr_ctx_find_by_sa(tun, data->type);
+	if (!ctx) {
+		nss_ipsecmgr_warn("%p: failed to find inner context associated with tunnel", tun);
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		dev_put(dev);
+		return NSS_IPSECMGR_FAIL;
+	}
+
+	/*
+	 * Allocate the SA entry
+	 */
+	sa = nss_ipsecmgr_sa_alloc(ctx);
+	if (!sa) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_warn("%p: Failed to allocate SA for add", ctx);
+		dev_put(dev);
+		return NSS_IPSECMGR_FAIL_NOMEM;
+	}
+
+	/*
+	 * We are done with the net_device release the reference
+	 */
+	dev_put(dev);
+	read_unlock_bh(&ipsecmgr_drv->lock);
+
+	/*
+	 * Allocate crypto resources
+	 */
+	if (nss_ipsecmgr_sa_crypto_alloc(sa, &data->cmn, msg_tuple, msg_data)) {
+		nss_ipsecmgr_warn("%p: Failed to allocate crypto resource for SA add", ctx);
+		nss_ipsecmgr_sa_free(sa);
+		return NSS_IPSECMGR_FAIL_NOCRYPTO;
+	}
+
+	if (data->type == NSS_IPSECMGR_SA_TYPE_ENCAP) {
+		nss_ipsecmgr_sa_init_encap(sa, data, &nicm);
+	} else {
+		nss_ipsecmgr_sa_init_decap(sa, data, &nicm);
+	}
+
+	nss_ipsec_cmn_msg_init(&nicm, sa->ifnum, type, sizeof(nicm.msg.sa), NULL, NULL);
+
+	status = nss_ipsec_cmn_tx_msg_sync(sa->nss_ctx, sa->ifnum, type, sizeof(nicm.msg.sa), &nicm);
+	if (status != NSS_TX_SUCCESS) {
+		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)\n", ctx, type, status);
+		nss_ipsecmgr_sa_free(sa);
+		return NSS_IPSECMGR_FAIL_MESSAGE;
+	}
+
+	/*
+	 * Since, this is a synchronous call add it to the database directly
+	 */
+	if (!nss_ipsecmgr_sa_update_db(sa)) {
+		nss_ipsecmgr_warn("%p: Failed to update SA database", sa);
+		nss_ipsecmgr_sa_free(sa);
+		return NSS_IPSECMGR_FAIL_ADD_DB;
+	}
+
+	*ifnum = nss_ipsec_cmn_get_ifnum_with_coreid(sa->ifnum);
+	return NSS_IPSECMGR_OK;
+}
+EXPORT_SYMBOL(nss_ipsecmgr_sa_add_sync);
