@@ -58,10 +58,10 @@ struct nss_ipsecmgr_flow {
  */
 static inline void nss_ipsecmgr_flow_ntoh_v6addr(uint32_t *dest, uint32_t *src)
 {
-	dest[3] = ntohl(src[0]);
-	dest[2] = ntohl(src[1]);
-	dest[1] = ntohl(src[2]);
-	dest[0] = ntohl(src[3]);
+	dest[0] = ntohl(src[0]);
+	dest[1] = ntohl(src[1]);
+	dest[2] = ntohl(src[2]);
+	dest[3] = ntohl(src[3]);
 }
 
 /*
