@@ -41,4 +41,17 @@ struct nss_ipsecmgr_tunnel {
 	struct nss_ipsecmgr_callback cb;	/* Callback entry */
 };
 
+/*
+ * Initialize the metadata in the header of SKB, and return the pointer to the start of metadata payload
+ */
+static inline void *nss_ipsecmgr_tunnel_get_mdata(struct sk_buff *skb)
+{
+	struct nss_ipsec_cmn_mdata *mdata;
+
+	mdata = (struct nss_ipsec_cmn_mdata *)skb_push(skb, sizeof(struct nss_ipsec_cmn_mdata));
+	nss_ipsec_cmn_mdata_init(mdata);
+
+	return &mdata->data;
+}
+
 #endif

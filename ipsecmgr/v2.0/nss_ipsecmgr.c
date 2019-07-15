@@ -139,7 +139,12 @@ static void nss_ipsecmgr_configure(struct work_struct *work)
 	if (ipsecmgr_drv->ipsec_inline) {
 
 #ifdef NSS_IPSECMGR_PPE_SUPPORT
-		redir = nss_ipsecmgr_ctx_alloc_redir(tun);
+		redir = nss_ipsecmgr_ctx_alloc(tun,
+						NSS_IPSEC_CMN_CTX_TYPE_REDIR,
+						NSS_DYNAMIC_INTERFACE_TYPE_IPSEC_CMN_REDIRECT,
+						nss_ipsecmgr_ctx_rx_redir,
+						nss_ipsecmgr_ctx_rx_stats,
+						0);
 		if (!redir) {
 			nss_ipsecmgr_warn("%p: failed to allocate redirect context; disabling inline", tun);
 			ipsecmgr_drv->ipsec_inline = false;

@@ -208,72 +208,6 @@ done:
 }
 
 /*
- * nss_ipsecmgr_ctx_rx_stats()
- *	Asynchronous event for reception of stat
- */
-static void nss_ipsecmgr_ctx_rx_stats(void *app_data, struct nss_cmn_msg *ncm)
-{
-	struct nss_ipsec_cmn_msg *nicm = (struct nss_ipsec_cmn_msg *)ncm;
-	struct nss_ipsecmgr_tunnel *tun;
-	struct nss_ipsecmgr_ctx *ctx;
-
-	ctx = app_data;
-	tun = ctx->tun;
-
-	switch (ncm->type) {
-
-	case NSS_IPSEC_CMN_MSG_TYPE_SA_SYNC: {
-		struct nss_ipsec_cmn_sa_sync *sync = &nicm->msg.sa_sync;
-		struct list_head *sa_db = ipsecmgr_drv->sa_db;
-		struct nss_ipsecmgr_event event = {0};
-		void *app_data;
-		nss_ipsecmgr_event_callback_t ev_cb;
-		struct nss_ipsecmgr_sa *sa;
-		write_lock(&ipsecmgr_drv->lock);
-
-		sa = nss_ipsecmgr_sa_find(sa_db, &sync->sa_tuple);
-		if (!sa) {
-			write_unlock(&ipsecmgr_drv->lock);
-			break;
-		}
-		nss_ipsecmgr_sa_sync_state(sa, sync);
-
-		ev_cb = sa->cb.event_cb;
-		if (ev_cb) {
-			nss_ipsecmgr_sa_sync2stats(sync, &event.data.stats);
-			app_data = sa->cb.app_data;
-		}
-
-		write_unlock(&ipsecmgr_drv->lock);
-		if (ev_cb)
-			ev_cb(app_data, &event);
-		break;
-	}
-
-	case NSS_IPSEC_CMN_MSG_TYPE_CTX_SYNC: {
-		struct nss_ipsec_cmn_ctx_sync *ctx_sync = &nicm->msg.ctx_sync;
-		uint32_t *msg_stats = (uint32_t *)&ctx_sync->stats;
-		uint64_t *ctx_stats = (uint64_t *)&ctx->stats;
-		int num;
-
-		write_lock(&ipsecmgr_drv->lock);
-
-		for (num = 0; num < sizeof(ctx->stats)/sizeof(*ctx_stats); num++) {
-			ctx_stats[num] += msg_stats[num];
-		}
-
-		write_unlock(&ipsecmgr_drv->lock);
-		break;
-	}
-
-	default:
-		nss_ipsecmgr_info("%p: unhandled ipsec message type\n", nicm);
-		break;
-	}
-
-}
-
-/*
  * nss_ipsecmgr_ctx_notify_ipv4()
  * 	Notify Linux by route lookup for destination
  */
@@ -416,143 +350,51 @@ static void nss_ipsecmgr_ctx_route_ipv6(struct sk_buff *skb, struct nss_ipsecmgr
 }
 
 /*
- * nss_ipsecmgr_ctx_rx_outer()
- *	Process outer exception from NSS
+ * nss_ipsecmgr_ctx_free_work()
+ *	Delayed context free
  */
-void nss_ipsecmgr_ctx_rx_outer(struct net_device *dev, struct sk_buff *skb, struct napi_struct *napi)
+static void nss_ipsecmgr_ctx_free_work(struct work_struct *work)
 {
-	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
-	struct nss_ipsecmgr_ctx *ctx;
-	skb_reset_mac_header(skb);
-	skb_reset_network_header(skb);
+	struct nss_ipsecmgr_ctx *ctx = container_of(work, struct nss_ipsecmgr_ctx, free_work.work);
 
-	skb->dev = tun->cb.skb_dev;
-	skb->skb_iif = skb->dev->ifindex;
-
-	ctx = nss_ipsecmgr_ctx_find(netdev_priv(dev), NSS_IPSEC_CMN_CTX_TYPE_OUTER);
-	if (!ctx) {
-		nss_ipsecmgr_warn("%p: Could not find ctx", dev);
-		dev_kfree_skb_any(skb);
-		return;
-	}
-
-	ctx->hstats.outer_exp++;
-
-	/*
-	 * Reaching this point means the outer ECM rule is non-existent
-	 * whereas the IPsec rules are still present in FW. So, this is an ESP
-	 * encapsulated packet that has been exception to host from NSS.
-	 * We can send it to Linux IP stack for further routing.
-	 */
-	switch (ip_hdr(skb)->version) {
-	case IPVERSION:	{
-		struct iphdr *iph = ip_hdr(skb);
-		skb->protocol = ETH_P_IP;
-
-		if ((iph->protocol != IPPROTO_UDP) && (iph->protocol != IPPROTO_ESP)) {
-			nss_ipsecmgr_warn("%p: Unsupported IPv4 protocol(%u)", dev, iph->protocol);
-			dev_kfree_skb_any(skb);
-
-			ctx->hstats.outer_exp_drop++;
-			return;
-		}
-
-		skb_set_transport_header(skb, sizeof(*iph));
-		nss_ipsecmgr_ctx_route_ipv4(skb, ctx);
-		return;
-	}
-
-	case 6:	{
-		struct ipv6hdr *ip6h = ipv6_hdr(skb);
-		skb->protocol = ETH_P_IPV6;
-
-		if (ip6h->nexthdr != IPPROTO_ESP) {
-			nss_ipsecmgr_warn("%p: unsupported ipv6 next_hdr(%u)", dev, ip6h->nexthdr);
-			dev_kfree_skb_any(skb);
-
-			ctx->hstats.outer_exp_drop++;
-			return;
-		}
-
-		skb_set_transport_header(skb, sizeof(*ip6h));
-		nss_ipsecmgr_ctx_route_ipv6(skb, ctx);
-		return;
-	}
-
-	default:
-		nss_ipsecmgr_warn("%p: non ip packet received after decapsulation", dev);
-		ctx->hstats.outer_exp_drop++;
-
-		dev_kfree_skb_any(skb);
-		return;
-	}
+	nss_ipsecmgr_ctx_free(ctx);
 }
 
 /*
- * nss_ipsecmgr_ctx_rx_inner()
- * 	Process inner exception from NSS
+ * nss_ipsecmgr_ctx_free_ref()
+ * 	Free context from reference tree
  */
-static void nss_ipsecmgr_ctx_rx_inner(struct net_device *dev, struct sk_buff *skb, struct napi_struct *napi)
+static void nss_ipsecmgr_ctx_free_ref(struct nss_ipsecmgr_ref *ref)
 {
-	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
-	struct nss_ipsecmgr_ctx *ctx;
+	struct nss_ipsecmgr_ctx *ctx = container_of(ref, struct nss_ipsecmgr_ctx, ref);
+	bool status;
 
-	nss_ipsecmgr_trace("%p: received inner packet(%p), napi(%p)", dev, skb, napi);
+	list_del_init(&ctx->list);
 
-	ctx = nss_ipsecmgr_ctx_find(netdev_priv(dev), NSS_IPSEC_CMN_CTX_TYPE_INNER);
-	if (!ctx) {
-		nss_ipsecmgr_warn("%p: Could not find ctx", dev);
-		dev_kfree_skb_any(skb);
+	status = nss_ipsec_cmn_unregister_if(ctx->ifnum);
+	if (!status) {
+		nss_ipsecmgr_warn("%p: Failed to unregister, di_type(%u), I/F(%u)", ctx, ctx->state.di_type, ctx->ifnum);
 		return;
 	}
 
-	ctx->hstats.inner_exp++;
-
-	skb_reset_mac_header(skb);
-	skb_reset_network_header(skb);
-
-	switch (ip_hdr(skb)->version) {
-	case IPVERSION:
-		skb->protocol = cpu_to_be16(ETH_P_IP);
-		skb_set_transport_header(skb, sizeof(struct iphdr));
-		break;
-
-	case 6:
-		skb->protocol = cpu_to_be16(ETH_P_IPV6);
-		skb_set_transport_header(skb, sizeof(struct ipv6hdr));
-		break;
-
-	default:
-		nss_ipsecmgr_warn("%p: Invalid IP header received for rx_inner", tun);
-		dev_kfree_skb_any(skb);
-
-		ctx->hstats.inner_exp_drop++;
-
-		return;
-	}
-
-	skb->dev = tun->cb.skb_dev;
-	skb->pkt_type = PACKET_HOST;
-	skb->skb_iif = skb->dev->ifindex;
-
-	/*
-	 * If, data callback is available then send the packet to the
-	 * callback funtion
-	 */
-	if (tun->cb.data_cb) {
-		tun->cb.data_cb(tun->cb.app_data, skb);
-		ctx->hstats.inner_cb++;
-		return;
-	}
-
-	netif_receive_skb(skb);
+	schedule_delayed_work(&ctx->free_work, NSS_IPSECMGR_CTX_FREE_TIMEOUT);
 }
+
+/*
+ * file operation structure instance
+ */
+const struct file_operations ipsecmgr_ctx_file_ops = {
+	.open = simple_open,
+	.llseek = default_llseek,
+	.read = nss_ipsecmgr_ctx_read,
+};
 
 /*
  * nss_ipsecmgr_ctx_rx_redir()
  *	NSS IPsec manager device receive function
  */
-static void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *skb, struct napi_struct *napi)
+void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *skb,
+				__attribute__((unused))struct napi_struct *napi)
 {
 	void (*forward_fn)(struct sk_buff *skb, struct nss_ipsecmgr_ctx *ctx) = NULL;
 	struct nss_ipsec_cmn_flow_tuple flow_tuple = {0};
@@ -767,44 +609,206 @@ static void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *sk
 }
 
 /*
- * nss_ipsecmgr_ctx_free_work()
- *	Delayed context free
+ * nss_ipsecmgr_ctx_rx_outer()
+ *	Process outer exception from NSS
  */
-static void nss_ipsecmgr_ctx_free_work(struct work_struct *work)
+void nss_ipsecmgr_ctx_rx_outer(struct net_device *dev, struct sk_buff *skb,
+				__attribute__((unused)) struct napi_struct *napi)
 {
-	struct nss_ipsecmgr_ctx *ctx = container_of(work, struct nss_ipsecmgr_ctx, free_work.work);
+	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
+	struct nss_ipsecmgr_ctx *ctx;
+	skb_reset_mac_header(skb);
+	skb_reset_network_header(skb);
 
-	nss_ipsecmgr_ctx_free(ctx);
-}
+	skb->dev = tun->cb.skb_dev;
+	skb->skb_iif = skb->dev->ifindex;
 
-/*
- * nss_ipsecmgr_ctx_free_ref()
- * 	Free context from reference tree
- */
-static void nss_ipsecmgr_ctx_free_ref(struct nss_ipsecmgr_ref *ref)
-{
-	struct nss_ipsecmgr_ctx *ctx = container_of(ref, struct nss_ipsecmgr_ctx, ref);
-	bool status;
-
-	list_del_init(&ctx->list);
-
-	status = nss_ipsec_cmn_unregister_if(ctx->ifnum);
-	if (!status) {
-		nss_ipsecmgr_warn("%p: Failed to unregister, di_type(%u), I/F(%u)", ctx, ctx->state.di_type, ctx->ifnum);
+	ctx = nss_ipsecmgr_ctx_find(netdev_priv(dev), NSS_IPSEC_CMN_CTX_TYPE_OUTER);
+	if (!ctx) {
+		nss_ipsecmgr_warn("%p: Could not find ctx", dev);
+		dev_kfree_skb_any(skb);
 		return;
 	}
 
-	schedule_delayed_work(&ctx->free_work, NSS_IPSECMGR_CTX_FREE_TIMEOUT);
+	ctx->hstats.outer_exp++;
+
+	/*
+	 * Reaching this point means the outer ECM rule is non-existent
+	 * whereas the IPsec rules are still present in FW. So, this is an ESP
+	 * encapsulated packet that has been exception to host from NSS.
+	 * We can send it to Linux IP stack for further routing.
+	 */
+	switch (ip_hdr(skb)->version) {
+	case IPVERSION: {
+		struct iphdr *iph = ip_hdr(skb);
+		skb->protocol = cpu_to_be16(ETH_P_IP);
+
+		if ((iph->protocol != IPPROTO_UDP) && (iph->protocol != IPPROTO_ESP)) {
+			nss_ipsecmgr_warn("%p: Unsupported IPv4 protocol(%u)", dev, iph->protocol);
+			dev_kfree_skb_any(skb);
+
+			ctx->hstats.outer_exp_drop++;
+			return;
+		}
+
+		skb_set_transport_header(skb, sizeof(*iph));
+		nss_ipsecmgr_ctx_route_ipv4(skb, ctx);
+		return;
+	}
+
+	case 6: {
+		struct ipv6hdr *ip6h = ipv6_hdr(skb);
+		skb->protocol = cpu_to_be16(ETH_P_IPV6);
+
+		if (ip6h->nexthdr != IPPROTO_ESP) {
+			nss_ipsecmgr_warn("%p: unsupported ipv6 next_hdr(%u)", dev, ip6h->nexthdr);
+			dev_kfree_skb_any(skb);
+
+			ctx->hstats.outer_exp_drop++;
+			return;
+		}
+
+		skb_set_transport_header(skb, sizeof(*ip6h));
+		nss_ipsecmgr_ctx_route_ipv6(skb, ctx);
+		return;
+	}
+
+	default:
+		nss_ipsecmgr_warn("%p: non ip packet received after decapsulation", dev);
+		ctx->hstats.outer_exp_drop++;
+
+		dev_kfree_skb_any(skb);
+		return;
+	}
 }
 
 /*
- * file operation structure instance
+ * nss_ipsecmgr_ctx_rx_inner()
+ * 	Process inner exception from NSS
  */
-const struct file_operations ipsecmgr_ctx_file_ops = {
-	.open = simple_open,
-	.llseek = default_llseek,
-	.read = nss_ipsecmgr_ctx_read,
-};
+void nss_ipsecmgr_ctx_rx_inner(struct net_device *dev, struct sk_buff *skb,
+				__attribute__((unused)) struct napi_struct *napi)
+{
+	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
+	struct nss_ipsecmgr_ctx *ctx;
+
+	ctx = nss_ipsecmgr_ctx_find(netdev_priv(dev), NSS_IPSEC_CMN_CTX_TYPE_INNER);
+	if (!ctx) {
+		nss_ipsecmgr_warn("%p: Could not find ctx", dev);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+
+	ctx->hstats.inner_exp++;
+
+	skb_reset_mac_header(skb);
+	skb_reset_network_header(skb);
+
+	switch (ip_hdr(skb)->version) {
+	case IPVERSION:
+		skb->protocol = cpu_to_be16(ETH_P_IP);
+		skb_set_transport_header(skb, sizeof(struct iphdr));
+		break;
+
+	case 6:
+		skb->protocol = cpu_to_be16(ETH_P_IPV6);
+		skb_set_transport_header(skb, sizeof(struct ipv6hdr));
+		break;
+
+	default:
+		nss_ipsecmgr_warn("%p: Invalid IP header received for rx_inner", tun);
+		dev_kfree_skb_any(skb);
+
+		ctx->hstats.inner_exp_drop++;
+
+		return;
+	}
+
+	skb->dev = tun->cb.skb_dev;
+	skb->pkt_type = PACKET_HOST;
+	skb->skb_iif = skb->dev->ifindex;
+
+	/*
+	 * If, data callback is available then send the packet to the
+	 * callback funtion
+	 */
+	if (tun->cb.data_cb) {
+		tun->cb.data_cb(tun->cb.app_data, skb);
+		ctx->hstats.inner_cb++;
+		return;
+	}
+
+	netif_receive_skb(skb);
+}
+
+/*
+ * nss_ipsecmgr_ctx_rx_stats()
+ *	Asynchronous event for reception of stat
+ */
+void nss_ipsecmgr_ctx_rx_stats(void *app_data, struct nss_cmn_msg *ncm)
+{
+	struct nss_ipsec_cmn_msg *nicm = (struct nss_ipsec_cmn_msg *)ncm;
+	struct nss_ipsecmgr_tunnel *tun;
+	struct nss_ipsecmgr_ctx *ctx;
+
+	ctx = app_data;
+	tun = ctx->tun;
+
+	switch (ncm->type) {
+
+	case NSS_IPSEC_CMN_MSG_TYPE_SA_SYNC: {
+		struct nss_ipsec_cmn_sa_sync *sync = &nicm->msg.sa_sync;
+		struct list_head *sa_db = ipsecmgr_drv->sa_db;
+		struct nss_ipsecmgr_event event = {0};
+		nss_ipsecmgr_event_callback_t ev_cb;
+		struct nss_ipsecmgr_sa *sa;
+		void *app_data;
+
+		write_lock(&ipsecmgr_drv->lock);
+
+		sa = nss_ipsecmgr_sa_find(sa_db, &sync->sa_tuple);
+		if (!sa) {
+			write_unlock(&ipsecmgr_drv->lock);
+			break;
+		}
+
+		nss_ipsecmgr_sa_sync_state(sa, sync);
+
+		ev_cb = sa->cb.event_cb;
+		if (ev_cb) {
+			nss_ipsecmgr_sa_sync2stats(sync, &event.data.stats);
+			app_data = sa->cb.app_data;
+		}
+
+		write_unlock(&ipsecmgr_drv->lock);
+
+		if (ev_cb)
+			ev_cb(app_data, &event);
+		break;
+	}
+
+	case NSS_IPSEC_CMN_MSG_TYPE_CTX_SYNC: {
+		struct nss_ipsec_cmn_ctx_sync *ctx_sync = &nicm->msg.ctx_sync;
+		uint32_t *msg_stats = (uint32_t *)&ctx_sync->stats;
+		uint64_t *ctx_stats = (uint64_t *)&ctx->stats;
+		int num;
+
+		write_lock(&ipsecmgr_drv->lock);
+
+		for (num = 0; num < sizeof(ctx->stats)/sizeof(*ctx_stats); num++) {
+			ctx_stats[num] += msg_stats[num];
+		}
+
+		write_unlock(&ipsecmgr_drv->lock);
+		break;
+	}
+
+	default:
+		nss_ipsecmgr_info("%p: unhandled ipsec message type(%u)", nicm, nicm->cm.type);
+		break;
+	}
+
+}
 
 /*
  * nss_ipsecmgr_ctx_stats_read()
@@ -888,14 +892,17 @@ void nss_ipsecmgr_ctx_free(struct nss_ipsecmgr_ctx *ctx)
 }
 
 /*
- * nss_ipsecmgr_ctx_alloc_inner()
- * 	Allocate context for inner dynamic interface type
+ * nss_ipsecmgr_ctx_alloc()
+ * 	Allocate context for type and dynamic interface(s)
  */
-struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc_inner(struct nss_ipsecmgr_tunnel *tun)
+struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc(struct nss_ipsecmgr_tunnel *tun,
+						enum nss_ipsec_cmn_ctx_type ctx_type,
+						enum nss_dynamic_interface_type di_type,
+						nss_ipsec_cmn_data_callback_t rx_data,
+						nss_ipsec_cmn_msg_callback_t rx_stats,
+						uint32_t features)
 {
 	struct nss_ipsecmgr_ctx *ctx;
-	const char *if_name = "inner";
-	uint32_t features = 0;
 
 	ctx = kzalloc(sizeof(*ctx), in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
 	if (!ctx) {
@@ -903,15 +910,15 @@ struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc_inner(struct nss_ipsecmgr_tunnel
 		return NULL;
 	}
 
-	nss_ipsecmgr_trace("%p: Allocating dynamic interface type(%s)", ctx, if_name);
+	nss_ipsecmgr_trace("%p: Allocating dynamic interface type(%d)", ctx, di_type);
 
 	ctx->tun = tun;
-	ctx->state.type = NSS_IPSEC_CMN_CTX_TYPE_INNER;
-	ctx->state.di_type = NSS_DYNAMIC_INTERFACE_TYPE_IPSEC_CMN_INNER;
+	ctx->state.type = ctx_type;
+	ctx->state.di_type = di_type;
 
-	ctx->ifnum = nss_dynamic_interface_alloc_node(ctx->state.di_type);
+	ctx->ifnum = nss_dynamic_interface_alloc_node(di_type);
 	if (ctx->ifnum < 0) {
-		nss_ipsecmgr_warn("%p: failed to allocate dynamic interface(%s)", tun, if_name);
+		nss_ipsecmgr_warn("%p: failed to allocate dynamic interface(%d)", tun, di_type);
 		kfree(ctx);
 		return NULL;
 	}
@@ -923,120 +930,10 @@ struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc_inner(struct nss_ipsecmgr_tunnel
 	INIT_LIST_HEAD(&ctx->list);
 	INIT_DELAYED_WORK(&ctx->free_work, nss_ipsecmgr_ctx_free_work);
 
-	if (ipsecmgr_drv->ipsec_inline) {
-		features = NSS_IPSEC_CMN_FEATURE_INLINE_ACCEL;
-	}
-
-	ctx->nss_ctx = nss_ipsec_cmn_register_if(ctx->ifnum, tun->dev,
-						nss_ipsecmgr_ctx_rx_inner,
-						nss_ipsecmgr_ctx_rx_stats,
-						features, ctx->state.di_type, ctx);
+	ctx->nss_ctx = nss_ipsec_cmn_register_if(ctx->ifnum, tun->dev, rx_data, rx_stats, features, di_type, ctx);
 	if (!ctx->nss_ctx) {
-		nss_ipsecmgr_warn("%p: failed to register (%s) interface with NSS driver", ctx, if_name);
-		nss_dynamic_interface_dealloc_node(ctx->ifnum, ctx->state.di_type);
-		kfree(ctx);
-		return NULL;
-	}
-
-	return ctx;
-}
-
-/*
- * nss_ipsecmgr_ctx_alloc_outer()
- * 	Allocate context for outer dynamic interface type
- */
-struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc_outer(struct nss_ipsecmgr_tunnel *tun)
-{
-	struct nss_ipsecmgr_ctx *ctx;
-	const char *if_name = "outer";
-	uint32_t features = 0;
-
-	ctx = kzalloc(sizeof(*ctx), in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
-	if (!ctx) {
-		nss_ipsecmgr_warn("%p: failed to allocate context memory", tun);
-		return NULL;
-	}
-
-	nss_ipsecmgr_trace("%p: Allocating dynamic interface type(%s)", ctx, if_name);
-
-	ctx->tun = tun;
-	ctx->state.type = NSS_IPSEC_CMN_CTX_TYPE_OUTER;
-	ctx->state.di_type = NSS_DYNAMIC_INTERFACE_TYPE_IPSEC_CMN_OUTER;
-
-	ctx->ifnum = nss_dynamic_interface_alloc_node(ctx->state.di_type);
-	if (ctx->ifnum < 0) {
-		nss_ipsecmgr_warn("%p: failed to allocate dynamic interface(%s)", tun, if_name);
-		kfree(ctx);
-		return NULL;
-	}
-
-	ctx->state.stats_len = ctx->state.print_len = nss_ipsecmgr_ctx_stats_size();
-	nss_ipsecmgr_ref_init(&ctx->ref, nss_ipsecmgr_ctx_free_ref);
-	nss_ipsecmgr_ref_init_print(&ctx->ref, nss_ipsecmgr_ctx_print_len, nss_ipsecmgr_ctx_print);
-
-	INIT_LIST_HEAD(&ctx->list);
-	INIT_DELAYED_WORK(&ctx->free_work, nss_ipsecmgr_ctx_free_work);
-
-	if (ipsecmgr_drv->ipsec_inline) {
-		features = NSS_IPSEC_CMN_FEATURE_INLINE_ACCEL;
-	}
-
-	ctx->nss_ctx = nss_ipsec_cmn_register_if(ctx->ifnum, tun->dev,
-						nss_ipsecmgr_ctx_rx_outer,
-						nss_ipsecmgr_ctx_rx_stats,
-						features, ctx->state.di_type, ctx);
-	if (!ctx->nss_ctx) {
-		nss_ipsecmgr_warn("%p: failed to register (%s) interface with NSS driver", ctx, if_name);
-		nss_dynamic_interface_dealloc_node(ctx->ifnum, ctx->state.di_type);
-		kfree(ctx);
-		return NULL;
-	}
-
-	return ctx;
-}
-
-/*
- * nss_ipsecmgr_ctx_alloc_redir()
- * 	Allocate context for redirect dynamic interface type
- */
-struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc_redir(struct nss_ipsecmgr_tunnel *tun)
-{
-	const char *if_name = "redirect";
-	struct nss_ipsecmgr_ctx *ctx;
-
-	ctx = kzalloc(sizeof(*ctx), in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
-	if (!ctx) {
-		nss_ipsecmgr_warn("%p: failed to allocate context memory", tun);
-		return NULL;
-	}
-
-	nss_ipsecmgr_trace("%p: Allocating dynamic interface type(%s)", ctx, if_name);
-
-	ctx->tun = tun;
-	ctx->state.type = NSS_IPSEC_CMN_CTX_TYPE_REDIR;
-	ctx->state.di_type = NSS_DYNAMIC_INTERFACE_TYPE_IPSEC_CMN_REDIRECT;
-
-	ctx->ifnum = nss_dynamic_interface_alloc_node(ctx->state.di_type);
-	if (ctx->ifnum < 0) {
-		nss_ipsecmgr_warn("%p: failed to allocate dynamic interface(%s)", tun, if_name);
-		kfree(ctx);
-		return NULL;
-	}
-
-	ctx->state.stats_len = ctx->state.print_len = nss_ipsecmgr_ctx_stats_size();
-	nss_ipsecmgr_ref_init(&ctx->ref, nss_ipsecmgr_ctx_free_ref);
-	nss_ipsecmgr_ref_init_print(&ctx->ref, nss_ipsecmgr_ctx_print_len, nss_ipsecmgr_ctx_print);
-
-	INIT_LIST_HEAD(&ctx->list);
-	INIT_DELAYED_WORK(&ctx->free_work, nss_ipsecmgr_ctx_free_work);
-
-	ctx->nss_ctx = nss_ipsec_cmn_register_if(ctx->ifnum, tun->dev,
-						nss_ipsecmgr_ctx_rx_redir,
-						nss_ipsecmgr_ctx_rx_stats,
-						0, ctx->state.di_type, ctx);
-	if (!ctx->nss_ctx) {
-		nss_ipsecmgr_warn("%p: failed to register (%s) interface with NSS driver", ctx, if_name);
-		nss_dynamic_interface_dealloc_node(ctx->ifnum, ctx->state.di_type);
+		nss_ipsecmgr_warn("%p: failed to register dynamic interface(%d, %d)", ctx, di_type, ctx->ifnum);
+		nss_dynamic_interface_dealloc_node(ctx->ifnum, di_type);
 		kfree(ctx);
 		return NULL;
 	}

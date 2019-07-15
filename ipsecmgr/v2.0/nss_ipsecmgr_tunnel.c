@@ -85,36 +85,17 @@ static int nss_ipsecmgr_tunnel_stop(struct net_device *dev)
 static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
+	struct nss_ipsec_cmn_flow_tuple f_tuple = {{0}};
+	struct nss_ipsec_cmn_mdata_encap *mdata;
 	struct nss_ctx_instance *nss_ctx;
+	struct nss_ipsecmgr_flow *flow;
 	struct nss_ipsecmgr_ctx *ctx;
 	bool expand_skb = false;
-	struct iphdr *iph;
 	int nhead, ntail;
 	uint32_t ifnum;
 
 	nhead = dev->needed_headroom;
 	ntail = dev->needed_tailroom;
-
-	iph = (struct iphdr *)skb->data;
-
-	/*
-	 * IPsec does not encapsulate non-IP frames
-	 */
-	if ((iph->version != IPVERSION) && (iph->version != 6))
-		goto free;
-
-	read_lock_bh(&ipsecmgr_drv->lock);
-
-	ctx = nss_ipsecmgr_ctx_find(tun, NSS_IPSEC_CMN_CTX_TYPE_INNER);
-	if (!ctx) {
-		read_unlock_bh(&ipsecmgr_drv->lock);
-		nss_ipsecmgr_warn("%p: failed to find inner context for TX\n", tun);
-		goto free;
-	}
-
-	nss_ctx = ctx->nss_ctx;
-	ifnum = ctx->ifnum;
-	read_unlock_bh(&ipsecmgr_drv->lock);
 
 	/*
 	 * Check if skb is shared
@@ -123,6 +104,24 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 		skb = skb_unshare(skb, in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
 		if (!skb)
 			return NETDEV_TX_OK;
+	}
+
+	/*
+	 * Currently IPsec only supports tunnel mode hence non-IP frames are freed.
+	 * In transport mode we will encapsulate based on the skb->protocol
+	 */
+	switch (ip_hdr(skb)->version) {
+	case IPVERSION:
+		nss_ipsecmgr_flow_ipv4_inner2tuple(ip_hdr(skb), &f_tuple);
+		break;
+
+	case 6:
+		nss_ipsecmgr_flow_ipv6_inner2tuple(ipv6_hdr(skb), &f_tuple);
+		break;
+
+	default:
+		nss_ipsecmgr_warn("%p: Non-IP packet for encapsulation", dev);
+		goto free;
 	}
 
 	/*
@@ -139,6 +138,50 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 		nss_ipsecmgr_trace("%s: unable to expand buffer\n", dev->name);
 		goto free;
 	}
+
+	/*
+	 * This packet is ready for NSS transformation. We will now insert the
+	 * metadata on top of the IP header
+	 */
+	mdata = nss_ipsecmgr_tunnel_get_mdata(skb);
+
+	read_lock_bh(&ipsecmgr_drv->lock);
+
+	ctx = nss_ipsecmgr_ctx_find(tun, NSS_IPSEC_CMN_CTX_TYPE_MDATA_INNER);
+	if (!ctx) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_warn("%p: failed to find inner metdata context for TX\n", tun);
+		goto free;
+	}
+
+	/*
+	 * We search the flow if this has been programmed prior to sending the packets
+	 */
+	flow = nss_ipsecmgr_flow_find(ipsecmgr_drv->flow_db, &f_tuple);
+	if (!flow) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_trace("%p, failed to find flow for TX", tun);
+		goto free;
+	}
+
+
+	mdata->flags = 0;
+	mdata->seq_num = 0;
+	mdata->sa = flow->state.sa;
+
+	ifnum = ctx->ifnum;
+	nss_ctx = ctx->nss_ctx;
+	read_unlock_bh(&ipsecmgr_drv->lock);
+
+	/*
+	 * We are not expecting the packet to host; hence scrub it.
+	 * In case of exception the packet will be encapsulated which
+	 * is different from the one that went for transformation.
+	 *
+	 * Note: The SKB will be orphaned at this point. Ideally, this should
+	 * be charged to NSS pool which allow the accounting of all such buffers.
+	 */
+	skb_scrub_packet(skb, true);
 
 	/*
 	 * Send the packet down;
@@ -320,7 +363,8 @@ EXPORT_SYMBOL(nss_ipsecmgr_tunnel_del);
  */
 struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 {
-	struct nss_ipsecmgr_ctx *inner, *outer;
+	struct nss_ipsecmgr_ctx *inner, *mdata_inner;
+	struct nss_ipsecmgr_ctx *outer, *mdata_outer;
 	struct nss_ipsecmgr_tunnel *tun;
 	struct net_device *skb_dev;
 	struct net_device *dev;
@@ -353,23 +397,64 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 	/*
 	 * Inner context allocation
 	 */
-	inner = nss_ipsecmgr_ctx_alloc_inner(tun);
+	inner = nss_ipsecmgr_ctx_alloc(tun,
+					NSS_IPSEC_CMN_CTX_TYPE_INNER,
+					NSS_DYNAMIC_INTERFACE_TYPE_IPSEC_CMN_INNER,
+					nss_ipsecmgr_ctx_rx_inner,
+					nss_ipsecmgr_ctx_rx_stats,
+					NSS_IPSEC_CMN_FEATURE_INLINE_ACCEL);
 	if (!inner) {
 		nss_ipsecmgr_warn("%p: failed to allocate context inner\n", tun);
 		goto free_dev;
 	}
 
 	/*
-	 * Outer context allocation
+	 * Inner Metadata context allocation
 	 */
-	outer = nss_ipsecmgr_ctx_alloc_outer(tun);
-	if (!outer) {
-		nss_ipsecmgr_warn("%p: failed to allocate context outer\n", tun);
+	mdata_inner = nss_ipsecmgr_ctx_alloc(tun,
+					NSS_IPSEC_CMN_CTX_TYPE_MDATA_INNER,
+					NSS_DYNAMIC_INTERFACE_TYPE_IPSEC_CMN_MDATA_INNER,
+					nss_ipsecmgr_ctx_rx_inner,
+					nss_ipsecmgr_ctx_rx_stats,
+					0);
+	if (!mdata_inner) {
+		nss_ipsecmgr_warn("%p: failed to allocate context metadata inner\n", tun);
 		goto free_inner;
 	}
 
+	/*
+	 * Outer context allocation
+	 */
+	outer = nss_ipsecmgr_ctx_alloc(tun,
+					NSS_IPSEC_CMN_CTX_TYPE_OUTER,
+					NSS_DYNAMIC_INTERFACE_TYPE_IPSEC_CMN_OUTER,
+					nss_ipsecmgr_ctx_rx_outer,
+					nss_ipsecmgr_ctx_rx_stats,
+					NSS_IPSEC_CMN_FEATURE_INLINE_ACCEL);
+	if (!outer) {
+		nss_ipsecmgr_warn("%p: failed to allocate context outer\n", tun);
+		goto free_mdata_inner;
+	}
+
+	/*
+	 * Outer metadata context allocation
+	 */
+	mdata_outer = nss_ipsecmgr_ctx_alloc(tun,
+					NSS_IPSEC_CMN_CTX_TYPE_MDATA_OUTER,
+					NSS_DYNAMIC_INTERFACE_TYPE_IPSEC_CMN_MDATA_OUTER,
+					nss_ipsecmgr_ctx_rx_outer,
+					nss_ipsecmgr_ctx_rx_stats,
+					0);
+	if (!mdata_outer) {
+		nss_ipsecmgr_warn("%p: failed to allocate context metadata outer\n", tun);
+		goto free_outer;
+	}
+
 	nss_ipsecmgr_ctx_attach(&tun->ctx_db, inner);
+	nss_ipsecmgr_ctx_attach(&tun->ctx_db, mdata_inner);
+
 	nss_ipsecmgr_ctx_attach(&tun->ctx_db, outer);
+	nss_ipsecmgr_ctx_attach(&tun->ctx_db, mdata_outer);
 
 	/*
 	 * We need to setup the exception interface number for inner & outer;
@@ -379,22 +464,34 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 	 * outer interface number. Similarly, for outer we have to do the opposite
 	 */
 	nss_ipsecmgr_ctx_set_except(inner, outer->ifnum);
+	nss_ipsecmgr_ctx_set_except(mdata_inner, outer->ifnum);
 	nss_ipsecmgr_ctx_set_except(outer, inner->ifnum);
+	nss_ipsecmgr_ctx_set_except(mdata_outer, inner->ifnum);
 
 	if (!nss_ipsecmgr_ctx_config(inner)) {
 		nss_ipsecmgr_warn("%p: failed to configure inner context\n", tun);
-		goto free_outer;
+		goto free_mdata_outer;
+	}
+
+	if (!nss_ipsecmgr_ctx_config(mdata_inner)) {
+		nss_ipsecmgr_warn("%p: failed to configure metadata inner context\n", tun);
+		goto free_mdata_outer;
 	}
 
 	if (!nss_ipsecmgr_ctx_config(outer)) {
-		nss_ipsecmgr_warn("%p: failed to configure inner context\n", tun);
-		goto free_outer;
+		nss_ipsecmgr_warn("%p: failed to configure outer context\n", tun);
+		goto free_mdata_outer;
+	}
+
+	if (!nss_ipsecmgr_ctx_config(mdata_outer)) {
+		nss_ipsecmgr_warn("%p: failed to configure metadata outer context\n", tun);
+		goto free_mdata_outer;
 	}
 
 	status = rtnl_is_locked() ? register_netdevice(dev) : register_netdev(dev);
 	if (status < 0) {
 		nss_ipsecmgr_warn("%p: register net dev failed :%s\n", tun, dev->name);
-		goto free_outer;
+		goto free_mdata_outer;
 	}
 
 	write_lock(&ipsecmgr_drv->lock);
@@ -409,13 +506,18 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 	tun->dentry = debugfs_create_dir(dev->name, ipsecmgr_drv->dentry);
 	if (tun->dentry) {
 		debugfs_create_file("inner", S_IRUGO, tun->dentry, inner, &ipsecmgr_ctx_file_ops);
+		debugfs_create_file("mdata_inner", S_IRUGO, tun->dentry, mdata_inner, &ipsecmgr_ctx_file_ops);
 		debugfs_create_file("outer", S_IRUGO, tun->dentry, outer, &ipsecmgr_ctx_file_ops);
+		debugfs_create_file("mdata_outer", S_IRUGO, tun->dentry, mdata_outer, &ipsecmgr_ctx_file_ops);
 	}
 
 	return dev;
-
+free_mdata_outer:
+	nss_ipsecmgr_ctx_free(mdata_outer);
 free_outer:
 	nss_ipsecmgr_ctx_free(outer);
+free_mdata_inner:
+	nss_ipsecmgr_ctx_free(mdata_inner);
 free_inner:
 	nss_ipsecmgr_ctx_free(inner);
 free_dev:
