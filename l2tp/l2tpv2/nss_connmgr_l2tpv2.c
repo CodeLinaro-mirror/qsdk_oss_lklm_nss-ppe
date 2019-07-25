@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2017, 2019-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, 2019-2021 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -257,7 +257,11 @@ static struct nss_connmgr_l2tpv2_session_data
 	       session->reorder_timeout, session->recv_seq,
 	       session->send_seq);
 
-	data->l2tpv2.tunnel.udp_csum = tunnel->sock->sk_no_check_tx;
+	/*
+	 * tunnel->sock->sk_no_check/sk_no_check_tx is set to true
+	 * if UDP checksum is not needed for the L2TP socket.
+	 */
+	data->l2tpv2.tunnel.udp_csum = !tunnel->sock->sk_no_check_tx;
 
 	inet = inet_sk(tunnel->sock);
 
@@ -734,6 +738,7 @@ static int nss_connmgr_l2tpv2_proc_handler(struct ctl_table *ctl,
 	struct nss_l2tpv2_bind_ipsec_if_msg *l2tpv2_bind_ipsec_if;
 	struct nss_ctx_instance *nss_ctx = nss_l2tpv2_get_context();
 	int ret = proc_dostring(ctl, write, buffer, lenp, ppos);
+	struct nss_connmgr_l2tpv2_session_data *ptr;
 
 	if (!write) {
 		nss_connmgr_l2tpv2_info("command to write is echo <l2tp-device-name> <ipsec-device-name> > <filename>\n");
@@ -759,6 +764,19 @@ static int nss_connmgr_l2tpv2_proc_handler(struct ctl_table *ctl,
 		nss_connmgr_l2tpv2_info("Cannot find the netdevice associated with %s\n", l2tp_device_name);
 		return -EINVAL;
 	}
+
+	rcu_read_lock();
+	hash_for_each_possible_rcu(l2tpv2_session_data_hash_table, ptr,
+				   hash_list, l2tpdev->ifindex) {
+		if (ptr->dev != l2tpdev) {
+			continue;
+		}
+
+		if (ptr->data.l2tpv2.tunnel.udp_csum) {
+			nss_connmgr_l2tpv2_info("Enabling UDP checksum in L2TP packet is not supported for l2tpoipsec flow\n");
+		}
+	}
+	rcu_read_unlock();
 
 	ipsecdev = dev_get_by_name(&init_net, ipsec_device_name);
 	if (!ipsecdev) {
