@@ -817,15 +817,34 @@ void nss_ipsecmgr_ctx_rx_stats(void *app_data, struct nss_cmn_msg *ncm)
 void nss_ipsecmgr_ctx_stats_read(struct nss_ipsecmgr_ctx *ctx, struct rtnl_link_stats64 *dev_stats)
 {
 	struct nss_ipsecmgr_ctx_stats_priv *ctx_stats = &ctx->stats;
+	uint64_t *packets, *bytes, *dropped;
 	int i;
 
-	dev_stats->rx_packets += ctx_stats->rx_packets;
-	dev_stats->tx_packets += ctx_stats->tx_packets;
-	dev_stats->rx_bytes +=  ctx_stats->rx_bytes;
-	dev_stats->tx_bytes += ctx_stats->tx_bytes;
+	switch (ctx->state.type) {
+	case NSS_IPSEC_CMN_CTX_TYPE_INNER:
+	case NSS_IPSEC_CMN_CTX_TYPE_MDATA_INNER:
+		packets = &dev_stats->tx_packets;
+		bytes = &dev_stats->tx_bytes;
+		dropped = &dev_stats->tx_dropped;
+		break;
 
-	for (i = 0; i < ARRAY_SIZE(ctx_stats->rx_dropped); i++)
-		dev_stats->rx_dropped += ctx_stats->rx_dropped[i];
+	case NSS_IPSEC_CMN_CTX_TYPE_OUTER:
+	case NSS_IPSEC_CMN_CTX_TYPE_MDATA_OUTER:
+		packets = &dev_stats->rx_packets;
+		bytes = &dev_stats->rx_bytes;
+		dropped = &dev_stats->rx_dropped;
+		break;
+	default:
+		return;
+	}
+
+	*packets += ctx_stats->rx_packets;
+	*bytes += ctx_stats->rx_bytes;
+	*dropped += (ctx_stats->rx_packets - ctx_stats->tx_packets);
+
+	for (i = 0; i < ARRAY_SIZE(ctx_stats->rx_dropped); i++) {
+		*dropped += ctx_stats->rx_dropped[i];
+	}
 }
 
 /*
