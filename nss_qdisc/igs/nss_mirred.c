@@ -17,8 +17,10 @@
 #include <nss_api_if.h>
 #include <nss_cmn.h>
 #include <linux/tc_act/tc_nss_mirred.h>
+#include <net/netfilter/nf_conntrack_core.h>
 #include "nss_mirred.h"
 #include "nss_igs.h"
+#include "nss_ifb.h"
 
 static LIST_HEAD(nss_mirred_list);		/* List for all nss mirred actions */
 static DEFINE_SPINLOCK(nss_mirred_list_lock);	/* Lock for the nss mirred list */
@@ -31,6 +33,23 @@ static void nss_mirred_release(struct tc_action *tc_act, int bind)
 {
 	struct nss_mirred_tcf *act = nss_mirred_get(tc_act);
 	struct net_device *dev = rcu_dereference_protected(act->tcfm_dev, 1);
+	struct nss_ifb_info *ifb_info = nss_ifb_find_dev(dev);
+
+	if (!ifb_info) {
+		nss_igs_error("IFB device %s not found in the linked list \n", dev->name);
+		return;
+	}
+
+	/*
+	 * Send IFB RESET NEXTHOP configure message to the mapped interface.
+	 */
+	if (!nss_ifb_reset_nexthop(ifb_info)) {
+		nss_igs_error("Error in sending IFB RESET NEXTHOP configure message\n");
+	}
+
+	if (!nss_ifb_clear_igs_node(ifb_info)) {
+		nss_igs_error("Error in sending IFB CLEAR configure message\n");
+	}
 
 	/*
 	 * Delete the nss mirred action list.
@@ -63,7 +82,8 @@ static int nss_mirred_init(struct net *net, struct nlattr *nla,
 	struct tc_nss_mirred *parm;
 	struct nss_mirred_tcf *act;
 	struct net_device *to_dev, *from_dev;
-	int ret;
+	struct nss_ifb_info *ifb_info;
+	int32_t ret, ifb_num;
 
 	if (!nla) {
 		return -EINVAL;
@@ -112,6 +132,62 @@ static int nss_mirred_init(struct net *net, struct nlattr *nla,
 	if (!netif_is_ifb_dev(to_dev)) {
 		nss_igs_error("%s is not an IFB device\n", to_dev->name);
 		return -ENODEV;
+	}
+
+	ifb_info = nss_ifb_find_map_dev(from_dev);
+	if (ifb_info) {
+		if (nss_ifb_is_mapped(ifb_info)) {
+			nss_igs_error("%s device is already mapped to the other IFB device\n",
+					from_dev->name);
+			return -EEXIST;
+		}
+	}
+
+	ifb_info = nss_ifb_find_dev(to_dev);
+	if (ifb_info) {
+		if (nss_ifb_is_mapped(ifb_info)) {
+			nss_igs_error("%s IFB device is already mapped to the other device\n",
+					to_dev->name);
+			return -EEXIST;
+		}
+	}
+
+	ifb_num = nss_cmn_get_interface_number_by_dev_and_type(to_dev, NSS_DYNAMIC_INTERFACE_TYPE_IGS);
+	if (ifb_num < 0) {
+		/*
+		 * Create the IFB instance in the NSS firmware.
+		 */
+		ifb_num = nss_ifb_create_if(to_dev);
+		if (ifb_num < 0) {
+			nss_igs_error("failure in IFB creation\n");
+			return -EINVAL;
+		}
+	}
+
+	/*
+	 * Send config message to the interface attached to an IFB interface.
+	 */
+	if (nss_ifb_config_msg_tx_sync(from_dev, ifb_num, NSS_IFB_SET_IGS_NODE, NULL) < 0) {
+		nss_igs_error("Sending config to %s dev failed\n", from_dev->name);
+		return -EINVAL;
+	}
+
+	/*
+	 * Send next hop config message to the interface attached to an IFB interface.
+	 */
+	if (nss_ifb_config_msg_tx_sync(from_dev, ifb_num, NSS_IFB_SET_NEXTHOP, NULL) < 0) {
+		nss_igs_error("Sending next hop config to %s dev failed\n", from_dev->name);
+		return -EINVAL;
+	}
+
+	/*
+	 * Bind an IFB device with its requested mapped interface.
+	 */
+	ret = nss_ifb_bind(ifb_info, from_dev, to_dev);
+	if (ret < 0) {
+		nss_igs_error(" Binding an IFB device failed\n");
+		nss_ifb_delete_if(ifb_num);
+		return ret;
 	}
 
 	/*
@@ -251,6 +327,110 @@ out:
 }
 
 /*
+ * nss_mirred_unregister_event_handler()
+ *	nss mirred un-register event handler.
+ */
+static void nss_mirred_unregister_event_handler(struct net_device *dev)
+{
+	struct nss_ifb_info *ifb_info;
+
+	/*
+	 * IFB interface.
+	 */
+	if (netif_is_ifb_dev(dev)) {
+		ifb_info = nss_ifb_find_dev(dev);
+	} else {
+		/*
+		 * Check if the device is an IFB mapped device.
+		 */
+		ifb_info = nss_ifb_find_map_dev(dev);
+	}
+
+	/*
+	 * Device not present in ifb list.
+	 */
+	if (!ifb_info) {
+		return;
+	}
+
+	/*
+	 * Send IFB RESET NEXTHOP configure message to the mapped interface.
+	 */
+	if (!nss_ifb_reset_nexthop(ifb_info)) {
+		nss_igs_error("Error in sending IFB RESET NEXTHOP configure message\n");
+	}
+
+	/*
+	 * Send IFB CLEAR configure message to the mapped interface.
+	 */
+	if (!nss_ifb_clear_igs_node(ifb_info)) {
+		nss_igs_error("Error in sending IFB CLEAR configure message\n");
+	}
+	if (netif_is_ifb_dev(dev)) {
+		int32_t ifb_num = nss_cmn_get_interface_number_by_dev_and_type(dev, NSS_DYNAMIC_INTERFACE_TYPE_IGS);
+
+		if (ifb_num < 0) {
+			nss_igs_error("Invalid %s IFB device\n", dev->name);
+			return;
+		}
+		nss_ifb_delete_if(ifb_num);
+		nss_ifb_list_del(ifb_info);
+	}
+}
+
+/*
+ * nss_mirred_down_event_handler()
+ *	nss mirred interface's down event handler.
+ */
+static void nss_mirred_down_event_handler(struct net_device *dev)
+{
+	struct nss_ifb_info *ifb_info;
+
+	/*
+	 * IFB interface.
+	 */
+	if (!netif_is_ifb_dev(dev)) {
+		return;
+	}
+
+	ifb_info = nss_ifb_find_dev(dev);
+
+	if (!ifb_info) {
+		return;
+	}
+
+	if (!nss_ifb_down(ifb_info)) {
+		nss_igs_error("Error in sending IFB DOWN configure message\n");
+	}
+}
+
+/*
+ * nss_mirred_up_event_handler()
+ *	nss mirred interface's up event handler.
+ */
+static void nss_mirred_up_event_handler(struct net_device *dev)
+{
+	struct nss_ifb_info *ifb_info;
+
+	/*
+	 * IFB interface.
+	 */
+	if (!netif_is_ifb_dev(dev)) {
+		return;
+	}
+
+	ifb_info = nss_ifb_find_dev(dev);
+
+	if (!ifb_info) {
+		return;
+	}
+
+	if (!nss_ifb_up(ifb_info)) {
+		nss_igs_error("Error in sending IFB UP configure message\n");
+	}
+}
+
+/*
  * nss_mirred_device_event()
  *	nssmirred device event callback.
  */
@@ -260,24 +440,32 @@ static int nss_mirred_device_event(struct notifier_block *unused,
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 	struct nss_mirred_tcf *act;
 
-	if (event != NETDEV_UNREGISTER) {
-		return NOTIFY_DONE;
-	}
+	switch (event) {
+	case NETDEV_UNREGISTER:
+		nss_mirred_unregister_event_handler(dev);
 
-	ASSERT_RTNL();
+		ASSERT_RTNL();
 
-	/*
-	 * Free up the actions instance present in
-	 * the nss mirred list.
-	 */
-	spin_lock_bh(&nss_mirred_list_lock);
-	list_for_each_entry(act, &nss_mirred_list, tcfm_list) {
-		if (rcu_access_pointer(act->tcfm_dev) == dev) {
-			dev_put(dev);
-			RCU_INIT_POINTER(act->tcfm_dev, NULL);
+		/*
+		 * Free up the actions instance present in
+		 * the nss mirred list.
+		 */
+		spin_lock_bh(&nss_mirred_list_lock);
+		list_for_each_entry(act, &nss_mirred_list, tcfm_list) {
+			if (rcu_access_pointer(act->tcfm_dev) == dev) {
+				dev_put(dev);
+				RCU_INIT_POINTER(act->tcfm_dev, NULL);
+			}
 		}
+		spin_unlock_bh(&nss_mirred_list_lock);
+		break;
+	case NETDEV_UP:
+		nss_mirred_up_event_handler(dev);
+		break;
+	case NETDEV_DOWN:
+		nss_mirred_down_event_handler(dev);
+		break;
 	}
-	spin_unlock_bh(&nss_mirred_list_lock);
 
 	return NOTIFY_DONE;
 }
@@ -305,6 +493,28 @@ struct tc_action_ops nss_mirred_act_ops = {
 };
 
 /*
+ * nss_mirred_igs_nf_ops
+ *	Pre-routing hooks into netfilter packet monitoring point.
+ */
+struct nf_hook_ops nss_mirred_igs_nf_ops[] __read_mostly = {
+	/*
+	 * Pre routing hook is used to copy class-id to the ECM rule.
+	 */
+	{
+		.hook		=	nss_ifb_igs_ip_pre_routing_hook,
+		.pf		=	NFPROTO_IPV4,
+		.hooknum	=	NF_INET_PRE_ROUTING,
+		.priority	=	NF_IP_PRI_CONNTRACK + 1,
+	},
+	{
+		.hook		=	nss_ifb_igs_ip_pre_routing_hook,
+		.pf		=	NFPROTO_IPV6,
+		.hooknum	=	NF_INET_PRE_ROUTING,
+		.priority	=	NF_IP_PRI_CONNTRACK + 1,
+	},
+};
+
+/*
  * nss_mirred_init_module()
  *	nssmirred init function.
  */
@@ -318,8 +528,19 @@ static int __init nss_mirred_init_module(void)
 	err = tcf_register_action(&nss_mirred_act_ops, NSS_MIRRED_TAB_MASK);
 	if (err) {
 		unregister_netdevice_notifier(&nss_mirred_device_notifier);
+		return err;
 	}
-	return err;
+
+	err = nf_register_hooks(nss_mirred_igs_nf_ops, ARRAY_SIZE(nss_mirred_igs_nf_ops));
+	if (err < 0) {
+		nss_igs_error("Registering ingress nf hooks failed, ret: %d\n", err);
+		tcf_unregister_action(&nss_mirred_act_ops);
+		unregister_netdevice_notifier(&nss_mirred_device_notifier);
+		return err;
+	}
+
+	nss_ifb_init();
+	return 0;
 }
 
 /*
@@ -328,6 +549,8 @@ static int __init nss_mirred_init_module(void)
  */
 static void __exit nss_mirred_cleanup_module(void)
 {
+	nf_unregister_hooks(nss_mirred_igs_nf_ops, ARRAY_SIZE(nss_mirred_igs_nf_ops));
+
 	/*
 	 * Un-register nss mirred action.
 	 */

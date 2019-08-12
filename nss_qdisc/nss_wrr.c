@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, 2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -833,6 +833,9 @@ const struct Qdisc_class_ops nss_wrr_class_ops = {
 	.qlen_notify	= nss_wrr_qlen_notify,
 	.get		= nss_wrr_get_class,
 	.put		= nss_wrr_put_class,
+	.tcf_chain	= nss_qdisc_tcf_chain,
+	.bind_tcf	= nss_qdisc_tcf_bind,
+	.unbind_tcf	= nss_qdisc_tcf_unbind,
 	.dump		= nss_wrr_dump_class,
 	.dump_stats	= nss_wrr_dump_class_stats,
 	.walk		= nss_wrr_walk
@@ -862,6 +865,9 @@ const struct Qdisc_class_ops nss_wfq_class_ops = {
 	.qlen_notify	= nss_wrr_qlen_notify,
 	.get		= nss_wrr_get_class,
 	.put		= nss_wrr_put_class,
+	.tcf_chain	= nss_qdisc_tcf_chain,
+	.bind_tcf	= nss_qdisc_tcf_bind,
+	.unbind_tcf	= nss_qdisc_tcf_unbind,
 	.dump		= nss_wrr_dump_class,
 	.dump_stats	= nss_wrr_dump_class_stats,
 	.walk		= nss_wrr_walk

@@ -5,4 +5,6 @@ ccflags-y += -DNSS_IGS_DEBUG_LEVEL=2
 ccflags-y += -Werror
 
 obj-m += act_nssmirred.o
-act_nssmirred-objs := nss_mirred.o
+act_nssmirred-objs := \
+		      nss_mirred.o \
+		      nss_ifb.o

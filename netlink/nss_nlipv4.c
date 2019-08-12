@@ -494,6 +494,29 @@ static int nss_nlipv4_verify_qos_rule(struct nss_ipv4_rule_create_msg *msg)
 }
 
 /*
+ * nss_nlipv4_verify_igs_rule()
+ * 	Verify and override ingress shaping rule entries.
+ */
+static int nss_nlipv4_verify_igs_rule(struct nss_ipv4_rule_create_msg *msg)
+{
+	struct nss_ipv4_igs_rule *igs = &msg->igs_rule;
+	const size_t rule_sz = sizeof(struct nss_ipv4_igs_rule);
+	bool valid;
+
+	valid = msg->valid_flags & NSS_IPV4_RULE_CREATE_IGS_VALID;
+
+	/*
+	 * ingress shaping rule is not valid ignore rest of the checks
+	 */
+	if (!valid) {
+		memset(igs, 0, rule_sz);
+		return 0;
+	}
+
+	return 0;
+}
+
+/*
  * nss_nlipv4_verify_dscp_rule()
  * 	verify and override dscp rule entries
  */
@@ -724,6 +747,15 @@ static int nss_nlipv4_ops_create_rule(struct sk_buff *skb, struct genl_info *inf
 	error = nss_nlipv4_verify_qos_rule(&nim->msg.rule_create);
 	if (error < 0) {
 		nss_nl_error("%d:invalid qos rule information passed\n", pid);
+		goto done;
+	}
+
+	/*
+	 * check ingress shaping rule
+	 */
+	error = nss_nlipv4_verify_igs_rule(&nim->msg.rule_create);
+	if (error < 0) {
+		nss_nl_error("%d:invalid ingress shaping rule information passed\n", pid);
 		goto done;
 	}
 

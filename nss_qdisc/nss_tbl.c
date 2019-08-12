@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, 2019, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -366,6 +366,9 @@ const struct Qdisc_class_ops nss_tbl_class_ops = {
 	.leaf		=	nss_tbl_leaf,
 	.get		=	nss_tbl_get,
 	.put		=	nss_tbl_put,
+	.tcf_chain	=	nss_qdisc_tcf_chain,
+	.bind_tcf	=	nss_qdisc_tcf_bind,
+	.unbind_tcf	=	nss_qdisc_tcf_unbind,
 	.walk		=	nss_tbl_walk,
 	.dump		=	nss_tbl_dump_class,
 };

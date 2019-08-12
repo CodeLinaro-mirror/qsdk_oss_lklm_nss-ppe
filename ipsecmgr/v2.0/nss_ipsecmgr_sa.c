@@ -586,8 +586,8 @@ static bool nss_ipsecmgr_sa_update_db(struct nss_ipsecmgr_sa *sa)
 
 	ctx = nss_ipsecmgr_ctx_find(tun, sa->type);
 	if (!ctx) {
-		write_unlock_bh(&ipsecmgr_drv->lock);
 		nss_ipsecmgr_warn("%p: Failed to find context (%u) between SA creation\n", sa, sa->type);
+		write_unlock_bh(&ipsecmgr_drv->lock);
 		dev_put(dev);
 		return false;
 	}
@@ -1004,3 +1004,165 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_add_sync(struct net_device *dev, struct ns
 	return NSS_IPSECMGR_OK;
 }
 EXPORT_SYMBOL(nss_ipsecmgr_sa_add_sync);
+
+/*
+ * nss_ipsecmgr_sa_verify()
+ * 	Confirm SA is present or not for sa tuple.
+ */
+bool nss_ipsecmgr_sa_verify(struct net_device *dev, struct nss_ipsecmgr_sa_tuple *tuple)
+{
+	struct nss_ipsec_cmn_sa_tuple sa_tuple = {0};
+	struct nss_ipsecmgr_sa *sa;
+
+	/*
+	 * Look for an existing SA.
+	 */
+	nss_ipsecmgr_sa2tuple(tuple, &sa_tuple);
+
+	read_lock_bh(&ipsecmgr_drv->lock);
+	sa = nss_ipsecmgr_sa_find(ipsecmgr_drv->sa_db, &sa_tuple);
+	read_unlock_bh(&ipsecmgr_drv->lock);
+
+	return !!sa;
+}
+EXPORT_SYMBOL(nss_ipsecmgr_sa_verify);
+
+/*
+ * nss_ipsecmgr_sa_tx_inner()
+ * 	Offload given SKB to NSS for inner processing.
+ */
+nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_inner(struct net_device *dev, struct nss_ipsecmgr_sa_tuple *tuple,
+					struct sk_buff *skb)
+{
+	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
+	nss_ipsecmgr_status_t status = NSS_IPSECMGR_OK;
+	struct nss_ipsec_cmn_sa_tuple sa_tuple = {0};
+	struct nss_ipsec_cmn_mdata_encap *enc_mdata;
+	struct nss_ctx_instance *nss_ctx;
+	struct nss_ipsecmgr_ctx *ctx;
+	struct nss_ipsecmgr_sa *sa;
+	nss_tx_status_t tx_status;
+	uint32_t ifnum;
+
+	BUG_ON(skb_shared(skb));
+
+	dev_hold(dev);
+
+	nss_ipsecmgr_sa2tuple(tuple, &sa_tuple);
+	read_lock_bh(&ipsecmgr_drv->lock);
+
+	/*
+	 * Look for an existing SA.
+	 */
+	sa = nss_ipsecmgr_sa_find(ipsecmgr_drv->sa_db, &sa_tuple);
+	if (unlikely(!sa)) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_warn("%p: Failed to find SA", tun);
+		status = NSS_IPSECMGR_INVALID_SA;
+		goto done;
+	}
+
+	/*
+	 * Add metadata and send SKB to IPsec meta data inner node for encapsulation.
+	 */
+	enc_mdata = nss_ipsecmgr_tunnel_get_mdata(skb);
+	enc_mdata->sa = sa->state.tuple;
+
+	ctx = nss_ipsecmgr_ctx_find(tun, NSS_IPSEC_CMN_CTX_TYPE_MDATA_INNER);
+	if (unlikely(!ctx)) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_warn("%p: Failed to find context(%u)", tun, NSS_IPSEC_CMN_CTX_TYPE_MDATA_INNER);
+		status = NSS_IPSECMGR_INVALID_CTX;
+		goto done;
+	}
+
+	ifnum = ctx->ifnum;
+	nss_ctx = ctx->nss_ctx;
+	read_unlock_bh(&ipsecmgr_drv->lock);
+
+	/*
+	 * Send the packet to NSS
+	 */
+	tx_status = nss_ipsec_cmn_tx_buf(nss_ctx, skb, ifnum);
+	if (unlikely(tx_status != NSS_TX_SUCCESS)) {
+		nss_ipsecmgr_warn("%p: Failed to send buffer to NSS; error(%u)", tun, tx_status);
+		status = NSS_IPSECMGR_FAIL;
+		goto done;
+	}
+
+done:
+	dev_put(dev);
+	return status;
+}
+EXPORT_SYMBOL(nss_ipsecmgr_sa_tx_inner);
+
+/*
+ * nss_ipsecmgr_sa_tx_outer()
+ * 	Offload given SKB to NSS for outer processing.
+ */
+nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_outer(struct net_device *dev, struct nss_ipsecmgr_sa_tuple *tuple,
+					struct sk_buff *skb)
+{
+	struct nss_ipsecmgr_tunnel *tun = netdev_priv(dev);
+	nss_ipsecmgr_status_t status = NSS_IPSECMGR_OK;
+	struct nss_ipsec_cmn_sa_tuple sa_tuple = {0};
+	struct nss_ipsec_cmn_mdata_decap *dec_mdata;
+	struct nss_ctx_instance *nss_ctx;
+	struct nss_ipsecmgr_ctx *ctx;
+	struct nss_ipsecmgr_sa *sa;
+	nss_tx_status_t tx_status;
+	uint32_t ifnum;
+
+	BUG_ON(skb_shared(skb));
+
+	dev_hold(dev);
+
+	nss_ipsecmgr_sa2tuple(tuple, &sa_tuple);
+	read_lock_bh(&ipsecmgr_drv->lock);
+
+	/*
+	 * Look for an existing SA.
+	 */
+	sa = nss_ipsecmgr_sa_find(ipsecmgr_drv->sa_db, &sa_tuple);
+	if (unlikely(!sa)) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_warn("%p: Failed to find SA", tun);
+		status = NSS_IPSECMGR_INVALID_SA;
+		goto done;
+
+	}
+
+	/*
+	 * Add metadata and send SKB to IPsec meta data outer node for decapsulation.
+	 */
+	dec_mdata = nss_ipsecmgr_tunnel_get_mdata(skb);
+	dec_mdata->sa = sa->state.tuple;
+
+	ctx = nss_ipsecmgr_ctx_find(tun, NSS_IPSEC_CMN_CTX_TYPE_MDATA_OUTER);
+	if (unlikely(!ctx)) {
+		read_unlock_bh(&ipsecmgr_drv->lock);
+		nss_ipsecmgr_warn("%p: Failed to find context(%u)", tun, NSS_IPSEC_CMN_CTX_TYPE_MDATA_OUTER);
+		status = NSS_IPSECMGR_INVALID_CTX;
+		goto done;
+
+	}
+
+	ifnum = ctx->ifnum;
+	nss_ctx = ctx->nss_ctx;
+	read_unlock_bh(&ipsecmgr_drv->lock);
+
+	/*
+	 * Send the packet to NSS
+	 */
+	tx_status = nss_ipsec_cmn_tx_buf(nss_ctx, skb, ifnum);
+	if (unlikely(tx_status != NSS_TX_SUCCESS)) {
+		nss_ipsecmgr_warn("%p: Failed to send buffer to NSS; error(%u)", tun, tx_status);
+		status = NSS_IPSECMGR_FAIL;
+		goto done;
+	}
+
+done:
+	dev_put(dev);
+	return status;
+}
+EXPORT_SYMBOL(nss_ipsecmgr_sa_tx_outer);

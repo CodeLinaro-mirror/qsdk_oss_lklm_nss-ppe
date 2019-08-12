@@ -77,6 +77,7 @@
 
 #endif /* !CONFIG_DYNAMIC_DEBUG */
 
+#define NSS_IPSEC_KLIPS_BITS2BYTE(x) ((x) / BITS_PER_BYTE) /**< Bits to Bytes */
 #define nss_ipsec_klips_assert(expr) BUG_ON(!expr)
 
 #if !defined (CONFIG_NSS_IPSEC_KLIPS_DBG)

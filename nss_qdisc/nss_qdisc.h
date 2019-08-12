@@ -199,6 +199,7 @@ struct nss_qdisc {
 						 * is attached to PPE qdisc in the tree.
 						 */
 #endif
+	struct tcf_proto __rcu *filter_list;	/* Filter list */
 };
 
 /*
@@ -370,3 +371,21 @@ extern int nss_qdisc_gnet_stats_copy_queue(struct gnet_dump *d,
  */
 extern struct Qdisc *nss_qdisc_replace(struct Qdisc *sch, struct Qdisc *new,
 					struct Qdisc **pold);
+
+/*
+ * nss_qdisc_tcf_chain()
+ *	Return the filter list of qdisc.
+ */
+extern struct tcf_proto __rcu **nss_qdisc_tcf_chain(struct Qdisc *sch, unsigned long arg);
+
+/*
+ * nss_qdisc_tcf_bind()
+ *	Bind the filter to the qdisc.
+ */
+extern unsigned long nss_qdisc_tcf_bind(struct Qdisc *sch, unsigned long parent, u32 classid);
+
+/*
+ * nss_qdisc_tcf_unbind()
+ *	Unbind the filter from the qdisc.
+ */
+extern void nss_qdisc_tcf_unbind(struct Qdisc *sch, unsigned long arg);

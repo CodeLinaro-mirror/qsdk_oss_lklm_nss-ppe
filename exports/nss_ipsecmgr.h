@@ -562,5 +562,60 @@ void nss_ipsecmgr_flow_del(struct net_device *tun, struct nss_ipsecmgr_flow_tupl
  */
 nss_ipsecmgr_status_t nss_ipsecmgr_flow_get_sa(struct net_device *tun, struct nss_ipsecmgr_flow_tuple *flow,
 					struct nss_ipsecmgr_sa_tuple *sa);
+
+/*
+ * nss_ipsecmgr_sa_verify()
+ * 	Check if SA is present.
+ *
+ * @datatypes
+ * net_device \n
+ * nss_ipsecmgr_sa_tuple
+ *
+ * @param[in] tun  Pointer to the network device associated with the tunnel.
+ * @param[in] sa   Pointer to SA tuple to use for tx.
+ *
+ * @return
+ * Returns true if the SA is present.
+ */
+bool nss_ipsecmgr_sa_verify(struct net_device *tun, struct nss_ipsecmgr_sa_tuple *sa);
+
+/*
+ * nss_ipsecmgr_sa_tx_inner()
+ * 	Offload given SKB to NSS for inner processing.
+ *
+ * @datatypes
+ * net_device \n
+ * nss_ipsecmgr_sa_tuple \n
+ * sk_buff
+ *
+ * @param[in] tun  Pointer to the network device associated with the tunnel.
+ * @param[in] sa   Pointer to SA tuple to use for tx.
+ * @param[in] skb  Pointer to SKB to be offload.
+ *
+ * @return
+ * Status of the transmit operation.
+ */
+nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_inner(struct net_device *tun, struct nss_ipsecmgr_sa_tuple *sa,
+                                        struct sk_buff *skb);
+
+/*
+ * nss_ipsecmgr_sa_tx_outer()
+ * 	Offload given SKB to NSS for outer processing.
+ *
+ * @datatypes
+ * net_device \n
+ * nss_ipsecmgr_sa_tuple \n
+ * sk_buff
+ *
+ * @param[in] tun  Pointer to the network device associated with the tunnel.
+ * @param[in] sa   Pointer to SA tuple to use for tx.
+ * @param[in] skb  Pointer to SKB to be offload.
+ *
+ * @return
+ * Status of the transmit operation.
+ */
+nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_outer(struct net_device *tun, struct nss_ipsecmgr_sa_tuple *sa,
+                                        struct sk_buff *skb);
+
 #endif /* __KERNEL__ */
 #endif /* __NSS_IPSECMGR_H */
