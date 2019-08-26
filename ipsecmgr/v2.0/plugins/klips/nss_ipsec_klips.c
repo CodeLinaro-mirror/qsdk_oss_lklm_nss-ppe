@@ -884,6 +884,18 @@ static int32_t nss_ipsec_klips_offload_inner(struct sk_buff *orig_skb, struct ns
 	}
 
 	/*
+	 * Fix the original SKB and then do a copy of it for NSS.
+	 * We need to do this because the cache lines modified by KLIPS will not be
+	 * needed anymore. Addtionally, the dma_map_single only flush/invalidates the
+	 * SKB from head to tail. In this case the tail has shortened.
+	 */
+	if (ipsec_cb->flags & NSS_IPSEC_KLIPS_FLAG_TRANSPORT_MODE) {
+		nss_ipsec_klips_init_trans_offload(orig_skb, iv_len, crypto->hash_len);
+	} else {
+		nss_ipsec_klips_init_tun_offload(orig_skb, iv_len);
+	}
+
+	/*
 	 * We create a copy of the KLIPS skb; since this will be transmitted out
 	 * of NSS. We cannot expect it to return to host. Hence, we overwrite
 	 * the skb with the clone.
@@ -901,12 +913,6 @@ static int32_t nss_ipsec_klips_offload_inner(struct sk_buff *orig_skb, struct ns
 	 */
 	skb_scrub_packet(skb, true);
 	skb->skb_iif = orig_skb->skb_iif;
-
-	if (ipsec_cb->flags & NSS_IPSEC_KLIPS_FLAG_TRANSPORT_MODE) {
-		nss_ipsec_klips_init_trans_offload(skb, iv_len, crypto->hash_len);
-	} else {
-		nss_ipsec_klips_init_tun_offload(skb, iv_len);
-	}
 
 	nss_ipsec_klips_inner2flow_tuple(skb->data, 0, &flow_tuple);
 
