@@ -1038,10 +1038,10 @@ static nss_tx_status_t nss_capwapmgr_create_ipv6_rule(void *ctx, struct nss_ipv6
 	}
 
 	/*
-	 * Set the flag NSS_IPV4_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH so that
+	 * Set the flag NSS_IPV6_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH so that
 	 * rule is not flushed when NSS FW receives ICMP errors/packets.
 	 */
-	nircm->rule_flags |= NSS_IPV4_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH;
+	nircm->rule_flags |= NSS_IPV6_RULE_CREATE_FLAG_ICMP_NO_CME_FLUSH;
 
 	/*
 	 * Add any other additional flags which caller has requested.
