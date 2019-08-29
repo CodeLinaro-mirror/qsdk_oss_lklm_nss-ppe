@@ -96,7 +96,6 @@ struct nss_ipsecmgr_ctx {
 	struct nss_ipsecmgr_tunnel *tun;		/* IPsec tunnel */
 
 	uint32_t ifnum;					/* Interface number */
-	struct delayed_work free_work;			/* Free work */
 	struct nss_ctx_instance *nss_ctx;		/* NSS context instance */
 
 	struct nss_ipsecmgr_ctx_state state;		/* Per context state */

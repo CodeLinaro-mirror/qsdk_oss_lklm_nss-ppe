@@ -32,7 +32,10 @@
  */
 struct nss_ipsecmgr_tunnel {
 	struct list_head list;			/* List node */
-	struct nss_ipsecmgr_ref ref;		/* SA objects under the tunnel */
+	struct nss_ipsecmgr_ref ref;		/* Ref objects under the tunnel */
+	struct list_head free_refs;		/* Refs objects needs to freed */
+	struct work_struct free_work;		/* Free work for pending refs */
+
 	struct net_device *dev;			/* back pointer to tunnel device */
 
 	size_t stats_buf_sz;			/* Size of statistics buffer */

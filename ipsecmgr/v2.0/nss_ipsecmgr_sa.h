@@ -86,7 +86,6 @@ struct nss_ipsecmgr_sa {
 	struct crypto_ahash *ahash;			/* Linux crypto AHASH context */
 
 	uint32_t ifnum;					/* Interface number */
-	struct delayed_work free_work;			/* Delayed free work */
 	enum nss_ipsec_cmn_ctx_type type;		/* Type */
 	struct nss_ctx_instance *nss_ctx;		/* NSS context */
 

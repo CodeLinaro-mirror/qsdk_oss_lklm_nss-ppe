@@ -314,6 +314,59 @@ static void nss_ipsecmgr_tunnel_free(struct net_device *dev)
 }
 
 /*
+ * nss_ipsecmgr_tunnel_free_work()
+ *	Drain all pending refs for free
+ */
+static void nss_ipsecmgr_tunnel_free_work(struct work_struct *work)
+{
+	struct nss_ipsecmgr_tunnel *tun = container_of(work, struct nss_ipsecmgr_tunnel, free_work);
+	struct nss_ipsecmgr_ref *ref, *tmp;
+	struct list_head tmp_head;
+	bool is_locked;
+
+	INIT_LIST_HEAD(&tmp_head);
+
+	write_lock_bh(&ipsecmgr_drv->lock);
+	list_splice_tail_init(&tun->free_refs, &tmp_head);
+	write_unlock_bh(&ipsecmgr_drv->lock);
+
+	is_locked = rtnl_trylock();
+	list_for_each_entry_safe(ref, tmp, &tmp_head, node) {
+		ref->free(ref);
+	}
+
+	if (is_locked)
+		rtnl_unlock();
+}
+
+/*
+ * nss_ipsecmgr_tunnel_free_ref()
+ *	Unregister IPsec tunnel interface
+ */
+static void nss_ipsecmgr_tunnel_free_ref(struct nss_ipsecmgr_ref *ref)
+{
+	struct nss_ipsecmgr_tunnel *tun = container_of(ref, struct nss_ipsecmgr_tunnel, ref);
+
+	nss_ipsecmgr_tunnel_mtu_update(&ipsecmgr_drv->tun_db);
+
+	/*
+	 * The unregister should start here but the expectation is that the free would
+	 * happen when the reference count goes down to '0'
+	 */
+	rtnl_is_locked() ? unregister_netdevice(tun->dev) : unregister_netdev(tun->dev);
+}
+
+/*
+ * nss_ipsecmgr_tunnel_del_ref()
+ *	Delete IPsec tunnel reference
+ */
+static void nss_ipsecmgr_tunnel_del_ref(struct nss_ipsecmgr_ref *ref)
+{
+	struct nss_ipsecmgr_tunnel *tun = container_of(ref, struct nss_ipsecmgr_tunnel, ref);
+	list_del(&tun->list);
+}
+
+/*
  * nss_ipsecmr_dev_setup()
  *	setup the IPsec tunnel
  */
@@ -357,18 +410,11 @@ void nss_ipsecmgr_tunnel_del(struct net_device *dev)
 	 * Flush all associated SA(s) and flow(s) with the tunnel
 	 */
 	write_lock_bh(&ipsecmgr_drv->lock);
-	nss_ipsecmgr_ref_free(&tun->ref);
-
-	list_del(&tun->list);
+	nss_ipsecmgr_ref_del(&tun->ref, &tun->free_refs);
 	write_unlock_bh(&ipsecmgr_drv->lock);
 
-	nss_ipsecmgr_tunnel_mtu_update(&ipsecmgr_drv->tun_db);
-
-	/*
-	 * The unregister should start here but the expectation is that the free would
-	 * happen when the reference count goes down to '0'
-	 */
-	rtnl_is_locked() ? unregister_netdevice(dev) : unregister_netdev(dev);
+	schedule_work(&tun->free_work);
+	flush_work(&tun->free_work);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_tunnel_del);
 
@@ -395,9 +441,12 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 	tun = netdev_priv(dev);
 
 	tun->dev = dev;
-	nss_ipsecmgr_ref_init(&tun->ref, NULL);
+	nss_ipsecmgr_ref_init(&tun->ref, nss_ipsecmgr_tunnel_del_ref, nss_ipsecmgr_tunnel_free_ref);
 
 	INIT_LIST_HEAD(&tun->list);
+	INIT_LIST_HEAD(&tun->free_refs);
+	INIT_WORK(&tun->free_work, nss_ipsecmgr_tunnel_free_work);
+
 	nss_ipsecmgr_db_init(&tun->ctx_db);
 
 	memcpy(&tun->cb, cb, sizeof(tun->cb));

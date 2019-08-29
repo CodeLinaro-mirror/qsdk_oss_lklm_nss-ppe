@@ -490,38 +490,10 @@ static void nss_ipsecmgr_sa_free(struct nss_ipsecmgr_sa *sa)
 }
 
 /*
- * nss_ipsecmgr_sa_free_work()
- *	Free the SA entry in a delayed work context
- */
-static void nss_ipsecmgr_sa_free_work(struct work_struct *work)
-{
-	struct nss_ipsecmgr_sa *sa = container_of(work, struct nss_ipsecmgr_sa, free_work.work);
-	enum nss_ipsec_cmn_msg_type type = NSS_IPSEC_CMN_MSG_TYPE_SA_DESTROY;
-	struct nss_ipsec_cmn_msg nicm;
-	nss_tx_status_t status;
-
-	memset(&nicm, 0, sizeof(nicm));
-	memcpy(&nicm.msg.sa.sa_tuple, &sa->state.tuple, sizeof(nicm.msg.sa.sa_tuple));
-
-	status = nss_ipsec_cmn_tx_msg_sync(sa->nss_ctx, sa->ifnum, type, sizeof(nicm.msg.sa), &nicm);
-	if (status != NSS_TX_SUCCESS) {
-		if (status == NSS_TX_FAILURE_QUEUE) {
-			nss_ipsecmgr_trace("%p: Failed to send message(%u) to NSS(%u)", sa->nss_ctx, type, status);
-			schedule_delayed_work(&sa->free_work, NSS_IPSECMGR_SA_FREE_TIMEOUT);
-			return;
-		}
-
-		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)", sa->nss_ctx, type, status);
-	}
-
-	nss_ipsecmgr_sa_free(sa);
-}
-
-/*
- * nss_ipsecmgr_sa_free_ref()
+ * nss_ipsecmgr_sa_del_ref()
  *	Detach the SA entry from the list
  */
-static void nss_ipsecmgr_sa_free_ref(struct nss_ipsecmgr_ref *ref)
+static void nss_ipsecmgr_sa_del_ref(struct nss_ipsecmgr_ref *ref)
 {
 	struct nss_ipsecmgr_sa *sa = container_of(ref, struct nss_ipsecmgr_sa, ref);
 	struct nss_ipsecmgr_tunnel *tun = NULL;
@@ -538,7 +510,7 @@ static void nss_ipsecmgr_sa_free_ref(struct nss_ipsecmgr_ref *ref)
 	dev = dev_get_by_index(&init_net, sa->tunnel_id);
 	if (!dev) {
 		nss_ipsecmgr_trace("%p: Failed to find dev for tunnel-ID(%u)", sa, sa->tunnel_id);
-		goto done;
+		return;
 	}
 
 	/*
@@ -550,14 +522,32 @@ static void nss_ipsecmgr_sa_free_ref(struct nss_ipsecmgr_ref *ref)
 	}
 
 	dev_put(dev);
+}
 
-done:
+/*
+ * nss_ipsecmgr_sa_free_ref()
+ *	Detach the SA entry from the list
+ */
+static void nss_ipsecmgr_sa_free_ref(struct nss_ipsecmgr_ref *ref)
+{
+	struct nss_ipsecmgr_sa *sa = container_of(ref, struct nss_ipsecmgr_sa, ref);
+	enum nss_ipsec_cmn_msg_type type = NSS_IPSEC_CMN_MSG_TYPE_SA_DESTROY;
+	struct nss_ipsec_cmn_msg nicm;
+	nss_tx_status_t status;
 
 	/*
 	 * The free path can potentially sleep hence we detach the SA here but
 	 * free it later
 	 */
-	schedule_delayed_work(&sa->free_work, NSS_IPSECMGR_SA_FREE_TIMEOUT);
+	memset(&nicm, 0, sizeof(nicm));
+	memcpy(&nicm.msg.sa.sa_tuple, &sa->state.tuple, sizeof(nicm.msg.sa.sa_tuple));
+
+	status = nss_ipsec_cmn_tx_msg_sync(sa->nss_ctx, sa->ifnum, type, sizeof(nicm.msg.sa), &nicm);
+	if (status != NSS_TX_SUCCESS) {
+		nss_ipsecmgr_warn("%p: Failed to send message(%u) to NSS(%u)", sa->nss_ctx, type, status);
+	}
+
+	nss_ipsecmgr_sa_free(sa);
 }
 
 /*
@@ -585,9 +575,8 @@ static struct nss_ipsecmgr_sa *nss_ipsecmgr_sa_alloc(struct nss_ipsecmgr_ctx *ct
 	sa->cb = tun->cb;
 
 	INIT_LIST_HEAD(&sa->list);
-	nss_ipsecmgr_ref_init(&sa->ref, nss_ipsecmgr_sa_free_ref);
+	nss_ipsecmgr_ref_init(&sa->ref, nss_ipsecmgr_sa_del_ref, nss_ipsecmgr_sa_free_ref);
 	nss_ipsecmgr_ref_init_print(&sa->ref, nss_ipsecmgr_sa_print_len, nss_ipsecmgr_sa_print);
-	INIT_DELAYED_WORK(&sa->free_work, nss_ipsecmgr_sa_free_work);
 
 	return sa;
 }
@@ -845,8 +834,10 @@ void nss_ipsecmgr_sa_del(struct net_device *dev, struct nss_ipsecmgr_sa_tuple *t
 	/*
 	 * Free the entire reference hierarchy
 	 */
-	nss_ipsecmgr_ref_free(&sa->ref);
+	nss_ipsecmgr_ref_del(&sa->ref, &tun->free_refs);
 	write_unlock_bh(&ipsecmgr_drv->lock);
+
+	schedule_work(&tun->free_work);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_sa_del);
 

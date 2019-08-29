@@ -350,34 +350,32 @@ static void nss_ipsecmgr_ctx_route_ipv6(struct sk_buff *skb, struct nss_ipsecmgr
 }
 
 /*
- * nss_ipsecmgr_ctx_free_work()
- *	Delayed context free
+ * nss_ipsecmgr_ctx_del_ref()
+ * 	Delete context from context list
  */
-static void nss_ipsecmgr_ctx_free_work(struct work_struct *work)
+static void nss_ipsecmgr_ctx_del_ref(struct nss_ipsecmgr_ref *ref)
 {
-	struct nss_ipsecmgr_ctx *ctx = container_of(work, struct nss_ipsecmgr_ctx, free_work.work);
-
-	nss_ipsecmgr_ctx_free(ctx);
+	struct nss_ipsecmgr_ctx *ctx = container_of(ref, struct nss_ipsecmgr_ctx, ref);
+	list_del_init(&ctx->list);
 }
 
 /*
  * nss_ipsecmgr_ctx_free_ref()
- * 	Free context from reference tree
+ * 	Free context
  */
 static void nss_ipsecmgr_ctx_free_ref(struct nss_ipsecmgr_ref *ref)
 {
 	struct nss_ipsecmgr_ctx *ctx = container_of(ref, struct nss_ipsecmgr_ctx, ref);
+	enum nss_dynamic_interface_type di_type = ctx->state.di_type;
 	bool status;
-
-	list_del_init(&ctx->list);
 
 	status = nss_ipsec_cmn_unregister_if(ctx->ifnum);
 	if (!status) {
-		nss_ipsecmgr_warn("%p: Failed to unregister, di_type(%u), I/F(%u)", ctx, ctx->state.di_type, ctx->ifnum);
+		nss_ipsecmgr_warn("%p: Failed to unregister, di_type(%u), I/F(%u)", ctx, di_type, ctx->ifnum);
 		return;
 	}
 
-	schedule_delayed_work(&ctx->free_work, NSS_IPSECMGR_CTX_FREE_TIMEOUT);
+	nss_ipsecmgr_ctx_free(ctx);
 }
 
 /*
@@ -980,11 +978,10 @@ struct nss_ipsecmgr_ctx *nss_ipsecmgr_ctx_alloc(struct nss_ipsecmgr_tunnel *tun,
 	}
 
 	ctx->state.stats_len = ctx->state.print_len = nss_ipsecmgr_ctx_stats_size();
-	nss_ipsecmgr_ref_init(&ctx->ref, nss_ipsecmgr_ctx_free_ref);
+	nss_ipsecmgr_ref_init(&ctx->ref, nss_ipsecmgr_ctx_del_ref, nss_ipsecmgr_ctx_free_ref);
 	nss_ipsecmgr_ref_init_print(&ctx->ref, nss_ipsecmgr_ctx_print_len, nss_ipsecmgr_ctx_print);
 
 	INIT_LIST_HEAD(&ctx->list);
-	INIT_DELAYED_WORK(&ctx->free_work, nss_ipsecmgr_ctx_free_work);
 
 	ctx->nss_ctx = nss_ipsec_cmn_register_if(ctx->ifnum, tun->dev, rx_data, rx_stats, features, di_type, ctx);
 	if (!ctx->nss_ctx) {

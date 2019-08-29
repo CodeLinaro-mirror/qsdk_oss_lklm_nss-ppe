@@ -61,6 +61,16 @@
 extern struct nss_ipsecmgr_drv *ipsecmgr_drv;
 
 /*
+ * nss_ipsecmgr_ref_no_del()
+ *	dummy functions for object owner when there is no delete
+ */
+static void nss_ipsecmgr_ref_no_del(struct nss_ipsecmgr_ref *ref)
+{
+	nss_ipsecmgr_trace("%p: ref_no_del triggered\n", ref);
+	return;
+}
+
+/*
  * nss_ipsecmgr_ref_no_free()
  *	dummy functions for object owner when there is no free
  */
@@ -94,7 +104,7 @@ static ssize_t nss_ipsecmgr_ref_no_print(struct nss_ipsecmgr_ref *ref, char *buf
  * nss_ipsecmgr_ref_init()
  *	initiaize the reference object
  */
-void nss_ipsecmgr_ref_init(struct nss_ipsecmgr_ref *ref, nss_ipsecmgr_ref_method_t free)
+void nss_ipsecmgr_ref_init(struct nss_ipsecmgr_ref *ref, nss_ipsecmgr_ref_method_t del, nss_ipsecmgr_ref_method_t free)
 {
 	INIT_LIST_HEAD(&ref->head);
 	INIT_LIST_HEAD(&ref->node);
@@ -102,6 +112,7 @@ void nss_ipsecmgr_ref_init(struct nss_ipsecmgr_ref *ref, nss_ipsecmgr_ref_method
 	ref->id = 0;
 	ref->parent = NULL;
 	ref->free = free ? free : nss_ipsecmgr_ref_no_free;
+	ref->del = del ? del : nss_ipsecmgr_ref_no_del;
 	ref->print_len = nss_ipsecmgr_ref_no_print_len;
 	ref->print = nss_ipsecmgr_ref_no_print;
 }
@@ -163,17 +174,52 @@ ssize_t nss_ipsecmgr_ref_print_len(struct nss_ipsecmgr_ref *ref)
 
 /*
  * nss_ipsecmgr_ref_del()
- *	Delete child reference to parent chain
+ *	Delete child reference and add it to zombie list
+ *
+ * Note: If, the "ref" has child references then it
+ * will walk the child reference chain first and issue
+ * free for each of the associated "child ref" objects.
+ * At the end it will invoke free for the "parent" ref
+ * object.
+ *
+ * +-------+
+ * |  tun0 |
+ * +-------+
+ *     |
+ *     V
+ * +-------+    +-------+    +-------+
+ * |  SA1  |--->|  SA2  |--->|  SA3  |
+ * +-------+    +-------+    +-------+
+ *     |
+ *     V
+ * +-------+    +-------+    +-------+
+ * | Flow1 |--->| Flow2 |--->| Flow4 |
+ * +-------+    +-------+    +-------+
  */
-void nss_ipsecmgr_ref_del(struct nss_ipsecmgr_ref *child)
+void nss_ipsecmgr_ref_del(struct nss_ipsecmgr_ref *ref, struct list_head *free_q)
 {
+	struct nss_ipsecmgr_ref *entry;
+
 	/*
 	 * DEBUG check to see if the lock is taken before touching the list
 	 */
 	BUG_ON(write_can_lock(&ipsecmgr_drv->lock));
 
-	list_del_init(&child->node);
-	child->parent = child;
+	while (!list_empty(&ref->head)) {
+		entry = list_first_entry(&ref->head, struct nss_ipsecmgr_ref, node);
+		nss_ipsecmgr_ref_del(entry, free_q);
+	}
+
+	list_del_init(&ref->node);
+	ref->del(ref);
+
+	/*
+	 * If, free list is valid then add the reference node to zombie
+	 * list for delayed free
+	 */
+	if (free_q) {
+		list_add_tail(&ref->node, free_q);
+	}
 }
 
 /*
@@ -197,46 +243,4 @@ void nss_ipsecmgr_ref_add(struct nss_ipsecmgr_ref *child, struct nss_ipsecmgr_re
 	list_add(&child->node, &parent->head);
 
 	child->parent = parent;
-}
-
-/*
- * nss_ipsecmgr_ref_free()
- *	Free all references from the "ref" object
- *
- * Note: If, the "ref" has child references then it
- * will walk the child reference chain first and issue
- * free for each of the associated "child ref" objects.
- * At the end it will invoke free for the "parent" ref
- * object.
- *
- * +-------+
- * |  tun0 |
- * +-------+
- *     |
- *     V
- * +-------+    +-------+    +-------+
- * |  SA1  |--->|  SA2  |--->|  SA3  |
- * +-------+    +-------+    +-------+
- *     |
- *     V
- * +-------+    +-------+    +-------+
- * | Flow1 |--->| Flow2 |--->| Flow4 |
- * +-------+    +-------+    +-------+
- */
-void nss_ipsecmgr_ref_free(struct nss_ipsecmgr_ref *ref)
-{
-	struct nss_ipsecmgr_ref *entry;
-
-	/*
-	 * DEBUG check to see if the lock is taken before touching the list
-	 */
-	BUG_ON(write_can_lock(&ipsecmgr_drv->lock));
-
-	while (!list_empty(&ref->head)) {
-		entry = list_first_entry(&ref->head, struct nss_ipsecmgr_ref, node);
-		nss_ipsecmgr_ref_free(entry);
-	}
-
-	list_del_init(&ref->node);
-	ref->free(ref);
 }

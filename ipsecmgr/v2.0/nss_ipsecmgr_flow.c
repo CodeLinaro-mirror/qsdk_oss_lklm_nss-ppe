@@ -204,12 +204,28 @@ static void nss_ipsecmgr_flow_free(struct nss_ipsecmgr_flow *flow)
 }
 
 /*
- * nss_ipsecmgr_flow_free_work()
- *	Flow free in synchronously
+ * nss_ipsecmgr_flow_del_ref()
+ *	Unlink the flow entry
  */
-static void nss_ipsecmgr_flow_free_work(struct work_struct *work)
+static void nss_ipsecmgr_flow_del_ref(struct nss_ipsecmgr_ref *ref)
 {
-	struct nss_ipsecmgr_flow *flow = container_of(work, struct nss_ipsecmgr_flow, free_work.work);
+	struct nss_ipsecmgr_flow *flow = container_of(ref, struct nss_ipsecmgr_flow, ref);
+
+	/*
+	 * Write lock needs to be held by the caller since flow db is
+	 * getting modified.
+	 */
+	BUG_ON(write_can_lock(&ipsecmgr_drv->lock));
+	list_del_init(&flow->list);
+}
+
+/*
+ * nss_ipsecmgr_flow_free_ref()
+ *	Free the flow entry
+ */
+static void nss_ipsecmgr_flow_free_ref(struct nss_ipsecmgr_ref *ref)
+{
+	struct nss_ipsecmgr_flow *flow = container_of(ref, struct nss_ipsecmgr_flow, ref);
 	enum nss_ipsec_cmn_msg_type type = NSS_IPSEC_CMN_MSG_TYPE_FLOW_DESTROY;
 	struct nss_ipsec_cmn_msg nicm;
 	nss_tx_status_t status;
@@ -232,24 +248,6 @@ static void nss_ipsecmgr_flow_free_work(struct work_struct *work)
 }
 
 /*
- * nss_ipsecmgr_flow_free_ref()
- *	Free the flow entry
- */
-static void nss_ipsecmgr_flow_free_ref(struct nss_ipsecmgr_ref *ref)
-{
-	struct nss_ipsecmgr_flow *flow = container_of(ref, struct nss_ipsecmgr_flow, ref);
-
-	/*
-	 * Write lock needs to be held by the caller since flow db is
-	 * getting modified.
-	 */
-	BUG_ON(write_can_lock(&ipsecmgr_drv->lock));
-
-	list_del_init(&flow->list);
-	schedule_delayed_work(&flow->free_work, NSS_IPSECMGR_FLOW_FREE_TIMEOUT);
-}
-
-/*
  * nss_ipsecmgr_flow_alloc()
  *	Add a new flow to database
  */
@@ -269,14 +267,12 @@ static struct nss_ipsecmgr_flow *nss_ipsecmgr_flow_alloc(struct nss_ipsecmgr_sa 
 	/*
 	 * Initialize the flow entry
 	 */
-	INIT_LIST_HEAD(&flow->list);
-	INIT_DELAYED_WORK(&flow->free_work, nss_ipsecmgr_flow_free_work);
-
 	flow->ifnum = sa->ifnum;
 	flow->nss_ctx = sa->nss_ctx;
 	flow->tunnel_id = sa->tunnel_id;
 
-	nss_ipsecmgr_ref_init(&flow->ref, nss_ipsecmgr_flow_free_ref);
+	INIT_LIST_HEAD(&flow->list);
+	nss_ipsecmgr_ref_init(&flow->ref, nss_ipsecmgr_flow_del_ref, nss_ipsecmgr_flow_free_ref);
 	nss_ipsecmgr_ref_init_print(&flow->ref, nss_ipsecmgr_flow_print_len, nss_ipsecmgr_flow_print);
 
 	/*
@@ -402,8 +398,10 @@ void nss_ipsecmgr_flow_del(struct net_device *dev, struct nss_ipsecmgr_flow_tupl
 	/*
 	 * Free the flow entry and reference.
 	 */
-	nss_ipsecmgr_ref_free(&flow->ref);
+	nss_ipsecmgr_ref_del(&flow->ref, &tun->free_refs);
 	write_unlock_bh(&ipsecmgr_drv->lock);
+
+	schedule_work(&tun->free_work);
 }
 EXPORT_SYMBOL(nss_ipsecmgr_flow_del);
 
@@ -490,8 +488,7 @@ nss_ipsecmgr_status_t nss_ipsecmgr_flow_add(struct net_device *dev, struct nss_i
 		 * Here we don't want to inform the NSS as it is not a real flow free.
 		 * We are just moving an existing flow to a new SA
 		 */
-		list_del_init(&flow->list);
-		nss_ipsecmgr_ref_del(&flow->ref);
+		nss_ipsecmgr_ref_del(&flow->ref, NULL);
 		nss_ipsecmgr_flow_free(flow);
 	}
 
@@ -617,8 +614,7 @@ nss_ipsecmgr_status_t nss_ipsecmgr_flow_add_sync(struct net_device *dev, struct 
 		 * Here we don't want to inform the NSS as it is not a real flow free.
 		 * We are just moving an existing flow to a new SA
 		 */
-		list_del_init(&flow->list);
-		nss_ipsecmgr_ref_del(&flow->ref);
+		nss_ipsecmgr_ref_del(&flow->ref, NULL);
 		nss_ipsecmgr_flow_free(flow);
 	}
 

@@ -226,8 +226,9 @@ static int __init nss_ipsecmgr_init(void)
 	tun = netdev_priv(dev);
 	tun->dev = dev;
 
-	nss_ipsecmgr_ref_init(&tun->ref, NULL);
+	nss_ipsecmgr_ref_init(&tun->ref, NULL, NULL);
 	INIT_LIST_HEAD(&tun->list);
+	INIT_LIST_HEAD(&tun->free_refs);
 
 	dev->netdev_ops = &nss_ipsecmgr_dummy_ndev_ops;
 	nss_ipsecmgr_db_init(&tun->ctx_db);
@@ -314,7 +315,6 @@ static void __exit nss_ipsecmgr_exit(void)
 	write_lock(&ipsecmgr_drv->lock);
 	list_del(&tun->list);
 
-	nss_ipsecmgr_ref_free(&tun->ref);
 	ipsecmgr_drv->max_mtu = U16_MAX;
 	write_unlock(&ipsecmgr_drv->lock);
 

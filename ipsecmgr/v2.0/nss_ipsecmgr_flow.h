@@ -45,7 +45,6 @@ struct nss_ipsecmgr_flow {
 	struct nss_ipsecmgr_sa *sa;		/* Parent SA object */
 
 	uint32_t ifnum;				/* NSS interface attached to flow */
-	struct delayed_work free_work;		/* Retry work */
 	struct nss_ctx_instance *nss_ctx;	/* NSS context */
 	struct nss_ipsecmgr_flow_state state;
 
