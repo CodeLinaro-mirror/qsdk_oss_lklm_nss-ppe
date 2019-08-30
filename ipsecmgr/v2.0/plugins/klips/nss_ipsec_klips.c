@@ -243,7 +243,10 @@ static struct nss_ipsec_klips_tun *nss_ipsec_klips_get_tun(struct net_device *kl
 	 * table is looked up here
 	 */
 	BUG_ON(write_can_lock(&tunnel_map.lock));
-	BUG_ON(!klips_dev);
+
+	if (!klips_dev) {
+		return NULL;
+	}
 
 	for (i = 0, tun = tunnel_map.tbl; i < tunnel_map.max; i++, tun++) {
 		if (!tun->nss_dev || !tun->klips_dev)
