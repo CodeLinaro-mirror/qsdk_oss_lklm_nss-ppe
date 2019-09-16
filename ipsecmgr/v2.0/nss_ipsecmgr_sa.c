@@ -751,7 +751,7 @@ void nss_ipsecmgr_sa_sync2stats(struct nss_ipsec_cmn_sa_sync *sync, struct nss_i
 	/*
 	 * Drop counters starts after common stats counters
 	 */
-	drop_counters = (uint32_t *)((uint8_t *)&sa_stats + sizeof(sa_stats->cmn_stats));
+	drop_counters = (uint32_t *)((uint8_t *)sa_stats + sizeof(sa_stats->cmn_stats));
 	num_counters = (sizeof(*sa_stats) - sizeof(sa_stats->cmn_stats)) / sizeof(uint32_t);
 
 	for (i = 0; i < num_counters; i++)
