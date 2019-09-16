@@ -774,7 +774,7 @@ void nss_ipsecmgr_ctx_rx_stats(void *app_data, struct nss_cmn_msg *ncm)
 
 		ev_cb = sa->cb.event_cb;
 		if (ev_cb) {
-			nss_ipsecmgr_sa_sync2stats(sync, &event.data.stats);
+			nss_ipsecmgr_sa_sync2stats(sa, sync, &event.data.stats);
 			app_data = sa->cb.app_data;
 		}
 

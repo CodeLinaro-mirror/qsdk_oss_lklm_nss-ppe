@@ -245,5 +245,5 @@ static inline void nss_ipsecmgr_sa_ipv6_outer2tuple(struct ipv6hdr *ip6h, struct
 /* functions to operate on SA object */
 struct nss_ipsecmgr_sa *nss_ipsecmgr_sa_find(struct list_head *db, struct nss_ipsec_cmn_sa_tuple *tuple);
 void nss_ipsecmgr_sa_sync_state(struct nss_ipsecmgr_sa *sa, struct nss_ipsec_cmn_sa_sync *sync);
-void nss_ipsecmgr_sa_sync2stats(struct nss_ipsec_cmn_sa_sync *sync, struct nss_ipsecmgr_sa_stats *stats);
+void nss_ipsecmgr_sa_sync2stats(struct nss_ipsecmgr_sa *sa, struct nss_ipsec_cmn_sa_sync *sync, struct nss_ipsecmgr_sa_stats *stats);
 #endif
