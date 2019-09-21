@@ -743,10 +743,25 @@ void nss_ipsecmgr_sa_sync2stats(struct nss_ipsecmgr_sa *sa, struct nss_ipsec_cmn
 	int i;
 
 	nss_ipsecmgr_sa_tuple2sa(&sync->sa_tuple, &stats->sa);
-	stats->pkt_bytes = sa_stats->cmn_stats.rx_bytes + sa_stats->cmn_stats.tx_bytes;
-	stats->pkt_count = sa_stats->cmn_stats.rx_packets + sa_stats->cmn_stats.tx_packets;
-	stats->pkt_failed = 0;
 
+	switch (sa->type) {
+	case NSS_IPSEC_CMN_CTX_TYPE_INNER:
+	case NSS_IPSEC_CMN_CTX_TYPE_MDATA_INNER:
+		stats->pkt_count = sa_stats->cmn_stats.tx_packets;
+		stats->pkt_bytes = sa_stats->cmn_stats.tx_bytes;
+		break;
+
+	case NSS_IPSEC_CMN_CTX_TYPE_OUTER:
+	case NSS_IPSEC_CMN_CTX_TYPE_MDATA_OUTER:
+		stats->pkt_count = sa_stats->cmn_stats.rx_packets;
+		stats->pkt_bytes = sa_stats->cmn_stats.rx_bytes;
+		break;
+	default:
+		return;
+
+	}
+
+	stats->pkt_failed = 0;
 	for (i = 0; i < ARRAY_SIZE(sa_stats->cmn_stats.rx_dropped); i++)
 		stats->pkt_failed += sa_stats->cmn_stats.rx_dropped[i];
 
