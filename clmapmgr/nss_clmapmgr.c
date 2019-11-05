@@ -63,6 +63,14 @@ static netdev_tx_t nss_clmapmgr_dev_xmit(struct sk_buff *skb, struct net_device 
 
 	status = nss_clmap_tx_buf(clmap_ctx, skb, (uint32_t)if_number);
 	if (unlikely(status != NSS_TX_SUCCESS)) {
+		if (likely(status == NSS_TX_FAILURE_QUEUE)) {
+			nss_clmapmgr_warning("%p: netdev :%p queue is full", dev, dev);
+			if (!netif_queue_stopped(dev)) {
+				netif_stop_queue(dev);
+			}
+			nss_clmapmgr_warning("%p: (CLMAP packet) Failed to xmit the packet because of tx queue full, status: %d\n", dev, status);
+			return NETDEV_TX_BUSY;
+		}
 		nss_clmapmgr_info("%p: NSS clmapmgr could not send packet to NSS %d\n", dev, if_number);
 		goto fail;
 	}
@@ -214,18 +222,18 @@ static void nss_clmapmgr_event_receive(void *if_ctx, struct nss_cmn_msg *cmsg)
 		if (interface_type == NSS_DYNAMIC_INTERFACE_TYPE_CLMAP_US) {
 			netdev_stats->tx_packets += stats->node_stats.tx_packets;
 			netdev_stats->tx_bytes += stats->node_stats.tx_bytes;
+			dropped += stats->dropped_macdb_lookup_failed;
+			dropped += stats->dropped_invalid_packet_size;
+			dropped += stats->dropped_low_hroom;
 		} else if (interface_type == NSS_DYNAMIC_INTERFACE_TYPE_CLMAP_DS) {
 			netdev_stats->rx_packets += stats->node_stats.rx_packets;
 			netdev_stats->rx_bytes += stats->node_stats.rx_bytes;
+			dropped += stats->dropped_pbuf_alloc_failed;
+			dropped += stats->dropped_linear_failed;
+			dropped += stats->shared_packet_count;
+			dropped += stats->ethernet_frame_error;
 		}
-		dropped += stats->dropped_macdb_lookup_failed;
-		dropped += stats->dropped_invalid_packet_size;
-		dropped += stats->dropped_low_hroom;
 		dropped += stats->dropped_next_node_queue_full;
-		dropped += stats->dropped_pbuf_alloc_failed;
-		dropped += stats->dropped_linear_failed;
-		dropped += stats->shared_packet_count;
-		dropped += stats->ethernet_frame_error;
 		netdev_stats->tx_dropped += dropped;
 		if (interface_type == NSS_DYNAMIC_INTERFACE_TYPE_CLMAP_DS) {
 			netdev_stats->rx_dropped += nss_cmn_rx_dropped_sum(&stats->node_stats);
@@ -478,6 +486,7 @@ int nss_clmapmgr_netdev_enable(struct net_device *dev)
 	struct nss_clmap_msg req;
 	int us_if, ds_if;
 	struct nss_ctx_instance *nss_ctx = NULL;
+	struct nss_clmapmgr_priv_t *priv;
 	nss_tx_status_t status;
 
 	if (!dev) {
@@ -528,6 +537,8 @@ int nss_clmapmgr_netdev_enable(struct net_device *dev)
 	/*
 	 * Open the netdev to accept packets
 	 */
+	priv = (struct nss_clmapmgr_priv_t *)netdev_priv(dev);
+	priv->clmap_enabled = true;
 	nss_clmapmgr_dev_open(dev);
 
 	return NOTIFY_OK;
@@ -553,6 +564,7 @@ int nss_clmapmgr_netdev_disable(struct net_device *dev)
 	struct nss_clmap_msg req;
 	int us_if, ds_if;
 	struct nss_ctx_instance *nss_ctx = NULL;
+	struct nss_clmapmgr_priv_t *priv;
 	nss_tx_status_t status;
 
 	if (!dev) {
@@ -603,6 +615,8 @@ int nss_clmapmgr_netdev_disable(struct net_device *dev)
 	/*
 	 * Close the netdev
 	 */
+	priv = (struct nss_clmapmgr_priv_t *)netdev_priv(dev);
+	priv->clmap_enabled = false;
 	nss_clmapmgr_dev_close(dev);
 
 	return NOTIFY_OK;
@@ -702,6 +716,24 @@ dealloc_ds:
 }
 
 /*
+ * nss_clmapmgr_decongestion_callback()
+ * 	Wakeup netif queue if we were stopped by start_xmit
+ */
+static void nss_clmapmgr_decongestion_callback(void *arg) {
+	struct net_device *dev = arg;
+	struct nss_clmapmgr_priv_t *priv;
+
+	priv = (struct nss_clmapmgr_priv_t *)netdev_priv(dev);
+	if (unlikely(!priv->clmap_enabled)) {
+		return;
+	}
+
+	if (netif_queue_stopped(dev)) {
+		netif_wake_queue(dev);
+	}
+}
+
+/*
  * nss_clmapmgr_netdev_destroy()
  * 	API for destroying a netdevice.
  * 	Note: User needs to flush all MAC entries in the clmap before destroying the clmap netdevice
@@ -712,6 +744,13 @@ nss_clmapmgr_status_t nss_clmapmgr_netdev_destroy(struct net_device *dev)
 	nss_clmapmgr_status_t ret;
 
 	netif_tx_disable(dev);
+
+	/*
+	 * Deregister decongestion callback
+	 */
+	if (nss_cmn_unregister_queue_decongestion(nss_clmap_get_ctx(), nss_clmapmgr_decongestion_callback) != NSS_CB_UNREGISTER_SUCCESS) {
+		nss_clmapmgr_info("%p: failed to unregister decongestion callback\n", dev);
+	}
 
 	/*
 	 * Check if upstream clmap interface is registered with NSS
@@ -803,6 +842,7 @@ struct net_device *nss_clmapmgr_netdev_create(void)
 	}
 
 	priv = (struct nss_clmapmgr_priv_t *)netdev_priv(dev);
+	priv->clmap_enabled = false;
 	priv->nss_if_number_us = us_if;
 	priv->nss_if_number_ds = ds_if;
 
@@ -834,12 +874,22 @@ struct net_device *nss_clmapmgr_netdev_create(void)
 		goto unregister_ds;
 	}
 
-	nss_clmapmgr_info("%p: nss_clmap_register() successful. nss_ctx = %p\n", dev, nss_ctx);
+	/*
+	 * Register decongestion callback
+	 */
+	if (nss_cmn_register_queue_decongestion(nss_clmap_get_ctx(), nss_clmapmgr_decongestion_callback, dev) != NSS_CB_REGISTER_SUCCESS) {
+		nss_clmapmgr_warning("%p: failed to register decongestion callback\n", dev);
+		goto unregister_us;
+	}
 
 	/*
 	 * Success
 	 */
+	nss_clmapmgr_info("%p: nss_clmap_register() successful. nss_ctx = %p\n", dev, nss_ctx);
 	return dev;
+
+unregister_us:
+	nss_clmap_unregister(us_if);
 
 unregister_ds:
 	nss_clmap_unregister(ds_if);
