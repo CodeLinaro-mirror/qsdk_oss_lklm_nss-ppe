@@ -618,7 +618,7 @@ static bool nss_bridge_mgr_l2_exception_acl_enable(void)
 	error = fal_acl_list_creat(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_LIST_PRIORITY);
 	if (error != SW_OK) {
-		pr_err("List creation failed with error = %d\n", error);
+		nss_bridge_mgr_warn("List creation failed with error = %d\n", error);
 		return false;
 	}
 
@@ -634,7 +634,7 @@ static bool nss_bridge_mgr_l2_exception_acl_enable(void)
 	error = fal_acl_rule_add(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_FRAG_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR, &rule);
 	if (error != SW_OK) {
-		pr_err("Could not add fragment acl rule, error = %d\n", error);
+		nss_bridge_mgr_warn("Could not add fragment acl rule, error = %d\n", error);
 		goto frag_fail;
 	}
 
@@ -652,7 +652,7 @@ static bool nss_bridge_mgr_l2_exception_acl_enable(void)
 	error = fal_acl_rule_add(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_FIN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR, &rule);
 	if (error != SW_OK) {
-		pr_err("Could not add TCP FIN rule, error = %d\n", error);
+		nss_bridge_mgr_warn("Could not add TCP FIN rule, error = %d\n", error);
 		goto fin_fail;
 	}
 
@@ -670,7 +670,7 @@ static bool nss_bridge_mgr_l2_exception_acl_enable(void)
 	error = fal_acl_rule_add(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_SYN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR, &rule);
 	if (error != SW_OK) {
-		pr_err("Could not add TCP SYN rule, error = %d\n", error);
+		nss_bridge_mgr_warn("Could not add TCP SYN rule, error = %d\n", error);
 		goto syn_fail;
 	}
 
@@ -688,7 +688,7 @@ static bool nss_bridge_mgr_l2_exception_acl_enable(void)
 	error = fal_acl_rule_add(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_RST_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR, &rule);
 	if (error != SW_OK) {
-		pr_err("Could not add TCP RST rule, error = %d\n", error);
+		nss_bridge_mgr_warn("Could not add TCP RST rule, error = %d\n", error);
 		goto rst_fail;
 	}
 
@@ -698,45 +698,45 @@ static bool nss_bridge_mgr_l2_exception_acl_enable(void)
 	error = fal_acl_list_bind(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				FAL_ACL_DIREC_IN, FAL_ACL_BIND_SERVICE_CODE, NSS_PPE_SC_VLAN_FILTER_BYPASS);
 	if (error != SW_OK) {
-		pr_err("Could not bind ACL list, error = %d\n", error);
+		nss_bridge_mgr_warn("Could not bind ACL list, error = %d\n", error);
 		goto bind_fail;
 	}
 
-	pr_info("Created ACL rule\n");
+	nss_bridge_mgr_info("Created ACL rule\n");
 	return true;
 
 bind_fail:
 	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_RST_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
 	if (error != SW_OK) {
-		pr_err("TCP RST rule deletion failed, error %d\n", error);
+		nss_bridge_mgr_warn("TCP RST rule deletion failed, error %d\n", error);
 	}
 
 rst_fail:
 	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_SYN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
 	if (error != SW_OK) {
-		pr_err("TCP SYN rule deletion failed, error %d\n", error);
+		nss_bridge_mgr_warn("TCP SYN rule deletion failed, error %d\n", error);
 	}
 
 syn_fail:
 	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_FIN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
 	if (error != SW_OK) {
-		pr_err("TCP FIN rule deletion failed, error %d\n", error);
+		nss_bridge_mgr_warn("TCP FIN rule deletion failed, error %d\n", error);
 	}
 
 fin_fail:
 	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_FRAG_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
 	if (error != SW_OK) {
-		pr_err("IP fragmentation rule deletion failed, error %d\n", error);
+		nss_bridge_mgr_warn("IP fragmentation rule deletion failed, error %d\n", error);
 	}
 
 frag_fail:
 	error = fal_acl_list_destroy(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID);
 	if (error != SW_OK) {
-		pr_err("ACL list destroy failed, error %d\n", error);
+		nss_bridge_mgr_warn("ACL list destroy failed, error %d\n", error);
 	}
 
 	return false;
@@ -753,30 +753,30 @@ static void nss_bridge_mgr_l2_exception_acl_disable(void)
 	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_SYN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
 	if (error != SW_OK) {
-		pr_err("TCP SYN rule deletion failed, error %d\n", error);
+		nss_bridge_mgr_warn("TCP SYN rule deletion failed, error %d\n", error);
 	}
 
 	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_FIN_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
 	if (error != SW_OK) {
-		pr_err("TCP FIN rule deletion failed, error %d\n", error);
+		nss_bridge_mgr_warn("TCP FIN rule deletion failed, error %d\n", error);
 	}
 
 	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_RST_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
 	if (error != SW_OK) {
-		pr_err("TCP RST rule deletion failed, error %d\n", error);
+		nss_bridge_mgr_warn("TCP RST rule deletion failed, error %d\n", error);
 	}
 
 	error = fal_acl_rule_delete(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID,
 				NSS_BRIDGE_MGR_ACL_FRAG_RULE_ID, NSS_BRIDGE_MGR_ACL_RULE_NR);
 	if (error != SW_OK) {
-		pr_err("IP fragmentation rule deletion failed, error %d\n", error);
+		nss_bridge_mgr_warn("IP fragmentation rule deletion failed, error %d\n", error);
 	}
 
 	error = fal_acl_list_destroy(NSS_BRIDGE_MGR_ACL_DEV_ID, NSS_BRIDGE_MGR_ACL_LIST_ID);
 	if (error != SW_OK) {
-		pr_err("ACL list destroy failed, error %d\n", error);
+		nss_bridge_mgr_warn("ACL list destroy failed, error %d\n", error);
 	}
 }
 
