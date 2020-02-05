@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2015,2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015,2019-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -46,6 +46,12 @@ extern struct genl_ops nss_nlgre_redir_cmd_ops[NSS_NLGRE_REDIR_CMD_MAX];
  * nss_nlgre_redir_cmd_get_ifnum()
  * 	Get the interface number corresponding to netdev
  */
-int nss_nlgre_redir_cmd_get_ifnum(struct net_device* dev, enum nss_dynamic_interface_type type);
+int nss_nlgre_redir_cmd_get_ifnum(struct net_device *dev, uint8_t proto);
+
+/*
+ * nss_nlgre_redir_cmd_get_mtu()
+ * 	Returns the mtu based on the device passed
+ */
+int nss_nlgre_redir_cmd_get_mtu(struct net_device *dev, uint8_t iptype, int ifnum);
 
 #endif /* __NSS_NLGRE_REDIR_CMD_H */

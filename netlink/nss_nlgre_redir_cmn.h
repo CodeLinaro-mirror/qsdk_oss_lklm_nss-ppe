@@ -27,6 +27,8 @@
 #define NSS_NLGRE_REDIR_CMN_MAX_SKB_PRINT_LEN 3		/**< Maximum length of skb to print */
 #define NSS_NLGRE_REDIR_CMN_MIN_TUNNELS 0		/**< Mininum number of tunnels required */
 #define NSS_NLGRE_REDIR_CMN_IP_TTL 128			/**< Time to live for IP */
+#define NSS_NLGRE_REDIR_PKT_DUMP_SZ 64			/**< Size of packet to dump */
+#define NSS_NLGRE_REDIR_PKT_DUMP_OFFSET 0		/**< Dump offset */
 
 /*
  * netdevice private data
@@ -112,10 +114,10 @@ enum nss_nlgre_redir_cmn_tun_type nss_nlgre_redir_cmn_get_tun_type(char *tun_typ
 bool nss_nlgre_redir_cmn_unregister_and_deallocate(struct net_device *dev, uint32_t type);
 
 /*
- * nss_nlgre_redir_cmn_print_skb()
- * 	Prints the first 48 bytes of skb
+ * nss_nlgre_redir_cmn_print_hex_dump()
+ *	Prints the initials few bytes of packet
  */
-void nss_nlgre_redir_cmn_print_skb(struct sk_buff *skb);
+void nss_nlgre_redir_cmn_print_hex_dump(struct sk_buff *skb);
 
 /*
  * nss_nlgre_redir_cmn_create_tun()

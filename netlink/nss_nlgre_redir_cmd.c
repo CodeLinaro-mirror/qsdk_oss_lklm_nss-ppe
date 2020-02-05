@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2016,2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016,2018-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -29,6 +29,8 @@
 #include "nss_nlgre_redir_cmd.h"
 #include "nss_nlgre_redir_cmn.h"
 #include "nss_nlgre_redir_lag.h"
+#include "nss_nlipv6_if.h"
+#include "nss_nlipv4_if.h"
 
 /*
  * To get lock on deploy_mode
@@ -425,9 +427,24 @@ struct genl_ops nss_nlgre_redir_cmd_ops[] = {
  * nss_nlgre_redir_cmd_get_ifnum()
  * 	Get the interface number corresponding to netdev
  */
-int nss_nlgre_redir_cmd_get_ifnum(struct net_device* dev, enum nss_dynamic_interface_type type)
+int nss_nlgre_redir_cmd_get_ifnum(struct net_device *dev, uint8_t proto)
 {
+	enum nss_dynamic_interface_type type;
 	int ifnum;
+
+	switch (proto) {
+	case IPPROTO_TCP:
+	case IPPROTO_UDP:
+	case IPPROTO_UDPLITE:
+		type = NSS_DYNAMIC_INTERFACE_TYPE_GRE_REDIR_WIFI_OFFL_INNER;
+		break;
+	case IPPROTO_GRE:
+		type = NSS_DYNAMIC_INTERFACE_TYPE_GRE_REDIR_OUTER;
+		break;
+	default:
+		nss_nl_error("Invalid protocol %d\n", proto);
+		return -1;
+	}
 
 	/*
 	 * Get the interface number depending upon the dev and type
@@ -440,4 +457,39 @@ int nss_nlgre_redir_cmd_get_ifnum(struct net_device* dev, enum nss_dynamic_inter
 
 	return ifnum;
 }
+
+/*
+ * nss_nlgre_redir_cmd_get_mtu()
+ * 	Returns the mtu based on the device passed
+ */
+int nss_nlgre_redir_cmd_get_mtu(struct net_device *dev, uint8_t iptype, int ifnum)
+{
+	enum nss_dynamic_interface_type type;
+	struct nss_ctx_instance *nss_ctx;
+	int mtu = dev->mtu;
+
+	nss_ctx = nss_gre_redir_get_context();
+	type = nss_dynamic_interface_get_type(nss_ctx, ifnum);
+	switch (iptype) {
+	case NSS_GRE_REDIR_IP_HDR_TYPE_IPV4:
+		if (type == NSS_DYNAMIC_INTERFACE_TYPE_GRE_REDIR_OUTER) {
+			mtu = NSS_NLIPV4_MAX_MTU;
+		} else if (mtu < NSS_NLIPV4_MIN_MTU) {
+			mtu = NSS_NLIPV4_MIN_MTU;
+		}
+
+		break;
+	case NSS_GRE_REDIR_IP_HDR_TYPE_IPV6:
+		if (type == NSS_DYNAMIC_INTERFACE_TYPE_GRE_REDIR_OUTER) {
+			mtu = NSS_NLIPV6_MAX_MTU;
+		} else if (mtu < NSS_NLIPV6_MIN_MTU) {
+			mtu = NSS_NLIPV6_MIN_MTU;
+		}
+
+		break;
+	}
+
+	return mtu;
+}
+
 

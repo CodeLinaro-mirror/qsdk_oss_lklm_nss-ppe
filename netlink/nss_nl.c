@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2016,2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016,2018-2020 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -14,39 +14,45 @@
  **************************************************************************
  */
 
+#include <linux/if.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/kernel.h>
+#include <linux/netlink.h>
 #include <linux/of.h>
 #include <linux/types.h>
 #include <linux/version.h>
-#include <linux/if.h>
-#include <linux/netlink.h>
 #include <net/genetlink.h>
 
 #include <nss_api_if.h>
-#include <nss_nl_if.h>
+#include <nss_capwap.h>
+#include <nss_capwapmgr.h>
+#include <nss_cmn.h>
 #include <nss_ipsecmgr.h>
-#include "nss_nlcmn_if.h"
+#include <nss_nl_if.h>
 #include "nss_crypto_defines.h"
-#include "nss_nlipv4_if.h"
-#include "nss_nlipv6_if.h"
-#include "nss_nlipsec_if.h"
+#include "nss_nl.h"
+#include "nss_nlcapwap.h"
+#include "nss_nlcapwap_if.h"
+#include "nss_nlcmn_if.h"
+#include "nss_nlcrypto.h"
+#include "nss_nlcryptov2.h"
+#include "nss_nldtls.h"
+#include "nss_nldtls_if.h"
 #include "nss_nlgre_redir_if.h"
 #include "nss_nlgre_redir_family.h"
+#include "nss_nlipsec.h"
+#include "nss_nlipsec_if.h"
+#include "nss_nlipv4.h"
+#include "nss_nlipv4_if.h"
+#include "nss_nlipv6.h"
+#include "nss_nlipv6_if.h"
+#include "nss_nloam.h"
 #include "nss_nloam_if.h"
 #if defined (CONFIG_NSS_NLCRYPTO)
 #include "nss_nlcrypto_if.h"
 #else
 #include "nss_nlcryptov2_if.h"
 #endif
-#include "nss_nl.h"
-#include "nss_nlipv4.h"
-#include "nss_nlipv6.h"
-#include "nss_nlcrypto.h"
-#include "nss_nlcryptov2.h"
-#include "nss_nlipsec.h"
-#include "nss_nloam.h"
 
 /*
  * nss_nl.c
@@ -133,14 +139,31 @@ static struct nss_nl_family family_handlers[] = {
 		.exit = NSS_NLGRE_REDIR_FAMILY_EXIT,	/* exit */
 		.valid = CONFIG_NSS_NLGRE_REDIR_FAMILY	/* 1 or 0 */
 	},
-
+	{
+		/*
+		 * NSS_NLCAPWAP
+		 */
+		.name = NSS_NLCAPWAP_FAMILY,		/* capwap */
+		.entry = NSS_NLCAPWAP_INIT,		/* init */
+		.exit = NSS_NLCAPWAP_EXIT,		/* exit */
+		.valid = CONFIG_NSS_NLCAPWAP		/* 1 or 0 */
+	},
+	{
+		/*
+		 * NSS_NLDTLS
+		 */
+		.name = NSS_NLDTLS_FAMILY,		/* dtls */
+		.entry = NSS_NLDTLS_INIT,		/* init */
+		.exit = NSS_NLDTLS_EXIT,		/* exit */
+		.valid = CONFIG_NSS_NLDTLS		/* 1 or 0 */
+	},
 };
 
 #define NSS_NL_FAMILY_HANDLER_SZ ARRAY_SIZE(family_handlers)
 
 /*
  * nss_nl_alloc_msg()
- * 	allocate NETLINK message
+ *	allocate NETLINK message
  *
  * NOTE: this returns the SKB/message
  */
@@ -184,7 +207,7 @@ struct sk_buff *nss_nl_new_msg(struct genl_family *family, uint8_t cmd)
 
 /*
  * nss_nl_copy_msg()
- * 	copy a existing NETLINK message into a new one
+ *	copy a existing NETLINK message into a new one
  *
  * NOTE: this returns the new SKB/message
  */
@@ -206,7 +229,7 @@ struct sk_buff *nss_nl_copy_msg(struct sk_buff *orig)
 
 /*
  * nss_nl_get_data()
- * 	Returns start of payload data
+ *	Returns start of payload data
  */
 void  *nss_nl_get_data(struct sk_buff *skb)
 {
@@ -215,7 +238,7 @@ void  *nss_nl_get_data(struct sk_buff *skb)
 
 /*
  * nss_nl_mcast_event()
- * 	mcast the event to the user listening on the MCAST group ID
+ *	mcast the event to the user listening on the MCAST group ID
  *
  * Note: It will free the message buffer if there is no space left to end
  */
@@ -253,7 +276,7 @@ int nss_nl_mcast_event(struct genl_multicast_group *grp, struct sk_buff *skb)
 
 /*
  * nss_nl_ucast_resp()
- * 	send the response to the user (PID)
+ *	send the response to the user (PID)
  *
  * NOTE: this assumes the socket to be available for reception
  */
@@ -286,7 +309,7 @@ int nss_nl_ucast_resp(struct sk_buff *skb)
 
 /*
  * nss_nl_get_msg()
- * 	verifies and returns the message pointer
+ *	verifies and returns the message pointer
  */
 struct nss_nlcmn *nss_nl_get_msg(struct genl_family *family, struct genl_info *info, uint16_t cmd)
 {
@@ -323,7 +346,7 @@ struct nss_nlcmn *nss_nl_get_msg(struct genl_family *family, struct genl_info *i
 
 /*
  * nss_nl_init()
- * 	init module
+ *	init module
  */
 static int __init nss_nl_init(void)
 {
@@ -366,7 +389,7 @@ static int __init nss_nl_init(void)
 
 /*
  * nss_nl_exit()
- * 	deinit module
+ *	deinit module
  */
 static void __exit nss_nl_exit(void)
 {

@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -1082,9 +1082,11 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_inner(struct net_device *dev, struct ns
 	struct nss_ipsecmgr_ctx *ctx;
 	struct nss_ipsecmgr_sa *sa;
 	nss_tx_status_t tx_status;
+	uint16_t data_len;
 	uint32_t ifnum;
 
 	BUG_ON(skb_shared(skb));
+	WARN_ON(skb_is_nonlinear(skb) || skb_has_frag_list(skb));
 
 	dev_hold(dev);
 
@@ -1102,12 +1104,6 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_inner(struct net_device *dev, struct ns
 		goto done;
 	}
 
-	/*
-	 * Add metadata and send SKB to IPsec meta data inner node for encapsulation.
-	 */
-	enc_mdata = nss_ipsecmgr_tunnel_get_mdata(skb);
-	enc_mdata->sa = sa->state.tuple;
-
 	ctx = nss_ipsecmgr_ctx_find(tun, NSS_IPSEC_CMN_CTX_TYPE_MDATA_INNER);
 	if (unlikely(!ctx)) {
 		read_unlock_bh(&ipsecmgr_drv->lock);
@@ -1118,6 +1114,20 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_inner(struct net_device *dev, struct ns
 
 	ifnum = ctx->ifnum;
 	nss_ctx = ctx->nss_ctx;
+	data_len = skb->len;
+
+	/*
+	 * Expand data area to cover tailroom used by NSS.
+	 */
+	skb_put(skb, dev->needed_tailroom);
+
+	/*
+	 * Add metadata and send SKB to IPsec meta data inner node for encapsulation.
+	 */
+	enc_mdata = nss_ipsecmgr_tunnel_push_mdata(skb);
+	enc_mdata->sa = sa->state.tuple;
+	enc_mdata->data_len = data_len;
+
 	read_unlock_bh(&ipsecmgr_drv->lock);
 
 	/*
@@ -1126,6 +1136,8 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_inner(struct net_device *dev, struct ns
 	tx_status = nss_ipsec_cmn_tx_buf(nss_ctx, skb, ifnum);
 	if (unlikely(tx_status != NSS_TX_SUCCESS)) {
 		nss_ipsecmgr_warn("%p: Failed to send buffer to NSS; error(%u)", tun, tx_status);
+		nss_ipsecmgr_tunnel_pull_mdata(skb);
+		skb_trim(skb, data_len);
 		status = NSS_IPSECMGR_FAIL;
 		goto done;
 	}
@@ -1172,12 +1184,6 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_outer(struct net_device *dev, struct ns
 
 	}
 
-	/*
-	 * Add metadata and send SKB to IPsec meta data outer node for decapsulation.
-	 */
-	dec_mdata = nss_ipsecmgr_tunnel_get_mdata(skb);
-	dec_mdata->sa = sa->state.tuple;
-
 	ctx = nss_ipsecmgr_ctx_find(tun, NSS_IPSEC_CMN_CTX_TYPE_MDATA_OUTER);
 	if (unlikely(!ctx)) {
 		read_unlock_bh(&ipsecmgr_drv->lock);
@@ -1189,6 +1195,13 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_outer(struct net_device *dev, struct ns
 
 	ifnum = ctx->ifnum;
 	nss_ctx = ctx->nss_ctx;
+
+	/*
+	 * Add metadata and send SKB to IPsec meta data outer node for decapsulation.
+	 */
+	dec_mdata = nss_ipsecmgr_tunnel_push_mdata(skb);
+	dec_mdata->sa = sa->state.tuple;
+
 	read_unlock_bh(&ipsecmgr_drv->lock);
 
 	/*
@@ -1197,6 +1210,7 @@ nss_ipsecmgr_status_t nss_ipsecmgr_sa_tx_outer(struct net_device *dev, struct ns
 	tx_status = nss_ipsec_cmn_tx_buf(nss_ctx, skb, ifnum);
 	if (unlikely(tx_status != NSS_TX_SUCCESS)) {
 		nss_ipsecmgr_warn("%p: Failed to send buffer to NSS; error(%u)", tun, tx_status);
+		nss_ipsecmgr_tunnel_pull_mdata(skb);
 		status = NSS_IPSECMGR_FAIL;
 		goto done;
 	}

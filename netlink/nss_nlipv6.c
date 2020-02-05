@@ -336,14 +336,14 @@ static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, str
 		break;
 
 	case NSS_NL_IFTYPE_TUNNEL_GRE:
-		conn->flow_interface_num = nss_nlgre_redir_cmd_get_ifnum(flow_dev, NSS_DYNAMIC_INTERFACE_TYPE_GRE_REDIR_OUTER);
+		conn->flow_interface_num = nss_nlgre_redir_cmd_get_ifnum(flow_dev, tuple->protocol);
 		if (conn->flow_interface_num < 0 ) {
 			nss_nl_error("%p: Failed to get flow interface number (dev:%s, type:%d)\n",
 			flow_dev, flow_dev->name, flow_iftype);
 			return -EINVAL;
 		}
 
-		conn->flow_mtu = NSS_NLIPV6_MAX_MTU;
+		conn->flow_mtu = nss_nlgre_redir_cmd_get_mtu(flow_dev, NSS_GRE_REDIR_IP_HDR_TYPE_IPV6, conn->flow_interface_num);
 		break;
 
 	case NSS_NL_IFTYPE_VLAN:
@@ -394,15 +394,14 @@ static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, str
 		break;
 
 	case NSS_NL_IFTYPE_TUNNEL_GRE:
-		conn->return_interface_num = nss_nlgre_redir_cmd_get_ifnum(return_dev,
-		NSS_DYNAMIC_INTERFACE_TYPE_GRE_REDIR_WIFI_OFFL_INNER);
+		conn->return_interface_num = nss_nlgre_redir_cmd_get_ifnum(return_dev, tuple->protocol);
 		if (conn->return_interface_num < 0 ) {
 			nss_nl_error("%p: Failed to get return interface number (dev:%s, type:%d)\n",
 			return_dev, return_dev->name, return_iftype);
 			return -EINVAL;
 		}
 
-		conn->return_mtu = NSS_NLIPV6_MAX_MTU;
+		conn->return_mtu = nss_nlgre_redir_cmd_get_mtu(return_dev, NSS_GRE_REDIR_IP_HDR_TYPE_IPV6, conn->return_interface_num);
 		break;
 
 	case NSS_NL_IFTYPE_VLAN:

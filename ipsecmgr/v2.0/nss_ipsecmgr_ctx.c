@@ -1,6 +1,6 @@
 /*
  * ********************************************************************************
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -98,6 +98,7 @@ static const struct nss_ipsecmgr_print ipsecmgr_print_ctx_stats[] = {
 	{"\tfail_exception", NSS_IPSECMGR_PRINT_DWORD},
 	{"\tfail_transform", NSS_IPSECMGR_PRINT_DWORD},
 	{"\tfail_linearized", NSS_IPSECMGR_PRINT_DWORD},
+	{"\tfail_mdata_ver", NSS_IPSECMGR_PRINT_DWORD},
 };
 
 /*
@@ -225,7 +226,7 @@ static void nss_ipsecmgr_ctx_notify_ipv4(struct sk_buff *skb, struct nss_ipsecmg
 	 * flow that coming in for the first time. We should query
 	 * the Linux to see the associated NETDEV
 	 */
-	rt = ip_route_output(&init_net, iph->daddr, 0, 0, 0);
+	rt = ip_route_output(&init_net, iph->saddr, 0, 0, 0);
 	if (IS_ERR(rt)) {
 		dev_kfree_skb_any(skb);
 		ctx->hstats.v4_notify_drop++;
@@ -237,7 +238,6 @@ static void nss_ipsecmgr_ctx_notify_ipv4(struct sk_buff *skb, struct nss_ipsecmg
 	dst_release(dst);
 
 	skb->pkt_type = PACKET_HOST;
-	skb->skb_iif = skb->dev->ifindex;
 	skb->protocol = htons(ETH_P_IP);
 
 notify:
@@ -293,7 +293,7 @@ static void nss_ipsecmgr_ctx_notify_ipv6(struct sk_buff *skb, struct nss_ipsecmg
 	 * the Linux to see the associated NETDEV
 	 */
 	memset(&fl6, 0, sizeof(fl6));
-	memcpy(&fl6.daddr, &ip6h->daddr, sizeof(fl6.daddr));
+	memcpy(&fl6.daddr, &ip6h->saddr, sizeof(fl6.daddr));
 
 	dst = ip6_route_output(&init_net, NULL, &fl6);
 	if (IS_ERR(dst)) {
@@ -306,7 +306,6 @@ static void nss_ipsecmgr_ctx_notify_ipv6(struct sk_buff *skb, struct nss_ipsecmg
 	dst_release(dst);
 
 	skb->pkt_type = PACKET_HOST;
-	skb->skb_iif = skb->dev->ifindex;
 	skb->protocol = htons(ETH_P_IPV6);
 
 notify:
@@ -395,10 +394,8 @@ void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *skb,
 				__attribute__((unused))struct napi_struct *napi)
 {
 	void (*forward_fn)(struct sk_buff *skb, struct nss_ipsecmgr_ctx *ctx) = NULL;
-	struct nss_ipsec_cmn_flow_tuple flow_tuple = {0};
 	struct nss_ipsec_cmn_sa_tuple sa_tuple = {0};
 	struct nss_ipsecmgr_tunnel *tun;
-	struct nss_ipsecmgr_flow *flow;
 	struct nss_ipsecmgr_sa *sa;
 	struct nss_ipsecmgr_ctx *ctx;
 	int tunnel_id;
@@ -431,24 +428,11 @@ void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *skb,
 		skb->protocol = ETH_P_IP;
 
 		/*
-		 * Note: For inner flows check if the flow entry is present.
-		 * This will happen for exception after de-capsulation
+		 * This will happen for exception after de-capsulation.
 		 */
 		if ((iph->protocol != IPPROTO_ESP) && (iph->protocol != IPPROTO_UDP)) {
-			nss_ipsecmgr_flow_ipv4_inner2tuple(iph, &flow_tuple);
-
-			read_lock(&ipsecmgr_drv->lock);
-			flow = nss_ipsecmgr_flow_find(ipsecmgr_drv->flow_db, &flow_tuple);
-			if (!flow) {
-				read_unlock(&ipsecmgr_drv->lock);
-				nss_ipsecmgr_ctx_notify_ipv4(skb, ctx);
-				return;
-			}
-
-			tunnel_id = flow->tunnel_id;
-			read_unlock(&ipsecmgr_drv->lock);
-			forward_fn = nss_ipsecmgr_ctx_notify_ipv4;
-			break;
+			nss_ipsecmgr_ctx_notify_ipv4(skb, ctx);
+			return;
 		}
 
 		/*
@@ -479,23 +463,8 @@ void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *skb,
 		 */
 		udph = (struct udphdr *)((uint8_t *)iph + sizeof(*iph));
 		if (udph->dest != ntohs(NSS_IPSECMGR_NATT_PORT_DATA)) {
-			nss_ipsecmgr_flow_ipv4_inner2tuple(iph, &flow_tuple);
-
-			read_lock(&ipsecmgr_drv->lock);
-			flow = nss_ipsecmgr_flow_find(ipsecmgr_drv->flow_db, &flow_tuple);
-			if (!flow) {
-
-				read_unlock(&ipsecmgr_drv->lock);
-				nss_ipsecmgr_ctx_notify_ipv4(skb, ctx);
-
-				ctx->hstats.redir_fail_flow++;
-				return;
-			}
-
-			tunnel_id = flow->tunnel_id;
-			read_unlock(&ipsecmgr_drv->lock);
-			forward_fn = nss_ipsecmgr_ctx_notify_ipv4;
-			break;
+			nss_ipsecmgr_ctx_notify_ipv4(skb, ctx);
+			return;
 		}
 
 		nss_ipsecmgr_sa_ipv4_outer2tuple(iph, &sa_tuple);
@@ -544,22 +513,8 @@ void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *skb,
 			break;
 		}
 
-		nss_ipsecmgr_flow_ipv6_inner2tuple(ip6h, &flow_tuple);
-
-		read_lock(&ipsecmgr_drv->lock);
-		flow = nss_ipsecmgr_flow_find(ipsecmgr_drv->flow_db, &flow_tuple);
-		if (!flow) {
-			read_unlock(&ipsecmgr_drv->lock);
-			nss_ipsecmgr_ctx_notify_ipv6(skb, ctx);
-
-			ctx->hstats.redir_fail_flow++;
-			return;
-		}
-
-		tunnel_id = flow->tunnel_id;
-		read_unlock(&ipsecmgr_drv->lock);
-		forward_fn = nss_ipsecmgr_ctx_notify_ipv6;
-		break;
+		nss_ipsecmgr_ctx_notify_ipv6(skb, ctx);
+		return;
 	}
 
 	default:
