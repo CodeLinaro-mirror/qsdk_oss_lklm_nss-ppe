@@ -445,25 +445,29 @@ int __init nss_match_init_module(void)
 	 */
 	nss_match_l2_init();
 
+	/*
+	 * Register command line interface for match
+	 */
+	if (!nss_match_ctl_register()) {
+		nss_match_warn("Can't create Match directory in procfs");
+		return -1;
+	}
+
 	match_config = debugfs_create_dir("match", NULL);
 
 	if (!match_config) {
 		nss_match_warn("Cannot create MATCH directory");
+		nss_match_ctl_unregister();
 		return -1;
 	}
 
 	/*
-	 * Register command line interface for match
+	 * Register stats CLI for match
 	 */
-	if (!nss_match_cmd_debugfs_create(match_config)) {
-		nss_match_warn("Cannot create MATCH node cmd dentry file");
-		debugfs_remove_recursive(match_config);
-		return -1;
-	}
-
 	if (!nss_match_stats_debugfs_create(match_config)) {
 		nss_match_warn("Cannot create MATCH node stats dentry file");
 		debugfs_remove_recursive(match_config);
+		nss_match_ctl_unregister();
 		return -1;
 	}
 

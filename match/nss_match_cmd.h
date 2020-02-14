@@ -37,5 +37,6 @@ typedef enum nss_match_parse_command_type {
 	NSS_MATCH_DESTROY_TABLE,
 } nss_match_cmd_t;
 
-bool nss_match_cmd_debugfs_create(struct dentry *match_config);
+void nss_match_ctl_unregister(void);
+bool nss_match_ctl_register(void);
 #endif /* __NSS_MATCH_CMD_H */
