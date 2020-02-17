@@ -28,51 +28,29 @@
 #define MATCH_L2_KEY3_ETHERTYPE_SHIFT 16
 
 /*
- * nss_match_l2_rule_id_generate()
- *	Check if any slot is available for new entry.
- */
-static int nss_match_l2_rule_id_generate(struct nss_match_instance *db_instance)
-{
-	uint16_t index;
-
-	for (index = 0; index < NSS_MATCH_INSTANCE_RULE_MAX; index++) {
-		if (db_instance->rules.l2[index].valid_rule) {
-			continue;
-		}
-
-		return (index + 1);
-	}
-
-	nss_match_warn("Rule table full with NSS_MATCH_INSTANCE_RULE_MAX:%d entries.\n",
-			NSS_MATCH_INSTANCE_RULE_MAX);
-	return -1;
-}
-
-/*
  * nss_match_l2_rule_find()
  *	Check if any slot is available for new entry.
  */
-static bool nss_match_l2_rule_find(struct nss_match_instance *db_instance, void *rule)
+static bool nss_match_l2_rule_find(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule)
 {
 	uint16_t index;
-	struct nss_match_rule_l2_msg *l2_rule = (struct nss_match_rule_l2_msg *)rule;
 
 	/*
 	 * Check if entry is duplicate.
 	 */
 	for (index = 0; index < NSS_MATCH_INSTANCE_RULE_MAX; index++) {
-		struct nss_match_l2_rule_info rule_info = db_instance->rules.l2[index];
+		struct nss_match_rule_info rule_info = db_instance->rules[index];
 
 		if (rule_info.valid_rule &&
-			rule_info.rule.if_num == l2_rule->if_num &&
-			rule_info.rule.ethertype == l2_rule->ethertype &&
-			rule_info.rule.smac[0] == l2_rule->smac[0] &&
-			rule_info.rule.smac[1] == l2_rule->smac[1] &&
-			rule_info.rule.smac[2] == l2_rule->smac[2] &&
-			rule_info.rule.dmac[0] == l2_rule->dmac[0] &&
-			rule_info.rule.dmac[1] == l2_rule->dmac[1] &&
-			rule_info.rule.dmac[2] == l2_rule->dmac[2] &&
-			rule_info.rule.mask_id == l2_rule->mask_id) {
+			rule_info.profile.l2.if_num == rule->profile.l2.if_num &&
+			rule_info.profile.l2.ethertype == rule->profile.l2.ethertype &&
+			rule_info.profile.l2.smac[0] == rule->profile.l2.smac[0] &&
+			rule_info.profile.l2.smac[1] == rule->profile.l2.smac[1] &&
+			rule_info.profile.l2.smac[2] == rule->profile.l2.smac[2] &&
+			rule_info.profile.l2.dmac[0] == rule->profile.l2.dmac[0] &&
+			rule_info.profile.l2.dmac[1] == rule->profile.l2.dmac[1] &&
+			rule_info.profile.l2.dmac[2] == rule->profile.l2.dmac[2] &&
+			rule_info.profile.l2.mask_id == rule->profile.l2.mask_id) {
 			nss_match_info("Rule matched\n");
 			return true;
 		}
@@ -85,59 +63,35 @@ static bool nss_match_l2_rule_find(struct nss_match_instance *db_instance, void 
  * nss_match_l2_db_rule_add()
  * 	Store L2 rule information.
  */
-static bool nss_match_l2_db_rule_add(struct nss_match_instance *db_instance, void *rule)
+static bool nss_match_l2_db_rule_add(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule)
 {
-	struct nss_match_rule_l2_msg *l2_rule = (struct nss_match_rule_l2_msg *)rule;
-	uint8_t rule_id = l2_rule->rule_id;
+	uint8_t rule_id = rule->profile.l2.rule_id;
 
 	if (rule_id == 0 || rule_id > NSS_MATCH_INSTANCE_RULE_MAX) {
 		nss_match_warn("Invalid rule id: %d\n", rule_id);
 		return false;
 	}
 
-	if (db_instance->rules.l2[rule_id - 1].valid_rule) {
+	if (db_instance->rules[rule_id - 1].valid_rule) {
 		nss_match_warn("Rule exists for rule id: %d\n", rule_id);
 		return false;
 	}
 
-	db_instance->rules.l2[rule_id - 1].rule.if_num =  l2_rule->if_num;
-	db_instance->rules.l2[rule_id - 1].rule.smac[0] = l2_rule->smac[0];
-	db_instance->rules.l2[rule_id - 1].rule.smac[1] = l2_rule->smac[1];
-	db_instance->rules.l2[rule_id - 1].rule.smac[2] = l2_rule->smac[2];
-	db_instance->rules.l2[rule_id - 1].rule.dmac[0] = l2_rule->dmac[0];
-	db_instance->rules.l2[rule_id - 1].rule.dmac[1] = l2_rule->dmac[1];
-	db_instance->rules.l2[rule_id - 1].rule.dmac[2] = l2_rule->dmac[2];
-	db_instance->rules.l2[rule_id - 1].rule.ethertype = l2_rule->ethertype;
-	db_instance->rules.l2[rule_id - 1].rule.mask_id = l2_rule->mask_id;
-	db_instance->rules.l2[rule_id - 1].rule.action.action_flag = l2_rule->action.action_flag;
-	db_instance->rules.l2[rule_id - 1].rule.action.setprio = l2_rule->action.setprio;
-	db_instance->rules.l2[rule_id - 1].rule.action.forward_ifnum = l2_rule->action.forward_ifnum;
-	db_instance->rules.l2[rule_id - 1].valid_rule = true;
-	db_instance->rules.l2[rule_id - 1].rule.rule_id = rule_id;
+	db_instance->rules[rule_id - 1].profile.l2.if_num =  rule->profile.l2.if_num;
+	db_instance->rules[rule_id - 1].profile.l2.smac[0] = rule->profile.l2.smac[0];
+	db_instance->rules[rule_id - 1].profile.l2.smac[1] = rule->profile.l2.smac[1];
+	db_instance->rules[rule_id - 1].profile.l2.smac[2] = rule->profile.l2.smac[2];
+	db_instance->rules[rule_id - 1].profile.l2.dmac[0] = rule->profile.l2.dmac[0];
+	db_instance->rules[rule_id - 1].profile.l2.dmac[1] = rule->profile.l2.dmac[1];
+	db_instance->rules[rule_id - 1].profile.l2.dmac[2] = rule->profile.l2.dmac[2];
+	db_instance->rules[rule_id - 1].profile.l2.ethertype = rule->profile.l2.ethertype;
+	db_instance->rules[rule_id - 1].profile.l2.mask_id = rule->profile.l2.mask_id;
+	db_instance->rules[rule_id - 1].profile.l2.action.action_flag = rule->profile.l2.action.action_flag;
+	db_instance->rules[rule_id - 1].profile.l2.action.setprio = rule->profile.l2.action.setprio;
+	db_instance->rules[rule_id - 1].profile.l2.action.forward_ifnum = rule->profile.l2.action.forward_ifnum;
+	db_instance->rules[rule_id - 1].valid_rule = true;
+	db_instance->rules[rule_id - 1].profile.l2.rule_id = rule_id;
 	db_instance->rule_count++;
-
-	return true;
-}
-
-/*
- * nss_match_l2_db_rule_delete()
- *	Clears stored rule information.
- */
-static bool nss_match_l2_db_rule_delete(struct nss_match_instance *db_instance, uint32_t rule_id)
-{
-	if (rule_id == 0 || rule_id > NSS_MATCH_INSTANCE_RULE_MAX) {
-		nss_match_warn("Invalid rule id: %d\n", rule_id);
-		return false;
-	}
-
-	if (!(db_instance->rules.l2[rule_id - 1].valid_rule)) {
-		nss_match_warn("Rule dosn't exist for rule id: %d\n", rule_id);
-		return false;
-	}
-
-	db_instance->rule_count--;
-	db_instance->stats.hit_count[rule_id - 1] = 0;
-	memset(db_instance->rules.l2 + rule_id - 1, 0, sizeof(struct nss_match_l2_rule_info));
 
 	return true;
 }
@@ -146,23 +100,23 @@ static bool nss_match_l2_db_rule_delete(struct nss_match_instance *db_instance, 
  * nss_match_l2_rule_read()
  *	Reads rule parameters by rule id.
  */
-static bool nss_match_l2_rule_read(struct nss_match_instance *db_instance, struct nss_match_msg *rule, uint16_t rule_id)
+static bool nss_match_l2_rule_read(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule, uint16_t rule_id)
 {
-	if (!db_instance->rules.l2[rule_id - 1].valid_rule) {
+	if (!db_instance->rules[rule_id - 1].valid_rule) {
 		nss_match_warn("rule_id doesnot exist, rule_id = %d", rule_id);
 		return false;
 	}
 
-	rule->msg.l2_rule.if_num = db_instance->rules.l2[rule_id - 1].rule.if_num;
-	rule->msg.l2_rule.smac[0] = db_instance->rules.l2[rule_id - 1].rule.smac[0];
-	rule->msg.l2_rule.smac[1] = db_instance->rules.l2[rule_id - 1].rule.smac[1];
-	rule->msg.l2_rule.smac[2] = db_instance->rules.l2[rule_id - 1].rule.smac[2];
-	rule->msg.l2_rule.dmac[0] = db_instance->rules.l2[rule_id - 1].rule.dmac[0];
-	rule->msg.l2_rule.dmac[1] = db_instance->rules.l2[rule_id - 1].rule.dmac[1];
-	rule->msg.l2_rule.dmac[2] = db_instance->rules.l2[rule_id - 1].rule.dmac[2];
-	rule->msg.l2_rule.ethertype = db_instance->rules.l2[rule_id - 1].rule.ethertype;
-	rule->msg.l2_rule.mask_id = db_instance->rules.l2[rule_id - 1].rule.mask_id;
-	rule->msg.l2_rule.rule_id = db_instance->rules.l2[rule_id - 1].rule.rule_id;
+	rule->profile.l2.if_num = db_instance->rules[rule_id - 1].profile.l2.if_num;
+	rule->profile.l2.smac[0] = db_instance->rules[rule_id - 1].profile.l2.smac[0];
+	rule->profile.l2.smac[1] = db_instance->rules[rule_id - 1].profile.l2.smac[1];
+	rule->profile.l2.smac[2] = db_instance->rules[rule_id - 1].profile.l2.smac[2];
+	rule->profile.l2.dmac[0] = db_instance->rules[rule_id - 1].profile.l2.dmac[0];
+	rule->profile.l2.dmac[1] = db_instance->rules[rule_id - 1].profile.l2.dmac[1];
+	rule->profile.l2.dmac[2] = db_instance->rules[rule_id - 1].profile.l2.dmac[2];
+	rule->profile.l2.ethertype = db_instance->rules[rule_id - 1].profile.l2.ethertype;
+	rule->profile.l2.mask_id = db_instance->rules[rule_id - 1].profile.l2.mask_id;
+	rule->profile.l2.rule_id = db_instance->rules[rule_id - 1].profile.l2.rule_id;
 
 	return true;
 }
@@ -415,11 +369,11 @@ static size_t nss_match_l2_table_read(struct nss_match_instance *db_instance, si
 
 	size_wr += scnprintf(bufp + size_wr, buflen - size_wr, "rule_id\t\t hit_count\t\t mask_id\t\t if_name\t\t DMAC \t\t\t SMAC \t\t\t ethertype\t\t action\t\t priority\t\t nexthop\n");
 	for (j = 0; j < NSS_MATCH_INSTANCE_RULE_MAX; j++) {
-		if (!db_instance->rules.l2[j].valid_rule)
+		if (!db_instance->rules[j].valid_rule)
 			continue;
 
 		dev_name = "N/A";
-		net_dev = nss_cmn_get_interface_dev(nss_ctx, db_instance->rules.l2[j].rule.if_num);
+		net_dev = nss_cmn_get_interface_dev(nss_ctx, db_instance->rules[j].profile.l2.if_num);
 		if (net_dev) {
 			dev_name = net_dev->name;
 		}
@@ -427,14 +381,14 @@ static size_t nss_match_l2_table_read(struct nss_match_instance *db_instance, si
 		size_wr += scnprintf(bufp + size_wr, buflen - size_wr, "%d\t\t %llu\t\t %d\t\t %s\t\t%pM  %pM\t\t %d\t\t %u\t\t %d\t\t %d\n",
 				j + 1,
 				db_instance->stats.hit_count[j],
-				db_instance->rules.l2[j].rule.mask_id,
+				db_instance->rules[j].profile.l2.mask_id,
 				dev_name,
-				&db_instance->rules.l2[j].rule.dmac,
-				&db_instance->rules.l2[j].rule.smac,
-				db_instance->rules.l2[j].rule.ethertype,
-				db_instance->rules.l2[j].rule.action.action_flag,
-				db_instance->rules.l2[j].rule.action.setprio,
-				db_instance->rules.l2[j].rule.action.forward_ifnum);
+				&db_instance->rules[j].profile.l2.dmac,
+				&db_instance->rules[j].profile.l2.smac,
+				db_instance->rules[j].profile.l2.ethertype,
+				db_instance->rules[j].profile.l2.action.action_flag,
+				db_instance->rules[j].profile.l2.action.setprio,
+				db_instance->rules[j].profile.l2.action.forward_ifnum);
 	}
 
 	return size_wr;
@@ -444,10 +398,8 @@ static size_t nss_match_l2_table_read(struct nss_match_instance *db_instance, si
  * Match ops for L2 profile.
  */
 static struct match_profile_ops match_profile_ops_l2 = {
-	nss_match_l2_rule_id_generate,
 	nss_match_l2_rule_find,
 	nss_match_l2_db_rule_add,
-	nss_match_l2_db_rule_delete,
 	nss_match_l2_rule_read,
 	nss_match_l2_table_read,
 	nss_match_l2_cmd_parse,

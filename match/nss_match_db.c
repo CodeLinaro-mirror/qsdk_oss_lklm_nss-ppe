@@ -118,16 +118,30 @@ int nss_match_db_generate_rule_id(uint32_t table_id)
 		return -1;
 	}
 
-	rule_id = db_instance->ops->nss_match_rule_id_generate(db_instance);
+	/*
+	 * Find an unused slot in the rule table.
+	 */
+	for (rule_id = 0; rule_id < NSS_MATCH_INSTANCE_RULE_MAX; rule_id++) {
+		if (db_instance->rules[rule_id].valid_rule) {
+			continue;
+		}
+
+		spin_unlock_bh(&match_db.db_lock);
+		return (rule_id + 1);
+	}
+
+	nss_match_warn("Rule table full with NSS_MATCH_INSTANCE_RULE_MAX:%d entries.\n",
+			NSS_MATCH_INSTANCE_RULE_MAX);
+
 	spin_unlock_bh(&match_db.db_lock);
-	return rule_id;
+	return -1;
 }
 
 /*
  * nss_match_db_rule_find()
  * 	Finds if rule exists in db.
  */
-bool nss_match_db_rule_find(void *rule, uint32_t table_id)
+bool nss_match_db_rule_find(struct nss_match_rule_info *rule, uint32_t table_id)
 {
 	bool result;
 	struct nss_match_instance *db_instance;
@@ -149,7 +163,7 @@ bool nss_match_db_rule_find(void *rule, uint32_t table_id)
  * nss_match_db_rule_add()
  * 	Adds the match rule in match db.
  */
-bool nss_match_db_rule_add(void *rule, uint8_t table_id)
+bool nss_match_db_rule_add(struct nss_match_rule_info *rule, uint8_t table_id)
 {
 	struct nss_match_instance *db_instance;
 
@@ -180,6 +194,11 @@ bool nss_match_db_rule_delete(uint32_t table_id, uint32_t rule_id)
 {
 	struct nss_match_instance *db_instance;
 
+	if (rule_id == 0 || rule_id > NSS_MATCH_INSTANCE_RULE_MAX) {
+		nss_match_warn("Invalid rule ID: %d\n", rule_id);
+		return false;
+	}
+
 	spin_lock_bh(&match_db.db_lock);
 
 	db_instance = nss_match_db_get_instance_by_table_id(table_id - 1);
@@ -189,11 +208,15 @@ bool nss_match_db_rule_delete(uint32_t table_id, uint32_t rule_id)
 		return false;
 	}
 
-	if (!db_instance->ops->nss_match_rule_delete(db_instance, rule_id)) {
-		nss_match_warn("Unable to delete rule from match database.\n");
+	if (!(db_instance->rules[rule_id - 1].valid_rule)) {
+		nss_match_warn("Rule dosn't exist for rule id: %d\n", rule_id);
 		spin_unlock_bh(&match_db.db_lock);
 		return false;
 	}
+
+	db_instance->rule_count--;
+	db_instance->stats.hit_count[rule_id - 1] = 0;
+	memset(&(db_instance->rules[rule_id - 1]), 0, sizeof(struct nss_match_rule_info));
 
 	spin_unlock_bh(&match_db.db_lock);
 	return true;
@@ -203,7 +226,7 @@ bool nss_match_db_rule_delete(uint32_t table_id, uint32_t rule_id)
  * nss_match_db_rule_read()
  * 	Gets the match rule from match db.
  */
-bool nss_match_db_rule_read(struct nss_match_msg *rule, uint32_t table_id, uint16_t rule_id)
+bool nss_match_db_rule_read(struct nss_match_rule_info *rule, uint32_t table_id, uint16_t rule_id)
 {
 	bool res;
 	struct nss_match_instance *db_instance;

@@ -96,6 +96,7 @@ static void nss_match_sync_callback(void *app_data, struct nss_match_msg *nmm)
 nss_match_status_t nss_match_rule_delete(struct nss_ctx_instance *nss_ctx, uint32_t rule_id, uint32_t table_id)
 {
 	struct nss_match_msg matchm;
+	struct nss_match_rule_info rule;
 	uint32_t profile_type, len;
 	int if_num;
 	enum nss_match_msg_types type;
@@ -117,28 +118,30 @@ nss_match_status_t nss_match_rule_delete(struct nss_ctx_instance *nss_ctx, uint3
 		return NSS_MATCH_ERROR_TABLE_ID_OUTOFBOUND;
 	}
 
+	/*
+	 * Read the rule information
+	 */
+	if (!nss_match_db_rule_read(&rule, table_id, rule_id)) {
+		nss_match_warn("%p: rule_id does not exist, rule_id = %d", nss_ctx, rule_id);
+		return NSS_MATCH_ERROR_RULE_ID_OUTOFBOUND;
+	}
+
 	nss_match_db_get_profile_type(table_id, &profile_type);
 
 	switch (profile_type) {
 	case NSS_MATCH_PROFILE_TYPE_VOW:
 		type = NSS_MATCH_DELETE_VOW_RULE_MSG;
 		len = sizeof(struct nss_match_rule_vow_msg);
+		matchm.msg.vow_rule = rule.profile.vow;
 		break;
 	case NSS_MATCH_PROFILE_TYPE_L2:
 		type = NSS_MATCH_DELETE_L2_RULE_MSG;
 		len = sizeof(struct nss_match_rule_l2_msg);
+		matchm.msg.l2_rule = rule.profile.l2;
 		break;
 	default:
 		nss_match_warn("%p: Unknown profile type: %d", nss_ctx, profile_type);
 		return NSS_MATCH_ERROR_UNKNOWN_MSG;
-	}
-
-	/*
-	 * Read the rule information
-	 */
-	if (!nss_match_db_rule_read(&matchm, table_id, rule_id)) {
-		nss_match_warn("%p: rule_id doesnot exist, rule_id = %d", nss_ctx, rule_id);
-		return NSS_MATCH_ERROR_RULE_ID_OUTOFBOUND;
 	}
 
 	nss_match_msg_init(&matchm, if_num, type, len, NULL, NULL);
@@ -162,6 +165,7 @@ int nss_match_vow_rule_add(struct nss_ctx_instance *nss_ctx, struct nss_match_ru
 {
 	int rule_id = -1, if_num;
 	struct nss_match_msg nmm;
+	struct nss_match_rule_info rule;
 	enum nss_match_msg_types type = NSS_MATCH_ADD_VOW_RULE_MSG;
 	nss_tx_status_t nss_tx_status;
 
@@ -176,7 +180,9 @@ int nss_match_vow_rule_add(struct nss_ctx_instance *nss_ctx, struct nss_match_ru
 		return rule_id;
 	}
 
-	if (nss_match_db_rule_find(rule_msg, table_id)) {
+	rule.profile.vow = *rule_msg;
+
+	if (nss_match_db_rule_find(&rule, table_id)) {
 		nss_match_warn("%p: Rule exists already. \n", nss_ctx);
 		return -1;
 	}
@@ -187,12 +193,12 @@ int nss_match_vow_rule_add(struct nss_ctx_instance *nss_ctx, struct nss_match_ru
 		return -1;
 	}
 
-	rule_msg->rule_id = rule_id;
-	nss_match_db_rule_add(rule_msg, table_id);
+	rule.profile.vow.rule_id = rule_id;
+	nss_match_db_rule_add(&rule, table_id);
 
 	nss_match_msg_init(&nmm, if_num, type, sizeof(struct nss_match_rule_vow_msg), NULL, NULL);
 
-	nmm.msg.vow_rule = *rule_msg;
+	nmm.msg.vow_rule = rule.profile.vow;
 	nmm.cm.type = type;
 
 	/*
@@ -219,6 +225,7 @@ int nss_match_l2_rule_add(struct nss_ctx_instance *nss_ctx, struct nss_match_rul
 	int rule_id = -1, if_num;
 	enum nss_match_msg_types type = NSS_MATCH_ADD_L2_RULE_MSG;
 	struct nss_match_msg nmm;
+	struct nss_match_rule_info rule;
 	nss_tx_status_t nss_tx_status;
 
 	if (!nss_match_db_table_validate(table_id)) {
@@ -232,7 +239,9 @@ int nss_match_l2_rule_add(struct nss_ctx_instance *nss_ctx, struct nss_match_rul
 		return rule_id;
 	}
 
-	if (nss_match_db_rule_find(rule_msg, table_id)) {
+	rule.profile.l2 = *rule_msg;
+
+	if (nss_match_db_rule_find(&rule, table_id)) {
 		nss_match_warn("%p: Rule exists already \n", nss_ctx);
 		return -1;
 	}
@@ -243,12 +252,12 @@ int nss_match_l2_rule_add(struct nss_ctx_instance *nss_ctx, struct nss_match_rul
 		return -1;
 	}
 
-	rule_msg->rule_id = rule_id;
-	nss_match_db_rule_add(rule_msg, table_id);
+	rule.profile.l2.rule_id = rule_id;
+	nss_match_db_rule_add(&rule, table_id);
 
 	nss_match_msg_init(&nmm, if_num, type, sizeof(struct nss_match_rule_l2_msg), NULL, NULL);
 
-	nmm.msg.l2_rule = *rule_msg;
+	nmm.msg.l2_rule = rule.profile.l2;
 	nmm.cm.type = type;
 
 	/*

@@ -23,20 +23,14 @@
 #include "nss_match_cmd.h"
 
 /*
- * nss_match_vow_rule_info
- *	VoW profile rule to store.
+ * nss_match_rule_info
+ *	Rule information.
  */
-struct nss_match_vow_rule_info {
-	struct nss_match_rule_vow_msg rule;
-	bool valid_rule;
-};
-
-/*
- * nss_match_l2_rule_info
- *	L2 profile rule to store.
- */
-struct nss_match_l2_rule_info {
-	struct nss_match_rule_l2_msg rule;
+struct nss_match_rule_info {
+	union {
+		struct nss_match_rule_vow_msg vow;
+		struct nss_match_rule_l2_msg l2;
+	} profile;
 	bool valid_rule;
 };
 
@@ -45,11 +39,7 @@ struct nss_match_l2_rule_info {
  *	Match instance information.
  */
 struct nss_match_instance {
-	union {
-		struct nss_match_vow_rule_info vow[NSS_MATCH_INSTANCE_RULE_MAX];
-		struct nss_match_l2_rule_info l2[NSS_MATCH_INSTANCE_RULE_MAX];
-	} rules;
-
+	struct nss_match_rule_info rules[NSS_MATCH_INSTANCE_RULE_MAX];
 	struct nss_match_stats stats;
 	struct match_profile_ops *ops;
 	uint32_t valid_mask_flag;
@@ -76,20 +66,14 @@ struct nss_match_db {
  */
 struct match_profile_ops {
 
-	/* Generate rule id for adding the rule. */
-	int (*nss_match_rule_id_generate)(struct nss_match_instance *db_instance);
-
 	/* Check if rule exists already in database. */
-	bool (*nss_match_rule_find)(struct nss_match_instance *db_instance, void *rule);
+	bool (*nss_match_rule_find)(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule);
 
 	/* Add match rule into database. */
-	bool (*nss_match_rule_add)(struct nss_match_instance *db_instance, void *rule);
-
-	/* Delete match rule from database. */
-	bool (*nss_match_rule_delete)(struct nss_match_instance *db_instance, uint32_t rule_id);
+	bool (*nss_match_rule_add)(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule);
 
 	/* Get match rules details from database. */
-	bool (*nss_match_rule_read)(struct nss_match_instance *db_instance, struct nss_match_msg *delete_rule, uint16_t rule_id);
+	bool (*nss_match_rule_read)(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule, uint16_t rule_id);
 
 	/* Read table details. */
 	size_t (*nss_match_table_read)(struct nss_match_instance *db_instance, size_t buflen, char *bufp);
@@ -112,10 +96,10 @@ bool nss_match_db_instance_disable(uint32_t table_id);
 int nss_match_db_instance_count_get(void);
 bool nss_match_db_profile_type_add(uint32_t profile_type, uint8_t table_id);
 int nss_match_db_generate_rule_id(uint32_t table_id);
-bool nss_match_db_rule_find(void *rule, uint32_t table_id);
-bool nss_match_db_rule_add(void *rule, uint8_t table_id);
+bool nss_match_db_rule_find(struct nss_match_rule_info *rule, uint32_t table_id);
+bool nss_match_db_rule_add(struct nss_match_rule_info *rule, uint8_t table_id);
 bool nss_match_db_rule_delete(uint32_t table_id, uint32_t rule_id);
-bool nss_match_db_rule_read(struct nss_match_msg *delete_rule, uint32_t table_id, uint16_t rule_id);
+bool nss_match_db_rule_read(struct nss_match_rule_info *rule, uint32_t table_id, uint16_t rule_id);
 int nss_match_db_parse_cmd(uint32_t table_id, char *input_msg, struct nss_match_msg *rule_msg, nss_match_cmd_t type);
 void nss_match_stats_table_sync(struct nss_ctx_instance *nss_ctx, struct nss_match_stats_sync *stats_msg, uint16_t if_num);
 size_t nss_match_db_table_read(uint32_t table_id, size_t buflen, char *bufp);

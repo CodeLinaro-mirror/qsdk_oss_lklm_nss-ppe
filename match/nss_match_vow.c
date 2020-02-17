@@ -26,47 +26,25 @@
 #define NSS_MATCH_VOW_KEY_OUTER_8021P_SHIFT 25
 
 /*
- * nss_match_vow_rule_id_generate()
- *	Check if any slot is available for new entry.
- */
-static int nss_match_vow_rule_id_generate(struct nss_match_instance *db_instance)
-{
-	uint16_t index;
-
-	for (index = 0; index < NSS_MATCH_INSTANCE_RULE_MAX; index++) {
-		if (db_instance->rules.vow[index].valid_rule) {
-			continue;
-		}
-
-		return (index + 1);
-	}
-
-	nss_match_warn("Rule table full with NSS_MATCH_INSTANCE_RULE_MAX:%d entries.\n",
-			NSS_MATCH_INSTANCE_RULE_MAX);
-	return -1;
-}
-
-/*
  * nss_match_vow_rule_find()
  * 	Check if rule exists already.
  */
-static bool nss_match_vow_rule_find(struct nss_match_instance *db_instance, void *rule)
+static bool nss_match_vow_rule_find(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule)
 {
 	uint16_t index;
-	struct nss_match_rule_vow_msg *vow_rule = (struct nss_match_rule_vow_msg *)rule;
 
 	/*
 	 * Check if entry is present already.
 	 */
 	for (index = 0; index < NSS_MATCH_INSTANCE_RULE_MAX; index++) {
-		struct nss_match_vow_rule_info rule_info = db_instance->rules.vow[index];
+		struct nss_match_rule_info rule_info = db_instance->rules[index];
 
-		if (rule_info.valid_rule &&
-				rule_info.rule.if_num == vow_rule->if_num &&
-				rule_info.rule.dscp == vow_rule->dscp &&
-				rule_info.rule.inner_8021p == vow_rule->inner_8021p &&
-				rule_info.rule.outer_8021p == vow_rule->outer_8021p &&
-				rule_info.rule.mask_id == vow_rule->mask_id) {
+		if (rule->valid_rule &&
+				rule_info.profile.vow.if_num == rule->profile.vow.if_num &&
+				rule_info.profile.vow.dscp == rule->profile.vow.dscp &&
+				rule_info.profile.vow.inner_8021p == rule->profile.vow.inner_8021p &&
+				rule_info.profile.vow.outer_8021p == rule->profile.vow.outer_8021p &&
+				rule_info.profile.vow.mask_id == rule->profile.vow.mask_id) {
 			nss_match_info("Rule matched.\n");
 			return true;
 		}
@@ -79,55 +57,31 @@ static bool nss_match_vow_rule_find(struct nss_match_instance *db_instance, void
  * nss_match_vow_db_rule_add()
  * 	Store VoW rule information.
  */
-static bool nss_match_vow_db_rule_add(struct nss_match_instance *db_instance, void *rule)
+static bool nss_match_vow_db_rule_add(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule)
 {
-	struct nss_match_rule_vow_msg *vow_rule = (struct nss_match_rule_vow_msg *)rule;
-	uint8_t rule_id = vow_rule->rule_id;
+	uint8_t rule_id = rule->profile.vow.rule_id;
 
 	if (rule_id == 0 || rule_id > NSS_MATCH_INSTANCE_RULE_MAX) {
 		nss_match_warn("Invalid rule id: %d\n", rule_id);
 		return false;
 	}
 
-	if (db_instance->rules.vow[rule_id - 1].valid_rule) {
+	if (db_instance->rules[rule_id - 1].valid_rule) {
 		nss_match_warn("Rule exists for rule id: %d\n", rule_id);
 		return false;
 	}
 
-	db_instance->rules.vow[rule_id - 1].rule.if_num = vow_rule->if_num;
-	db_instance->rules.vow[rule_id - 1].rule.dscp = vow_rule->dscp;
-	db_instance->rules.vow[rule_id - 1].rule.inner_8021p = vow_rule->inner_8021p;
-	db_instance->rules.vow[rule_id - 1].rule.outer_8021p = vow_rule->outer_8021p;
-	db_instance->rules.vow[rule_id - 1].rule.mask_id = vow_rule->mask_id;
-	db_instance->rules.vow[rule_id - 1].rule.action.action_flag = vow_rule->action.action_flag;
-	db_instance->rules.vow[rule_id - 1].rule.action.setprio = vow_rule->action.setprio;
-	db_instance->rules.vow[rule_id - 1].rule.action.forward_ifnum = vow_rule->action.forward_ifnum;
-	db_instance->rules.vow[rule_id - 1].valid_rule = true;
-	db_instance->rules.vow[rule_id - 1].rule.rule_id = rule_id;
+	db_instance->rules[rule_id - 1].profile.vow.if_num = rule->profile.vow.if_num;
+	db_instance->rules[rule_id - 1].profile.vow.dscp = rule->profile.vow.dscp;
+	db_instance->rules[rule_id - 1].profile.vow.inner_8021p = rule->profile.vow.inner_8021p;
+	db_instance->rules[rule_id - 1].profile.vow.outer_8021p = rule->profile.vow.outer_8021p;
+	db_instance->rules[rule_id - 1].profile.vow.mask_id = rule->profile.vow.mask_id;
+	db_instance->rules[rule_id - 1].profile.vow.action.action_flag = rule->profile.vow.action.action_flag;
+	db_instance->rules[rule_id - 1].profile.vow.action.setprio = rule->profile.vow.action.setprio;
+	db_instance->rules[rule_id - 1].profile.vow.action.forward_ifnum = rule->profile.vow.action.forward_ifnum;
+	db_instance->rules[rule_id - 1].valid_rule = true;
+	db_instance->rules[rule_id - 1].profile.vow.rule_id = rule_id;
 	db_instance->rule_count++;
-
-	return true;
-}
-
-/*
- * nss_match_vow_db_rule_delete()
- *	Clears stored rule information.
- */
-static bool nss_match_vow_db_rule_delete(struct nss_match_instance *db_instance, uint32_t rule_id)
-{
-	if (rule_id == 0 || rule_id > NSS_MATCH_INSTANCE_RULE_MAX) {
-		nss_match_warn("Invalid rule id: %d\n", rule_id);
-		return false;
-	}
-
-	if (!(db_instance->rules.vow[rule_id - 1].valid_rule)) {
-		nss_match_warn("Rule does not exist for rule id: %d\n", rule_id);
-		return false;
-	}
-
-	db_instance->rule_count--;
-	db_instance->stats.hit_count[rule_id - 1] = 0;
-	memset(db_instance->rules.vow + rule_id - 1, 0, sizeof(struct nss_match_vow_rule_info));
 
 	return true;
 }
@@ -136,24 +90,24 @@ static bool nss_match_vow_db_rule_delete(struct nss_match_instance *db_instance,
  * nss_match_vow_rule_read()
  *	Reads rule parameters by rule id.
  */
-static bool nss_match_vow_rule_read(struct nss_match_instance *db_instance, struct nss_match_msg *rule, uint16_t rule_id)
+static bool nss_match_vow_rule_read(struct nss_match_instance *db_instance, struct nss_match_rule_info *rule, uint16_t rule_id)
 {
 	if (rule_id == 0 || rule_id > NSS_MATCH_INSTANCE_RULE_MAX) {
 		nss_match_warn("Invalid rule id: %d\n", rule_id);
 		return false;
 	}
 
-	if (!db_instance->rules.vow[rule_id - 1].valid_rule) {
+	if (!db_instance->rules[rule_id - 1].valid_rule) {
 		nss_match_warn("rule_id doesnot exist, rule_id = %d", rule_id);
 		return false;
 	}
 
-	rule->msg.vow_rule.if_num = db_instance->rules.vow[rule_id - 1].rule.if_num;
-	rule->msg.vow_rule.dscp = db_instance->rules.vow[rule_id - 1].rule.dscp;
-	rule->msg.vow_rule.outer_8021p = db_instance->rules.vow[rule_id - 1].rule.outer_8021p;
-	rule->msg.vow_rule.inner_8021p = db_instance->rules.vow[rule_id - 1].rule.inner_8021p;
-	rule->msg.vow_rule.mask_id = db_instance->rules.vow[rule_id - 1].rule.mask_id;
-	rule->msg.vow_rule.rule_id = db_instance->rules.vow[rule_id - 1].rule.rule_id;
+	rule->profile.vow.if_num = db_instance->rules[rule_id - 1].profile.vow.if_num;
+	rule->profile.vow.dscp = db_instance->rules[rule_id - 1].profile.vow.dscp;
+	rule->profile.vow.outer_8021p = db_instance->rules[rule_id - 1].profile.vow.outer_8021p;
+	rule->profile.vow.inner_8021p = db_instance->rules[rule_id - 1].profile.vow.inner_8021p;
+	rule->profile.vow.mask_id = db_instance->rules[rule_id - 1].profile.vow.mask_id;
+	rule->profile.vow.rule_id = db_instance->rules[rule_id - 1].profile.vow.rule_id;
 	return true;
 }
 
@@ -417,11 +371,11 @@ static size_t nss_match_vow_table_read(struct nss_match_instance *db_instance, s
 
 	size_wr += scnprintf(bufp + size_wr, buflen - size_wr, "rule_id\t hit_count\t mask_id\t if_name\t dscp\t outer 802.1p\t inner 802.1p\t action\t priority\t nexthop\n\n");
 	for (j = 0; j < NSS_MATCH_INSTANCE_RULE_MAX; j++) {
-		if (!db_instance->rules.vow[j].valid_rule)
+		if (!db_instance->rules[j].valid_rule)
 			continue;
 
 		dev_name = "N/A";
-		net_dev = nss_cmn_get_interface_dev(nss_ctx, db_instance->rules.vow[j].rule.if_num);
+		net_dev = nss_cmn_get_interface_dev(nss_ctx, db_instance->rules[j].profile.vow.if_num);
 		if (net_dev) {
 			dev_name = net_dev->name;
 		}
@@ -429,14 +383,14 @@ static size_t nss_match_vow_table_read(struct nss_match_instance *db_instance, s
 		size_wr += scnprintf(bufp + size_wr, buflen - size_wr, "%d\t\t %llu\t\t %d\t\t %s\t\t %d\t\t %d\t\t %d\t\t %u\t\t %d\t\t %d\n",
 				j + 1,
 				db_instance->stats.hit_count[j],
-				db_instance->rules.vow[j].rule.mask_id,
+				db_instance->rules[j].profile.vow.mask_id,
 				dev_name,
-				db_instance->rules.vow[j].rule.dscp,
-				db_instance->rules.vow[j].rule.outer_8021p,
-				db_instance->rules.vow[j].rule.inner_8021p,
-				db_instance->rules.vow[j].rule.action.action_flag,
-				db_instance->rules.vow[j].rule.action.setprio,
-				db_instance->rules.vow[j].rule.action.forward_ifnum);
+				db_instance->rules[j].profile.vow.dscp,
+				db_instance->rules[j].profile.vow.outer_8021p,
+				db_instance->rules[j].profile.vow.inner_8021p,
+				db_instance->rules[j].profile.vow.action.action_flag,
+				db_instance->rules[j].profile.vow.action.setprio,
+				db_instance->rules[j].profile.vow.action.forward_ifnum);
 	}
 
 	return size_wr;
@@ -446,10 +400,8 @@ static size_t nss_match_vow_table_read(struct nss_match_instance *db_instance, s
  * Match ops for VoW profile.
  */
 static struct match_profile_ops match_profile_vow_ops = {
-	nss_match_vow_rule_id_generate,
 	nss_match_vow_rule_find,
 	nss_match_vow_db_rule_add,
-	nss_match_vow_db_rule_delete,
 	nss_match_vow_rule_read,
 	nss_match_vow_table_read,
 	nss_match_vow_cmd_parse,
