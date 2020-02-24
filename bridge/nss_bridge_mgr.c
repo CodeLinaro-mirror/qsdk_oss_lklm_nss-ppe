@@ -40,6 +40,11 @@
 
 #include "nss_bridge_mgr_priv.h"
 
+/*
+ * Module parameter to enable/disable OVS bridge.
+ */
+static bool ovs_enabled = false;
+
 static struct nss_bridge_mgr_context br_mgr_ctx;
 
 /*
@@ -1049,20 +1054,20 @@ int nss_bridge_mgr_register_br(struct net_device *dev)
 
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
 	/*
-	 * Disable fdb learning for OVS bridge port.
+	 * Disable FDB learning if OVS is enabled for
+	 * all bridges (including Linux bridge).
 	 */
-#if defined(NSS_BRIDGE_MGR_OVS_ENABLE)
-	if (ovsmgr_is_ovs_master(dev)) {
+	if (ovs_enabled) {
 		nss_bridge_mgr_disable_fdb_learning(b_pvt);
 	}
-#endif
 #endif
 	return 0;
 
 fail_3:
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
-	if (nss_bridge_tx_vsi_unassign_msg(ifnum, vsi_id) != NSS_TX_SUCCESS)
+	if (nss_bridge_tx_vsi_unassign_msg(ifnum, vsi_id) != NSS_TX_SUCCESS) {
 		nss_bridge_mgr_warn("%p: failed to unassign vsi\n", b_pvt);
+	}
 
 fail_2:
 	ppe_vsi_free(NSS_BRIDGE_MGR_SWITCH_ID, vsi_id);
@@ -1605,3 +1610,6 @@ module_exit(nss_bridge_mgr_exit_module);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("NSS bridge manager");
+
+module_param(ovs_enabled, bool, 0644);
+MODULE_PARM_DESC(ovs_enabled, "OVS bridge is enabled");
