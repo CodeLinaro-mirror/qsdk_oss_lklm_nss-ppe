@@ -606,6 +606,12 @@ void nss_match_stats_table_sync(struct nss_ctx_instance *nss_ctx, struct nss_mat
 	}
 
 	for (index = 0; index < NSS_MATCH_INSTANCE_RULE_MAX; index++) {
+		/*
+		 * Avoid sync for invalid rules.
+		 */
+		if (!db_instance->rules[index].valid_rule) {
+			continue;
+		}
 		db_instance->stats.hit_count[index] += stats_msg->hit_count[index];
 	}
 
