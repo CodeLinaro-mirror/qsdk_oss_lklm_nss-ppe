@@ -923,16 +923,32 @@ bool nss_nlipv6_init(void)
 	}
 
 	/*
+	 * To get NSS context
+	 */
+	gbl_ctx.nss = nss_ipv6_get_mgr();
+	if (!gbl_ctx.nss) {
+		nss_nl_info_always("Error: retreiving the NSS Context \n");
+		goto unreg_family;
+	}
+
+	/*
 	 * register device call back handler for ipv6 from NSS
 	 */
 	ret = nss_ipv6_stats_register_notifier(&nss_ipv6_stats_notifier_nb);
 	if (ret) {
 		nss_nl_info_always("Error: retreiving the NSS Context \n");
-		genl_unregister_family(&nss_nlipv6_family);
-		return false;
+		goto unreg_family;
 	}
 
 	return true;
+
+	/*
+	 * undo all registeration
+	 */
+unreg_family:
+	genl_unregister_family(&nss_nlipv6_family);
+
+	return false;
 }
 
 /*

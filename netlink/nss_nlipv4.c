@@ -922,6 +922,15 @@ bool nss_nlipv4_init(void)
 	}
 
 	/*
+	 * To get NSS context
+	 */
+	gbl_ctx.nss = nss_ipv4_get_mgr();
+	if (!gbl_ctx.nss) {
+		nss_nl_info_always("Error: retreiving the NSS Context \n");
+		goto unreg_family;
+	}
+
+	/*
 	 * register device call back handler for ipv4 from NSS
 	 */
 	ret = nss_ipv4_stats_register_notifier(&nss_ipv4_stats_notifier_nb);
