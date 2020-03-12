@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014,2016,2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014,2016,2018, 2020 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -73,14 +73,14 @@
  */
 
 #ifdef	PROFILE_DEBUG
-#define	profileDebug(s, ...) pr_debug("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define	profileInfo(s, ...) pr_info("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define	profileWarn(s, ...) pr_warn("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define	profileDebug(s, ...) pr_debug("%s[%d]: " s, __func__, __LINE__, ##__VA_ARGS__)
+#define	profileInfo(s, ...) pr_info("%s[%d]: " s, __func__, __LINE__, ##__VA_ARGS__)
 #else
 #define	profileDebug(s, ...)
 #define	profileInfo(s, ...)
-#define	profileWarn(s, ...)
 #endif
+
+#define	profileWarn(s, ...) pr_warn("%s[%d]: " s, __func__, __LINE__, ##__VA_ARGS__)
 
 static void profiler_handle_reply(struct nss_ctx_instance *nss_ctx, struct nss_cmn_msg *ncm);
 
@@ -158,14 +158,14 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 		return -EINVAL;
 	}
 
-	profileDebug("%p stat %x cnt %d %p\n", pn->pnc.pn2h, pn->pnc.pn2h->mh.md_type, psc_hd->ps_count, pn->ccl);
+	profileInfo("%p stat %x cnt %d %p\n", pn->pnc.pn2h, pn->pnc.pn2h->mh.md_type, psc_hd->ps_count, pn->ccl);
 
 	if (pn->pnc.pn2h->mh.md_type == PINGPONG_EMPTY || psc_hd->ps_count < 1) {
 		struct nss_profile_n2h_sample_buf *nsb;
 		ns = (pn->ccl_read + 1) & (CCL_SIZE-1);
 		nsb = pn->ccl + ns;
 		if (ns == pn->ccl_write || nsb->mh.md_type != PINGPONG_FULL) {
-			profileInfo("%s: waiting more data %x %p : ns %d rd %d wr %d\n", __func__, nsb->mh.md_type, nsb, ns, pn->ccl_read, pn->ccl_write);
+			profileInfo("waiting more data %x %p : ns %d rd %d wr %d\n", nsb->mh.md_type, nsb, ns, pn->ccl_read, pn->ccl_write);
 			return -EAGAIN;
 		}
 		pn->ccl_read = ns;
@@ -191,7 +191,7 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 	ph.pph.sample_stack_words = NSS_PROFILE_STACK_WORDS;
 
 	ns = (blen - sizeof(ph)) / sizeof(struct nss_profile_sample);
-	profileInfo("%X: blen %d ns = %d psc_hd count %d ssets %d phs %lu pss %lu\n",
+	profileInfo("%X: blen %d ns = %d psc_hd count %d ssets %d phs %zu pss %zu\n",
 		pn->profile_sequence_num, blen, ns, psc_hd->ps_count,
 		psc_hd->ex_hd.sample_sets, sizeof(ph), sizeof(struct nss_profile_sample));
 	if (ns > psc_hd->ps_count)
@@ -229,7 +229,8 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 	buf += sizeof(psc_hd->ex_hd);
 
 	blen = ns * sizeof(struct nss_profile_sample);
-	profileDebug("-profile_make_data_packet %p slen %d cur %d dcped %d + %d\n", pn->pnc.samples, blen, pn->pnc.cur, sizeof(ph.pph), sizeof(psc_hd->ex_hd));
+	profileDebug("-profile_make_data_packet %p slen %d cur %d dcped %zd + %zd\n",
+		pn->pnc.samples, blen, pn->pnc.cur, sizeof(ph.pph), sizeof(psc_hd->ex_hd));
 	if (copy_to_user(buf, &pn->pnc.samples[pn->pnc.cur], blen) != 0) {
 		return -EFAULT;
 	}
@@ -249,8 +250,16 @@ static int profile_make_data_packet(char *buf, int blen, struct profile_io *pn)
 
 	pn->profile_sequence_num++;
 	blen += sizeof(ph);
-	profileDebug("+profile_make_data_packet %d phd len %d nsp %p rd %d cnt %d\n", blen, sizeof(ph), pn->pnc.pn2h, pn->ccl_read, psc_hd->ps_count);
+	profileDebug("+profile_make_data_packet %d phd len %zd nsp %p rd %d cnt %d\n", blen, sizeof(ph), pn->pnc.pn2h, pn->ccl_read, psc_hd->ps_count);
 	return blen;
+}
+
+static void *profiler_get_dma(struct nss_ctx_instance *nss_ctx, struct profile_io *pn)
+{
+	struct nss_profile_sdma_producer *dma;
+	void *kaddr = nss_profiler_alloc_dma(nss_ctx, &dma);
+	pn->pnc.un.sram_start = dma->desc_ring;
+	return kaddr;
 }
 
 /*
@@ -344,7 +353,7 @@ static int profile_open(struct inode *inode, struct file *filp)
 	struct profile_io *pn;
 
 	if (filp->private_data)
-		printk(KERN_WARNING "%s: %p\n", filp->f_path.dentry->d_iname, filp->private_data);
+		profileWarn("%s: %p\n", filp->f_path.dentry->d_iname, filp->private_data);
 
 	n = filp->f_path.dentry->d_iname[strlen(filp->f_path.dentry->d_iname) - 1] - '0';
 	if (n < 0 || n >= NSS_MAX_CORES)
@@ -408,13 +417,24 @@ static ssize_t profile_read(struct file *filp, char *buf, size_t count, loff_t *
 	}
 	if (pn->sw_ksp_ptr) {
 		struct debug_box *db = (struct debug_box *) pn->sw_ksp_ptr;
+
+		if ((void*)db != (void*)pn) {
+			profileWarn("%p: hwe data not ready %p\n", pn, db);
+			return -EAGAIN;
+		}
+
+		profileWarn("dbda %p: %x %x %x %x %x\n", db->data,
+			db->data[0], db->data[2], db->data[4], db->data[6], db->data[7]);
+
 		slen = (PROFILE_STS_EVENT_COUNTERS + 1) * sizeof(db->data[0]);
 		if (copy_to_user(buf, db->data, slen))
 			return -EFAULT;
+		profileInfo("%p: sw_ksp_ptr %p slen %d\n", pn, pn->sw_ksp_ptr, slen);
 		return	slen;
 	}
 
 	if (!pn->pnc.samples) {
+		profileWarn("DEBUG %p: NULL samples\n", pn);
 		return -ENOMEM;
 	}
 
@@ -642,6 +662,7 @@ static void profiler_handle_stat_event_reply(struct nss_ctx_instance *nss_ctx,
 	 * save data for read()
 	 */
 	memcpy(pdb->data, db->data, (db->dlen + 1) * sizeof(db->data[0]));
+	pio->sw_ksp_ptr = (uint32_t *)pdb;
 }
 
 /*
@@ -682,40 +703,66 @@ static int parse_sys_stat_event_req(const char *buf, size_t count,
 	}
 
 	do {
-		int idx, event;
+		unsigned long idx;
+		int event, e5x;
+		char *kstrp;
 
 		while (isspace(*cp))
 			cp++;
-		if (kstrtoul(cp, 0, (unsigned long *)&event))
-			return -EINVAL;
-
-		cp = strchr(cp, ' ');
-		if (!cp) {
-			printk("missing index %s\n", buf);
+		kstrp = strchr(cp, ' ');
+		if (!kstrp) {
+			printk(KERN_ERR "%p missing index %p %s\n", buf, cp, cp);
 			return	-EINVAL;
 		}
-		while (isspace(*cp))
-			cp++;
-		idx = event >> 16;
-		if (idx) {
+		kstrp[0] = 0;
+
+		/*
+		 * kstrtoul bugs:
+		 *	it does not use white space for delimiter.
+		 *	it cannot use base 0, thus base 10 only.
+		 */
+		event = kstrtoul(cp, 10, &idx);
+		if (event) {
+			printk(KERN_ERR "kstrtoul %d: %s\n", event, cp);
+			return -EINVAL;
+		}
+		event = idx;
+
+		/*
+		 * Processing thread specific events, which requires hex values.
+		 * Because kstrtoul cannot use base 0, it makes this task harder
+		 * in user space. Users need to convert hex value to decimal, then
+		 * pass them in userland command event-counter.
+		 */
+		e5x = event >> 16;
+		if (e5x) {
 			if ((event & 0x1FF) < 50) {
-				printk("thr ID (%d) ignored for event %d\n",
-					idx, event & 0x1FF);
-			} else if (idx > 12) {
-				if ((idx >>= 5) > 12) {
-					printk("tID %d too big [1..12]\n", idx);
+				printk(KERN_INFO "thr ID (%d) ignored for event %d\n",
+					e5x, event & 0x1FF);
+			} else if (e5x > 12) {
+				if ((e5x >>= 5) > 12) {
+					printk(KERN_INFO "tID %d too big [1..12]\n", e5x);
 					return	-E2BIG;
 				}
 			}
 		}
 
-		if (kstrtoul(cp, 10, (unsigned long *)&idx) || idx < 0 || idx > 7) {
-			printk("index %d out of range [0..7]\n", idx);
+		cp = kstrp + 1;
+		while (isspace(*cp))
+			cp++;
+		kstrp = strchr(cp, ' ');
+		if (kstrp) {
+			kstrp[0] = 0;
+			kstrp++;
+		}
+
+		if (kstrtoul(cp, 10, &idx) || idx < 0 || idx > 7) {
+			printk(KERN_ERR "bad index %ld [0..7]\n", idx);
 			return	-ERANGE;
 		}
-		printk("%p: e %d i %d\n", db, event, idx);
+		printk(KERN_INFO "%p: e %d i %ld\n", db, event, idx);
 		db->data[idx] = event;
-		cp = strchr(cp, ' ');
+		cp = kstrp;
 	} while (cp);
 	db->hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_SET_SYS_STAT_EVENT;
 	result = nss_profiler_if_tx_buf(pio->ctx, &pio->pnc.un, sizeof(pio->pnc.un),
@@ -778,7 +825,7 @@ noea:		printk("%s: no enough arguments\n", __func__);
 			printk("n %d : %s\n", n, cp);
 			break;
 		}
-		printk("write %x to off %x\n", db->data[n], n * (int)sizeof(db->data[0]));
+		printk("write %x to off %zx\n", db->data[n], n * sizeof(db->data[0]));
 		n++;
 		cp = strchr(cp, ' ');
 	} while (cp && n < MAX_DB_WR);
@@ -864,7 +911,7 @@ static ssize_t debug_if(struct file *filp,
 			/*
 			 * set flag so event-counter can read the data from FW
 			 */
-			pio->sw_ksp_ptr = (uint32_t *)db;
+			pio->sw_ksp_ptr = db->data;
 		}
 		return	result;
 	}
@@ -988,7 +1035,8 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 	int	swap = 0;	/* only for header and info data, not samples */
 
 	if (buf_len < (sizeof(struct nss_profile_session) - sizeof(struct profile_counter) * (PROFILE_MAX_APP_COUNTERS))) {
-		printk("profile data packet is too small to be useful %d\n", buf_len);
+		profileWarn("%p: profile data packet is too small to be useful %d %x psc_hd %p\n",
+			npm, buf_len, npm->cm.interface, psc_hd);
 		return;
 	}
 
@@ -1058,13 +1106,92 @@ static void profile_handle_nss_data(void *arg, struct nss_profiler_msg *npm)
 }
 
 /*
+ * profiler_dma_handler
+ *	Handle DMA interrupt, and map DMA to N2H to minimize changes
+ * in profile_handle_nss_data.
+ */
+static void profiler_dma_handler(void *arg)
+{
+	int cri, idx, widx;
+	struct nss_profiler_msg *npm;
+	struct nss_profile_sdma_consumer *cbc;
+	struct nss_profile_sdma_producer *dma;
+	struct profile_io *pn = (struct profile_io *)arg;
+	struct nss_profile_sdma_ctrl *ctrl = nss_profile_dma_get_ctrl(pn->ctx);
+
+	if (!ctrl) {
+		profileWarn("%p: cannot get dma ctrl block\n", pn->ctx);
+		return;
+	}
+
+	dma = ctrl->producer;
+	cbc = ctrl->consumer;
+	cri = ctrl->cur_ring;
+	idx = ctrl->cidx[cri];
+	widx = ctrl->pidx[cri];
+
+	if (idx == widx) {
+		profileInfo("%p: dma[%d]%d %p sz %d no more profile data %p (%zd)\n",
+			ctrl, cri, idx, dma, dma->buf_size,
+			cbc->ring.kp + idx * dma->buf_size, sizeof(*ctrl));
+		return;
+	}
+
+	do {
+		npm = cbc->ring.kp + idx * dma->buf_size;
+
+		dmac_inv_range(npm, &npm->payload);
+		dsb(sy);
+
+		dmac_inv_range(&npm->payload, (void *)&npm->payload + npm->cm.len);
+		dsb(sy);
+
+		profile_handle_nss_data(pn, npm);
+		idx = (idx + 1) & (dma->num_bufs - 1);
+	} while (idx != widx);
+
+	ctrl->cidx[cri] = idx;
+	profileInfo("flush %p %p r %d w %d(%d)\n", cbc, cbc->ring.kp, idx, widx, ctrl->pidx[cri]);
+	dmac_clean_range(ctrl->cidx + cri, ctrl->cidx + cri + 1);
+	dsb(sy);
+}
+
+/*
  * profiler_handle_reply
- *	process N2H reply for message we sent to NSS -- currently no action
+ *	process N2H reply for message we sent to NSS
  */
 static void profiler_handle_reply(struct nss_ctx_instance *nss_ctx, struct nss_cmn_msg *ncm)
 {
 	switch (ncm->response) {
 	default:
+		if (ncm->error == PROFILE_ERROR_NO_DMA) {
+			struct nss_profile_sdma_consumer *cbc;
+			struct nss_profile_sdma_ctrl *ctrl;
+			struct profile_io *pn = node[0];
+
+			if (!pn || pn->ctx != nss_ctx) {
+				pn = node[1];
+				if (!pn || pn->ctx != nss_ctx)
+					return;
+			}
+
+			ctrl = nss_profile_dma_get_ctrl(nss_ctx);
+			if (!ctrl) {
+				profileWarn("%p: profiler can't get DMA\n", nss_ctx);
+				return;
+			}
+
+			cbc = ctrl->consumer;
+			cbc->ring.kp = profiler_get_dma(nss_ctx, pn);
+			if (cbc->ring.kp) {
+				pn->pnc.un.hd_magic = NSS_PROFILE_HD_MAGIC | NSS_PROFILER_START_MSG;
+				if (nss_profiler_if_tx_buf(pn->ctx, &pn->pnc.un,
+					sizeof(pn->pnc.un), profiler_handle_reply, pn)
+						== NSS_TX_SUCCESS)
+					return;
+			}
+		}
+
 		profileWarn("%p: profiler had error response %d\n", nss_ctx, ncm->response);
 		/*
 		 * fail through -- no plan to do anything yet
@@ -1072,6 +1199,30 @@ static void profiler_handle_reply(struct nss_ctx_instance *nss_ctx, struct nss_c
 	case NSS_CMN_RESPONSE_ACK:
 		return;
 	}
+}
+
+/*
+ * profile_prepare_dma()
+ *	Allocate DMA for profile if no DMA allocated; then register
+ * callback to handle interrupt for reading samples.
+ */
+static bool profile_prepare_dma(struct profile_io *node)
+{
+	struct nss_profile_sdma_ctrl *ctrl = nss_profile_dma_get_ctrl(node->ctx);
+
+	if (!ctrl)
+		return 0;
+
+	if (!ctrl->consumer[0].ring.kp)
+		ctrl->consumer[0].ring.kp = profiler_get_dma(node->ctx, node);
+
+	/*
+	 * register_noncd_cb will not fail since (!ctrl) has been checked above.
+	 * The ctrl is allocated in driver side, so even in impossible event to
+	 * cause register_noncd_cb failed, no need to release dma since calling
+	 * this function will not allocate another DMA if a DMA alerady exists.
+	 */
+	return (bool)nss_profile_dma_register_cb(node->ctx, 0, profiler_dma_handler, (void*)node);
 }
 
 /*
@@ -1119,9 +1270,14 @@ void netap_profile_release_resource(void)
 		remove_proc_entry("data", pdir);
 		remove_proc_entry("data1", pdir);
 	}
+	nss_profile_dma_deregister_cb(node[0]->ctx, 0);
+	nss_profile_dma_deregister_cb(node[1]->ctx, 0);
+	nss_profiler_release_dma(node[1]->ctx);
+	nss_profiler_release_dma(node[0]->ctx);
 	kfree(node[0]->ccl);
 	kfree(node[0]);
 	node[0] = NULL;
+
 }
 
 /*
@@ -1143,13 +1299,13 @@ int __init netap_profile_init_module(void)
 	 */
 	node[0] = kmalloc(sizeof(*node[0]) * NSS_MAX_CORES, GFP_KERNEL);
 	if (!node[0]) {
-		printk(KERN_INFO "Profiler CTRL kmalloc failed.\n");
+		profileWarn("Profiler CTRL kmalloc failed.\n");
 		return -ENOMEM;
 	}
 
 	node[0]->ccl = kmalloc(sizeof(*node[0]->ccl) * CCL_SIZE * NSS_MAX_CORES, GFP_KERNEL);
 	if (!node[0]->ccl) {
-		printk(KERN_INFO "Profiler n2h_sample_buf kmalloc failed.\n");
+		profileWarn("Profiler n2h_sample_buf kmalloc failed.\n");
 		kfree(node[0]);
 		node[0] = NULL;
 		return -ENOMEM;
@@ -1173,12 +1329,20 @@ int __init netap_profile_init_module(void)
 	 * attatch the device callback to N2H channel for CPU 0
 	 */
 	node[0]->ctx = nss_profiler_notify_register(NSS_CORE_0, profile_handle_nss_data, node[0]);
+	if (!node[0]->ctx) {
+		netap_profile_release_resource();
+		return -ENXIO;
+	}
+	profile_prepare_dma(node[0]);
+
 #if NSS_MAX_CORES > 1
 	node[1] = node[0] + 1;
 	node[1]->ccl = node[0]->ccl + CCL_SIZE;
 
 	profile_init(node[1]);
 	node[1]->ctx = nss_profiler_notify_register(NSS_CORE_1, profile_handle_nss_data, node[1]);
+	profile_prepare_dma(node[1]);
+
 	profile_register_performance_counter(&node[1]->profile_sequence_num, "Profile1 DRV data packets");
 #endif
 

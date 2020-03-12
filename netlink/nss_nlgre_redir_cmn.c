@@ -135,14 +135,14 @@ static bool nss_nlgre_redir_cmn_deinit_tun_data(struct nss_nlgre_redir_cmn_tun_d
 static void nss_nlgre_redir_cmn_host_data_cb(struct net_device *netdev, struct sk_buff *skb, struct napi_struct *napi)
 {
 	struct nss_ctx_instance *nss_ctx = nss_gre_redir_get_context();
-	struct nss_gre_redir_decap_per_pkt_metadata *meta_data_decap = NULL;
 
 	if (!skb) {
 		nss_nl_trace("%p: SKB is NULL\n", nss_ctx);
 		return;
 	}
 
-	meta_data_decap = (struct nss_gre_redir_decap_per_pkt_metadata *)(skb->data - NSS_GRE_REDIR_PER_PACKET_METADATA_OFFSET);
+	nss_nl_trace("%p: Exception packet on host inner:\n", skb);
+	nss_nlgre_redir_cmn_print_hex_dump(skb);
 	skb->protocol = eth_type_trans(skb, netdev);
 	netif_receive_skb(skb);
 }
@@ -153,9 +153,17 @@ static void nss_nlgre_redir_cmn_host_data_cb(struct net_device *netdev, struct s
  */
 static void nss_nlgre_redir_cmn_wifi_offl_data_cb(struct net_device *netdev, struct sk_buff *skb, struct napi_struct *napi)
 {
+	struct nss_ctx_instance *nss_ctx = nss_gre_redir_get_context();
+
+	if (!skb) {
+		nss_nl_warn("%p: SKB is NULL\n", nss_ctx);
+		return;
+	}
+
 	nss_nl_trace("%p: Exception packet on wifi offld inner:\n", skb);
-	nss_nlgre_redir_cmn_print_skb(skb);
-	dev_kfree_skb(skb);
+	nss_nlgre_redir_cmn_print_hex_dump(skb);
+	skb->protocol = eth_type_trans(skb, netdev);
+	netif_receive_skb(skb);
 }
 
 /*
@@ -165,7 +173,7 @@ static void nss_nlgre_redir_cmn_wifi_offl_data_cb(struct net_device *netdev, str
 static void nss_nlgre_redir_cmn_sjack_data_cb(struct net_device *netdev, struct sk_buff *skb, struct napi_struct *napi)
 {
 	nss_nl_trace("%p: Exception packet on sjack inner node:\n", skb);
-	nss_nlgre_redir_cmn_print_skb(skb);
+	nss_nlgre_redir_cmn_print_hex_dump(skb);
 	dev_kfree_skb(skb);
 }
 
@@ -176,7 +184,7 @@ static void nss_nlgre_redir_cmn_sjack_data_cb(struct net_device *netdev, struct 
 static void nss_nlgre_redir_cmn_outer_data_cb(struct net_device *netdev, struct sk_buff *skb, struct napi_struct *napi)
 {
 	nss_nl_trace("%p: Exception packet on outer node:\n", skb);
-	nss_nlgre_redir_cmn_print_skb(skb);
+	nss_nlgre_redir_cmn_print_hex_dump(skb);
 	dev_kfree_skb(skb);
 }
 
@@ -286,7 +294,7 @@ static netdev_tx_t nss_nlgre_redir_cmn_xmit_data(struct sk_buff *skb, struct net
 	/*
 	 * Configuring gre_redir meta data.
 	 */
-	meta_data_encap = (struct nss_gre_redir_encap_per_pkt_metadata *)(skb->data - NSS_GRE_REDIR_PER_PACKET_METADATA_OFFSET);
+	meta_data_encap = (struct nss_gre_redir_encap_per_pkt_metadata *)(skb->head + NSS_GRE_REDIR_PER_PACKET_METADATA_OFFSET);
 	memset(meta_data_encap, 0, sizeof(struct nss_gre_redir_encap_per_pkt_metadata));
 	meta_data_encap->gre_flags = 0;
 	meta_data_encap->gre_prio = 0;
@@ -398,6 +406,27 @@ static const struct net_device_ops gre_redir_netdev_ops = {
 };
 
 /*
+ * nss_nlgre_redir_cmn_print_hex_dump()
+ *	To print hex dump of packet received
+ */
+void nss_nlgre_redir_cmn_print_hex_dump(struct sk_buff *skb)
+{
+	int16_t dump_sz = (skb->len < NSS_NLGRE_REDIR_PKT_DUMP_SZ) ? skb->len : NSS_NLGRE_REDIR_PKT_DUMP_SZ;
+
+	dump_sz -= NSS_NLGRE_REDIR_PKT_DUMP_OFFSET;
+	if (dump_sz > 0) {
+		/*
+		 * Enable dynamic debug to print
+		 */
+		print_hex_dump_bytes("", DUMP_PREFIX_OFFSET, skb->data, dump_sz);
+		return;
+	}
+
+	nss_nl_warn("Could not print packet skb->len=%d, DUMP_SZ=%d, DUMP_OFFSET=%d\n",
+			skb->len, NSS_NLGRE_REDIR_PKT_DUMP_SZ, NSS_NLGRE_REDIR_PKT_DUMP_OFFSET);
+}
+
+/*
  * nss_nlgre_redir_cmn_mode_str_to_enum()
  * 	Returns the type of mode
  */
@@ -490,40 +519,6 @@ int nss_nlgre_redir_cmn_get_tun_data_index(struct net_device *dev)
 
 	spin_unlock(&lock);
 	return -1;
-}
-
-/*
- * nss_nlgre_redir_cmn_print_skb()
- * 	Prints the skb data
- */
-void nss_nlgre_redir_cmn_print_skb(struct sk_buff *skb)
-{
-	int length;
-	int iter;
-
-	/*
-	 * Check if length is less than 16 bytes
-	 * Else bring down to minimum multiple of 16 bytes.
-	 */
-	if (skb->len < 16) {
-		nss_nl_trace("%p: Skb too small to print min size: 16 bytes\n", skb);
-		return;
-	}
-
-	length = (skb->len / 16);
-	if (length > NSS_NLGRE_REDIR_CMN_MAX_SKB_PRINT_LEN)
-		length = NSS_NLGRE_REDIR_CMN_MAX_SKB_PRINT_LEN;
-
-	/*
-	 * Print first 48 bytes of sk_buff
-	 */
-	for (iter = 0; iter < length; iter++) {
-		nss_nl_trace("%04xx: %02x%02x %02x%02x %02x%02x %02x%02x %02x%02x %02x%02x %02x%02x %02x%02x\n", iter,
-			skb->data[iter * 8], skb->data[iter * 8 + 1], skb->data[iter * 8 + 2], skb->data[iter * 8 + 3],
-			skb->data[iter * 8 + 4], skb->data[iter * 8 + 5], skb->data[iter * 8 + 6], skb->data[iter * 8 + 7],
-			skb->data[iter * 8 + 8], skb->data[iter * 8 + 9], skb->data[iter * 8 + 10], skb->data[iter * 8 + 11],
-			skb->data[iter * 8 + 10], skb->data[iter * 8 + 13], skb->data[iter * 8 + 14], skb->data[iter * 8 + 15]);
-	}
 }
 
 /*

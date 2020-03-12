@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -76,6 +76,7 @@ struct nss_nlipv6_ctx {
 
 static int nss_nlipv6_ops_create_rule(struct sk_buff *skb, struct genl_info *info);
 static int nss_nlipv6_ops_destroy_rule(struct sk_buff *skb, struct genl_info *info);
+static int nss_nlipv6_process_notify(struct notifier_block *nb, unsigned long val, void *data);
 
 /*
  * IPV6 family definition
@@ -95,7 +96,7 @@ static struct genl_family nss_nlipv6_family = {
  * multicast group for sending message status & events
  */
 static struct genl_multicast_group nss_nlipv6_mcgrp[] = {
-	{.name = NSS_NLIPV6_FAMILY},
+	{.name = NSS_NLIPV6_MCAST_GRP},
 };
 
 /*
@@ -104,6 +105,13 @@ static struct genl_multicast_group nss_nlipv6_mcgrp[] = {
 static struct genl_ops nss_nlipv6_ops[] = {
 	{.cmd = NSS_IPV6_TX_CREATE_RULE_MSG, .doit = nss_nlipv6_ops_create_rule,},	/* rule create */
 	{.cmd = NSS_IPV6_TX_DESTROY_RULE_MSG, .doit = nss_nlipv6_ops_destroy_rule,},	/* rule destroy */
+};
+
+/*
+ * statistics call back handler for ipv6 from NSS
+ */
+static struct notifier_block nss_ipv6_stats_notifier_nb = {
+	.notifier_call = nss_nlipv6_process_notify,
 };
 
 #define NSS_NLIPV6_OPS_SZ ARRAY_SIZE(nss_nlipv6_ops)
@@ -336,14 +344,14 @@ static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, str
 		break;
 
 	case NSS_NL_IFTYPE_TUNNEL_GRE:
-		conn->flow_interface_num = nss_nlgre_redir_cmd_get_ifnum(flow_dev, NSS_DYNAMIC_INTERFACE_TYPE_GRE_REDIR_OUTER);
+		conn->flow_interface_num = nss_nlgre_redir_cmd_get_ifnum(flow_dev, tuple->protocol);
 		if (conn->flow_interface_num < 0 ) {
 			nss_nl_error("%p: Failed to get flow interface number (dev:%s, type:%d)\n",
 			flow_dev, flow_dev->name, flow_iftype);
 			return -EINVAL;
 		}
 
-		conn->flow_mtu = NSS_NLIPV6_MAX_MTU;
+		conn->flow_mtu = nss_nlgre_redir_cmd_get_mtu(flow_dev, NSS_GRE_REDIR_IP_HDR_TYPE_IPV6, conn->flow_interface_num);
 		break;
 
 	case NSS_NL_IFTYPE_VLAN:
@@ -394,15 +402,14 @@ static int nss_nlipv6_verify_conn_rule(struct nss_ipv6_rule_create_msg *msg, str
 		break;
 
 	case NSS_NL_IFTYPE_TUNNEL_GRE:
-		conn->return_interface_num = nss_nlgre_redir_cmd_get_ifnum(return_dev,
-		NSS_DYNAMIC_INTERFACE_TYPE_GRE_REDIR_WIFI_OFFL_INNER);
+		conn->return_interface_num = nss_nlgre_redir_cmd_get_ifnum(return_dev, tuple->protocol);
 		if (conn->return_interface_num < 0 ) {
 			nss_nl_error("%p: Failed to get return interface number (dev:%s, type:%d)\n",
 			return_dev, return_dev->name, return_iftype);
 			return -EINVAL;
 		}
 
-		conn->return_mtu = NSS_NLIPV6_MAX_MTU;
+		conn->return_mtu = nss_nlgre_redir_cmd_get_mtu(return_dev, NSS_GRE_REDIR_IP_HDR_TYPE_IPV6, conn->return_interface_num);
 		break;
 
 	case NSS_NL_IFTYPE_VLAN:
@@ -608,41 +615,26 @@ static int nss_nlipv6_verify_vlan_rule(struct nss_ipv6_rule_create_msg *msg, str
 
 /*
  * nss_nlipv6_process_notify()
- * 	process notification messages from NSS
+ *	process notification messages from NSS
  */
-static void nss_nlipv6_process_notify(void *app_data, struct nss_ipv6_msg *nim)
+static int nss_nlipv6_process_notify(struct notifier_block *nb, unsigned long val, void *data)
 {
 	struct nss_nlipv6_rule *nl_rule;
-	struct nss_ipv6_msg *nl_nim;
 	struct sk_buff *skb;
+	struct nss_ipv6_stats_notification *nss_stats;
 
-	skb = nss_nl_new_msg(&nss_nlipv6_family, nim->cm.type);
+	skb = nss_nl_new_msg(&nss_nlipv6_family, NSS_NLCMN_SUBSYS_IPV6);
 	if (!skb) {
 		nss_nl_error("unable to allocate NSS_NLIPV6 event\n");
-		return;
+		return NOTIFY_DONE;
 	}
 
 	nl_rule = nss_nl_get_data(skb);
-	nl_nim = &nl_rule->nim;
-
-	/*
-	 * initialize the NETLINK common header
-	 */
-	nss_nlipv6_rule_init(nl_rule, nim->cm.type);
-
-	/*
-	 * clear NSS common message items that are not useful to uspace
-	 */
-	nim->cm.interface = 0;
-	nim->cm.cb = (nss_ptr_t)NULL;
-	nim->cm.app_data = (nss_ptr_t)NULL;
-
-	/*
-	 * copy the contents of the sync message into the NETLINK message
-	 */
-	memcpy(nl_nim, nim, sizeof(struct nss_ipv6_msg));
-
+	nss_stats = (struct nss_ipv6_stats_notification *)data;
+	memcpy(&nl_rule->stats, nss_stats, sizeof(struct nss_ipv6_stats_notification));
 	nss_nl_mcast_event(&nss_nlipv6_family, skb);
+
+	return NOTIFY_DONE;
 }
 
 /*
@@ -917,7 +909,7 @@ done:
  */
 bool nss_nlipv6_init(void)
 {
-	int error;
+	int error, ret;
 
 	nss_nl_info_always("Init NSS netlink IPV6 handler\n");
 
@@ -933,21 +925,14 @@ bool nss_nlipv6_init(void)
 	/*
 	 * register device call back handler for ipv6 from NSS
 	 */
-	gbl_ctx.nss = nss_ipv6_notify_register(nss_nlipv6_process_notify, &gbl_ctx);
-	if (!gbl_ctx.nss) {
+	ret = nss_ipv6_stats_register_notifier(&nss_ipv6_stats_notifier_nb);
+	if (ret) {
 		nss_nl_info_always("Error: retreiving the NSS Context \n");
-		goto unreg_family;
+		genl_unregister_family(&nss_nlipv6_family);
+		return false;
 	}
 
 	return true;
-
-	/*
-	 * undo all registeration
-	 */
-unreg_family:
-	genl_unregister_family(&nss_nlipv6_family);
-
-	return false;
 }
 
 /*
@@ -961,6 +946,11 @@ bool nss_nlipv6_exit(void)
 	nss_nl_info_always("Exit NSS netlink IPV6 handler\n");
 
 	/*
+	 * Unregister the device callback handler for ipv6
+	 */
+	nss_ipv6_stats_unregister_notifier(&nss_ipv6_stats_notifier_nb);
+
+	/*
 	 * unregister the ops family
 	 */
 	error = genl_unregister_family(&nss_nlipv6_family);
@@ -968,11 +958,6 @@ bool nss_nlipv6_exit(void)
 		nss_nl_info_always("unable to unregister IPV6 NETLINK family\n");
 		return false;
 	}
-
-	/*
-	 * Unregister the device callback handler for ipv6
-	 */
-	nss_ipv6_notify_unregister();
 
 	gbl_ctx.nss = NULL;
 

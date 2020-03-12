@@ -51,7 +51,7 @@ static void nss_nlgre_redir_lag_msg_completion_cb(void *app_data, struct nss_cmn
 static void nss_nlgre_redir_lag_us_data_cb(struct net_device *netdev, struct sk_buff *skb, struct napi_struct *napi)
 {
 	nss_nl_trace("Exception packet on lag_us node:\n");
-	nss_nlgre_redir_cmn_print_skb(skb);
+	nss_nlgre_redir_cmn_print_hex_dump(skb);
 	dev_kfree_skb_any(skb);
 }
 
@@ -62,7 +62,7 @@ static void nss_nlgre_redir_lag_us_data_cb(struct net_device *netdev, struct sk_
 static void nss_nlgre_redir_lag_ds_data_cb(struct net_device *netdev, struct sk_buff *skb, struct napi_struct *napi)
 {
 	nss_nl_trace("Exception packet on lag_ds node:\n");
-	nss_nlgre_redir_cmn_print_skb(skb);
+	nss_nlgre_redir_cmn_print_hex_dump(skb);
 	dev_kfree_skb_any(skb);
 }
 

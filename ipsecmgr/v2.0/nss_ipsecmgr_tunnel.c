@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -93,6 +93,7 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	struct nss_ipsecmgr_ctx *ctx;
 	struct nss_ipsecmgr_sa *sa;
 	bool expand_skb = false;
+	uint16_t data_len;
 	int nhead, ntail;
 	uint32_t ifnum;
 
@@ -143,9 +144,11 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 
 	/*
 	 * This packet is ready for NSS transformation. We will now insert the
-	 * metadata on top of the IP header
+	 * metadata on top of the IP header and expand data area to cover tailroom for NSS.
 	 */
-	mdata = nss_ipsecmgr_tunnel_get_mdata(skb);
+	data_len = skb->len;
+	skb_put(skb, ntail);
+	mdata = nss_ipsecmgr_tunnel_push_mdata(skb);
 
 	read_lock_bh(&ipsecmgr_drv->lock);
 
@@ -183,6 +186,7 @@ fill_mdata:
 	mdata->flags = 0;
 	mdata->seq_num = 0;
 	mdata->sa = *sa_tuple;
+	mdata->data_len = data_len;
 
 	ifnum = ctx->ifnum;
 	nss_ctx = ctx->nss_ctx;
