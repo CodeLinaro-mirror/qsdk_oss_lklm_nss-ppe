@@ -54,6 +54,13 @@ static int nss_ovpnmgr_netdevice_event(struct notifier_block *unused,
 	struct net_device *nss_dev;
 
 	/*
+	 * Do not process any event other than UP and DOWN
+	 */
+	if ((event != NETDEV_UP) && (event != NETDEV_DOWN)) {
+		return NOTIFY_DONE;
+	}
+
+	/*
 	 * We should process notification only for TUN/TAP device
 	 */
 	if (!(app_dev->priv_flags & IFF_TUN_TAP)) {
@@ -77,39 +84,27 @@ static int nss_ovpnmgr_netdevice_event(struct notifier_block *unused,
 	 * then bring all NSS device attached to application device UP. If down event is triggered
 	 * then bring down all NSS device attached to application device DOWN. This will make ECM
 	 * flush(DOWN)/add(UP) flow rules in the system.
+	 *
+	 * Iterate through all NSS device registered and change their state to UP
 	 */
-	switch (event) {
-	case NETDEV_UP:
-		/*
-		 * Iterate through all NSS device registered and change their state to UP
-		 */
-		list_for_each_entry_safe(tun, n, &app->tun_list, list) {
-			nss_dev = __dev_get_by_index(&init_net, tun->tunnel_id);
-			if (unlikely(!nss_dev)) {
-				nss_ovpnmgr_warn("%p: Couldn't find tunnel: tunnel_id = %u\n\n", tun, tun->tunnel_id);
-				continue;
-			}
-
-			dev_open(nss_dev);
+	list_for_each_entry_safe(tun, n, &app->tun_list, list) {
+		nss_dev = __dev_get_by_index(&init_net, tun->tunnel_id);
+		if (unlikely(!nss_dev)) {
+			nss_ovpnmgr_warn("%p: Couldn't find tunnel: tunnel_id = %u\n\n", tun, tun->tunnel_id);
+			continue;
 		}
 
-		break;
-
-	case NETDEV_DOWN:
 		/*
-		 * Iterate through all NSS device registered and change their state to DOWN
+		 * dev_open and dev_close can sleep; hence calling it in non atomic context.
 		 */
-		list_for_each_entry_safe(tun, n, &app->tun_list, list) {
-			nss_dev = __dev_get_by_index(&init_net, tun->tunnel_id);
-			if (unlikely(!nss_dev)) {
-				nss_ovpnmgr_warn("%p: Couldn't find tunnel: tunnel_id = %u\n\n", tun, tun->tunnel_id);
-				continue;
-			}
-
+		read_unlock_bh(&ovpnmgr_ctx.lock);
+		if (event == NETDEV_UP) {
+			dev_open(nss_dev);
+		} else {
 			dev_close(nss_dev);
 		}
 
-		break;
+		read_lock_bh(&ovpnmgr_ctx.lock);
 	}
 
 	read_unlock_bh(&ovpnmgr_ctx.lock);
