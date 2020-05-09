@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -1669,7 +1669,6 @@ static int nss_ppe_scheduler_set(struct nss_qdisc *nq)
 			nss_ppe_queue_disable(nq);
 		}
 	} else {
-
 		/*
 		 * When a classful qdisc say HTB is configured with max levels of hierarchy,
 		 * and then if a qdisc say FIFO is attached at the last level, we will have all
@@ -1935,6 +1934,32 @@ int nss_ppe_port_num_get(struct nss_qdisc *nq)
 
 	nss_qdisc_info("port:%d\n", port_num);
 	return port_num;
+}
+
+/*
+ * nss_ppe_all_queue_enable_hybrid()
+ *	Enables PPE queues when NSS queuing Qdiscs are attached in the hieracrchy.
+ */
+void nss_ppe_all_queue_enable_hybrid(struct nss_qdisc *nq)
+{
+	struct nss_qdisc *nq_root = qdisc_priv(qdisc_root(nq->qdisc));
+
+	if (!nq_root->hybrid_configured) {
+		return;
+	}
+
+	/*
+	 * In case of hybrid mode, we disable the PPE queues until
+	 * queueing Qdisc is attached in the hierarchy.
+	 */
+	if((nq->type == NSS_SHAPER_NODE_TYPE_CODEL)
+		|| (nq->type == NSS_SHAPER_NODE_TYPE_FIFO)
+		|| (nq->type == NSS_SHAPER_NODE_TYPE_BF)
+		|| (nq->type == NSS_SHAPER_NODE_TYPE_WRED)) {
+		uint32_t port_num = nss_ppe_port_num_get(nq);
+		nss_ppe_all_queue_enable(port_num);
+		nss_qdisc_info("Queues in hybrid mode enabled successfully for Qdisc %p (type %d)\n", nq, nq->type);
+	}
 }
 
 /*

@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017, 2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -240,6 +240,12 @@ extern int nss_ppe_set_parent(struct Qdisc *sch, struct nss_qdisc *nq, uint32_t 
  *	Returns the number of PRIO bands supported based on qdisc level.
  */
 extern int nss_ppe_get_max_prio_bands(struct nss_qdisc *nq);
+
+/*
+ * nss_ppe_all_queue_enable_hybrid()
+ *	Enables PPE queues when NSS queuing Qdiscs are attached in the hieracrchy.
+ */
+extern void nss_ppe_all_queue_enable_hybrid(struct nss_qdisc *nq);
 
 /*
  * nss_ppe_node_detach()
