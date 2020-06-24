@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -1633,6 +1633,14 @@ int nss_qdisc_node_attach(struct nss_qdisc *nq, struct nss_qdisc *nq_child,
 	spin_lock_bh(&nq_child->lock);
 	nq_child->parent = nq;
 	spin_unlock_bh(&nq_child->lock);
+
+#if defined(NSS_QDISC_PPE_SUPPORT)
+	/*
+	 * In case of hybrid mode, enable PPE queues when NSS queuing
+	 * Qdiscs are attached in the hierarchy.
+	 */
+	nss_ppe_all_queue_enable_hybrid(nq_child);
+#endif
 
 	nss_qdisc_info("Qdisc %p (type %d): shaper node attach complete\n",
 			nq->qdisc, nq->type);

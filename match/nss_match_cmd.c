@@ -455,15 +455,16 @@ fail:
 static int nss_match_cmd_procfs_reset_nexthop(struct ctl_table *ctl, int write, void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	struct net_device *dev;
-	uint32_t if_num;
-	int ret, status;
+	uint32_t if_num, type = 0;
+	int ret;
 	char *dev_name;
 	char *cmd_buf = nss_match_data;
-	struct nss_if_msg nim;
+	nss_tx_status_t nss_tx_status;
 	struct nss_ctx_instance *nss_ctx = nss_match_get_context();
+	struct nss_ctx_instance *wifi_nss_ctx = nss_wifi_get_context();
 
-	if (!nss_ctx) {
-		pr_warn("NSS context not found, reset nexthop failed\n");
+	if (!nss_ctx || !wifi_nss_ctx) {
+		pr_warn("%p: NSS Context not found. wifi_nss_ctx: %p. Reset nexthop failed", nss_ctx, wifi_nss_ctx);
 		return -ENOMEM;
 	}
 
@@ -491,22 +492,28 @@ static int nss_match_cmd_procfs_reset_nexthop(struct ctl_table *ctl, int write, 
 	}
 
 	/*
-	 * Send the reset nexthop command.
+	 * Reset Nexthop APIs.
+	 * nss_phys_if_reset_nexthop: Used for physical interfaces.
+	 * nss_if_reset_nexthop: used for VAP interfaces.
 	 */
-	nss_cmn_msg_init(&nim.cm, if_num, NSS_IF_RESET_NEXTHOP, sizeof(struct nss_if_set_nexthop), NULL, NULL);
-
-	/*
-	 * TODO: Add and use synchronous API.
-	 */
-	status = nss_if_tx_msg(nss_ctx, &nim);
-        if (status != NSS_TX_SUCCESS) {
-		nss_match_warn("%p: Failed to send reset next hop message. Reset nexthop failed.\n", nss_ctx);
+	type = nss_dynamic_interface_get_type(wifi_nss_ctx, if_num);
+	if (type == NSS_DYNAMIC_INTERFACE_TYPE_VAP) {
+		nss_tx_status = nss_if_reset_nexthop(wifi_nss_ctx, if_num);
+	} else if (if_num < NSS_MAX_PHYSICAL_INTERFACES) {
+		nss_tx_status = nss_phys_if_reset_nexthop(nss_ctx, if_num);
+	} else {
+		pr_warn("%p: Invalid interface to Reset nexthop. Failed to Reset nexthop on if_num %d.\n",
+				nss_ctx, if_num);
 		dev_put(dev);
 		return -EFAULT;
 	}
 
-	pr_info("%p: Reset nexthop successful.\n", nss_ctx);
+	if (nss_tx_status != NSS_TX_SUCCESS) {
+		pr_warn("%p: Sending message failed, cannot reset nexthop\n", nss_ctx);
+	}
+
 	dev_put(dev);
+	pr_info("%p: Reset nexthop successful.\n", nss_ctx);
 	return 0;
 }
 
@@ -533,16 +540,16 @@ static int nss_match_cmd_procfs_set_if_nexthop(struct ctl_table *ctl, int write,
 		return ret;
 	}
 
+	if (!nss_ctx || !wifi_nss_ctx) {
+		pr_warn("%p: NSS Context not found. wifi_nss_ctx: %p. Set nexthop failed", nss_ctx, wifi_nss_ctx);
+		return -ENOMEM;
+	}
+
 	cmd_buf = (char *)kzalloc(count + 1, GFP_KERNEL);
 	nexthop_msg = cmd_buf;
 	if (!cmd_buf) {
 		pr_warn("%p: Cannot allocate buffer to read input", nss_ctx);
 		return -ENOMEM;
-	}
-
-	if (!nss_ctx) {
-		nss_match_warn("Cannot find nss context\n");
-		return -EFAULT;
 	}
 
 	if (copy_from_user(cmd_buf, buffer, count)) {
@@ -596,12 +603,14 @@ static int nss_match_cmd_procfs_set_if_nexthop(struct ctl_table *ctl, int write,
 		return -EFAULT;
 	}
 
-	if (wifi_nss_ctx) {
-		type = nss_dynamic_interface_get_type(wifi_nss_ctx, if_num);
-	}
-
+	/*
+	 * Set Nexthop APIs.
+	 * nss_phys_if_set_nexthop: Used for physical interfaces.
+	 * nss_if_set_nexthop: used for VAP interfaces.
+	 */
+	type = nss_dynamic_interface_get_type(wifi_nss_ctx, if_num);
 	if (type == NSS_DYNAMIC_INTERFACE_TYPE_VAP) {
-		nss_tx_status = nss_wifi_vdev_set_next_hop(wifi_nss_ctx, if_num, nh_if_num);
+		nss_tx_status = nss_if_set_nexthop(wifi_nss_ctx, if_num, nh_if_num);
 	} else if (if_num < NSS_MAX_PHYSICAL_INTERFACES) {
 		nss_tx_status = nss_phys_if_set_nexthop(nss_ctx, if_num, nh_if_num);
 	} else {

@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, 2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -146,7 +146,7 @@ static int nss_connmgr_pptp_get_session(struct net_device *dev, struct pptp_opt 
 	/*
 	 * check whether the interface is of type PPP
 	 */
-	if (dev->type != ARPHRD_PPP || !(dev->priv_flags & IFF_PPP_PPTP)) {
+	if (dev->type != ARPHRD_PPP || !(dev->priv_flags_ext & IFF_EXT_PPP_PPTP)) {
 		nss_connmgr_pptp_info("%p: netdevice is not a PPP tunnel type\n", dev);
 		return -1;
 	}
@@ -686,7 +686,7 @@ static int nss_connmgr_pptp_dev_down(struct net_device *dev)
 	/*
 	 * check whether the interface is of type PPP
 	 */
-	if (dev->type != ARPHRD_PPP || !(dev->priv_flags & IFF_PPP_PPTP)) {
+	if (dev->type != ARPHRD_PPP || !(dev->priv_flags_ext & IFF_EXT_PPP_PPTP)) {
 		nss_connmgr_pptp_info("%p: netdevice is not a pptp tunnel type\n", dev);
 		return NOTIFY_DONE;
 	}

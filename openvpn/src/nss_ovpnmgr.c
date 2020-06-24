@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -63,7 +63,7 @@ static int nss_ovpnmgr_netdevice_event(struct notifier_block *unused,
 	/*
 	 * We should process notification only for TUN/TAP device
 	 */
-	if (!(app_dev->priv_flags & IFF_TUN_TAP)) {
+	if (!(app_dev->priv_flags_ext & IFF_EXT_TUN_TAP)) {
 		return NOTIFY_DONE;
 	}
 

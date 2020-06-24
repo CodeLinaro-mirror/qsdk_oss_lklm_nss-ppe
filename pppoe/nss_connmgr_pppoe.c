@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -282,7 +282,7 @@ static int nss_connmgr_pppoe_connect(struct net_device *dev)
 	 */
 	if (netif_is_bond_master(opt.dev)) {
 		int32_t bondid = -1;
-#if IS_ENABLED(CONFIG_BONDING)
+#if defined(BONDING_SUPPORT)
 		bondid = bond_get_id(opt.dev);
 #endif
 		if (bondid < 0) {

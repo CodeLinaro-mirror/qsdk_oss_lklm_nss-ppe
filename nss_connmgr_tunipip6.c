@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014, 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2017-2018, 2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -29,7 +29,10 @@
 #include <linux/tcp.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
+#include <linux/netdevice.h>
+#include <net/ip.h>
 #include <net/ipv6.h>
+#include <linux/if.h>
 #if (LINUX_VERSION_CODE <= KERNEL_VERSION(3,9,0))
 #include <net/ipip.h>
 #else
@@ -94,7 +97,7 @@ struct nss_tunipip6_stats {
  * nss_tunipip6_encap_exception()
  *	Exception handler registered to NSS driver.
  *
- * This function is called when no rule is found for successful encapsulation.
+ * Exception handler registered to NSS for handling tunipip6 ipv4 pkts.
  */
 static void nss_tunipip6_encap_exception(struct net_device *dev, struct sk_buff *skb, __attribute__((unused)) struct napi_struct *napi)
 {
@@ -114,20 +117,94 @@ static void nss_tunipip6_encap_exception(struct net_device *dev, struct sk_buff 
  * nss_tunipip6_decap_exception()
  *	Exception handler registered to NSS driver.
  *
- * This function is called when no rule is found for successful decapsulation.
+ * Exception handler registered to NSS for handling tunipip6 ipv6 pkts.
  */
 static void nss_tunipip6_decap_exception(struct net_device *dev, struct sk_buff *skb, __attribute__((unused)) struct napi_struct *napi)
 {
-	skb->dev = dev;
-	nss_tunipip6_info("received - %d bytes name %s ver %x\n",
-			skb->len, dev->name, (skb->data[0] >> 4));
+	const struct net_device_ops *ops = dev->netdev_ops;
+	struct netdev_queue *queue;
+	struct iphdr *iph;
+	struct rtable *rt;
+	int cpu;
+	int8_t ver = skb->data[0] >> 4;
 
-	skb->protocol = htons(ETH_P_IPV6);
+	nss_tunipip6_trace("%p: received - %d bytes name %s ver %x\n",
+			dev, skb->len, dev->name, ver);
+
+	nss_tunipip6_assert(ver == 6);
+
+	if (unlikely(!pskb_may_pull(skb, sizeof(struct ipv6hdr)))) {
+		nss_tunipip6_warning("%p: pskb_may_pull failed to pull ipv6 header", dev);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+
+	skb_pull(skb, sizeof(struct ipv6hdr));
+
+	if (unlikely(!pskb_may_pull(skb, sizeof(struct iphdr)))) {
+		nss_tunipip6_warning("%p: pskb_may_pull failed to linearize iphdr, packet does not have a proper IPv4 header.", dev);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+
 	skb_reset_network_header(skb);
+
+	iph = ip_hdr(skb);
+	nss_tunipip6_assert(iph->version == 4);
+
+	rt = ip_route_output(&init_net, iph->daddr, 0, 0, 0);
+	if (unlikely(IS_ERR(rt))) {
+		nss_tunipip6_info("%p: Failed to find IPv4 route for %pI4\n", skb, &iph->daddr);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+
+	nss_tunipip6_trace("%p: Route look up successful for dest_ip: %pI4 src_ip: %pI4\n",
+			skb, &iph->daddr, &iph->saddr);
+
+	skb_dst_drop(skb);
+	skb_dst_set(skb, &rt->dst);
+
+	skb_reset_transport_header(skb);
+
+	/*
+	 * Set ignore df bit to fragment the packet in kernel.
+	 */
+	if (!(iph->frag_off & htons(IP_DF))) {
+		skb->ignore_df = true;
+	}
+
+	skb->protocol = htons(ETH_P_IP);
 	skb->pkt_type = PACKET_HOST;
 	skb->skb_iif = dev->ifindex;
+	skb->dev = dev;
 	skb->ip_summed = CHECKSUM_NONE;
-	netif_receive_skb(skb);
+
+	/*
+	 * This is needed to acquire HARD_TX_LOCK.
+	 */
+	cpu = smp_processor_id();
+	queue = skb_get_tx_queue(dev, skb);
+
+	nss_tunipip6_trace("%p: skb queue mapping: %d, cpu: %d", skb, skb_get_queue_mapping(skb), cpu);
+
+	/*
+	 * Take HARD_TX_LOCK to be in sync with the kernel.
+	 */
+	HARD_TX_LOCK(dev, queue, cpu);
+
+	/*
+	 * Check if queue is alive
+	 */
+	if (unlikely(netif_xmit_frozen_or_stopped(queue))) {
+		HARD_TX_UNLOCK(dev, queue);
+		nss_tunipip6_trace("%p: Dropping the packet, as queue: %p is not alive", skb, queue);
+		skb_dst_drop(skb);
+		dev_kfree_skb_any(skb);
+		return;
+	}
+	ops->ndo_start_xmit(skb, dev);
+	HARD_TX_UNLOCK(dev, queue);
 }
 
 /*
@@ -191,17 +268,17 @@ int nss_tunipip6_dev_up(struct net_device *netdev)
 	struct nss_tunipip6_msg tnlmsg;
 	struct nss_tunipip6_create_msg *tnlcfg;
 	struct flowi6 *fl6;
-	uint32_t fmr_number = 0;
 	int inner_ifnum, outer_ifnum;
 	uint32_t features = 0;
 	nss_tx_status_t status;
 	struct nss_ctx_instance *nss_ctx;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+#if IS_ENABLED(CONFIG_MAP_E_SUPPORT)
+	uint32_t fmr_number = 0;
 	struct __ip6_tnl_fmr *fmr;
 #endif
 
 	/*
-	 * Validate netdev for ipv6-in-ipv4  Tunnel
+	 * Validate netdev for ipv4-in-ipv6 Tunnel
 	 */
 	if (netdev->type != ARPHRD_TUNNEL6 ) {
 		return NOTIFY_DONE;
@@ -282,12 +359,13 @@ int nss_tunipip6_dev_up(struct net_device *netdev)
 	 * Flow Label In kernel is stored in big endian format.
 	 */
 	tnlcfg->flowlabel = fl6->flowlabel;
+
+#if IS_ENABLED(CONFIG_MAP_E_SUPPORT)
 	tnlcfg->draft03 = tunnel->parms.draft03;
 
 	/*
 	 * Configure FMR table up to MAX_FMR_NUMBER, the rest will be forwarded to BR
 	 */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
 	for (fmr = tunnel->parms.fmrs; fmr && fmr_number < NSS_TUNIPIP6_MAX_FMR_NUMBER; fmr = fmr->next, fmr_number++) {
 		tnlcfg->fmr[fmr_number].ip6_prefix[0] = ntohl(fmr->ip6_prefix.s6_addr32[0]);
 		tnlcfg->fmr[fmr_number].ip6_prefix[1] = ntohl(fmr->ip6_prefix.s6_addr32[1]);
@@ -299,8 +377,9 @@ int nss_tunipip6_dev_up(struct net_device *netdev)
 		tnlcfg->fmr[fmr_number].ea_len = fmr->ea_len;
 		tnlcfg->fmr[fmr_number].offset = fmr->offset;
 	}
-#endif
+
 	tnlcfg->fmr_number = fmr_number;
+#endif
 
 	/*
 	 * Updating sibling_if_num for encap interface.

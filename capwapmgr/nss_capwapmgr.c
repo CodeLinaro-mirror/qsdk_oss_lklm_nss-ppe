@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -1426,6 +1426,139 @@ nss_capwapmgr_status_t nss_capwapmgr_update_dest_mac_addr(struct net_device *dev
 EXPORT_SYMBOL(nss_capwapmgr_update_dest_mac_addr);
 
 /*
+ * nss_capwapmgr_update_src_interface()
+ *	API for updating Source Interface
+ */
+nss_capwapmgr_status_t nss_capwapmgr_update_src_interface(struct net_device *dev, uint8_t tunnel_id, int32_t src_interface_num)
+{
+	struct nss_capwapmgr_priv *priv;
+	struct nss_capwapmgr_tunnel *t;
+	nss_capwapmgr_status_t status;
+	nss_tx_status_t nss_status;
+	uint32_t outer_trustsec_enabled, dtls_enabled, forward_if_num, src_interface_num_temp;
+
+	t = nss_capwapmgr_verify_tunnel_param(dev, tunnel_id);
+	if (!t) {
+		nss_capwapmgr_warn("%p: can't find tunnel: %d\n", dev, tunnel_id);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	dev_hold(dev);
+	priv = netdev_priv(dev);
+	nss_capwapmgr_info("%p: %d: tunnel update source interface is being called\n", dev, t->if_num);
+	outer_trustsec_enabled = t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_OUTER_TRUSTSEC_ENABLED;
+	dtls_enabled = t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED;
+
+	/*
+	 * If trustsec is enabled, just update the next node of trustsec.
+	 */
+	if (outer_trustsec_enabled) {
+		if (!dtls_enabled) {
+			forward_if_num = nss_capwap_ifnum_with_core_id(t->if_num);
+		} else {
+			forward_if_num = nss_dtlsmgr_get_interface(t->dtls_dev, NSS_DTLSMGR_INTERFACE_TYPE_OUTER);
+		}
+
+		nss_status = nss_trustsec_tx_update_nexthop(forward_if_num, src_interface_num, t->capwap_rule.outer_sgt_value);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: unconfigure trustsec_tx failed\n", dev);
+			return NSS_CAPWAPMGR_FAILURE_UNCONFIGURE_TRUSTSEC_TX;
+		}
+
+		if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
+			t->ip_rule.v4.src_interface_num = src_interface_num;
+		} else {
+			t->ip_rule.v6.src_interface_num = src_interface_num;
+		}
+		return NSS_CAPWAPMGR_SUCCESS;
+	}
+
+
+	/*
+	 * Destroy/Re-Create the IPv4/IPv6 rule with the new Interface number for flow and return
+	 */
+	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
+
+		/*
+		 * Destroy the IP rule only if it already exist.
+		 */
+		if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+			struct nss_ipv4_destroy v4_destroy;
+			v4_destroy.protocol = IPPROTO_UDP;
+			v4_destroy.src_ip = t->ip_rule.v4.src_ip;
+			v4_destroy.dest_ip = t->ip_rule.v4.dest_ip;
+			v4_destroy.src_port = t->ip_rule.v4.src_port;
+			v4_destroy.dest_port = t->ip_rule.v4.dest_port;
+			nss_status = nss_capwapmgr_unconfigure_ipv4_rule(&v4_destroy);
+			if (nss_status != NSS_TX_SUCCESS) {
+				nss_capwapmgr_warn("%p: unconfigure ipv4 rule failed : %d\n", dev, nss_status);
+				dev_put(dev);
+				return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+			}
+
+			t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+		}
+
+		src_interface_num_temp = t->ip_rule.v4.src_interface_num;
+		t->ip_rule.v4.src_interface_num = src_interface_num;
+		nss_capwapmgr_configure_ipv4(&t->ip_rule.v4, 0, 0);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: configure ipv4 rule failed : %d\n", dev, nss_status);
+			t->ip_rule.v4.src_interface_num = src_interface_num_temp;
+			dev_put(dev);
+			return NSS_CAPWAPMGR_FAILURE_IP_RULE;
+		}
+	} else {
+		/*
+		 * Destroy the IP rule only if it already exist.
+		 */
+		if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+			struct nss_ipv6_destroy v6_destroy;
+
+			if (t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDP) {
+				v6_destroy.protocol = IPPROTO_UDP;
+			} else {
+				v6_destroy.protocol = IPPROTO_UDPLITE;
+			}
+
+			v6_destroy.src_ip[0] = t->ip_rule.v6.src_ip[0];
+			v6_destroy.src_ip[1] = t->ip_rule.v6.src_ip[1];
+			v6_destroy.src_ip[2] = t->ip_rule.v6.src_ip[2];
+			v6_destroy.src_ip[3] = t->ip_rule.v6.src_ip[3];
+
+			v6_destroy.dest_ip[0] = t->ip_rule.v6.dest_ip[0];
+			v6_destroy.dest_ip[1] = t->ip_rule.v6.dest_ip[1];
+			v6_destroy.dest_ip[2] = t->ip_rule.v6.dest_ip[2];
+			v6_destroy.dest_ip[3] = t->ip_rule.v6.dest_ip[3];
+
+			v6_destroy.src_port = t->ip_rule.v6.src_port;
+			v6_destroy.dest_port = t->ip_rule.v6.dest_port;
+			nss_status = nss_capwapmgr_unconfigure_ipv6_rule(&v6_destroy);
+			if (nss_status != NSS_TX_SUCCESS) {
+				nss_capwapmgr_warn("%p: unconfigure ipv6 rule failed : %d\n", dev, nss_status);
+				dev_put(dev);
+				return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+			}
+
+			t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+		}
+
+		src_interface_num_temp = t->ip_rule.v6.src_interface_num;
+		t->ip_rule.v6.src_interface_num = src_interface_num;
+		nss_capwapmgr_configure_ipv6(&t->ip_rule.v6, 0, 0);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: configure ipv6 rule failed : %d\n", dev, nss_status);
+			t->ip_rule.v6.src_interface_num = src_interface_num_temp;
+			dev_put(dev);
+			return NSS_CAPWAPMGR_FAILURE_IP_RULE;
+		}
+	}
+	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+	return status;
+}
+EXPORT_SYMBOL(nss_capwapmgr_update_src_interface);
+
+/*
  * nss_capwapmgr_dscp_rule_destroy()
  *	API to destroy previously created DSCP rule.
  */
@@ -1826,7 +1959,15 @@ nss_capwapmgr_status_t nss_capwapmgr_configure_dtls(struct net_device *dev, uint
 				nss_capwapmgr_info("%p: dtls in_data required to create dtls tunnel\n", dev);
 				return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 			}
+
+			/*
+			 * We only support the METADATA mode for pure DTLS tunnels; in CAPWAP-DTLS
+			 * the offload will not send the packets starting with Metadata. We need to
+			 * ensure that the user does not configure this mode accidentally.
+			 */
+			in_data->flags &= ~NSS_DTLSMGR_ENCAP_METADATA;
 			in_data->decap.nexthop_ifnum = nss_capwap_ifnum_with_core_id(t->if_num);
+
 			t->dtls_dev = nss_dtlsmgr_session_create(in_data);
 			if (!t->dtls_dev) {
 				nss_capwapmgr_warn("%p: cannot create DTLS session\n", dev);
@@ -1877,45 +2018,51 @@ nss_capwapmgr_status_t nss_capwapmgr_configure_dtls(struct net_device *dev, uint
 	 * Recreate ipv4/v6 rules with the new interface number
 	 */
 	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
-		v4.protocol = IPPROTO_UDP;
-		v4.src_ip = t->ip_rule.v4.src_ip;
-		v4.dest_ip = t->ip_rule.v4.dest_ip;
-		v4.src_port = t->ip_rule.v4.src_port;
-		v4.dest_port = t->ip_rule.v4.dest_port;
-		nss_status = nss_capwapmgr_unconfigure_ipv4_rule(&v4);
-		if (nss_status != NSS_TX_SUCCESS) {
-			nss_capwapmgr_warn("%p: unconfigure ipv4 rule failed : %d\n", dev, nss_status);
-			dev_put(dev);
-			return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+		if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+			v4.protocol = IPPROTO_UDP;
+			v4.src_ip = t->ip_rule.v4.src_ip;
+			v4.dest_ip = t->ip_rule.v4.dest_ip;
+			v4.src_port = t->ip_rule.v4.src_port;
+			v4.dest_port = t->ip_rule.v4.dest_port;
+			nss_status = nss_capwapmgr_unconfigure_ipv4_rule(&v4);
+			if (nss_status != NSS_TX_SUCCESS) {
+				nss_capwapmgr_warn("%p: unconfigure ipv4 rule failed : %d\n", dev, nss_status);
+				dev_put(dev);
+				return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+			}
+			t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
 		}
+
 		t->ip_rule.v4.dest_interface_num = ip_if_num;
 		nss_status = nss_capwapmgr_configure_ipv4(&t->ip_rule.v4, 0, 0);
 	} else {
-		if (t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDP) {
-			v6.protocol = IPPROTO_UDP;
-		} else {
-			v6.protocol = IPPROTO_UDPLITE;
+		if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+			if (t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDP) {
+				v6.protocol = IPPROTO_UDP;
+			} else {
+				v6.protocol = IPPROTO_UDPLITE;
+			}
+
+			v6.src_ip[0] = t->ip_rule.v6.src_ip[0];
+			v6.src_ip[1] = t->ip_rule.v6.src_ip[1];
+			v6.src_ip[2] = t->ip_rule.v6.src_ip[2];
+			v6.src_ip[3] = t->ip_rule.v6.src_ip[3];
+
+			v6.dest_ip[0] = t->ip_rule.v6.dest_ip[0];
+			v6.dest_ip[1] = t->ip_rule.v6.dest_ip[1];
+			v6.dest_ip[2] = t->ip_rule.v6.dest_ip[2];
+			v6.dest_ip[3] = t->ip_rule.v6.dest_ip[3];
+
+			v6.src_port = t->ip_rule.v6.src_port;
+			v6.dest_port = t->ip_rule.v6.dest_port;
+			nss_status = nss_capwapmgr_unconfigure_ipv6_rule(&v6);
+			if (nss_status != NSS_TX_SUCCESS) {
+				nss_capwapmgr_warn("%p: unconfigure ipv6 rule failed : %d\n", dev, nss_status);
+				dev_put(dev);
+				return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+			}
+			t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
 		}
-
-		v6.src_ip[0] = t->ip_rule.v6.src_ip[0];
-		v6.src_ip[1] = t->ip_rule.v6.src_ip[1];
-		v6.src_ip[2] = t->ip_rule.v6.src_ip[2];
-		v6.src_ip[3] = t->ip_rule.v6.src_ip[3];
-
-		v6.dest_ip[0] = t->ip_rule.v6.dest_ip[0];
-		v6.dest_ip[1] = t->ip_rule.v6.dest_ip[1];
-		v6.dest_ip[2] = t->ip_rule.v6.dest_ip[2];
-		v6.dest_ip[3] = t->ip_rule.v6.dest_ip[3];
-
-		v6.src_port = t->ip_rule.v6.src_port;
-		v6.dest_port = t->ip_rule.v6.dest_port;
-		nss_status = nss_capwapmgr_unconfigure_ipv6_rule(&v6);
-		if (nss_status != NSS_TX_SUCCESS) {
-			nss_capwapmgr_warn("%p: unconfigure ipv6 rule failed : %d\n", dev, nss_status);
-			dev_put(dev);
-			return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
-		}
-
 		t->ip_rule.v6.dest_interface_num = ip_if_num;
 		nss_status = nss_capwapmgr_configure_ipv6(&t->ip_rule.v6, 0, 0);
 	}
@@ -1929,6 +2076,7 @@ nss_capwapmgr_status_t nss_capwapmgr_configure_dtls(struct net_device *dev, uint
 	/*
 	 * Now configure capwap dtls
 	 */
+	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
 	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, dev, &capwapmsg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%p: configure DTLS failed : %d\n", dev, status);
@@ -2285,7 +2433,14 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 		capwap_rule->dtls_inner_if_num = 0;
 		forward_if_num = nss_capwap_ifnum_with_core_id(capwap_if_num);
 	} else {
+		/*
+		 * We only support the METADATA mode for pure DTLS tunnels; in CAPWAP-DTLS
+		 * the offload will not send the packets starting with Metadata. We need to
+		 * ensure that the user does not configure this mode accidentally.
+		 */
+		in_data->flags &= ~NSS_DTLSMGR_ENCAP_METADATA;
 		in_data->decap.nexthop_ifnum = nss_capwap_ifnum_with_core_id(capwap_if_num);
+
 		t->dtls_dev = nss_dtlsmgr_session_create(in_data);
 		if (!t->dtls_dev) {
 			nss_capwapmgr_warn("%p: NSS DTLS node alloc failed\n", dev);
@@ -2412,6 +2567,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 	t->if_num = capwap_if_num;
 	priv->if_num_to_tunnel_id[capwap_if_num] = tunnel_id;
 	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED;
+	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
 
 	dev_put(dev);
 	return status;
@@ -2553,42 +2709,44 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	/*
 	 * Destroy IP rule first.
 	 */
-	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
-		memset(&v4, 0, sizeof (struct nss_ipv4_destroy));
-		v4.protocol = IPPROTO_UDP;
-		v4.src_ip = t->ip_rule.v4.src_ip;
-		v4.dest_ip = t->ip_rule.v4.dest_ip;
-		v4.src_port = t->ip_rule.v4.src_port;
-		v4.dest_port = t->ip_rule.v4.dest_port;
-		nss_status = nss_capwapmgr_unconfigure_ipv4_rule(&v4);
-	} else {
-		memset(&v6, 0, sizeof (struct nss_ipv6_destroy));
-		if (t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDP) {
-			v6.protocol = IPPROTO_UDP;
+	if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+		if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
+			memset(&v4, 0, sizeof (struct nss_ipv4_destroy));
+			v4.protocol = IPPROTO_UDP;
+			v4.src_ip = t->ip_rule.v4.src_ip;
+			v4.dest_ip = t->ip_rule.v4.dest_ip;
+			v4.src_port = t->ip_rule.v4.src_port;
+			v4.dest_port = t->ip_rule.v4.dest_port;
+			nss_status = nss_capwapmgr_unconfigure_ipv4_rule(&v4);
 		} else {
-			v6.protocol = IPPROTO_UDPLITE;
+			memset(&v6, 0, sizeof (struct nss_ipv6_destroy));
+			if (t->capwap_rule.which_udp == NSS_CAPWAP_TUNNEL_UDP) {
+				v6.protocol = IPPROTO_UDP;
+			} else {
+				v6.protocol = IPPROTO_UDPLITE;
+			}
+
+			v6.src_ip[0] = t->ip_rule.v6.src_ip[0];
+			v6.src_ip[1] = t->ip_rule.v6.src_ip[1];
+			v6.src_ip[2] = t->ip_rule.v6.src_ip[2];
+			v6.src_ip[3] = t->ip_rule.v6.src_ip[3];
+
+			v6.dest_ip[0] = t->ip_rule.v6.dest_ip[0];
+			v6.dest_ip[1] = t->ip_rule.v6.dest_ip[1];
+			v6.dest_ip[2] = t->ip_rule.v6.dest_ip[2];
+			v6.dest_ip[3] = t->ip_rule.v6.dest_ip[3];
+
+			v6.src_port = t->ip_rule.v6.src_port;
+			v6.dest_port = t->ip_rule.v6.dest_port;
+			nss_status = nss_capwapmgr_unconfigure_ipv6_rule(&v6);
 		}
 
-		v6.src_ip[0] = t->ip_rule.v6.src_ip[0];
-
-		v6.src_ip[1] = t->ip_rule.v6.src_ip[1];
-		v6.src_ip[2] = t->ip_rule.v6.src_ip[2];
-		v6.src_ip[3] = t->ip_rule.v6.src_ip[3];
-
-		v6.dest_ip[0] = t->ip_rule.v6.dest_ip[0];
-		v6.dest_ip[1] = t->ip_rule.v6.dest_ip[1];
-		v6.dest_ip[2] = t->ip_rule.v6.dest_ip[2];
-		v6.dest_ip[3] = t->ip_rule.v6.dest_ip[3];
-
-		v6.src_port = t->ip_rule.v6.src_port;
-		v6.dest_port = t->ip_rule.v6.dest_port;
-		nss_status = nss_capwapmgr_unconfigure_ipv6_rule(&v6);
-	}
-
-	if (nss_status != NSS_TX_SUCCESS) {
-		nss_capwapmgr_warn("%p: %d: Unconfigure IP rule failed for tunnel : %d\n",
-			dev, if_num, tunnel_id);
-		return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%p: %d: Unconfigure IP rule failed for tunnel : %d\n",
+				dev, if_num, tunnel_id);
+			return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+		}
+		t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
 	}
 
 	/*
@@ -2600,9 +2758,16 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 			dev, if_num, tunnel_id);
 
 		if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
-			nss_capwapmgr_configure_ipv4(&t->ip_rule.v4, 0, 0);
+			nss_status = nss_capwapmgr_configure_ipv4(&t->ip_rule.v4, 0, 0);
+			if (nss_status == NSS_TX_SUCCESS) {
+				t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+			}
+
 		} else {
-			nss_capwapmgr_configure_ipv6(&t->ip_rule.v6, 0, 0);
+			nss_status = nss_capwapmgr_configure_ipv6(&t->ip_rule.v6, 0, 0);
+			if (nss_status == NSS_TX_SUCCESS) {
+				t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+			}
 		}
 
 		return NSS_CAPWAPMGR_FAILURE_CAPWAP_DESTROY_RULE;

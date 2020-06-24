@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018, 2020 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -93,8 +93,6 @@ static int nss_connmgr_gre_v4_get_mac_address(uint32_t src_ip, uint32_t dest_ip,
 		return GRE_ERR_RADDR_ROUTE_LOOKUP;
 	}
 
-	rcu_read_lock();
-
 	neigh = dst_neigh_lookup(&rt->dst, (const void *)&raddr);
 	if (!neigh) {
 		neigh = neigh_lookup(&arp_tbl, (const void *)&raddr,  rt->dst.dev);
@@ -112,7 +110,6 @@ static int nss_connmgr_gre_v4_get_mac_address(uint32_t src_ip, uint32_t dest_ip,
 		neigh = neigh_create(&arp_tbl, &raddr, rt->dst.dev);
 		if (IS_ERR_OR_NULL(neigh)) {
 			nss_connmgr_gre_warning("Unable to create ARP request neigh for %pI4\n", &raddr);
-			rcu_read_unlock();
 			ip_rt_put(rt);
 			return GRE_ERR_NEIGH_CREATE;
 		}
@@ -123,7 +120,6 @@ static int nss_connmgr_gre_v4_get_mac_address(uint32_t src_ip, uint32_t dest_ip,
 	}
 
 	if (neigh->dev->type == ARPHRD_LOOPBACK) {
-		rcu_read_unlock();
 		ip_rt_put(rt);
 		neigh_release(neigh);
 		nss_connmgr_gre_warning("Err in destination MAC address, neighbour dev is loop back for %pI4\n", &raddr);
@@ -132,7 +128,6 @@ static int nss_connmgr_gre_v4_get_mac_address(uint32_t src_ip, uint32_t dest_ip,
 	}
 
 	if (neigh->dev->flags & IFF_NOARP) {
-		rcu_read_unlock();
 		ip_rt_put(rt);
 		neigh_release(neigh);
 		nss_connmgr_gre_warning("Err in destination MAC address, neighbour dev is of type NO_ARP for %pI4\n", &raddr);
@@ -140,7 +135,6 @@ static int nss_connmgr_gre_v4_get_mac_address(uint32_t src_ip, uint32_t dest_ip,
 	}
 
 	ether_addr_copy(dest_mac, neigh->ha);
-	rcu_read_unlock();
 	ip_rt_put(rt);
 	neigh_release(neigh);
 	nss_connmgr_gre_info("Destination MAC address for %pI4 is %pM\n", &raddr, dest_mac);

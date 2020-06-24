@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -36,6 +36,20 @@
 #include "nss_connmgr_gre.h"
 
 /*
+ * nss_connmgr_gre_v6_route_lookup()
+ *	Find IPv6 route for the IP address
+ */
+static inline struct rt6_info *nss_connmgr_gre_v6_route_lookup(struct net *net, struct in6_addr *addr)
+{
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0))
+        return rt6_lookup(net, addr, NULL, 0, 0);
+#else
+	return rt6_lookup(net, addr, NULL, 0, 0, 0);
+#endif
+}
+
+
+/*
  * nss_connmgr_gre_v6_get_tx_dev()
  *	Find tx interface for the IP address.
  */
@@ -46,7 +60,8 @@ static struct net_device *nss_connmgr_gre_v6_get_tx_dev(uint8_t *dest_ip)
 	struct net_device *dev;
 
 	memcpy(ipv6_addr.s6_addr, dest_ip, 16);
-	rt = rt6_lookup(&init_net, &ipv6_addr, NULL, 0, 0);
+
+	rt = nss_connmgr_gre_v6_route_lookup(&init_net, &ipv6_addr);
 	if (!rt) {
 		return NULL;
 	}
@@ -92,7 +107,8 @@ static int nss_connmgr_gre_v6_get_mac_address(uint8_t *src_ip, uint8_t *dest_ip,
 	/*
 	 * Find dest MAC address
 	 */
-	rt = rt6_lookup(&init_net, &dst_addr, NULL, 0, 0);
+
+	rt = nss_connmgr_gre_v6_route_lookup(&init_net, &dst_addr);
 	if (!rt) {
 		nss_connmgr_gre_warning("Unable to find route lookup for %pI6", dest_ip);
 		return GRE_ERR_NEIGH_LOOKUP;
@@ -114,10 +130,10 @@ static int nss_connmgr_gre_v6_get_mac_address(uint8_t *src_ip, uint8_t *dest_ip,
 		 * Issue a Neighbour soliciation request
 	 	*/
 		nss_connmgr_gre_info("Issue Neighbour solicitation request\n");
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0))
-		ndisc_send_ns(local_dev, neigh, &dst_addr, &mc_dst_addr, &src_addr);
-#else
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0))
 		ndisc_send_ns(local_dev, &dst_addr, &mc_dst_addr, &src_addr);
+#else
+		ndisc_send_ns(local_dev, &dst_addr, &mc_dst_addr, &src_addr, 0);
 #endif
 		msleep(2000);
 
@@ -125,7 +141,8 @@ static int nss_connmgr_gre_v6_get_mac_address(uint8_t *src_ip, uint8_t *dest_ip,
 		 * Release hold on existing route entry, and find the route entry again
 		 */
 		ip6_rt_put(rt);
-		rt = rt6_lookup(&init_net, &dst_addr, NULL, 0, 0);
+
+		rt = nss_connmgr_gre_v6_route_lookup(&init_net, &dst_addr);
 		if (!rt) {
 			nss_connmgr_gre_warning("Unable to find route lookup for %pI6\n", dest_ip);
 			return GRE_ERR_NEIGH_LOOKUP;

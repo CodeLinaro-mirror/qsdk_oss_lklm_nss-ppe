@@ -423,17 +423,28 @@ static int nss_bridge_mgr_bond_master_join(struct net_device *bond_master,
 	struct net_device *slave;
 
 	/*
+	 * bond enslave/release path is protected by rtnl lock
+	 */
+	ASSERT_RTNL();
+
+	/*
+	 * Wait for RCU QS
+	 */
+	synchronize_rcu();
+
+	/*
 	 * Join each of the bonded slaves to the VSI group
 	 */
-	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(bond_master, slave) {
+	for_each_netdev(&init_net, slave) {
+		if (netdev_master_upper_dev_get(slave) != bond_master) {
+			continue;
+		}
+
 		if (nss_bridge_mgr_add_bond_slave(bond_master, slave, b_pvt)) {
-			rcu_read_unlock();
 			nss_bridge_mgr_warn("%p: Failed to add slave (%s) state in Bridge\n", b_pvt, slave->name);
 			goto cleanup;
 		}
 	}
-	rcu_read_unlock();
 
 	/*
 	 * If already other bond devices are attached to bridge,
@@ -461,13 +472,16 @@ static int nss_bridge_mgr_bond_master_join(struct net_device *bond_master,
 	}
 
 cleanup:
-	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(bond_master, slave) {
+
+	for_each_netdev(&init_net, slave) {
+		if (netdev_master_upper_dev_get(slave) != bond_master) {
+			continue;
+		}
+
 		if (nss_bridge_mgr_del_bond_slave(bond_master, slave, b_pvt)) {
 			nss_bridge_mgr_warn("%p: Failed to remove slave (%s) from Bridge\n", b_pvt, slave->name);
 		}
 	}
-	rcu_read_unlock();
 
 	return NOTIFY_BAD;
 }
@@ -483,18 +497,23 @@ static int nss_bridge_mgr_bond_master_leave(struct net_device *bond_master,
 
 	nss_bridge_mgr_assert(b_pvt->bond_slave_num == 0);
 
+	ASSERT_RTNL();
+
+	synchronize_rcu();
+
 	/*
 	 * Remove each of the bonded slaves from the VSI group
 	 */
-	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(bond_master, slave) {
+	for_each_netdev(&init_net, slave) {
+		if (netdev_master_upper_dev_get(slave) != bond_master) {
+			continue;
+		}
+
 		if (nss_bridge_mgr_del_bond_slave(bond_master, slave, b_pvt)) {
-			rcu_read_unlock();
-			nss_bridge_mgr_warn("%p: Failed to remove slave (%s) state in Bridge\n", b_pvt, slave->name);
+			nss_bridge_mgr_warn("%p: Failed to remove slave (%s) from Bridge\n", b_pvt, slave->name);
 			goto cleanup;
 		}
 	}
-	rcu_read_unlock();
 
 	/*
 	 * If more than one bond devices are attached to bridge,
@@ -521,13 +540,15 @@ static int nss_bridge_mgr_bond_master_leave(struct net_device *bond_master,
 	}
 
 cleanup:
-	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(bond_master, slave) {
+	for_each_netdev(&init_net, slave) {
+		if (netdev_master_upper_dev_get(slave) != bond_master) {
+			continue;
+		}
+
 		if (nss_bridge_mgr_add_bond_slave(bond_master, slave, b_pvt)) {
-			nss_bridge_mgr_warn("%p: Failed to add slave (%s) to Bridge\n", b_pvt, slave->name);
+			nss_bridge_mgr_warn("%p: Failed to add slave (%s) state in Bridge\n", b_pvt, slave->name);
 		}
 	}
-	rcu_read_unlock();
 
 	return NOTIFY_BAD;
 }
@@ -1567,7 +1588,7 @@ int __init nss_bridge_mgr_init_module(void)
 	/*
 	 * Monitor bridge activity only on supported platform
 	 */
-	if (!of_machine_is_compatible("qcom,ipq807x") && !of_machine_is_compatible("qcom,ipq6018"))
+	if (!of_machine_is_compatible("qcom,ipq807x") && !of_machine_is_compatible("qcom,ipq6018") && !of_machine_is_compatible("qcom,ipq8074"))
 		return 0;
 
 	INIT_LIST_HEAD(&br_mgr_ctx.list);

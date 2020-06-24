@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017 - 2018, 2020 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -172,8 +172,8 @@ void nss_dtlsmgr_ctx_dev_data_callback(void *app_data, struct sk_buff *skb)
 	ndm = (struct nss_dtlsmgr_metadata *)skb->data;
 	if (ndm->result != NSS_DTLSMGR_METADATA_RESULT_OK) {
 		nss_dtlsmgr_warn("%p: DTLS packets has error(s): %d", skb->dev, ndm->result);
-		dev_kfree_skb(skb);
-		stats->rx_dropped++;
+		dev_kfree_skb_any(skb);
+		stats->fail_host_rx++;
 		return;
 	}
 
@@ -278,6 +278,7 @@ void nss_dtlsmgr_ctx_dev_rx_outer(struct net_device *dev, struct sk_buff *skb, s
 		if (IS_ERR(rt)) {
 			nss_dtlsmgr_warn("%p: No IPv4 route or out dev", dev);
 			dev_kfree_skb_any(skb);
+			stats->fail_host_rx++;
 			break;
 		}
 
@@ -304,6 +305,7 @@ void nss_dtlsmgr_ctx_dev_rx_outer(struct net_device *dev, struct sk_buff *skb, s
 		if (IS_ERR(dst)) {
 			nss_dtlsmgr_warn("%p: No IPv6 route or out dev", dev);
 			dev_kfree_skb_any(skb);
+			stats->fail_host_rx++;
 			break;
 		}
 
@@ -320,7 +322,7 @@ void nss_dtlsmgr_ctx_dev_rx_outer(struct net_device *dev, struct sk_buff *skb, s
 		 */
 		nss_dtlsmgr_trace("%p: received non-IP packet", ctx);
 		dev_kfree_skb_any(skb);
-		stats->rx_dropped++;
+		stats->fail_host_rx++;
 	}
 
 	dev_put(dev);
@@ -334,8 +336,10 @@ void nss_dtlsmgr_ctx_dev_rx_outer(struct net_device *dev, struct sk_buff *skb, s
 static netdev_tx_t nss_dtlsmgr_ctx_dev_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct nss_dtlsmgr_ctx *ctx = netdev_priv(dev);
+	struct nss_dtlsmgr_metadata *ndm = NULL;
 	struct nss_dtlsmgr_ctx_data *encap;
 	struct nss_dtlsmgr_stats *stats;
+	bool mdata_init;
 	bool expand_skb;
 	int nhead, ntail;
 
@@ -353,6 +357,18 @@ static netdev_tx_t nss_dtlsmgr_ctx_dev_tx(struct sk_buff *skb, struct net_device
 		skb = skb_unshare(skb, in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
 
 	nss_dtlsmgr_trace("%p: TX packet for DTLS encapsulation, ifnum(%d)", dev, encap->ifnum);
+
+	if (encap->flags & NSS_DTLSMGR_ENCAP_METADATA) {
+		ndm = (struct nss_dtlsmgr_metadata *)skb->data;
+
+		/*
+		 * Check if metadata is initialized
+		 */
+		mdata_init = ndm->flags & NSS_DTLSMGR_METADATA_FLAG_ENC;
+		if (unlikely(!mdata_init))
+			goto free;
+
+	}
 
 	/*
 	 * For all these cases
@@ -380,6 +396,7 @@ static netdev_tx_t nss_dtlsmgr_ctx_dev_tx(struct sk_buff *skb, struct net_device
 	return NETDEV_TX_OK;
 free:
 	dev_kfree_skb_any(skb);
+	stats->fail_host_tx++;
 	return NETDEV_TX_OK;
 }
 

@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -212,8 +212,9 @@ static bool nss_dtlsmgr_ctx_configure_hdr(struct nss_dtlsmgr_ctx_data *data)
 	mask |= NSS_DTLS_CMN_CTX_HDR_UDPLITE;
 	mask |= NSS_DTLS_CMN_CTX_HDR_CAPWAP;
 	mask |= NSS_DTLS_CMN_CTX_CIPHER_MODE_GCM;
-	mask |= NSS_DTLS_CMN_CTX_OUTER_UDPLITE_CSUM;
-	mask |= NSS_DTLS_CMN_CTX_INNER_ACCEPT_ALL;
+	mask |= NSS_DTLS_CMN_CTX_ENCAP_UDPLITE_CSUM;
+	mask |= NSS_DTLS_CMN_CTX_ENCAP_METADATA;
+	mask |= NSS_DTLS_CMN_CTX_DECAP_ACCEPT_ALL;
 
 	cfg = &ndcm.msg.hdr_cfg;
 	cfg->flags = data->flags & mask;
@@ -332,9 +333,8 @@ static int nss_dtlsmgr_ctx_create_encap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 	struct nss_dtlsmgr_ctx_data *data = &ctx->encap;
 	struct nss_dtlsmgr_flow_data *flow = &data->flow;
 	struct nss_dtlsmgr_dtls_data *dtls;
-	uint32_t mask;
 
-	dtls = nss_dtlsmgr_ctx_alloc_dtls(ctx, &ctx->encap, &ndc->encap.crypto);
+	dtls = nss_dtlsmgr_ctx_alloc_dtls(ctx, &ctx->encap, &cfg->crypto);
 	if (!dtls) {
 		nss_dtlsmgr_warn("%p: unable to allocate encap context data", ctx);
 		return -ENOMEM;
@@ -345,7 +345,7 @@ static int nss_dtlsmgr_ctx_create_encap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 	data->di_type = NSS_DYNAMIC_INTERFACE_TYPE_DTLS_CMN_INNER;
 	data->ifnum = ifnum;
 	data->src_ifnum = src_ifnum;
-	data->flags = ndc->flags;
+	data->flags = ndc->flags & (NSS_DTLSMGR_HDR_MASK | NSS_DTLSMGR_CRYPTO_MASK | NSS_DTLSMGR_ENCAP_MASK);
 	data->tailroom = dtls->blk_len + dtls->hash_len;
 	data->headroom = dtls->iv_len;
 
@@ -362,8 +362,6 @@ static int nss_dtlsmgr_ctx_create_encap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 	dtls->epoch = cfg->epoch;
 	dtls->ver = cfg->ver;
 
-	mask = NSS_DTLSMGR_HDR_IPV6 | NSS_DTLSMGR_HDR_CAPWAP;
-
 	data->headroom += NSS_DTLSMGR_DTLS_HDR_SZ;
 
 	/*
@@ -372,7 +370,7 @@ static int nss_dtlsmgr_ctx_create_encap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 	 * to work with dynamically created interfaces
 	 *
 	 */
-	switch (mask & ndc->flags) {
+	switch (data->flags & NSS_DTLSMGR_HDR_MASK) {
 	case NSS_DTLSMGR_HDR_IPV6 | NSS_DTLSMGR_HDR_CAPWAP:
 		data->dest_ifnum = NSS_IPV6_RX_INTERFACE;
 		data->headroom += sizeof(struct ipv6hdr);
@@ -468,7 +466,7 @@ static int nss_dtlsmgr_ctx_create_decap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 	data->src_ifnum = src_ifnum;
 	data->dest_ifnum = cfg->decap.nexthop_ifnum;
 	data->tailroom = data->headroom = 0;
-	data->flags = cfg->flags;
+	data->flags = cfg->flags & (NSS_DTLSMGR_HDR_MASK | NSS_DTLSMGR_CRYPTO_MASK | NSS_DTLSMGR_DECAP_MASK);
 
 	nss_dtlsmgr_trace("%p: decap ifnum(%u), src(%u), dest(%u)", ctx, data->ifnum,
 			  data->src_ifnum, data->dest_ifnum);

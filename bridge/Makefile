@@ -15,7 +15,7 @@ ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64 ipq60xx ipq60xx_64))
 ccflags-y += -DNSS_BRIDGE_MGR_PPE_SUPPORT
 endif
 
-ifeq ($(CONFIG_BONDING), $(filter $(CONFIG_BONDING), y m))
+ifneq (,$(filter $(CONFIG_BONDING),y m))
 ifneq ($(findstring 4.4, $(KERNELVERSION)),)
 ccflags-y += -DBONDING_SUPPORT
 endif
