@@ -1039,7 +1039,7 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 		goto dealloc_inner_node;
 	}
 
-	nss_connmgr_gre_info("%px: nss_register_gre_if() successful. nss_ctx = %px\n", dev, nss_ctx);
+	nss_connmgr_gre_info("%px: nss_register_gre_if() custom successful. nss_ctx = %px. inner_if: %d, outer_if: %d\n", dev, nss_ctx, inner_if, outer_if);
 
 	/*
 	 * Send encap config to AE
@@ -1055,6 +1055,8 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 	}
 	cmsg->sibling_if_num = outer_if;
 	nss_gre_msg_init(&req, inner_if, NSS_GRE_MSG_ENCAP_CONFIGURE, sizeof(struct nss_gre_config_msg), NULL, NULL);
+	nss_connmgr_gre_info("%px: NSS_GRE_MSG_ENCAP_CONFIGURE:: nss_ctx = %px, flags:0x%x, ikey:0x%x, okey:0x%x, mode:%x, next_node_if_num:%u, sibling_if_num:%u, ttl:%u, tos:%u, metadata_size:%u\n",
+			dev, nss_ctx, cmsg->flags, cmsg->ikey, cmsg->okey, cmsg->mode, cmsg->next_node_if_num, cmsg->sibling_if_num, cmsg->ttl, cmsg->tos, cmsg->metadata_size);
 	status = nss_gre_tx_msg_sync(nss_ctx, &req);
 	if (status != NSS_TX_SUCCESS) {
 		*err_code = GRE_ERR_AE_CONFIG_FAILED;
@@ -1076,6 +1078,8 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 	}
 	cmsg->sibling_if_num = inner_if;
 	nss_gre_msg_init(&req, outer_if, NSS_GRE_MSG_DECAP_CONFIGURE, sizeof(struct nss_gre_config_msg), NULL, NULL);
+	nss_connmgr_gre_info("%px: NSS_GRE_MSG_DECAP_CONFIGURE:: nss_ctx = %px, flags:0x%x, ikey:0x%x, okey:0x%x, mode:%x, next_node_if_num:%u, sibling_if_num:%u, ttl:%u, tos:%u, metadata_size:%u\n",
+			dev, nss_ctx, cmsg->flags, cmsg->ikey, cmsg->okey, cmsg->mode, cmsg->next_node_if_num, cmsg->sibling_if_num, cmsg->ttl, cmsg->tos, cmsg->metadata_size);
 	status = nss_gre_tx_msg_sync(nss_ctx, &req);
 	if (status != NSS_TX_SUCCESS) {
 		*err_code = GRE_ERR_AE_CONFIG_FAILED;
@@ -1431,13 +1435,15 @@ static int nss_connmgr_gre_dev_up(struct net_device *dev)
 		goto unregister_inner;
 	}
 
-	nss_connmgr_gre_info("%px: nss_register_gre_if() successful. nss_ctx = %px. inner_if: %d, outer_if: %d\n", dev, nss_ctx, inner_if, outer_if);
+	nss_connmgr_gre_info("%px: nss_register_gre_if() standard successful. nss_ctx = %px. inner_if: %d, outer_if: %d\n", dev, nss_ctx, inner_if, outer_if);
 
 	/*
 	 * Send configure command for inner interface
 	 */
 	cmsg->sibling_if_num = outer_if;
 	nss_gre_msg_init(&req, inner_if, NSS_GRE_MSG_ENCAP_CONFIGURE, sizeof(struct nss_gre_config_msg), NULL, NULL);
+	nss_connmgr_gre_info("%px: NSS_GRE_MSG_ENCAP_CONFIGURE:: nss_ctx = %px, flags:0x%x, ikey:0x%x, okey:0x%x, mode:%x, next_node_if_num:%u, sibling_if_num:%u, ttl:%u, tos:%u, metadata_size:%u\n",
+			dev, nss_ctx, cmsg->flags, cmsg->ikey, cmsg->okey, cmsg->mode, cmsg->next_node_if_num, cmsg->sibling_if_num, cmsg->ttl, cmsg->tos, cmsg->metadata_size);
 	status = nss_gre_tx_msg_sync(nss_ctx, &req);
 	if (status != NSS_TX_SUCCESS) {
 		nss_connmgr_gre_warning("%px: nss gre std configure command error %d\n", dev, status);
@@ -1449,6 +1455,8 @@ static int nss_connmgr_gre_dev_up(struct net_device *dev)
 	 */
 	cmsg->sibling_if_num = inner_if;
 	nss_gre_msg_init(&req, outer_if, NSS_GRE_MSG_DECAP_CONFIGURE, sizeof(struct nss_gre_config_msg), NULL, NULL);
+	nss_connmgr_gre_info("%px: NSS_GRE_MSG_DECAP_CONFIGURE:: nss_ctx = %px, flags:0x%x, ikey:0x%x, okey:0x%x, mode:%x, next_node_if_num:%u, sibling_if_num:%u, ttl:%u, tos:%u, metadata_size:%u\n",
+			dev, nss_ctx, cmsg->flags, cmsg->ikey, cmsg->okey, cmsg->mode, cmsg->next_node_if_num, cmsg->sibling_if_num, cmsg->ttl, cmsg->tos, cmsg->metadata_size);
 	status = nss_gre_tx_msg_sync(nss_ctx, &req);
 	if (status != NSS_TX_SUCCESS) {
 		nss_connmgr_gre_warning("%px: nss gre std configure command error %d\n", dev, status);
