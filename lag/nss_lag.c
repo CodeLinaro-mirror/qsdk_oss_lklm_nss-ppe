@@ -22,7 +22,7 @@
 #include <linux/version.h>
 #include <linux/types.h>
 #include <linux/module.h>
-#include <linux/if_bonding.h>
+#include <net/bonding.h>
 #if defined(NSS_LAG_PPE_SUPPORT)
 #include <nss_vlan_mgr.h>
 #include <fal/fal_trunk.h>

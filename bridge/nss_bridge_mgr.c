@@ -23,6 +23,7 @@
 #include <linux/if_vlan.h>
 #include <linux/of.h>
 #include <linux/if_bridge.h>
+#include <net/bonding.h>
 #if defined(NSS_BRIDGE_MGR_PPE_SUPPORT)
 #include <ref/ref_vsi.h>
 #include <nss_vlan_mgr.h>

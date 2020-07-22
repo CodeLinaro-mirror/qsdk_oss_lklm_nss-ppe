@@ -23,6 +23,7 @@
 #include <linux/proc_fs.h>
 #include <linux/sysctl.h>
 #include <linux/module.h>
+#include <net/bonding.h>
 #include <nss_api_if.h>
 #ifdef NSS_VLAN_MGR_PPE_SUPPORT
 #include <ref/ref_vsi.h>

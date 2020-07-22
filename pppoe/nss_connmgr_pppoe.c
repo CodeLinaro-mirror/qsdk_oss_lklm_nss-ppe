@@ -28,6 +28,7 @@
 #include <linux/if_pppox.h>
 #include <net/ip.h>
 #include <linux/if_bridge.h>
+#include <net/bonding.h>
 #ifdef CONFIG_OF
 #include <linux/of.h>
 #endif
