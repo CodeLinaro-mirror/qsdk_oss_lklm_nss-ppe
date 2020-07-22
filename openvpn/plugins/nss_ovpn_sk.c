@@ -338,6 +338,7 @@ static int nss_ovpn_sk_tun_add(struct socket *sock, unsigned long argp)
 	}
 
 	tun_cfg.flags = tun_data.ovpn.flags;
+	tun_cfg.peer_id = tun_data.ovpn.peer_id;
 
 	/*
 	 * Update TTL and if necessary source IP address.
