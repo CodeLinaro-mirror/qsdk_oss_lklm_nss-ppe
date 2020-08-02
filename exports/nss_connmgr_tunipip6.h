@@ -70,6 +70,7 @@ struct nss_connmgr_tunipip6_tunnel_cfg {
 	bool ttl_inherit;				/**< Inherit IPv4 ttl to hoplimit. */
 	bool tos_inherit;				/**< Inherit IPv4 tos. */
 	bool frag_id_update;				/**< Enable fragment ID support. Applicable for MAP-E/4RD only. */
+	uint32_t fmr_max;				/**< Maximum number of FMR that can be configured. */
 };
 
 /**
