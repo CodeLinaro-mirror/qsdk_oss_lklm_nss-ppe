@@ -94,6 +94,11 @@ static int nss_tunipip6_data_parser(struct ctl_table *ctl, int write, void __use
 		param = strsep(&token, "=");
 		value = token;
 
+		if (!value || !param) {
+			kfree(pfree);
+			goto fail;
+		}
+
 		/*
 		 * Parse netdev and FMR parameters.
 		 */
