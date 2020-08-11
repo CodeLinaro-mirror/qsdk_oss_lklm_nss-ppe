@@ -23,10 +23,10 @@
 #ifndef __NSS_NLC2C_RX_H
 #define __NSS_NLC2C_RX_H
 
+#if (CONFIG_NSS_NLC2C_RX == 1)
 bool nss_nlc2c_rx_init(void);
 bool nss_nlc2c_rx_exit(void);
 
-#if defined(CONFIG_NSS_NLC2C_RX)
 #define NSS_NLC2C_RX_INIT nss_nlc2c_rx_init
 #define NSS_NLC2C_RX_EXIT nss_nlc2c_rx_exit
 #else

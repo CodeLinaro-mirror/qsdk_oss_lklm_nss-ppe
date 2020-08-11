@@ -13,11 +13,8 @@ ccflags-y += -DCONFIG_NSS_NLIPV6=1
 ccflags-y += -DCONFIG_NSS_NLOAM=1
 ccflags-y += -DCONFIG_NSS_NLGRE_REDIR_FAMILY=1
 ccflags-y += -DCONFIG_NSS_NLETHRX=1
-ccflags-y += -DCONFIG_NSS_NLEDMA=1
 ccflags-y += -DCONFIG_NSS_NLDYNAMIC_INTERFACE=1
 ccflags-y += -DCONFIG_NSS_NLN2H=1
-ccflags-y += -DCONFIG_NSS_NLC2C_TX=1
-ccflags-y += -DCONFIG_NSS_NLC2C_RX=1
 ccflags-y += -DCONFIG_NSS_NLIPV4_REASM=1
 ccflags-y += -DCONFIG_NSS_NLIPV6_REASM=1
 ccflags-y += -DCONFIG_NSS_NLWIFILI=1
@@ -40,11 +37,8 @@ qca-nss-netlink-objs += nss_nlipv4.o
 qca-nss-netlink-objs += nss_nlipv6.o
 qca-nss-netlink-objs += nss_nloam.o
 qca-nss-netlink-objs += nss_nlethrx.o
-qca-nss-netlink-objs += nss_nledma.o
 qca-nss-netlink-objs += nss_nldynamic_interface.o
 qca-nss-netlink-objs += nss_nln2h.o
-qca-nss-netlink-objs += nss_nlc2c_tx.o
-qca-nss-netlink-objs += nss_nlc2c_rx.o
 qca-nss-netlink-objs += nss_nlipv4_reasm.o
 qca-nss-netlink-objs += nss_nlipv6_reasm.o
 qca-nss-netlink-objs += nss_nlwifili.o
@@ -64,6 +58,23 @@ endif
 
 ifneq (,$(filter $(ipsecmgr), y))
 qca-nss-netlink-objs += nss_nlipsec.o
+endif
+
+ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64))
+ccflags-y += -DCONFIG_NSS_NLC2C_TX=1
+ccflags-y += -DCONFIG_NSS_NLC2C_RX=1
+qca-nss-netlink-objs += nss_nlc2c_tx.o
+qca-nss-netlink-objs += nss_nlc2c_rx.o
+else
+ccflags-y += -DCONFIG_NSS_NLC2C_TX=0
+ccflags-y += -DCONFIG_NSS_NLC2C_RX=0
+endif
+
+ifeq ($(SoC),$(filter $(SoC),ipq60xx ipq60xx_64 ipq807x ipq807x_64))
+ccflags-y += -DCONFIG_NSS_NLEDMA=1
+qca-nss-netlink-objs += nss_nledma.o
+else
+ccflags-y += -DCONFIG_NSS_NLEDMA=0
 endif
 
 obj-m += qca-nss-netlink.o

@@ -23,10 +23,10 @@
 #ifndef __NSS_NLEDMA_H
 #define __NSS_NLEDMA_H
 
+#if (CONFIG_NSS_NLEDMA == 1)
 bool nss_nledma_init(void);
 bool nss_nledma_exit(void);
 
-#if defined(CONFIG_NSS_NLEDMA)
 #define NSS_NLEDMA_INIT nss_nledma_init
 #define NSS_NLEDMA_EXIT nss_nledma_exit
 #else
