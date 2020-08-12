@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -29,6 +29,7 @@
 #include <linux/debugfs.h>
 #include <linux/rtnetlink.h>
 #include <net/ipv6.h>
+#include <net/vxlan.h>
 #include <linux/if_arp.h>
 #include <linux/etherdevice.h>
 #include <linux/atomic.h>
@@ -377,6 +378,7 @@ static int nss_dtlsmgr_ctx_create_encap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 		data->dest_ifnum = NSS_IPV6_RX_INTERFACE;
 		data->headroom += sizeof(struct ipv6hdr);
 		data->headroom += NSS_DTLSMGR_CAPWAP_DTLS_HDR_SZ;
+		data->headroom += NSS_DTLSMGR_SGT_HDR_SZ;
 		break;
 	case NSS_DTLSMGR_HDR_IPV6:
 		data->dest_ifnum = NSS_IPV6_RX_INTERFACE;
@@ -386,6 +388,7 @@ static int nss_dtlsmgr_ctx_create_encap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 		data->dest_ifnum = NSS_IPV4_RX_INTERFACE;
 		data->headroom += sizeof(struct iphdr);
 		data->headroom += NSS_DTLSMGR_CAPWAP_DTLS_HDR_SZ;
+		data->headroom += NSS_DTLSMGR_SGT_HDR_SZ;
 		break;
 	default:
 		data->dest_ifnum = NSS_IPV4_RX_INTERFACE;
@@ -396,7 +399,7 @@ static int nss_dtlsmgr_ctx_create_encap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 	/*
 	 * Header size is same for UDP and UDPLite
 	 */
-	data->headroom += sizeof(struct udphdr);
+	data->headroom += sizeof(struct ethhdr) + sizeof(struct vlan_hdr) + sizeof(struct udphdr);
 
 	nss_dtlsmgr_trace("%p: encap ifnum(%u), src(%u), dest(0x%x)", ctx, data->ifnum,
 			  data->src_ifnum, data->dest_ifnum);
@@ -626,7 +629,7 @@ struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
 	 * so that the skb data pointer remains 4 byte aligned when the
 	 * headroom/tailroom is adjusted.
 	 */
-	dev->needed_headroom = ALIGN(ctx->encap.headroom, 4);
+	dev->needed_headroom = ALIGN(ctx->encap.headroom + NSS_DTLSMGR_EDMA_PRE_HDR_SZ, 4);
 	dev->needed_tailroom = ALIGN(ctx->encap.tailroom, 4);
 
 	ctx->app_data = cfg->app_data;
