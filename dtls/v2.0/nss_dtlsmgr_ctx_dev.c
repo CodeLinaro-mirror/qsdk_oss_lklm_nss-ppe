@@ -339,6 +339,7 @@ static netdev_tx_t nss_dtlsmgr_ctx_dev_tx(struct sk_buff *skb, struct net_device
 	struct nss_dtlsmgr_metadata *ndm = NULL;
 	struct nss_dtlsmgr_ctx_data *encap;
 	struct nss_dtlsmgr_stats *stats;
+	struct sk_buff *skb2;
 	bool mdata_init;
 	bool expand_skb;
 	int nhead, ntail;
@@ -375,17 +376,25 @@ static netdev_tx_t nss_dtlsmgr_ctx_dev_tx(struct sk_buff *skb, struct net_device
 	 * - create a writable copy of buffer
 	 * - increase the head room
 	 * - increase the tail room
+	 * - skb->data is not 4-byte aligned
 	 */
-	expand_skb = skb_cloned(skb) || (skb_headroom(skb) < nhead) || (skb_tailroom(skb) < ntail);
+	expand_skb = skb_cloned(skb) || (skb_headroom(skb) < nhead) || (skb_tailroom(skb) < ntail)
+			|| !IS_ALIGNED((unsigned long)skb->data, sizeof(uint32_t));
 
-	if (expand_skb && pskb_expand_head(skb, nhead, ntail, GFP_ATOMIC)) {
-		nss_dtlsmgr_trace("%px: unable to expand buffer for (%s)", ctx, dev->name);
-		/*
-		 * Update stats based on whether headroom or tailroom or both failed
-		 */
-		stats->fail_headroom = stats->fail_headroom + (skb_headroom(skb) < nhead);
-		stats->fail_tailroom = stats->fail_tailroom + (skb_tailroom(skb) < ntail);
-		goto free;
+	if (expand_skb) {
+		skb2 = skb_copy_expand(skb, nhead, ntail, GFP_ATOMIC);
+		if (!skb2) {
+			nss_dtlsmgr_trace("%px: unable to expand buffer for (%s)", ctx, dev->name);
+			/*
+			 * Update stats based on whether headroom or tailroom or both failed
+			 */
+			stats->fail_headroom = stats->fail_headroom + (skb_headroom(skb) < nhead);
+			stats->fail_tailroom = stats->fail_tailroom + (skb_tailroom(skb) < ntail);
+			goto free;
+		}
+
+		dev_kfree_skb_any(skb);
+		skb = skb2;
 	}
 
 	if (nss_dtls_cmn_tx_buf(skb, encap->ifnum, encap->nss_ctx) != NSS_TX_SUCCESS) {
