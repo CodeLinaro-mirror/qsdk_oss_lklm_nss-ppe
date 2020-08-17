@@ -371,7 +371,7 @@ static int nss_dtlsmgr_ctx_create_encap(struct nss_dtlsmgr_ctx *ctx, uint32_t if
 	 * to work with dynamically created interfaces
 	 *
 	 */
-	switch (data->flags & NSS_DTLSMGR_HDR_MASK) {
+	switch (data->flags & (NSS_DTLSMGR_HDR_IPV6 | NSS_DTLSMGR_HDR_CAPWAP)) {
 	case NSS_DTLSMGR_HDR_IPV6 | NSS_DTLSMGR_HDR_CAPWAP:
 		data->dest_ifnum = NSS_IPV6_RX_INTERFACE;
 		data->headroom += sizeof(struct ipv6hdr);
