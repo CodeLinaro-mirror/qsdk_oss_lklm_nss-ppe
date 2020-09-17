@@ -843,10 +843,11 @@ static struct net_device *__nss_connmgr_gre_create_interface(struct nss_connmgr_
 	}
 
 	/*
-	 * Ignore set MAC flag for EoGRE
-	 * TODO: Find a better way to clear this flag
+	 * If next_dev is NULL, then the set MAC
+	 * flag can not be set. Because the packet
+	 * will be forwarded to ipv4_rx/ipv6_rx
 	 */
-	if (cfg->next_dev_outer) {
+	if (!cfg->next_dev) {
 		cmsg->flags &= ~NSS_GRE_CONFIG_SET_MAC;
 	}
 
