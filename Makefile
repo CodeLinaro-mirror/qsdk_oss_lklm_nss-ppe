@@ -37,6 +37,7 @@ obj-$(clmapmgr)+= clmapmgr/
 obj-$(match)+= match/
 obj-$(tlsmgr)+= tls/
 obj-$(mirror)+= mirror/
+obj-$(mscs)+= mscs/
 
 #NSS NETLINK
 obj-$(netlink)+= netlink/
