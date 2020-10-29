@@ -652,7 +652,7 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	if (nexthdr == IPPROTO_TCP) {
 		tcph->check = (uint16_t)l4_csum;
 	} else {
-		tcph->check = (uint16_t)l4_csum;
+		udph->check = (uint16_t)l4_csum;
 	}
 
 	skb->pkt_type = PACKET_HOST;
