@@ -156,6 +156,11 @@ static int nss_connmgr_pptp_get_session(struct net_device *dev, struct pptp_opt 
 		return -1;
 	}
 
+	if (ppp_is_cp_enabled(dev)) {
+		nss_connmgr_pptp_warning("%px: rx or tx compression is enabled for PPP\n", dev);
+		return -1;
+	}
+
 	ppp_ch_count = ppp_hold_channels(dev, channel, 1);
 	nss_connmgr_pptp_info("%px: PPP hold channel ret %d\n", dev, ppp_ch_count);
 	if (ppp_ch_count != 1) {
