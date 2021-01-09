@@ -552,8 +552,8 @@ void nss_ipsecmgr_ctx_rx_redir(struct net_device *dev, struct sk_buff *skb,
 	 * If, data callback is available then send the packet to the
 	 * callback function
 	 */
-	if (tun->cb.data_cb) {
-		tun->cb.data_cb(tun->cb.app_data, skb);
+	if (tun->cb.except_cb) {
+		tun->cb.except_cb(tun->cb.app_data, skb);
 		ctx->hstats.redir_cb++;
 		return;
 	}
@@ -609,6 +609,11 @@ void nss_ipsecmgr_ctx_rx_outer(struct net_device *dev, struct sk_buff *skb,
 		}
 
 		skb_set_transport_header(skb, sizeof(*iph));
+		if (tun->cb.except_cb) {
+			tun->cb.except_cb(tun->cb.app_data, skb);
+			ctx->hstats.outer_cb++;
+			return;
+		}
 		nss_ipsecmgr_ctx_route_ipv4(skb, ctx);
 		return;
 	}
@@ -626,6 +631,11 @@ void nss_ipsecmgr_ctx_rx_outer(struct net_device *dev, struct sk_buff *skb,
 		}
 
 		skb_set_transport_header(skb, sizeof(*ip6h));
+		if (tun->cb.except_cb) {
+			tun->cb.except_cb(tun->cb.app_data, skb);
+			ctx->hstats.outer_cb++;
+			return;
+		}
 		nss_ipsecmgr_ctx_route_ipv6(skb, ctx);
 		return;
 	}

@@ -348,6 +348,26 @@ static struct rtnl_link_stats64 *nss_capwapmgr_get_tunnel_stats(struct net_devic
 	return stats;
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0))
+/*
+ * nss_capwapmgr_dev_tunnel_stats()
+ *	Netdev ops function to retrieve stats for kernel version < 4.6
+ */
+static struct rtnl_link_stats64 *nss_capwapmgr_dev_tunnel_stats(struct net_device *dev, struct rtnl_link_stats64 *stats)
+{
+	return nss_capwapmgr_get_tunnel_stats(dev, stats);
+}
+#else
+/*
+ * nss_capwapmgr_dev_tunnel_stats()
+ *	Netdev ops function to retrieve stats for kernel version > 4.6
+ */
+static void nss_capwapmgr_dev_tunnel_stats(struct net_device *dev, struct rtnl_link_stats64 *stats)
+{
+	nss_capwapmgr_get_tunnel_stats(dev, stats);
+}
+#endif
+
 /*
  * nss_capwapmgr_netdev_ops
  *	Netdev operations.
@@ -358,7 +378,7 @@ static const struct net_device_ops nss_capwapmgr_netdev_ops = {
 	.ndo_start_xmit		= nss_capwapmgr_start_xmit,
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_change_mtu		= eth_change_mtu,
-	.ndo_get_stats64	= nss_capwapmgr_get_tunnel_stats,
+	.ndo_get_stats64	= nss_capwapmgr_dev_tunnel_stats,
 };
 
 /*
@@ -375,7 +395,12 @@ static void nss_capwapmgr_dummpy_netdev_setup(struct net_device *dev)
 	dev->ethtool_ops = NULL;
 	dev->header_ops = NULL;
 	dev->netdev_ops = &nss_capwapmgr_netdev_ops;
+
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(4, 11, 8))
 	dev->destructor = NULL;
+#else
+	dev->priv_destructor = NULL;
+#endif
 	memcpy(dev->dev_addr, "\x00\x00\x00\x00\x00\x00", dev->addr_len);
 	memset(dev->broadcast, 0xff, dev->addr_len);
 	memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);

@@ -128,6 +128,14 @@ static netdev_tx_t nss_ipsecmgr_tunnel_tx(struct sk_buff *skb, struct net_device
 	}
 
 	/*
+	 * Linearize the nonlinear SKB.
+	 */
+	if (skb_linearize(skb)) {
+		nss_ipsecmgr_trace("%s: unable to Linearize SKB\n", dev->name);
+		goto free;
+	}
+
+	/*
 	 * For all these cases
 	 * - create a writable copy of buffer
 	 * - increase the head room

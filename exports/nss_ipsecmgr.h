@@ -408,6 +408,7 @@ struct nss_ipsecmgr_callback {
 	struct net_device *skb_dev;		/**< Net device to use for Socket Buffer. */
 	nss_ipsecmgr_data_callback_t data_cb;	/**< Data callback function. */
 	nss_ipsecmgr_event_callback_t event_cb;	/**< Event callback function. */
+	nss_ipsecmgr_data_callback_t except_cb; /**< Outer exception callback function. */
 };
 
 /**

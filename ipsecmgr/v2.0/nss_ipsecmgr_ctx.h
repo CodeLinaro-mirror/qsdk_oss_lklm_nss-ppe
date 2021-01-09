@@ -43,7 +43,7 @@ struct nss_ipsecmgr_ctx_host_stats {
 	uint64_t inner_fail_flow;	/* Failed to find flow for inner packet */
 	uint64_t outer_exp;		/* Host processed inner IPv6 exceptioned packet */
 	uint64_t outer_exp_drop;	/* Host processed and dropped inner IPv6 exceptioned packet */
-	uint64_t outer_cb;		/* Number of times data call back called for inner packet */
+	uint64_t outer_cb;		/* Number of times exception call back called for outer packet */
 	uint64_t outer_fail_dev;	/* Failed to find netdevice for inner packet */
 	uint64_t outer_fail_sa;		/* Failed to find SA for outer packet */
 	uint64_t outer_fail_flow;	/* Failed to find flow for outer packet */
