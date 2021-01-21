@@ -1,6 +1,6 @@
  /*
  **************************************************************************
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -61,7 +61,7 @@ static int nss_tunipip6_data_parser(struct ctl_table *ctl, int write, void __use
 	bool ipv4_prefix_valid = false, ipv4_prefix_len_valid = false, ipv6_suffix_len_valid = false;
 	bool rule_type_valid = false, ea_len_valid = false, psid_offset_valid = false, netdev_valid = false;
 	struct nss_connmgr_tunipip6_maprule_cfg mrcfg = {0};
-	char *buf = kzalloc(MAX_PROC_SIZE, GFP_KERNEL);
+	char *buf;
 	enum nss_connmgr_tunipip6_err_codes status;
 	struct net_device *dev = NULL;
 	char *pfree;
@@ -69,7 +69,11 @@ static int nss_tunipip6_data_parser(struct ctl_table *ctl, int write, void __use
 	int ret;
 	int count;
 
+        if (!write) {
+                return -EINVAL;
+        }
 
+	buf = kzalloc(MAX_PROC_SIZE, GFP_KERNEL);
 	if (!buf) {
 		return -ENOMEM;
 	}
@@ -122,6 +126,7 @@ static int nss_tunipip6_data_parser(struct ctl_table *ctl, int write, void __use
 
 			if ((rule_type !=NSS_CONNMGR_TUNIPIP6_RULE_BMR) &&
 				       (rule_type != NSS_CONNMGR_TUNIPIP6_RULE_FMR)) {
+				kfree(pfree);
 				goto fail;
 			}
 			rule_type_valid = true;
@@ -135,6 +140,7 @@ static int nss_tunipip6_data_parser(struct ctl_table *ctl, int write, void __use
 			}
 
 			if (frag_id != 0 && frag_id != 1) {
+				kfree(pfree);
 				goto fail;
 			}
 			continue;
@@ -396,9 +402,9 @@ static int nss_tunipip6_cmd_procfs_read_help(struct ctl_table *ctl, int write, v
 			b. To delete maprule(BMR):\n\
 			echo dev=<map-mape/MAP-E netdevice> rule_type=<1> > remove_map_rule\n\
 			3. To flush FMR entries:\n\
-			echo dev=<map-mape/MAP-E netdevice> > flush_fmr_rule\n\
-			4. To enable/disable frag id:\n\
-			echo frag_id_update=<0/1> > frag_id\n\
+			echo dev=<map-mape/MAP-E netdevice> > flush_fmr_rule\n");
+	pr_info("\t\t\t4. To enable/disable frag id: \n\
+			echo frag_id_update=<0/1> > frag_id \n\
 			=====end of help=====\n");
 	*lenp = 0;
 	return ret;
