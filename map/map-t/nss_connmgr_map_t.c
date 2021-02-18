@@ -515,6 +515,7 @@ static void nss_connmgr_map_t_decap_exception(struct net_device *dev,
 /*
  * nss_connmgr_map_t_encap_exception()
  *	Exception handler registered to NSS for handling map_t ipv4 pkts
+ * Translates ipv4 packet back to ipv6 and send to nat46 device directly.
  */
 static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 			struct sk_buff *skb,
@@ -524,8 +525,8 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	struct iphdr *ip4_hdr;
 	struct ipv6hdr *ip6_hdr;
 	uint8_t v6saddr[16], v6daddr[16];
-	struct tcphdr *v4_tcp_hdr = NULL;
-	struct udphdr *v4_udp_hdr = NULL;
+	struct tcphdr *tcph = NULL;
+	struct udphdr *udph = NULL;
 	struct iphdr ip4_hdr_r;
 	__be16 sport, dport;
 	uint8_t nexthdr, hop_limit, tos;
@@ -533,24 +534,29 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	bool df_bit = false;
 	uint16_t append_hdr_sz = 0;
 	uint16_t identifier;
+	uint32_t l4_csum;
+	uint16_t csum;
 
-	/* discard L2 header */
+	/*
+	 * Discard L2 header.
+	 */
 	skb_pull(skb, sizeof(struct ethhdr));
 	skb_reset_mac_header(skb);
-
 	skb_reset_network_header(skb);
 
 	ip4_hdr = ip_hdr(skb);
-	skb_set_transport_header(skb, ip4_hdr->ihl*4);
+	skb_set_transport_header(skb, ip4_hdr->ihl * 4);
 
 	if (ip4_hdr->protocol == IPPROTO_TCP) {
-		v4_tcp_hdr = tcp_hdr(skb);
-		sport = v4_tcp_hdr->source;
-		dport = v4_tcp_hdr->dest;
+		tcph = tcp_hdr(skb);
+		l4_csum = tcph->check;
+		sport = tcph->source;
+		dport = tcph->dest;
 	} else if (ip4_hdr->protocol == IPPROTO_UDP) {
-		v4_udp_hdr = udp_hdr(skb);
-		sport = v4_udp_hdr->source;
-		dport = v4_udp_hdr->dest;
+		udph = udp_hdr(skb);
+		l4_csum = udph->check;
+		sport = udph->source;
+		dport = udph->dest;
 	} else {
 		nss_connmgr_map_t_warning("%px: Unsupported protocol, free it up\n", dev);
 		dev_kfree_skb_any(skb);
@@ -558,6 +564,12 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	}
 
 	/*
+	 * Undo the checksum of the IPv4 source and destinationIPv4 address.
+	 */
+	csum = ip_compute_csum(&ip4_hdr->saddr, 2 * sizeof(ip4_hdr->saddr));
+	l4_csum += ((~csum) & 0xFFFF);
+
+	/*`
 	 * IPv6 packet is xlated to ipv4 packet by acceleration engine. But there is no ipv4 rule.
 	 * Call xlate_4_to_6() [ which is exported by nat46.ko ] to find original ipv6 src and ipv6 dest address.
 	 * These functions is designed for packets from lan to wan. Since this packet is from wan, need to call
@@ -626,15 +638,31 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	}
 
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr) + append_hdr_sz);
-	ip6_update_csum(skb, ip6_hdr, 0);
+
+	/*
+	 * Add the checksum of the IPv6 source and destination address.
+	 */
+	l4_csum += ip_compute_csum(ip6_hdr->saddr.s6_addr16, 2 * sizeof(ip6_hdr->saddr));
+
+	/*
+	 * Fold the 32 bits checksum to 16 bits
+	 */
+	l4_csum = (l4_csum & 0x0000FFFF) + (l4_csum >> 16);
+	l4_csum = (l4_csum & 0x0000FFFF) + (l4_csum >> 16);
+
+	if (nexthdr == IPPROTO_TCP) {
+		tcph->check = (uint16_t)l4_csum;
+	} else {
+		udph->check = (uint16_t)l4_csum;
+	}
 
 	skb->pkt_type = PACKET_HOST;
 	skb->skb_iif = dev->ifindex;
 	skb->ip_summed = CHECKSUM_NONE;
 	skb->dev = dev;
 
-	nss_connmgr_map_t_trace("%px: ipv4 packet exceptioned after v6 ---> v4 xlate, created original ipv6 packet\n", dev);
-	nss_connmgr_map_t_trace("%px: Calculted ipv6 params: src_addr=%pI6, dest_addr=%pI6, payload_len=%d\n", dev, v6saddr, v6daddr, payload_len);
+	nss_connmgr_map_t_trace("%p: ipv4 packet exceptioned after v6 ---> v4 xlate, created original ipv6 packet\n", dev);
+	nss_connmgr_map_t_trace("%p: Calculted ipv6 params: src_addr=%pI6, dest_addr=%pI6, payload_len=%d, checksum=%x\n", dev, v6saddr, v6daddr, payload_len, l4_csum);
 
 	dev_queue_xmit(skb);
 	return;

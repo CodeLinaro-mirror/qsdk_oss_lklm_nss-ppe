@@ -1,6 +1,6 @@
 /*
  ***************************************************************************
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -299,10 +299,6 @@ static void nss_mirror_data_cb(struct net_device *netdev, struct sk_buff *skb, s
 	if (!skb || !skb->data) {
 		return;
 	}
-
-	nss_mirror_info("Printing 64 bytes of data\n");
-	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 16, 1,
-			skb->data, 64, 0);
 
 	dev_hold(netdev);
 
