@@ -512,6 +512,45 @@ extern nss_wifi_meshmgr_status_t nss_wifi_meshmgr_mesh_path_add_sync(nss_wifi_me
 							   struct nss_wifi_mesh_mpath_add_msg *wmpam);
 
 /**
+ * nss_wifi_meshmgr_mesh_path_exception
+ *	Send mesh path exception message.
+ *
+ * @datatypes
+ * nss_wifi_mesh_handle_t \n
+ * nss_wifi_mesh_exception_flag_msg \n
+ * nss_wifi_mesh_msg_callback_t \n
+ *
+ * @param[in]	mesh_handle     Pointer to the mesh handle.
+ * @param[in]	wmpefm		WiFi mesh path exception message.
+ * @param[in]	msg_cb		Callback for NACK/ACK messages from NSS.
+ * @param[in]	app_data	Application data for the message callback.
+ *
+ * @return
+ * Status
+ */
+extern nss_wifi_meshmgr_status_t nss_wifi_meshmgr_mesh_path_exception(nss_wifi_mesh_handle_t mesh_handle,
+						      struct nss_wifi_mesh_exception_flag_msg *wmpefm,
+						      nss_wifi_mesh_msg_callback_t msg_cb,
+						      void *app_data);
+
+/**
+ * nss_wifi_meshmgr_mesh_path_exception_sync
+ *	Send mesh path update message synchronously.
+ *
+ * @datatypes
+ * nss_wifi_mesh_handle_t \n
+ * nss_wifi_mesh_exception_flag_msg \n
+ *
+ * @param[in]	mesh_handle	Pointer to the mesh handle.
+ * @param[in]	wmpefm		WiFi mesh path exception flag message.
+ *
+ * @return
+ * Status
+ */
+extern nss_wifi_meshmgr_status_t nss_wifi_meshmgr_mesh_path_exception_sync(nss_wifi_mesh_handle_t mesh_handle,
+							      struct nss_wifi_mesh_exception_flag_msg *wmpefm);
+
+/**
  * nss_wifi_meshmgr_mesh_if_destroy_sync
  *	Destroy NSS mesh interfaces synchronously.
  *

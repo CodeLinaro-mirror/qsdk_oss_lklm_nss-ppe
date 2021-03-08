@@ -1483,6 +1483,105 @@ nss_wifi_meshmgr_mesh_path_update_sync(nss_wifi_mesh_handle_t mesh_handle, struc
 EXPORT_SYMBOL(nss_wifi_meshmgr_mesh_path_update_sync);
 
 /*
+ * nss_wifi_meshmgr_mesh_path_exception()
+ *	Mesh path exception msg asynchronously.
+ */
+nss_wifi_meshmgr_status_t
+nss_wifi_meshmgr_mesh_path_exception(nss_wifi_mesh_handle_t mesh_handle, struct nss_wifi_mesh_exception_flag_msg *wmefm,
+			       nss_wifi_mesh_msg_callback_t msg_cb, void *app_data)
+{
+	struct nss_wifi_mesh_msg wmesh_msg;
+	struct nss_wifi_mesh_exception_flag_msg *nwmefm;
+	struct nss_wifi_meshmgr_mesh_ctx *wmesh_ctx;
+	int32_t encap_ifnum;
+	nss_wifi_meshmgr_status_t nss_status;
+
+	wmesh_ctx = nss_wifi_meshmgr_find_and_ref_inc(mesh_handle);
+	if (!wmesh_ctx) {
+		nss_wifi_meshmgr_warn("%px: Mesh context is null\n", &wmgr_ctx);
+		return NSS_WIFI_MESHMGR_FAILURE_NULL_MESH_CTX;
+	}
+
+	encap_ifnum = wmesh_ctx->encap_ifnum;
+
+	/*
+	 * Verify the encap I/F number against it types.
+	 */
+	if (!(nss_wifi_meshmgr_verify_if_num(encap_ifnum, NSS_DYNAMIC_INTERFACE_TYPE_WIFI_MESH_INNER))) {
+		nss_wifi_meshmgr_warn("%px: I/F num: 0x%x verification failed\n", &wmgr_ctx, encap_ifnum);
+		nss_wifi_meshmgr_ref_dec(wmesh_ctx);
+		return NSS_WIFI_MESHMGR_FAILURE;
+	}
+
+	/*
+	 * Initialize the message.
+	 */
+	memset(&wmesh_msg, 0, sizeof(struct nss_wifi_mesh_msg));
+	nwmefm = &wmesh_msg.msg.exception_msg;
+	memcpy(nwmefm, wmefm, sizeof(*nwmefm));
+	nss_wifi_mesh_msg_init(&wmesh_msg, encap_ifnum, NSS_WIFI_MESH_MSG_EXCEPTION_FLAG,
+			sizeof(*nwmefm), msg_cb, app_data);
+
+	/*
+	 * Send the message to NSS asynchronously.
+	 */
+	nss_status = nss_wifi_meshmgr_tx_msg(&wmesh_msg);
+	if (nss_status != NSS_WIFI_MESHMGR_SUCCESS) {
+		nss_wifi_meshmgr_warn("%px: Mesh path exception message failed: %d.\n", &wmgr_ctx, nss_status);
+	}
+
+	nss_wifi_meshmgr_ref_dec(wmesh_ctx);
+	return nss_status;
+}
+EXPORT_SYMBOL(nss_wifi_meshmgr_mesh_path_exception);
+
+/*
+ * nss_wifi_meshmgr_mesh_path_exception_sync()
+ *	Send mesh path exception message sychronously.
+ */
+nss_wifi_meshmgr_status_t
+nss_wifi_meshmgr_mesh_path_exception_sync(nss_wifi_mesh_handle_t mesh_handle,struct nss_wifi_mesh_exception_flag_msg *wmefm)
+{
+	nss_wifi_meshmgr_status_t nss_status;
+	int32_t ret;
+	struct nss_wifi_meshmgr_mesh_ctx *wmesh_ctx;
+
+	wmesh_ctx = nss_wifi_meshmgr_find_and_ref_inc(mesh_handle);
+	if (!wmesh_ctx) {
+		nss_wifi_meshmgr_warn("%px: Mesh context is null\n", &wmgr_ctx);
+		return NSS_WIFI_MESHMGR_FAILURE_NULL_MESH_CTX;
+	}
+
+	/*
+	 * Send the message to NSS synchronously.
+	 */
+	down(&wmesh_ctx->sem);
+	nss_status = nss_wifi_meshmgr_mesh_path_exception(mesh_handle, wmefm, nss_wifi_meshmgr_tx_msg_cb, wmesh_ctx);
+	if (nss_status != NSS_WIFI_MESHMGR_SUCCESS) {
+		nss_wifi_meshmgr_warn("%px: Mesh path exception message failed: %d.\n", &wmgr_ctx, nss_status);
+		up(&wmesh_ctx->sem);
+		nss_wifi_meshmgr_ref_dec(wmesh_ctx);
+		return nss_status;
+	}
+
+	/*
+	 * Wait for the acknowledgement
+	 */
+	ret = wait_for_completion_timeout(&wmesh_ctx->complete, msecs_to_jiffies(NSS_WIFI_MESH_TX_TIMEOUT));
+	if (!ret) {
+		nss_wifi_meshmgr_warn("%px: WiFi mesh msg tx failed due to timeout\n", &wmgr_ctx);
+		wmesh_ctx->response = NSS_WIFI_MESHMGR_FAILURE_SYNC_TIMEOUT;
+	}
+
+	nss_status = wmesh_ctx->response;
+	up(&wmesh_ctx->sem);
+
+	nss_wifi_meshmgr_ref_dec(wmesh_ctx);
+	return nss_status;
+}
+EXPORT_SYMBOL(nss_wifi_meshmgr_mesh_path_exception_sync);
+
+/*
  * nss_wifi_meshmgr_if_destroy_sync()
  *	Function to unregister and destroy dynamic interfaces synchronously.
  */
