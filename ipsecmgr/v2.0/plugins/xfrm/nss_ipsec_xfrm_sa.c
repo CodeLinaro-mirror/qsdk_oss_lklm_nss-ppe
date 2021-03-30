@@ -227,23 +227,18 @@ static void nss_ipsec_xfrm_sa_init_tuple(struct nss_ipsec_xfrm_sa *sa, struct xf
 
 /*
  * nss_ipsec_xfrm_sa_deinit()
- *	Deinitialize the SA before destroy
+ *	Deinitialize the SA.
  */
-static void nss_ipsec_xfrm_sa_deinit(struct nss_ipsec_xfrm_sa *sa, struct xfrm_state *x)
+void nss_ipsec_xfrm_sa_deinit(struct xfrm_state *x)
 {
-	struct nss_ipsec_xfrm_tunnel *tun = sa->tun;
+	nss_ipsec_xfrm_info("%p: flags 0x%x\n", x, x->xflags);
 
 	/*
-	 * Only switch the value if it same for the current SA
-	 */
-	atomic_cmpxchg(&tun->default_spi, sa->tuple.spi_index, 0);
-
-	/*
-	 * If, XFRM state was programmed then deinit
+	 * If XFRM state was programmed, then deinit
 	 */
 	if (x->xflags & XFRM_STATE_OFFLOAD_NSS) {
-		nss_ipsec_xfrm_sa_deref(x->data);
 		x->xflags &= ~XFRM_STATE_OFFLOAD_NSS;
+		nss_ipsec_xfrm_sa_deref(x->data);
 		x->data = NULL;
 	}
 }
@@ -382,8 +377,7 @@ struct nss_ipsec_xfrm_sa *nss_ipsec_xfrm_sa_ref_by_state(struct xfrm_state *x)
 
 /*
  * nss_ipsec_xfrm_sa_dealloc()
- *	Delete an SA object. Expected to be called when the associated xfrm_state is getting freed.
- *	Caller needs to hold the write lock.
+ *	Delete an SA object. Expected to be called when the associated xfrm_state is getting deleted.
  */
 void nss_ipsec_xfrm_sa_dealloc(struct nss_ipsec_xfrm_sa *sa, struct xfrm_state *x)
 {
@@ -402,7 +396,11 @@ void nss_ipsec_xfrm_sa_dealloc(struct nss_ipsec_xfrm_sa *sa, struct xfrm_state *
 	 * Delete from ipsecmgr.
 	 */
 	nss_ipsecmgr_sa_del(sa->tun->dev, &sa->tuple);
-	nss_ipsec_xfrm_sa_deinit(sa, x);
+
+	/*
+	 * Only switch the value if it same for the current SA
+	 */
+	atomic_cmpxchg(&sa->tun->default_spi, sa->tuple.spi_index, 0);
 
 	/*
 	 * Refcnt was set to 1 when the sa object was created.
@@ -487,7 +485,7 @@ struct nss_ipsec_xfrm_sa *nss_ipsec_xfrm_sa_alloc(struct nss_ipsec_xfrm_tunnel *
 
 	return sa;
 error:
-	nss_ipsec_xfrm_sa_deinit(sa, x);
+	nss_ipsec_xfrm_sa_deinit(x);
 	nss_ipsec_xfrm_sa_deref(sa);
 	return NULL;
 }

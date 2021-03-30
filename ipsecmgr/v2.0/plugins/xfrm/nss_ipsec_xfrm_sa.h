@@ -42,6 +42,7 @@ struct nss_ipsec_xfrm_sa *nss_ipsec_xfrm_sa_ref_by_spi(uint32_t spi_index, uint3
 
 bool nss_ipsec_xfrm_sa_sp_set(struct nss_ipsec_xfrm_sa *sa, struct sk_buff *skb);
 
+void nss_ipsec_xfrm_sa_deinit(struct xfrm_state *x);
 void nss_ipsec_xfrm_sa_dealloc(struct nss_ipsec_xfrm_sa *sa, struct xfrm_state *x);
 struct nss_ipsec_xfrm_sa *nss_ipsec_xfrm_sa_alloc(struct nss_ipsec_xfrm_tunnel *tun, struct xfrm_state *x);
 #endif /* !__NSS_IPSEC_XFRM_SA_H */
