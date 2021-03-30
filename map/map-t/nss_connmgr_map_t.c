@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -534,7 +534,7 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	bool df_bit = false;
 	uint16_t append_hdr_sz = 0;
 	uint16_t identifier;
-	uint32_t l4_csum;
+	uint32_t l4_csum, orig_csum;
 	uint16_t csum;
 
 	/*
@@ -554,7 +554,7 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 		dport = tcph->dest;
 	} else if (ip4_hdr->protocol == IPPROTO_UDP) {
 		udph = udp_hdr(skb);
-		l4_csum = udph->check;
+		orig_csum = l4_csum = udph->check;
 		sport = udph->source;
 		dport = udph->dest;
 	} else {
@@ -643,7 +643,6 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	 * Add the checksum of the IPv6 source and destination address.
 	 */
 	l4_csum += ip_compute_csum(ip6_hdr->saddr.s6_addr16, 2 * sizeof(ip6_hdr->saddr));
-
 	/*
 	 * Fold the 32 bits checksum to 16 bits
 	 */
@@ -653,7 +652,7 @@ static void nss_connmgr_map_t_encap_exception(struct net_device *dev,
 	if (nexthdr == IPPROTO_TCP) {
 		tcph->check = (uint16_t)l4_csum;
 	} else {
-		udph->check = (uint16_t)l4_csum;
+		udph->check = (orig_csum == 0)? 0:(uint16_t)l4_csum;
 	}
 
 	skb->pkt_type = PACKET_HOST;

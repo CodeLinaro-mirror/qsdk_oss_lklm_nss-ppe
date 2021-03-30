@@ -8,7 +8,7 @@ ccflags-y += -DNSS_CLIENT_BUILD_ID="$(BUILD_ID)"
 qca-nss-tun6rd-objs := nss_connmgr_tun6rd.o
 
 ccflags-y += -DNSS_TUN6RD_DEBUG_LEVEL=0
-ccflags-y += -Werror
+ccflags-y += -Wall -Werror
 
 KERNELVERSION := $(word 1, $(subst ., ,$(KERNELVERSION))).$(word 2, $(subst ., ,$(KERNELVERSION)))
 
