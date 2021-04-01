@@ -643,7 +643,7 @@ struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
 		ctx->app_data = ctx;
 	}
 
-	error = rtnl_is_locked() ? register_netdevice(dev) : register_netdev(dev);
+	error = register_netdev(dev);
 	if (error < 0) {
 		nss_dtlsmgr_warn("%px: unable register net_device(%s)", ctx, dev->name);
 		goto destroy_decap;
@@ -708,7 +708,7 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_destroy(struct net_device *dev)
 
 	NSS_DTLSMGR_SET_MAGIC(ctx, 0);
 
-	rtnl_is_locked() ? unregister_netdevice(dev) : unregister_netdev(dev);
+	unregister_netdev(dev);
 
 	return NSS_DTLSMGR_OK;
 }
