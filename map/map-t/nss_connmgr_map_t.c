@@ -424,7 +424,7 @@ static void nss_connmgr_map_t_decap_exception(struct net_device *dev,
 	struct ipv6hdr ip6_hdr_r;
 	uint8_t next_hdr, hop_limit, tclass, l4_proto;
 	int total_len;
-	uint32_t identifier;
+	uint32_t identifier = 0;
 	bool df_bit = false;
 	uint16_t skip_sz = 0;
 	struct nss_map_t_mdata *mdata;
@@ -504,8 +504,16 @@ static void nss_connmgr_map_t_decap_exception(struct net_device *dev,
 	ip4_hdr->tos = tclass;
 	if (unlikely(df_bit)) {
 		ip4_hdr->frag_off = htons(IP_DF);
-	} else {
+	}
+
+	if (unlikely(identifier)) {
 		ip4_hdr->id = htons(identifier & 0xffff);
+	} else {
+		/*
+		 * Generate the new identifier value and set it
+		 * in the IPv4 Identification field.
+		 */
+		__ip_select_ident(dev_net(dev), ip4_hdr, 1);
 	}
 
 	skb->pkt_type = PACKET_HOST;
