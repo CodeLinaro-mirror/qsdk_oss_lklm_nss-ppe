@@ -17,6 +17,13 @@
 #define __NSS_IPSEC_XFRM_SA_H
 
 /*
+ * Max replay_window size in bytes.
+ * The max window size suppoted by NSS is actually 48 bytes.
+ * We round it up to the next highest power of 2.
+ */
+#define NSS_IPSEC_XFRM_SA_MAX_REPLAY_WIN_SZ 64
+
+/*
  * NSS IPSec xfrm SA obj
  */
 struct nss_ipsec_xfrm_sa {

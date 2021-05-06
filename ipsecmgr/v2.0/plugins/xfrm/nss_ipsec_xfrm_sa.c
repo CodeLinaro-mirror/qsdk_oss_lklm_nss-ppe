@@ -269,7 +269,9 @@ static void nss_ipsec_xfrm_sa_init(struct nss_ipsec_xfrm_sa *sa, struct xfrm_sta
 		nss_ipsec_xfrm_trace("%p: Encap SA xfrm(%p), ttl(%d), dscp(%d), df(%d)\n", sa, x,
 				sa_data->encap.ttl_hop_limit, sa_data->encap.copy_dscp, sa_data->encap.copy_df);
 	} else {
-		sa_data->decap.replay_win = x->props.replay_window;
+		uint32_t replay_win = x->props.replay_window / BITS_PER_BYTE;
+
+		sa_data->decap.replay_win = replay_win & (NSS_IPSEC_XFRM_SA_MAX_REPLAY_WIN_SZ - 1);
 		nss_ipsec_xfrm_trace("%p: Decap SA xfrm(%p), replay_win(%u) \n", sa, x, sa_data->decap.replay_win);
 	}
 
