@@ -1460,36 +1460,8 @@ error:
  */
 static void nss_ipsec_xfrm_esp_deinit_state(struct xfrm_state *x)
 {
-	struct nss_ipsec_xfrm_drv *drv = &g_ipsec_xfrm;
-	struct nss_ipsec_xfrm_tunnel *tun;
-	struct nss_ipsec_xfrm_sa *sa;
-
-	/*
-	 * If we are not managing this xfrm_state, then fallback
-	 */
-	sa = nss_ipsec_xfrm_sa_ref_by_state(x);
-	if (!sa) {
-		nss_ipsec_xfrm_warn("%p: xfrm_state is not owned by NSS: return\n", x);
-		return;
-	}
-
-	tun = sa->tun;
-
-	/*
-	 * First delete any other objects that could be holding reference to the SA object.
-	 * We delete all the flows mapped to this SA.
-	 */
-	nss_ipsec_xfrm_flush_flow_by_sa(drv, sa);
-	nss_ipsec_xfrm_sa_dealloc(sa, x);
-	nss_ipsec_xfrm_sa_deref(sa);
-
-	/*
-	 * We need to release the tunnel when all SA(s) associated with are gone
-	 */
-	if (atomic_dec_and_test(&tun->num_sa)) {
-		nss_ipsec_xfrm_del_tun(drv, tun);
-	}
-
+	nss_ipsec_xfrm_trace("%p: xfrm_state destroyed\n", x);
+	nss_ipsec_xfrm_sa_deinit(x);
 	return;
 }
 
@@ -1941,12 +1913,76 @@ void nss_ipsec_xfrm_update_stats(struct nss_ipsec_xfrm_drv *drv, struct nss_ipse
 	xfrm_state_put(x);
 }
 
+/*
+ * nss_ipsec_xfrm_state_delete()
+ *	xfrm_state delete notification handler. Deallocate the associated NSS SA.
+ */
+static void nss_ipsec_xfrm_state_delete(struct xfrm_state *x)
+{
+	struct nss_ipsec_xfrm_drv *drv = &g_ipsec_xfrm;
+	struct nss_ipsec_xfrm_tunnel *tun;
+	struct nss_ipsec_xfrm_sa *sa;
+
+	/*
+	 * If we are not managing this xfrm_state, then return
+	 */
+	sa = nss_ipsec_xfrm_sa_ref_by_state(x);
+	if (!sa) {
+		nss_ipsec_xfrm_info("%p: xfrm_state is not owned by NSS: return\n", x);
+		return;
+	}
+
+	tun = sa->tun;
+
+	/*
+	 * First delete any other objects that could be holding reference to the SA object.
+	 * We delete all the flows mapped to this SA.
+	 */
+	nss_ipsec_xfrm_flush_flow_by_sa(drv, sa);
+	nss_ipsec_xfrm_sa_dealloc(sa, x);
+	nss_ipsec_xfrm_sa_deref(sa);
+
+	/*
+	 * We need to release the tunnel when all SA(s) associated with are gone
+	 */
+	if (atomic_dec_and_test(&tun->num_sa)) {
+		nss_ipsec_xfrm_del_tun(drv, tun);
+	}
+
+	return;
+}
+
+/*
+ * nss_ipsec_xfrm_state_event_notify()
+ *	xfrm_state change notification handler.
+ */
+void nss_ipsec_xfrm_state_event_notify(struct xfrm_state *x, enum xfrm_event_type event)
+{
+	nss_ipsec_xfrm_info("%p: xfrm state change event %d\n", x, event);
+
+	switch (event) {
+		case XFRM_EVENT_STATE_ADD:
+			nss_ipsec_xfrm_trace("%p: xfrm state added\n", x);
+			return;
+		case XFRM_EVENT_STATE_DEL:
+			nss_ipsec_xfrm_trace("%p: xfrm state removed\n", x);
+			nss_ipsec_xfrm_state_delete(x);
+			return;
+		default:
+			break;
+	}
+}
+
 static struct ecm_interface_ipsec_callback xfrm_ecm_ipsec_cb =  {
 	.tunnel_get_and_hold = nss_ipsec_xfrm_get_dev_n_type
 };
 
 static struct notifier_block xfrm_ecm_notifier = {
 	.notifier_call = nss_ipsec_xfrm_ecm_conn_notify,
+};
+
+static struct xfrm_event_notifier xfrm_evt_notifier = {
+	.state_notify = nss_ipsec_xfrm_state_event_notify,
 };
 
 #if defined(NSS_L2TPV2_ENABLED)
@@ -2267,6 +2303,11 @@ int __init nss_ipsec_xfrm_init_module(void)
 	net_get_random_once(&g_ipsec_xfrm.hash_nonce, sizeof(g_ipsec_xfrm.hash_nonce));
 
 	/*
+	 * Listen to xfrm event notifcations
+	 */
+	xfrm_event_register_notifier(&init_net, &xfrm_evt_notifier);
+
+	/*
 	 * Register own esp handlers
 	 */
 	if (xfrm4_protocol_register(&xfrm4_proto, IPPROTO_ESP) < 0) {
@@ -2343,6 +2384,12 @@ void __exit nss_ipsec_xfrm_exit_module(void)
 	 * Remove debugfs.
 	 */
 	nss_ipsec_xfrm_debugfs_deinit(&g_ipsec_xfrm);
+
+	/*
+	 * Unregister xfrm event notifcations
+	 */
+	xfrm_event_unregister_notifier(&init_net, &xfrm_evt_notifier);
+
 	nss_ipsec_xfrm_info_always("NSS IPSec xfrm plugin module unloaded\n");
 }
 
