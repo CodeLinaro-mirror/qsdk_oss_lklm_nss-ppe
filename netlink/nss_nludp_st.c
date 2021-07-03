@@ -797,7 +797,6 @@ static int nss_nludp_st_create_ipv4_rule(struct sk_buff *skb, struct nss_nludp_s
 	 * Copy over the connection rules and set the CONN_VALID flag
 	 */
 	nircm->conn_rule.flow_interface_num = NSS_UDP_ST_INTERFACE;
-	nircm->conn_rule.return_interface_num = nss_cmn_get_interface_number_by_dev(net_dev);
 	memcpy(nircm->conn_rule.flow_mac, net_dev->dev_addr, 6);
 
 	/*
@@ -807,12 +806,25 @@ static int nss_nludp_st_create_ipv4_rule(struct sk_buff *skb, struct nss_nludp_s
 	nircm->conn_rule.return_mtu = net_dev->mtu;
 
 	/*
-	 * Update the return MAC address
+	 * Special case: RAWIP, the destination address does not have MAC Addr.
+	 * So, set it to 0. Also append Core ID if the net device run in a different core.
 	 */
-	if (nss_nludp_st_get_macaddr_ipv4(nircm->tuple.return_ip, (uint8_t *)&nircm->conn_rule.return_mac)) {
-		nss_nl_info("Error in Updating the Return MAC Address \n");
+	if (net_dev->type == ARPHRD_RAWIP) {
+#if !defined(NSS_NETLINK_UDP_ST_NO_RMNET_SUPPORT)
+		nircm->conn_rule.return_interface_num = nss_rmnet_rx_get_ifnum(net_dev);
+		memset(nircm->conn_rule.return_mac, 0, ETH_ALEN);
+#else
+		nss_nl_info("Error. no RAWIP support \n");
 		dev_put(net_dev);
 		return -EINVAL;
+#endif
+	} else {
+		nircm->conn_rule.return_interface_num = nss_cmn_get_interface_number_by_dev(net_dev);
+		if (nss_nludp_st_get_macaddr_ipv4(nircm->tuple.return_ip, (uint8_t *)&nircm->conn_rule.return_mac)) {
+			nss_nl_info("Error in Updating the Return MAC Address \n");
+			dev_put(net_dev);
+			return -EINVAL;
+		}
 	}
 
 	nircm->valid_flags |= NSS_IPV4_RULE_CREATE_CONN_VALID;
@@ -864,7 +876,7 @@ static int nss_nludp_st_destroy_ipv6_rule(struct sk_buff *skb, struct nss_nludp_
 	}
 
 	memset(&nim, 0, sizeof(struct nss_ipv6_msg));
-        nss_ipv6_msg_init(&nim,
+	nss_ipv6_msg_init(&nim,
 			NSS_IPV6_RX_INTERFACE,
 			NSS_IPV6_TX_DESTROY_RULE_MSG,
 			sizeof(struct nss_ipv6_rule_destroy_msg),
@@ -958,16 +970,28 @@ static int nss_nludp_st_create_ipv6_rule(struct sk_buff *skb, struct nss_nludp_s
 	 * Copy over the connection rules and set CONN_VALID flag
 	 */
 	nircm->conn_rule.flow_interface_num = NSS_UDP_ST_INTERFACE;
-	nircm->conn_rule.return_interface_num = nss_cmn_get_interface_number_by_dev(net_dev);
 	memcpy(nircm->conn_rule.flow_mac, net_dev->dev_addr, 6);
 
 	/*
-	 * Update the return MAC address
+	 * Special case: RAWIP, the destination address does not have MAC Addr.
+	 * So, set it to 0. Also append Core ID if the net device run in a different core.
 	 */
-	if (nss_nludp_st_get_macaddr_ipv6(nircm->tuple.return_ip, (uint8_t *)&nircm->conn_rule.return_mac)) {
-		nss_nl_info("Error in Updating the Return MAC Address \n");
+	if (net_dev->type == ARPHRD_RAWIP) {
+#if !defined(NSS_NETLINK_UDP_ST_NO_RMNET_SUPPORT)
+		nircm->conn_rule.return_interface_num = nss_rmnet_rx_get_ifnum(net_dev);
+		memset(nircm->conn_rule.return_mac, 0, ETH_ALEN);
+#else
+		nss_nl_info("Error. no RAWIP support \n");
 		dev_put(net_dev);
 		return -EINVAL;
+#endif
+	} else {
+		nircm->conn_rule.return_interface_num = nss_cmn_get_interface_number_by_dev(net_dev);
+		if (nss_nludp_st_get_macaddr_ipv6(nircm->tuple.return_ip, (uint8_t *)&nircm->conn_rule.return_mac)) {
+			nss_nl_info("Error in Updating the Return MAC Address \n");
+			dev_put(net_dev);
+			return -EINVAL;
+		}
 	}
 
 	nircm->valid_flags |= NSS_IPV6_RULE_CREATE_CONN_VALID;
@@ -1120,7 +1144,7 @@ static int nss_nludp_st_ops_uncfg_rule(struct sk_buff *skb, struct genl_info *in
 		ret = nss_nludp_st_destroy_ipv6_rule(skb, nl_rule);
 	} else {
 		goto fail;
-        }
+	}
 
 	if (ret < 0) {
 		nss_nl_error("%px: Unable to delete a rule entry for ipv%d.\n", skb, nl_rule->num.msg.uncfg.ip_version);
