@@ -194,6 +194,7 @@ static void nss_tunipip6_encap_exception(struct net_device *dev, struct sk_buff 
 		skb->pkt_type = PACKET_HOST;
 		skb->skb_iif = dev->ifindex;
 		skb->ip_summed = CHECKSUM_NONE;
+		ip_rt_put(rt);
 		netif_receive_skb(skb);
 		return;
 	}
