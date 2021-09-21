@@ -89,7 +89,7 @@ static int nss_vxlanmgr_tun_stats_show(struct seq_file *m, void __attribute__((u
 	seq_printf(m, "\t\tflow_label = %u\n", tun_ctx->flow_label);
 	seq_printf(m, "\t\tsrc_port_min = %u\n", tun_ctx->src_port_min);
 	seq_printf(m, "\t\tsrc_port_max = %u\n", tun_ctx->src_port_max);
-	seq_printf(m, "\t\tdest_port = %u\n", ntohs(tun_ctx->dest_port));
+	seq_printf(m, "\t\tdest_port = %u\n", tun_ctx->dest_port);
 	seq_printf(m, "\t\ttos = %u\n", tun_ctx->tos);
 	seq_printf(m, "\t\tttl = %u\n", tun_ctx->ttl);
 
