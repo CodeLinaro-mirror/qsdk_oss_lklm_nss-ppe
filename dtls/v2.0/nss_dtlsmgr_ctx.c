@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -627,8 +627,8 @@ struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
 	 * so that the skb data pointer remains 4 byte aligned when the
 	 * headroom/tailroom is adjusted.
 	 */
-	dev->needed_headroom = NSS_DTLSMGR_NEEDED_HEADROOM_SZ;
-	dev->needed_tailroom = NSS_DTLSMGR_NEEDED_TAILROOM_SZ;
+	dev->needed_headroom = ALIGN(ctx->encap.headroom, 4);
+	dev->needed_tailroom = ALIGN(ctx->encap.tailroom, 4);
 
 	ctx->app_data = cfg->app_data;
 	ctx->notify_cb = cfg->notify;
