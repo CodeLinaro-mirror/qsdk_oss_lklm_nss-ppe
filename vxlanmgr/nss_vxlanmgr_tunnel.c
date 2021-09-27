@@ -1041,7 +1041,7 @@ int nss_vxlanmgr_tunnel_create(struct net_device *dev)
 	vxlan_cfg->tunnel_flags = parse_flags;
 	vxlan_cfg->src_port_min = priv->cfg.port_min;
 	vxlan_cfg->src_port_max = priv->cfg.port_max;
-	vxlan_cfg->dest_port = priv->cfg.dst_port;
+	vxlan_cfg->dest_port = ntohs(priv->cfg.dst_port);
 	vxlan_cfg->tos = priv->cfg.tos;
 	vxlan_cfg->ttl = (priv->cfg.ttl ? priv->cfg.ttl : IPDEFTTL);
 
