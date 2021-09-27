@@ -118,7 +118,7 @@ static inline struct nss_qdisc *nss_qdisc_stats_get_class_nq(struct nss_qdisc *n
 
 	nq = (struct nss_qdisc *)clops->get(nqp->qdisc, classid);
 	if (!nq) {
-		nss_qdisc_warning("Class %u not found for qdisc %p\n", classid, nqp);
+		nss_qdisc_info("Class %u not found for qdisc %p\n", classid, nqp);
 		return NULL;
 	}
 
