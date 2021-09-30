@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -278,11 +278,11 @@ static int __init nss_ipsecmgr_init(void)
 	 */
 	nss_ipsecmgr_configure(&ipsecmgr_drv->cfg_work.work);
 
-	write_lock(&ipsecmgr_drv->lock);
+	write_lock_bh(&ipsecmgr_drv->lock);
 	list_add(&tun->list, &ipsecmgr_drv->tun_db);
 
 	ipsecmgr_drv->max_mtu = dev->mtu;
-	write_unlock(&ipsecmgr_drv->lock);
+	write_unlock_bh(&ipsecmgr_drv->lock);
 
 	nss_ipsecmgr_info("NSS IPsec manager loaded: %s\n", NSS_CLIENT_BUILD_ID);
 	return 0;

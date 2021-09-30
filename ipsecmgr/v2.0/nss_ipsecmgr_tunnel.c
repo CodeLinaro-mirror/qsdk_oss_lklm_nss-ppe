@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -273,7 +273,7 @@ static void nss_ipsecmgr_tunnel_mtu_update(struct list_head *head)
 	uint16_t max_mtu = 0;
 	bool update_mtu = false;
 
-	write_lock(&ipsecmgr_drv->lock);
+	write_lock_bh(&ipsecmgr_drv->lock);
 	list_for_each_entry(tun, head, list) {
 		if (tun->dev->mtu > max_mtu)
 			max_mtu = tun->dev->mtu;
@@ -284,7 +284,7 @@ static void nss_ipsecmgr_tunnel_mtu_update(struct list_head *head)
 		update_mtu = true;
 	}
 
-	write_unlock(&ipsecmgr_drv->lock);
+	write_unlock_bh(&ipsecmgr_drv->lock);
 
 #ifdef NSS_IPSECMGR_PPE_SUPPORT
 	/*
@@ -627,9 +627,9 @@ struct net_device *nss_ipsecmgr_tunnel_add(struct nss_ipsecmgr_callback *cb)
 #endif
 	}
 
-	write_lock(&ipsecmgr_drv->lock);
+	write_lock_bh(&ipsecmgr_drv->lock);
 	list_add(&tun->list, &ipsecmgr_drv->tun_db);
-	write_unlock(&ipsecmgr_drv->lock);
+	write_unlock_bh(&ipsecmgr_drv->lock);
 
 	nss_ipsecmgr_tunnel_mtu(dev, skb_dev ? skb_dev->mtu : dev->mtu);
 
