@@ -867,7 +867,7 @@ done:
  */
 int nss_vxlanmgr_tunnel_destroy(struct net_device *dev)
 {
-	uint32_t inner_ifnum, outer_ifnum;
+	uint32_t inner_ifnum, outer_ifnum, tun_count;
 	struct nss_vxlanmgr_tun_ctx *tun_ctx;
 	struct nss_vxlan_msg vxlanmsg;
 	nss_tx_status_t ret;
@@ -904,16 +904,21 @@ int nss_vxlanmgr_tunnel_destroy(struct net_device *dev)
 
 	nss_vxlanmgr_tun_stats_deinit(tun_ctx);
 	nss_vxlanmgr_tun_stats_dentry_remove(tun_ctx);
+	dev_put(tun_ctx->dev);
 	kfree(tun_ctx);
 
-	if (!vxlan_ctx.tun_count) {
-		/*
-		 * Unregister fdb notifier chain if
-		 * all vxlan tunnels are destroyed.
-		 */
+	/*
+	 * Unregister fdb notifier chain if
+	 * all vxlan tunnels are destroyed.
+	 */
+	spin_lock_bh(&vxlan_ctx.tun_lock);
+	tun_count = vxlan_ctx.tun_count;
+	spin_unlock_bh(&vxlan_ctx.tun_lock);
+	if (!tun_count) {
 		vxlan_fdb_unregister_notify(&nss_vxlanmgr_tunnel_fdb_notifier);
 	}
-	nss_vxlanmgr_info("%px: VxLAN interface count is #%d\n", dev, vxlan_ctx.tun_count);
+
+	nss_vxlanmgr_info("%px: VxLAN interface count is #%d\n", dev, tun_count);
 
 	memset(&vxlanmsg, 0, sizeof(struct nss_vxlan_msg));
 	ret = nss_vxlanmgr_tunnel_tx_msg_sync(vxlan_ctx.nss_ctx,
@@ -978,6 +983,9 @@ int nss_vxlanmgr_tunnel_create(struct net_device *dev)
 	}
 	spin_unlock_bh(&vxlan_ctx.tun_lock);
 
+	/*
+	 * The reference to the dev will be released in nss_vxlanmgr_tunnel_destroy()
+	 */
 	dev_hold(dev);
 	priv = netdev_priv(dev);
 	parse_flags = nss_vxlanmgr_tunnel_flags_parse(priv);
@@ -1107,7 +1115,6 @@ int nss_vxlanmgr_tunnel_create(struct net_device *dev)
 	spin_unlock_bh(&vxlan_ctx.tun_lock);
 	nss_vxlanmgr_info("%px: VxLAN interface count is #%d\n", dev, vxlan_ctx.tun_count);
 
-	dev_put(dev);
 	return NOTIFY_DONE;
 
 config_fail:
