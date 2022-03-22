@@ -241,6 +241,41 @@ bool ppe_drv_vsi_deref(struct ppe_drv_vsi *vsi)
 }
 
 /*
+ * ppe_drv_vsi_set_vlan()
+ *	Set vlan info associated with vsi.
+ *
+ * PPE support only 2 vlan, caller should make sure not to set more than double vlan.
+ */
+bool ppe_drv_vsi_set_vlan(struct ppe_drv_vsi *vsi, uint32_t vlan_id, struct ppe_drv_iface *nh_iface)
+{
+	/*
+	 * PPE support vlan acceleration only on physical, bond or pppoe interface.
+	 */
+	if ((nh_iface->type == PPE_DRV_IFACE_TYPE_PHYSICAL)
+		|| (nh_iface->type == PPE_DRV_IFACE_TYPE_LAG)) {
+		/*
+		 * single vlan
+		 */
+		vsi->vlan.inner_vlan = vlan_id;
+	} else if (nh_iface->type == PPE_DRV_IFACE_TYPE_VLAN) {
+		struct ppe_drv_vsi *nh_vsi = ppe_drv_iface_vsi_get(nh_iface);
+		if (!nh_vsi) {
+			ppe_drv_warn("%p: Invalid vsi associated with given nh_iface\n", vsi);
+			return false;
+		}
+
+		vsi->vlan.outer_vlan = nh_vsi->vlan.inner_vlan;
+		vsi->vlan.inner_vlan = vlan_id;
+	} else {
+		ppe_drv_warn("%p: Invalid nh_iface type(%d) during vlan setup", vsi, nh_iface->type);
+		return false;
+	}
+
+	ppe_drv_trace("%p: vsi configuration done for vlan_id(%d) and interface_type(%d)", vsi, vlan_id, nh_iface->type);
+	return true;
+}
+
+/*
  * ppe_drv_vsi_match_vlan()
  *	match vlan IDs associated with vsi.
  */

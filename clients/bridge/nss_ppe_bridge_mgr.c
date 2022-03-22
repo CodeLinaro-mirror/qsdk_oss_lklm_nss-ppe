@@ -1,9 +1,12 @@
 /*
  **************************************************************************
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -465,7 +468,7 @@ static int nss_ppe_bridge_mgr_add_bond_slave(struct net_device *bond_master,
 static int nss_ppe_bridge_mgr_bond_master_join(struct net_device *bond_master,
 		struct nss_ppe_bridge_mgr_pvt *b_pvt)
 {
-	struct net_device *slave;
+	struct slave *slave;
 	struct list_head *iter;
 	struct bonding *bond;
 
@@ -478,8 +481,8 @@ static int nss_ppe_bridge_mgr_bond_master_join(struct net_device *bond_master,
 	 * Join each of the bonded slaves to the VSI group
 	 */
 	bond_for_each_slave(bond, slave, iter) {
-		if (nss_ppe_bridge_mgr_add_bond_slave(bond_master, slave, b_pvt)) {
-			nss_ppe_bridge_mgr_warn("%px: Failed to add slave (%s) state in Bridge\n", b_pvt, slave->name);
+		if (nss_ppe_bridge_mgr_add_bond_slave(bond_master, slave->dev, b_pvt)) {
+			nss_ppe_bridge_mgr_warn("%px: Failed to add slave (%s) state in Bridge\n", b_pvt, slave->dev->name);
 			goto cleanup;
 		}
 	}
@@ -512,8 +515,8 @@ static int nss_ppe_bridge_mgr_bond_master_join(struct net_device *bond_master,
 cleanup:
 
 	bond_for_each_slave(bond, slave, iter) {
-		if (nss_ppe_bridge_mgr_del_bond_slave(bond_master, slave, b_pvt)) {
-			nss_ppe_bridge_mgr_warn("%px: Failed to remove slave (%s) from Bridge\n", b_pvt, slave->name);
+		if (nss_ppe_bridge_mgr_del_bond_slave(bond_master, slave->dev, b_pvt)) {
+			nss_ppe_bridge_mgr_warn("%px: Failed to remove slave (%s) from Bridge\n", b_pvt, slave->dev->name);
 		}
 	}
 
@@ -569,7 +572,7 @@ static int nss_ppe_bridge_mgr_bond_slave_changeupper(struct netdev_notifier_chan
 static int nss_ppe_bridge_mgr_bond_master_leave(struct net_device *bond_master,
 		struct nss_ppe_bridge_mgr_pvt *b_pvt)
 {
-	struct net_device *slave;
+	struct slave *slave;
 	struct list_head *iter;
 	struct bonding *bond;
 
@@ -584,8 +587,8 @@ static int nss_ppe_bridge_mgr_bond_master_leave(struct net_device *bond_master,
 	 * Remove each of the bonded slaves from the VSI group
 	 */
 	bond_for_each_slave(bond, slave, iter) {
-		if (nss_ppe_bridge_mgr_del_bond_slave(bond_master, slave, b_pvt)) {
-			nss_ppe_bridge_mgr_warn("%px: Failed to remove slave (%s) from Bridge\n", b_pvt, slave->name);
+		if (nss_ppe_bridge_mgr_del_bond_slave(bond_master, slave->dev, b_pvt)) {
+			nss_ppe_bridge_mgr_warn("%px: Failed to remove slave (%s) from Bridge\n", b_pvt, slave->dev->name);
 			goto cleanup;
 		}
 	}
@@ -616,8 +619,8 @@ static int nss_ppe_bridge_mgr_bond_master_leave(struct net_device *bond_master,
 
 cleanup:
 	bond_for_each_slave(bond, slave, iter) {
-		if (nss_ppe_bridge_mgr_add_bond_slave(bond_master, slave, b_pvt)) {
-			nss_ppe_bridge_mgr_warn("%px: Failed to add slave (%s) state in Bridge\n", b_pvt, slave->name);
+		if (nss_ppe_bridge_mgr_add_bond_slave(bond_master, slave->dev, b_pvt)) {
+			nss_ppe_bridge_mgr_warn("%px: Failed to add slave (%s) state in Bridge\n", b_pvt, slave->dev->name);
 		}
 	}
 

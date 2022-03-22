@@ -63,6 +63,7 @@ struct ppe_drv_vsi {
 	uint8_t type;			/* vsi type */
 };
 
+bool ppe_drv_vsi_set_vlan(struct ppe_drv_vsi *vsi, uint32_t vlan_id, struct ppe_drv_iface *nh_iface);
 bool ppe_drv_vsi_match_vlan(struct ppe_drv_vsi *vsi, uint32_t inner_vlan, uint32_t outer_vlan);
 
 void ppe_drv_vsi_mc_disable(struct ppe_drv_vsi *vsi);

@@ -57,12 +57,13 @@ struct ppe_drv_gen_stats {
 	atomic64_t v6_unknown_interface;	/* No of v6 create failure due to invalid IF */
 
 	atomic64_t fail_vp_full;		/* Create req fail due to VP table full */
-	atomic64_t fail_nh_full;		/* Create req fail due to nexthop table full */
-	atomic64_t fail_flow_full;		/* Create req fail due to flow table full */
-	atomic64_t fail_host_full;		/* Create req fail due to host table full */
-	atomic64_t fail_pubip_full;		/* Create req fail due to pub-ip table full */
-	atomic64_t fail_dev_port_map;		/* Create req fail due to PPE port not mapped to net-device */
-	atomic64_t fail_l3_if_full;		/* Create req fail due to L3_IF table full */
+        atomic64_t fail_pp_full;		/* Create req fail due to physical port table full */
+        atomic64_t fail_nh_full;		/* Create req fail due to nexthop table full */
+        atomic64_t fail_flow_full;		/* Create req fail due to flow table full */
+        atomic64_t fail_host_full;		/* Create req fail due to host table full */
+        atomic64_t fail_pubip_full;		/* Create req fail due to pub-ip table full */
+        atomic64_t fail_dev_port_map;		/* Create req fail due to PPE port not mapped to net-device */
+        atomic64_t fail_l3_if_full;		/* Create req fail due to L3_IF table full */
         atomic64_t fail_vsi_full;		/* Create req fail due to VSI table full */
 	atomic64_t fail_pppoe_full;		/* Create req fail due to PPPoE table full */
 	atomic64_t fail_rw_fifo_full;		/* Create req fail due to rw fifo full */
@@ -71,6 +72,8 @@ struct ppe_drv_gen_stats {
 	atomic64_t fail_ppe_unresponsive;	/* Create req fail due to PPE not responding */
 	atomic64_t ce_opaque_invalid;		/* Request fail due to invalid opaque in CE */
 	atomic64_t fail_fqg_full;		/* Create req fail due to flow qos group full */
+	atomic64_t fail_ingress_vlan_add;	/* Ingress vlan translation addition failed */
+	atomic64_t fail_egress_vlan_add;	/* Egress vlan translation addition failed */
 };
 
 /*

@@ -32,6 +32,8 @@
  *	Forward declaration for PPE interface object.
  */
 struct ppe_drv_iface;
+enum ppe_drv_ret;
+typedef enum ppe_drv_ret ppe_drv_ret_t;
 
 /**
  * PPE Interface Number.
@@ -48,9 +50,56 @@ enum ppe_drv_iface_type {
 	PPE_DRV_IFACE_TYPE_LAG,			/**< Interface type LAG. */
 	PPE_DRV_IFACE_TYPE_PPPOE,		/**< Interface type PPPoE. */
 	PPE_DRV_IFACE_TYPE_VLAN,		/**< Interface type VLAN. */
-	PPE_DRV_IFACE_TYPE_PORT,		/**< Interface type port. */
+	PPE_DRV_IFACE_TYPE_PHYSICAL,		/**< Interface type physical port. */
+	PPE_DRV_IFACE_TYPE_VIRTUAL,		/**< Interface type virtual port. */
 	PPE_DRV_IFACE_TYPE_MAX,			/**< Interface type max. */
 };
+
+/*
+ * ppe_drv_iface_mtu_set()
+ *	Set MTU for a given PPE interface.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * uint16_t
+ *
+ * @param[IN] iface   PPE interface.
+ * @param[IN] MTU   New MTU to be used.
+ *
+ * @return
+ * ppe_drv_iface_error
+ */
+ppe_drv_ret_t ppe_drv_iface_mtu_set(struct ppe_drv_iface *iface, uint16_t mtu);
+
+/*
+ * ppe_drv_iface_mac_addr_clear()
+ *	Clear Mac address for a given PPE interface.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ *
+ * @param[IN] iface   PPE interface.
+ *
+ * @return
+ * ppe_drv_iface_error
+ */
+ppe_drv_ret_t ppe_drv_iface_mac_addr_clear(struct ppe_drv_iface *iface);
+
+/*
+ * ppe_drv_iface_mac_addr_set()
+ *	Set Mac address for a given PPE interface.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * uint8_t *
+ *
+ * @param[IN] iface   PPE interface.
+ * @param[IN] mac_addr   New MAC address to be used.
+ *
+ * @return
+ * ppe_drv_iface_error
+ */
+ppe_drv_ret_t ppe_drv_iface_mac_addr_set(struct ppe_drv_iface *iface, uint8_t *mac_addr);
 
 /**
  * ppe_drv_iface_alloc
@@ -83,14 +132,36 @@ bool ppe_drv_iface_deref(struct ppe_drv_iface *ppe_iface);
 
 /**
  * ppe_drv_iface_get_by_dev
- *	Release reference on PPE interface.
+ *	Get PPE interface from net device.
  *
  * @param[in] dev    Associated net device.
  *
  * @return
  * PPE interface number if lookup is successful else -1 for failure.
  */
-ppe_drv_iface_t ppe_drv_iface_get_by_dev(struct net_device *dev);
+struct ppe_drv_iface *ppe_drv_iface_get_by_dev(struct net_device *dev);
+
+/**
+ * ppe_drv_iface_port_idx_get
+ *	Get port index from PPE interface.
+ *
+ * @param[in] iface    Associated PPE interface.
+ *
+ * @return
+ * int32_t
+ */
+int32_t ppe_drv_iface_port_idx_get(struct ppe_drv_iface *iface);
+
+/**
+ * ppe_drv_iface_idx_get_by_dev
+ *	Get PPE interface index from net device.
+ *
+ * @param[in] dev    Associated net device.
+ *
+ * @return
+ * ppe_drv_iface_t
+ */
+ppe_drv_iface_t ppe_drv_iface_idx_get_by_dev(struct net_device *dev);
 
 /** @} */ /* end_addtogroup ppe_drv_iface_subsystem */
 

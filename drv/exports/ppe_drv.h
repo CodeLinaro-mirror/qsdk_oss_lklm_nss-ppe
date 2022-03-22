@@ -104,12 +104,40 @@ enum ppe_drv_stats_sync_reason {
 };
 
 /**
- * PPE return status
+ * enum ppe_drv_ret
+ *	PPE return status
  */
-typedef enum {
+typedef enum ppe_drv_ret {
 	PPE_DRV_RET_SUCCESS = 0,			/**< Success */
+	PPE_DRV_RET_IFACE_INVALID,			/**< Failure due to Invalid PPE interface */
 	PPE_DRV_RET_FAILURE_NO_RESOURCE,		/**< Failure due to out of resource */
 	PPE_DRV_RET_FAILURE_INVALID_PARAM,		/**< Failure due to invalid parameter */
+	PPE_DRV_RET_PORT_NOT_FOUND,			/**< Port not found */
+	PPE_DRV_RET_VSI_NOT_FOUND,			/**< VSI not found */
+	PPE_DRV_RET_L3_IF_NOT_FOUND,			/**< L3_IF not found */
+	PPE_DRV_RET_PORT_ALLOC_FAIL,			/**< Port allocation fails */
+	PPE_DRV_RET_L3_IF_ALLOC_FAIL,			/**< L3_IF allocation fails */
+	PPE_DRV_RET_L3_IF_PORT_ATTACH_FAIL,		/**< L3_IF PORT attach fails */
+	PPE_DRV_RET_VSI_ALLOC_FAIL,			/**< VSI allocation fails */
+	PPE_DRV_RET_MAC_ADDR_CLEAR_CFG_FAIL,		/**< Mac address clear configuration fails */
+	PPE_DRV_RET_MAC_ADDR_SET_CFG_FAIL,		/**< Mac address set configuration fails */
+	PPE_DRV_RET_MTU_CFG_FAIL,			/**< MTU configuration fails */
+	PPE_DRV_RET_DEL_MAC_FDB_FAIL,			/**< Failed to delete FDB entry by MAC */
+	PPE_DRV_RET_STA_MOVE_FAIL,			/**< Failed to configure station movement */
+	PPE_DRV_RET_NEW_ADDR_LRN_FAIL,			/**< Failed to configure new address learning */
+	PPE_DRV_RET_FDB_FLUSH_VSI_FAIL,			/**< Failed to flush FDB entries by VSI */
+	PPE_DRV_RET_MEM_IF_INVALID_PORT,		/**< Failed to find port for member interface */
+	PPE_DRV_RET_STP_STATE_FAIL,			/**< Failed to set STP state on the bridge port */
+	PPE_DRV_RET_IFACE_L3_IF_FAIL,			/**< Failed to find L3_IF for the interface */
+	PPE_DRV_RET_PPPOE_ALLOC_FAIL,			/**< PPPOE session allocation failure */
+	PPE_DRV_RET_L3_IF_PPPOE_SET_FAIL,		/**< Failed to set PPPOE session information in L3_IF */
+	PPE_DRV_RET_BASE_IFACE_NOT_FOUND,		/**< Base interface not found */
+	PPE_DRV_RET_VLAN_TPID_FAIL,			/**< VLAN TPID not found */
+	PPE_DRV_RET_PORT_ROLE_FAIL,			/**< Port role configuration failed */
+	PPE_DRV_RET_INGRESS_VLAN_FAIL,			/**< Ingress vlan configuration failed */
+	PPE_DRV_RET_EGRESS_VLAN_FAIL,			/**< Egress vlan configuration failed */
+	PPE_DRV_RET_VLAN_INGRESS_DEL_FAIL,		/**< Ingress vlan deletion configuration failed */
+	PPE_DRV_RET_VLAN_EGRESS_DEL_FAIL,		/**< Egress vlan deletion configuration failed */
 } ppe_drv_ret_t;
 
 /** @} */ /* end_addtogroup ppe_drv_subsystem */

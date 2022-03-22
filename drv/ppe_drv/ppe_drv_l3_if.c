@@ -144,6 +144,49 @@ static void ppe_drv_l3_if_free(struct kref *kref)
 }
 
 /*
+ * ppe_drv_l3_if_eg_mac_addr_set()
+ *	Programs the given MAC address to L3 interface in PPE Egress table
+ */
+bool ppe_drv_l3_if_eg_mac_addr_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr)
+{
+	sw_error_t err;
+	fal_intf_macaddr_t mac_cfg = {0};
+
+	mac_cfg.direction = FAL_IP_EGRESS;
+	memcpy(&mac_cfg.mac_addr, mac_addr, sizeof(mac_cfg.mac_addr));
+	err = fal_ip_intf_macaddr_add(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &mac_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Error in setting mac addr(%pM) to l3_if %u", l3_if, mac_addr, l3_if->l3_if_index);
+		return false;
+	}
+
+	ppe_drv_trace("%p: setting mac addr(%pM) to l3_if %u", l3_if, mac_addr, l3_if->l3_if_index);
+	ppe_drv_l3_if_dump(l3_if);
+	return true;
+}
+
+/*
+ * ppe_drv_l3_if_eg_mac_addr_clear()
+ *	Clears MAC address of a given L3 interface in PPE egress table
+ */
+bool ppe_drv_l3_if_eg_mac_addr_clear(struct ppe_drv_l3_if *l3_if)
+{
+	sw_error_t err;
+	fal_intf_macaddr_t mac_cfg = {0};
+
+	mac_cfg.direction = FAL_IP_EGRESS;
+	err = fal_ip_intf_macaddr_del(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &mac_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Error in clearing mac addr for l3_if %u", l3_if, l3_if->l3_if_index);
+		return false;
+	}
+
+	ppe_drv_trace("%p: clearing mac addr of l3_if %u", l3_if, l3_if->l3_if_index);
+	ppe_drv_l3_if_dump(l3_if);
+	return true;
+}
+
+/*
  * ppe_drv_l3_if_mac_addr_set()
  *	Programs the given MAC address to L3 interface in PPE
  */
@@ -195,6 +238,7 @@ bool ppe_drv_l3_if_mac_addr_clear(struct ppe_drv_l3_if *l3_if)
 		return true;
 	}
 
+	mac_cfg.direction = FAL_IP_BOTH;
 	err = fal_ip_intf_macaddr_del(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &mac_cfg);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: Error in clearing mac addr for l3_if %u", l3_if, l3_if->l3_if_index);

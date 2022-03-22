@@ -180,6 +180,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->flow_num = cap.flow_caps;
 	p->pppoe_session_max = cap.pppoe_session_caps;
 	p->nexthop_num = cap.nexthop_caps;
+	p->sc_num = cap.service_code_caps;
 	p->iface_num = p->l3_if_num + p->port_num + p->pppoe_session_max;
 
 	if (!ppe_drv_hash_init()) {
@@ -213,6 +214,26 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		ppe_drv_warn("%p: failed to allocate PPPoe entries", p);
 		goto fail;
 	}
+
+	p->port = ppe_drv_port_entries_alloc();
+	if (!p->port) {
+		ppe_drv_warn("%p: failed to allocate Port entries", p);
+		goto fail;
+	}
+
+	p->sc = ppe_drv_sc_entries_alloc();
+	if (!p->sc) {
+		ppe_drv_warn("%p: failed to allocate service code entries", p);
+		goto fail;
+	}
+
+	p->iface = ppe_drv_iface_entries_alloc();
+	if (!p->iface) {
+		ppe_drv_warn("%p: failed to allocate iface entries", p);
+		goto fail;
+	}
+
+	ppe_drv_exception_init();
 
 	/*
 	 * Initialize locks
@@ -269,6 +290,21 @@ fail:
 		p->pppoe = NULL;
 	}
 
+	if (p->port) {
+		ppe_drv_port_entries_free(p->port);
+		p->port = NULL;
+	}
+
+	if (p->sc) {
+		ppe_drv_sc_entries_free(p->sc);
+		p->sc = NULL;
+	}
+
+	if (p->iface) {
+		ppe_drv_iface_entries_free(p->iface);
+		p->iface = NULL;
+	}
+
 	return -1;
 }
 
@@ -302,6 +338,21 @@ static int ppe_drv_remove(struct platform_device *pdev)
 	if (p->pppoe) {
 		ppe_drv_pppoe_entries_free(p->pppoe);
 		p->pppoe = NULL;
+	}
+
+	if (p->port) {
+		ppe_drv_port_entries_free(p->port);
+		p->port = NULL;
+	}
+
+	if (p->sc) {
+		ppe_drv_sc_entries_free(p->sc);
+		p->sc = NULL;
+	}
+
+	if (p->iface) {
+		ppe_drv_iface_entries_free(p->iface);
+		p->iface = NULL;
 	}
 
 	return 0;

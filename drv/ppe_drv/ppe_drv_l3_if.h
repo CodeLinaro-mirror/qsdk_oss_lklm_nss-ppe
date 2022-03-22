@@ -26,6 +26,8 @@ enum ppe_drv_l3_if_type {
 	PPE_DRV_L3_IF_TYPE_NONE,    /* L3_IF NONE */
 	PPE_DRV_L3_IF_TYPE_PORT,    /* L3_IF for a port */
 	PPE_DRV_L3_IF_TYPE_PPPOE,   /* L3_IF for pppoe interface */
+	PPE_DRV_L3_IF_TYPE_LAG,		/* L3_IF for LAG interface */
+	PPE_DRV_L3_IF_TYPE_VLAN,	/* L3_IF for VLAN interface */
 	PPE_DRV_L3_IF_TYPE_MAX,     /* Max L3_IF types */
 };
 
@@ -48,6 +50,9 @@ uint16_t ppe_drv_l3_if_get_index(struct ppe_drv_l3_if *l3_if);
 
 bool ppe_drv_l3_if_mtu_mru_set(struct ppe_drv_l3_if *l3_if, uint16_t mtu, uint16_t mru);
 bool ppe_drv_l3_if_mtu_mru_clear(struct ppe_drv_l3_if *l3_if);
+
+bool ppe_drv_l3_if_eg_mac_addr_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr);
+bool ppe_drv_l3_if_eg_mac_addr_clear(struct ppe_drv_l3_if *l3_if);
 
 bool ppe_drv_l3_if_mac_addr_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr);
 bool ppe_drv_l3_if_mac_addr_clear(struct ppe_drv_l3_if *l3_if);
