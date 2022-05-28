@@ -512,7 +512,7 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		/*
 		 * Detach port_vsi while attaching a new bridge-vsi.
 		 */
-		if (!pp->port_vsi && pp->port_l3_if) {
+		if (!pp->port_vsi && pp->port_l3_if && pp->port_l3_if_attached) {
 			ppe_drv_port_l3_if_detach(pp, pp->port_l3_if);
 		}
 
@@ -526,7 +526,7 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		 * Detach port L3_IF if this is the first VLAN interface on this port,
 		 * so that PPE can use l3 if associated with vlan interface.
 		 */
-		if (pp->port_l3_if && !pp->active_vlan) {
+		if (pp->port_l3_if && !pp->active_vlan && pp->port_l3_if_attached) {
 			ppe_drv_port_l3_if_detach(pp, pp->port_l3_if);
 		}
 
@@ -620,7 +620,7 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		/*
 		 * Attach port_vsi if br_vsi is going away
 		 */
-		if (!pp->port_vsi && pp->port_l3_if) {
+		if (!pp->port_vsi && pp->port_l3_if && !pp->port_l3_if_attached) {
 			ppe_drv_port_l3_if_attach(pp, pp->port_l3_if);
 		}
 
@@ -640,7 +640,7 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		 * Attach port L3_IF if this is the last VLAN interface on this port,
 		 * so that PPE can use l3 if associated with port.
 		 */
-		if (pp->port_l3_if && !pp->active_vlan) {
+		if (pp->port_l3_if && !pp->active_vlan && !pp->port_l3_if_attached) {
 			ppe_drv_port_l3_if_attach(pp, pp->port_l3_if);
 		}
 		return;
