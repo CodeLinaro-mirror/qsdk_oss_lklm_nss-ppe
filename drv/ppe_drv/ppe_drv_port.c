@@ -755,14 +755,13 @@ struct ppe_drv_port *ppe_drv_port_from_port_num(uint16_t port_num)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
-	uint16_t i;
 
 	if (port_num >= PPE_DRV_PORTS_MAX) {
 		ppe_drv_warn("%p: invalid port number: %u", p, port_num);
 		return NULL;
 	}
 
-	pp = &p->port[i];
+	pp = &p->port[port_num];
 	if (!kref_read(&pp->ref_cnt)) {
 		ppe_drv_warn("%p: port number not initialized: %u", p, port_num);
 		return NULL;

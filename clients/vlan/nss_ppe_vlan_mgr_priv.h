@@ -1,9 +1,12 @@
 /*
  **************************************************************************
  * Copyright (c) 2017-2018, 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -15,7 +18,7 @@
  */
 
 #ifndef _NSS_PPE_VLAN_MGR_PRIV_H_
-#define _NSS_PPE_BRIDGE_MGR_H_
+#define _NSS_PPE_VLAN_MGR_PRIV_H_
 
 #if (NSS_PPE_VLAN_MGR_DEBUG_LEVEL < 1)
 #define nss_ppe_vlan_mgr_assert(fmt, args...)
@@ -59,18 +62,12 @@
 #endif
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
-#define NSS_PPE_VLAN_MGR_INVALID_VLAN -1
-#define NSS_PPE_VLAN_MGR_PHY_PORT_MIN 1
-#define NSS_PPE_VLAN_MGR_PHY_PORT_MAX 6
-#define NSS_PPE_VLAN_MGR_PHY_PORT_NUM 8
+#define NSS_PPE_VLAN_MGR_INVALID_PORT -1
+#define NSS_PPE_VLAN_MGR_PORT_MAX (PPE_DRV_PORTS_MAX)
 #define NSS_PPE_VLAN_MGR_TYPE_SINGLE 0	/**< Single VLAN tag in message. */
 #define NSS_PPE_VLAN_MGR_TYPE_DOUBLE 1	/**< Double VLAN tag in message. */
-#define NSS_PPE_VLAN_MGR_PHY_PORT_CHK(n) ((n) >= NSS_PPE_VLAN_MGR_PHY_PORT_MIN && (n) <= NSS_PPE_VLAN_MGR_PHY_PORT_MAX)
 #define NSS_PPE_VLAN_MGR_TAG_CNT(v) ((v->parent) ? NSS_PPE_VLAN_MGR_TYPE_DOUBLE : NSS_PPE_VLAN_MGR_TYPE_SINGLE)
 #define NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED 1
-
-#define NSS_PPE_VLAN_MGR_SWITCH_ID 0
-#define NSS_PPE_VLAN_MGR_STP_ID 0
 
 /*
  * vlan client context
@@ -78,7 +75,7 @@
 struct nss_ppe_vlan_mgr_context {
 	int ctpid;				/* Customer TPID */
 	int stpid;				/* Service TPID */
-	int port_role[NSS_PPE_VLAN_MGR_PHY_PORT_NUM];
+	int16_t port_role[NSS_PPE_VLAN_MGR_PORT_MAX];
 						/* Role of physical ports */
 	struct list_head list;			/* List of vlan private instance */
 	spinlock_t lock;			/* Lock to protect vlan private instance */
@@ -96,7 +93,7 @@ struct nss_vlan_pvt {
 	 * Fields for Linux information
 	 */
 	int ifindex;				/* netdev ifindex */
-	int32_t port[NSS_PPE_VLAN_MGR_PHY_PORT_MAX];
+	int16_t port[NSS_PPE_VLAN_MGR_PORT_MAX];
 						/* real physical port of this vlan */
 	int32_t bond_id;			/* bond interface number, if vlan is created over bond */
 	uint32_t vid;				/* vid info */
@@ -107,12 +104,12 @@ struct nss_vlan_pvt {
 	/*
 	 * Fields for PPE information
 	 */
-	uint32_t ppe_vsi;			/* VLAN VSI info */
-	uint32_t bridge_vsi;			/* Bridge's VSI when vlan is a member of a bridge */
+	struct ppe_drv_iface *iface;		/* VLAN ppe_iface info */
+	struct ppe_drv_iface *bridge_iface;	/* Bridge ppe_iface info if member of a bridge */
 	uint32_t ppe_cvid;			/* ppe_cvid info */
 	uint32_t ppe_svid;			/* ppe_svid info */
-	fal_vlan_trans_adv_rule_t eg_xlt_rule;	/* VLAN Translation Rule */
-	fal_vlan_trans_adv_action_t eg_xlt_action;	/* VLAN Translation Action */
+	struct ppe_drv_vlan_xlate_info xlate_info;
+						/* XLATE info */
 	int refs;				/* reference count */
 };
 #endif

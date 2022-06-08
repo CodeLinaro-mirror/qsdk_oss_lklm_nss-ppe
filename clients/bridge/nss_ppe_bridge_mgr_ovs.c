@@ -1,9 +1,12 @@
 /*
  **************************************************************************
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -120,7 +123,7 @@ static void nss_ppe_bridge_mgr_ovs_handle_vlan_event(struct ovsmgr_notifiers_inf
 		nss_ppe_bridge_mgr_trace("%px: VLAN = %d, add on port %s, bridge %s\n",
 				b_pvt, vlan->vh.h_vlan_TCI, dev->name, master_dev->name);
 
-		nss_vlan_mgr_add_vlan_rule(dev, b_pvt->vsi, vlan->vh.h_vlan_TCI);
+		nss_vlan_mgr_add_vlan_rule(dev, b_pvt->iface, vlan->vh.h_vlan_TCI);
 		return;
 	}
 
@@ -129,7 +132,7 @@ static void nss_ppe_bridge_mgr_ovs_handle_vlan_event(struct ovsmgr_notifiers_inf
 	 */
 	nss_ppe_bridge_mgr_trace("%px: VLAN = %d, delete on port %s, bridge %s\n",
 					b_pvt, vlan->vh.h_vlan_TCI, dev->name, master_dev->name);
-	nss_vlan_mgr_del_vlan_rule(dev, b_pvt->vsi, vlan->vh.h_vlan_TCI);
+	nss_vlan_mgr_del_vlan_rule(dev, b_pvt->iface, vlan->vh.h_vlan_TCI);
 }
 
 /*

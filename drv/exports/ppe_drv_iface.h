@@ -57,21 +57,6 @@ enum ppe_drv_iface_type {
 };
 
 /*
- * ppe_drv_iface_vsi_num_get()
- *	Get VSI number
- *
- * @datatypes
- * ppe_drv_iface
- * uint8_t
- *
- * @param[IN] iface   PPE interface.
- *
- * @return
- * uint8_t
- */
-uint8_t ppe_drv_iface_vsi_num_get(struct ppe_drv_iface *iface);
-
-/*
  * ppe_drv_iface_mtu_set()
  *	Set MTU for a given PPE interface.
  *

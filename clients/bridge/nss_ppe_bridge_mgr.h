@@ -1,9 +1,12 @@
 /*
  **************************************************************************
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -90,11 +93,11 @@ struct nss_ppe_bridge_mgr_context {
 struct nss_ppe_bridge_mgr_pvt {
 	struct list_head list;			/* List of bridge instance */
 	struct net_device *dev;			/* Bridge netdevice */
-	uint32_t vsi;				/* VSI set for bridge */
-	uint32_t port_vsi[NSS_PPE_BRIDGE_MGR_PHY_PORT_MAX];	/* port VSI set for physical interfaces	*/
+	struct ppe_drv_iface *iface;		/* PPE bridge iface */
 	int bond_slave_num;			/* Total number of bond devices added into
 						   bridge device */
 	bool wan_if_enabled;			/* Is WAN interface enabled? */
+	bool fdb_lrn_enabled;			/* Keep track of FDB Learning status */
 	struct net_device *wan_netdev;		/* WAN interface netdevice */
 	uint32_t mtu;				/* MTU for bridge */
 	uint8_t dev_addr[ETH_ALEN];		/* MAC address for bridge */

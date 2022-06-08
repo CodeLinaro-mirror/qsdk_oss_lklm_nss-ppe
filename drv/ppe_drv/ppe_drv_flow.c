@@ -233,15 +233,34 @@ bool ppe_drv_flow_v6_qos_set(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_fl
 	fal_qos_cosmap_t qos_cfg = {0};
 
 	/*
-	 * TODO: to be filled later.
+	 * Check if flow needs DSCP marking, set DSCP fields in QoS config
 	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING)) {
+		qos_cfg.internal_dscp = ppe_drv_v6_conn_flow_egress_dscp_get(pcf) << PPE_DRV_DSCP_SHIFT;
+		qos_cfg.dscp_mask = PPE_DRV_DSCP_MASK;
+		qos_cfg.dscp_en = true;
+	}
+
+	/*
+	 * Check if flow needs PCP marking, set PCP fields in QoS config
+	 */
+	if ((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_VLAN_PRI_MARKING))
+			&& (ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf) == 1)) {
+		/*
+		 * Note: PPE does not have flow based support for double vlan tagging.
+		 * We do not need to mask unsigned integer.
+		 */
+		qos_cfg.internal_pcp = ppe_drv_v6_conn_flow_egress_vlan_get(pcf, 0)->tci >> PPE_DRV_VLAN_PRIORITY_SHIFT;;
+		qos_cfg.pcp_en = true;
+	}
+
 	err = fal_qos_cosmap_flow_set(PPE_DRV_SWITCH_ID, 0, flow->index, &qos_cfg);
 	if (err != SW_OK) {
-		ppe_drv_warn("%p qos mapping configuration failed for flow: %p", pcf, flow);
+		ppe_drv_warn("%p qos(DSCP/PCP) mapping configuration failed for flow: %p", pcf, flow);
 		return false;
 	}
 
-	ppe_drv_trace("%p qos mapping configuration done for flow: %p", pcf, flow);
+	ppe_drv_trace("%p qos(DSCP/PCP) mapping configuration done for flow: %p", pcf, flow);
 	return true;
 }
 
@@ -645,15 +664,34 @@ bool ppe_drv_flow_v4_qos_set(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_fl
 	fal_qos_cosmap_t qos_cfg = {0};
 
 	/*
-	 * TODO: to be filled later.
+	 * Check if flow needs DSCP marking, set DSCP fields in QoS config
 	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_DSCP_MARKING)) {
+		qos_cfg.internal_dscp = ppe_drv_v4_conn_flow_egress_dscp_get(pcf) << PPE_DRV_DSCP_SHIFT;
+		qos_cfg.dscp_mask = PPE_DRV_DSCP_MASK;
+		qos_cfg.dscp_en = true;
+	}
+
+	/*
+	 * Check if flow needs PCP marking, set PCP fields in QoS config
+	 */
+	if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_VLAN_PRI_MARKING))
+			&& (ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf) == 1)) {
+		/*
+		 * Note: PPE does not have flow based support for double vlan tagging.
+		 * We do not need to mask unsigned integer.
+		 */
+		qos_cfg.internal_pcp = ppe_drv_v4_conn_flow_egress_vlan_get(pcf, 0)->tci >> PPE_DRV_VLAN_PRIORITY_SHIFT;;
+		qos_cfg.pcp_en = true;
+	}
+
 	err = fal_qos_cosmap_flow_set(PPE_DRV_SWITCH_ID, 0, pf->index, &qos_cfg);
 	if (err != SW_OK) {
-		ppe_drv_warn("%p qos mapping configuration failed for flow: %p", pcf, pf);
+		ppe_drv_warn("%p qos(DSCP/PCP) mapping configuration failed for flow: %p", pcf, pf);
 		return false;
 	}
 
-	ppe_drv_trace("%p qos mapping configuration done for flow: %p", pcf, pf);
+	ppe_drv_trace("%p qos(DSCP/PCP) mapping configuration done for flow: %p", pcf, pf);
 	return true;
 }
 

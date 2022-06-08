@@ -15,6 +15,14 @@
  */
 
 /*
+ * Map CPU code to exception code.
+ *
+ * TODO: This logic is different for tunnel exception.
+ * Need to be fixed with tunnel implementation.
+ */
+#define PPE_DRV_CC_TO_EXP(cc) ((cc) - 1)
+
+/*
  * ppe_drv_cc
  *	Instance structure for cpu code management
  */

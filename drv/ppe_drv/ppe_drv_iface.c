@@ -425,18 +425,6 @@ bool ppe_drv_iface_l3_if_set(struct ppe_drv_iface *iface, struct ppe_drv_l3_if *
 }
 
 /*
- * ppe_drv_iface_vsi_num_get()
- *	Get VSI number
- */
-uint8_t ppe_drv_iface_vsi_num_get(struct ppe_drv_iface *iface)
-{
-	struct ppe_drv_vsi *vsi = ppe_drv_iface_vsi_get(iface);
-	ppe_drv_assert(vsi, "%p: VSI cannot be NULL in this usage\n", iface);
-	return vsi->index;
-}
-EXPORT_SYMBOL(ppe_drv_iface_vsi_num_get);
-
-/*
  * ppe_drv_iface_mtu_set()
  *	Set mac address for the given interface
  */

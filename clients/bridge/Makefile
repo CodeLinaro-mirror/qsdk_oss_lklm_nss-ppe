@@ -1,4 +1,4 @@
-ccflags-y := -I$(obj)/../../exports -I$(obj)/..
+ccflags-y := -I$(obj)/../../exports -I$(obj)/.. -I$(obj)/../../drv/exports
 ccflags-y += -DNSS_PPE_BUILD_ID="$(BUILD_ID)"
 ccflags-$(NSS_BRIDGE_MGR_OVS_ENABLE) += -DNSS_BRIDGE_MGR_OVS_ENABLE
 

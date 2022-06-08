@@ -1,9 +1,12 @@
 /*
  **************************************************************************
  * Copyright (c) 2017-2018, 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -24,12 +27,9 @@
 #include <linux/sysctl.h>
 #include <linux/module.h>
 #include <net/bonding.h>
-#include <ref/ref_vsi.h>
-#include <fal/fal_portvlan.h>
-#include <fal/fal_stp.h>
-#include <nss_dp_api_if.h>
+#include <ppe_drv_public.h>
 #include <nss_ppe_vlan_mgr.h>
-
+#include <ref/ref_vsi.h>
 #include "nss_ppe_vlan_mgr_priv.h"
 
 
@@ -41,20 +41,18 @@ static struct nss_ppe_vlan_mgr_context vlan_mgr_ctx;
  */
 static int nss_ppe_vlan_mgr_update_ppe_tpid(void)
 {
-	fal_tpid_t tpid;
-
-	tpid.mask = FAL_TPID_CTAG_EN | FAL_TPID_STAG_EN;
-	tpid.ctpid = vlan_mgr_ctx.ctpid;
-	tpid.stpid = vlan_mgr_ctx.stpid;
+	ppe_drv_ret_t ret;
+	uint32_t mask = FAL_TPID_CTAG_EN | FAL_TPID_STAG_EN;
+	uint16_t ctpid = vlan_mgr_ctx.ctpid;
+	uint16_t stpid = vlan_mgr_ctx.stpid;
 
 #ifdef NSS_VLAN_MGR_PPE_VP_TUN_SUPPORT
-	tpid.mask |= FAL_TUNNEL_TPID_CTAG_EN | FAL_TUNNEL_TPID_STAG_EN;
-	tpid.tunnel_ctpid = vlan_mgr_ctx.ctpid;
-	tpid.tunnel_stpid = vlan_mgr_ctx.stpid;
+	mask |= (FAL_TUNNEL_TPID_CTAG_EN | FAL_TUNNEL_TPID_STAG_EN);
 #endif
 
-	if (fal_ingress_tpid_set(NSS_PPE_VLAN_MGR_SWITCH_ID, &tpid) || fal_egress_tpid_set(NSS_PPE_VLAN_MGR_SWITCH_ID, &tpid)) {
-		nss_ppe_vlan_mgr_warn("failed to set ctpid %d stpid %d\n", tpid.ctpid, tpid.stpid);
+	ret = ppe_drv_vlan_tpid_set(ctpid, stpid, mask);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("failed to set ctpid %d stpid %d, error = %d\n", ctpid, stpid, ret);
 		return -1;
 	}
 
@@ -67,8 +65,9 @@ static int nss_ppe_vlan_mgr_update_ppe_tpid(void)
  *
  * both ingress and egress could be configured to edge or core.
  */
-static bool nss_ppe_vlan_mgr_ppe_update_port_role(struct net_device *dev, int port_id, bool is_core)
+static bool nss_ppe_vlan_mgr_ppe_update_port_role(struct ppe_drv_iface *iface, int port_id, fal_qinq_port_role_t role)
 {
+	ppe_drv_ret_t ret;
 	fal_port_qinq_role_t mode;
 
 	/*
@@ -81,23 +80,16 @@ static bool nss_ppe_vlan_mgr_ppe_update_port_role(struct net_device *dev, int po
 	mode.mask |= FAL_PORT_QINQ_ROLE_TUNNEL_EN;
 #endif
 
-	if (is_core) {
-		mode.ingress_port_role = FAL_QINQ_CORE_PORT;
-		mode.egress_port_role = FAL_QINQ_CORE_PORT;
+	mode.ingress_port_role = role;
+	mode.egress_port_role = role;
 #ifdef NSS_VLAN_MGR_PPE_VP_TUN_SUPPORT
-		mode.tunnel_port_role = FAL_QINQ_CORE_PORT;
+	mode.tunnel_port_role = role;
 #endif
-	} else {
-		mode.ingress_port_role = FAL_QINQ_EDGE_PORT;
-		mode.egress_port_role = FAL_QINQ_EDGE_PORT;
-#ifdef NSS_VLAN_MGR_PPE_VP_TUN_SUPPORT
-		mode.tunnel_port_role = FAL_QINQ_EDGE_PORT;
-#endif
-	}
 
-	if (fal_port_qinq_mode_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, &mode)) {
-		nss_ppe_vlan_mgr_warn("%px: Failed to set new mode to %d\n",
-					dev, port_id);
+	ret = ppe_drv_vlan_port_role_set(iface, port_id, &mode);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%px: Failed to set new mode to %d, error = %d\n",
+					iface, port_id, ret);
 		return false;
 	}
 
@@ -105,131 +97,27 @@ static bool nss_ppe_vlan_mgr_ppe_update_port_role(struct net_device *dev, int po
 }
 
 /*
- * nss_ppe_vlan_mgr_ppe_del_vlan_rule()
- *	Delete VLAN translation rule
+ * nss_ppe_vlan_mgr_get_port_id()
+ *	Returns corresponding iface and port_id for given net_device.
  */
-static bool nss_ppe_vlan_mgr_ppe_del_vlan_rule(struct net_device *dev, int port_id, int vsi,
-					int svid, int cvid, fal_vlan_trans_adv_rule_t *eg_xlt_rule,
-					fal_vlan_trans_adv_action_t *eg_xlt_action)
+static int32_t nss_ppe_vlan_mgr_get_port_id(struct net_device *dev)
 {
-	int ret;
-
-	/*
-	 * Delete ingress vlan translation rule
-	 */
-	ret = ppe_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, PPE_VSI_INVALID);
-	if (ret != SW_OK) {
-		nss_ppe_vlan_mgr_warn("%px: failed to delete ingress vlan translation for port: %d, error: %d\n", dev, port_id, ret);
-		return false;
+	int32_t port_id;
+	struct ppe_drv_iface *iface = ppe_drv_iface_get_by_dev(dev);
+	if (!iface) {
+		nss_ppe_vlan_mgr_warn("%px: %s: couldn't get PPE iface\n", dev, dev->name);
+		return NSS_PPE_VLAN_MGR_INVALID_PORT;
 	}
 
-	ret = fal_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, PPE_VSI_INVALID);
-	if (ret != SW_OK) {
-		ppe_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, vsi);
-		nss_ppe_vlan_mgr_warn("%px: failed to update port VSI of VLAN interface : %d, error: %d\n", dev, port_id, ret);
-		return false;
+	port_id = ppe_drv_iface_port_idx_get(iface);
+	if (port_id != NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		nss_ppe_vlan_mgr_info("%px: %s:%d is valid port\n", dev, dev->name, port_id);
+		return port_id;
+
 	}
 
-	/*
-	 * Delete old egress vlan translation rule
-	 */
-	ret = fal_port_vlan_trans_adv_del(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id,
-				FAL_PORT_VLAN_EGRESS, eg_xlt_rule,
-				eg_xlt_action);
-	if (ret != SW_OK) {
-		nss_ppe_vlan_mgr_warn("%px: Failed to update egress vlan translation of port: %d. error: %d\n", dev, port_id, ret);
-		ppe_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, vsi);
-		fal_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, vsi);
-		return false;
-	}
-
-	return true;
-}
-
-/*
- * nss_ppe_vlan_mgr_ppe_add_vlan_rule()
- *	Add VLAN translation rule
- */
-static bool nss_ppe_vlan_mgr_ppe_add_vlan_rule(struct net_device *dev, int port_id, int vsi,
-					int svid, int cvid, fal_vlan_trans_adv_rule_t *eg_xlt_rule,
-					fal_vlan_trans_adv_action_t *eg_xlt_action)
-{
-	int ret;
-
-	/*
-	 * Add new ingress vlan translation rule to use bridge VSI
-	 */
-	ret = ppe_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, vsi);
-	if (ret != SW_OK) {
-		nss_ppe_vlan_mgr_warn("%px: failed to change ingress vlan translation for port: %d, error: %d\n",
-				dev, port_id, ret);
-		return false;
-	}
-
-	ret = fal_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, vsi);
-	if (ret != SW_OK) {
-		ppe_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, PPE_VSI_INVALID);
-		nss_ppe_vlan_mgr_warn("%px: failed to update port VSI of VLAN interface : %d, error: %d\n", dev, port_id, ret);
-		return false;
-	}
-
-	ret = fal_port_vlan_trans_adv_add(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id,
-				FAL_PORT_VLAN_EGRESS, eg_xlt_rule,
-				eg_xlt_action);
-	if (ret != SW_OK) {
-		nss_ppe_vlan_mgr_warn("%px: Failed to update egress svid(%x) cvid (%x) translation rule for port: %d, error: %d\n",
-				dev, svid, cvid, port_id, ret);
-		/*
-		 * Delete ingress vlan translation rule
-		 */
-		if (ret != SW_ALREADY_EXIST) {
-			ppe_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, PPE_VSI_INVALID);
-			fal_port_vlan_vsi_set(NSS_PPE_VLAN_MGR_SWITCH_ID, port_id, svid, cvid, PPE_VSI_INVALID);
-		}
-		return false;
-	}
-
-	return true;
-}
-
-/*
- * nss_ppe_vlan_mgr_update_mac_addr()
- *	Update the mac address of the VLAN.
- *
- * Note: use PPE API when generated.
- */
-static bool nss_ppe_vlan_mgr_update_mac_addr(struct net_device *dev, uint8_t *addr)
-{
-	return true;
-}
-
-/*
- * nss_ppe_vlan_mgr_update_mtu()
- *	Update the MTU of the VLAN.
- *
- * Note: use PPE API when generated.
- */
-static bool nss_ppe_vlan_mgr_update_mtu(struct net_device *dev, uint16_t mtu)
-{
-	return true;
-}
-
-/*
- * nss_ppe_vlan_mgr_get_port_num()
- *	Returns the associated port number with net_device.
- */
-static int32_t nss_ppe_vlan_mgr_get_port_num(struct net_device *dev)
-{
-	uint32_t port_num = NSS_PPE_VLAN_MGR_INVALID_VLAN;
-	if (nss_dp_is_netdev_physical(dev)) {
-		port_num = nss_dp_get_port_num(dev);
-		if (port_num != NSS_DP_INVALID_INTERFACE) {
-			return port_num;
-		}
-	}
-
-	nss_ppe_vlan_mgr_warn("%px: Invalid port number\n", dev);
-	return NSS_PPE_VLAN_MGR_INVALID_VLAN;
+	nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", dev, dev->name, port_id);
+	return NSS_PPE_VLAN_MGR_INVALID_PORT;
 }
 
 /*
@@ -276,7 +164,7 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_instance_find_and_ref(
  */
 static bool nss_ppe_vlan_mgr_calculate_new_port_role(int32_t port, int32_t portindex, struct net_device *dev)
 {
-	struct nss_vlan_pvt *vif;
+	struct nss_vlan_pvt *v;
 	bool to_edge_port = true;
 
 	if (vlan_mgr_ctx.port_role[port] == FAL_QINQ_EDGE_PORT) {
@@ -289,11 +177,11 @@ static bool nss_ppe_vlan_mgr_calculate_new_port_role(int32_t port, int32_t porti
 
 	/*
 	 * If no other double VLAN interface on the same physcial port,
-	 * we set physical port as edge port
+	 * we set PPE port as edge port
 	 */
 	spin_lock(&vlan_mgr_ctx.lock);
-	list_for_each_entry(vif, &vlan_mgr_ctx.list, list) {
-		if ((vif->port[portindex] == port) && (vif->parent)) {
+	list_for_each_entry(v, &vlan_mgr_ctx.list, list) {
+		if ((v->port[portindex] == port) && (v->parent)) {
 			to_edge_port = false;
 			break;
 		}
@@ -301,7 +189,7 @@ static bool nss_ppe_vlan_mgr_calculate_new_port_role(int32_t port, int32_t porti
 	spin_unlock(&vlan_mgr_ctx.lock);
 
 	if (to_edge_port) {
-		if (!nss_ppe_vlan_mgr_ppe_update_port_role(dev, port, false)) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, port, FAL_QINQ_EDGE_PORT)) {
 			nss_ppe_vlan_mgr_warn("failed to set %d as edge port\n", port);
 			return false;
 		}
@@ -314,17 +202,20 @@ static bool nss_ppe_vlan_mgr_calculate_new_port_role(int32_t port, int32_t porti
 
 /*
  * nss_ppe_vlan_mgr_port_role_update()
- *	Update physical port role between EDGE and CORE.
+ *	Update PPE port role between EDGE and CORE.
  */
 static void nss_ppe_vlan_mgr_port_role_update(struct nss_vlan_pvt *v,
 					uint32_t new_ppe_cvid,
 					uint32_t new_ppe_svid,
 					uint32_t port_id)
 {
-	int vsi = v->bridge_vsi ? v->bridge_vsi : v->ppe_vsi;
+	ppe_drv_ret_t ret;
+	v->xlate_info.br = v->bridge_iface;
+	v->xlate_info.port_id = port_id;
 
-	if (!nss_ppe_vlan_mgr_ppe_del_vlan_rule(NULL, port_id, vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-		nss_ppe_vlan_mgr_warn("%px: Failed to delete old translation rule for port: %d\n", v, port_id);
+	ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%px: Failed to delete old translation rule for port: %d, error = %d\n", v, port_id, ret);
 	}
 
 	/*
@@ -336,13 +227,12 @@ static void nss_ppe_vlan_mgr_port_role_update(struct nss_vlan_pvt *v,
 	/*
 	 * Add new egress vlan translation rule
 	 */
-	v->eg_xlt_action.cvid_xlt_cmd = (v->ppe_cvid == FAL_VLAN_INVALID) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	v->eg_xlt_action.cvid_xlt = (v->ppe_cvid == FAL_VLAN_INVALID) ? 0 : v->ppe_cvid;
-	v->eg_xlt_action.svid_xlt_cmd = (v->ppe_svid == FAL_VLAN_INVALID) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	v->eg_xlt_action.svid_xlt = (v->ppe_svid == FAL_VLAN_INVALID) ? 0 : v->ppe_svid;
+	v->xlate_info.svid = new_ppe_svid;
+	v->xlate_info.cvid = new_ppe_cvid;
 
-	if (!nss_ppe_vlan_mgr_ppe_add_vlan_rule(NULL, port_id, vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-		nss_ppe_vlan_mgr_warn("%px: Failed to add new translation rule for port: %d\n", v, port_id);
+	ret = ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%px: Failed to add new translation rule for port: %d, error = %d\n", v, port_id, ret);
 	}
 }
 
@@ -350,15 +240,13 @@ static void nss_ppe_vlan_mgr_port_role_update(struct nss_vlan_pvt *v,
  * nss_ppe_vlan_mgr_port_role_over_bond_update()
  *	Update port role for bond slaves.
  */
-static void nss_ppe_vlan_mgr_port_role_over_bond_update(struct nss_vlan_pvt *vif,
+static void nss_ppe_vlan_mgr_port_role_over_bond_update(struct nss_vlan_pvt *v,
 					uint32_t new_ppe_cvid,
 					uint32_t new_ppe_svid)
 {
 	int i;
-	fal_vid_xlt_cmd_t old_cvid_xlt_cmd, old_svid_xlt_cmd;
-	uint32_t old_cvid_xlt, old_svid_xlt;
 
-	vif->eg_xlt_rule.port_bitmap = 0;
+	v->xlate_info.port_id = 0;
 
 	/*
 	 * For vlan over bond, the vif->eg_xlt_action will be modified while
@@ -367,41 +255,19 @@ static void nss_ppe_vlan_mgr_port_role_over_bond_update(struct nss_vlan_pvt *vif
 	 * modification of all ports we should update vif->eg_xlt_action with the
 	 * new value which is passed to ssdk.
 	 */
-	old_cvid_xlt_cmd = vif->eg_xlt_action.cvid_xlt_cmd;
-	old_cvid_xlt = vif->eg_xlt_action.cvid_xlt;
-	old_svid_xlt_cmd = vif->eg_xlt_action.svid_xlt_cmd;
-	old_svid_xlt = vif->eg_xlt_action.svid_xlt;
-	for (i = 0; i < NSS_PPE_VLAN_MGR_PHY_PORT_MAX; i++) {
-		if (!vif->port[i]) {
+	for (i = 0; i < NSS_PPE_VLAN_MGR_PORT_MAX; i++) {
+		if (!v->port[i]) {
 			continue;
 		}
 
-		vif->eg_xlt_rule.port_bitmap |= (1 << vif->port[i]);
-		nss_ppe_vlan_mgr_port_role_update(vif, new_ppe_cvid, new_ppe_svid, vif->port[i]);
-
-		/*
-		 * Update vif->eg_xlt_action with old value to modify the entry
-		 * for next port/slave
-		 */
-		vif->eg_xlt_action.cvid_xlt_cmd = old_cvid_xlt_cmd;
-		vif->eg_xlt_action.cvid_xlt = old_cvid_xlt;
-		vif->eg_xlt_action.svid_xlt_cmd = old_svid_xlt_cmd;
-		vif->eg_xlt_action.svid_xlt = old_svid_xlt;
+		v->xlate_info.port_id = v->port[i];
+		nss_ppe_vlan_mgr_port_role_update(v, new_ppe_cvid, new_ppe_svid, v->port[i]);
 	}
-
-	/*
-	 * All ports/slaves are updated now, reset the vif->eg_xlt_action
-	 * with the value that is passed to ssdk.
-	 */
-	vif->eg_xlt_action.cvid_xlt_cmd = (vif->ppe_cvid == FAL_VLAN_INVALID) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	vif->eg_xlt_action.cvid_xlt = (vif->ppe_cvid == FAL_VLAN_INVALID) ? 0 : vif->ppe_cvid;
-	vif->eg_xlt_action.svid_xlt_cmd = (vif->ppe_svid == FAL_VLAN_INVALID) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	vif->eg_xlt_action.svid_xlt = (vif->ppe_svid == FAL_VLAN_INVALID) ? 0 : vif->ppe_svid;
 }
 
 /*
  * nss_ppe_vlan_mgr_port_role_event()
- *	Decide port role updation for bond or physical device
+ *	Decide port role updation for bond or simple device
  */
 static void nss_ppe_vlan_mgr_port_role_event(int32_t port, int portindex)
 {
@@ -418,18 +284,20 @@ static void nss_ppe_vlan_mgr_port_role_event(int32_t port, int portindex)
 			vlan_over_bond = v->bond_id ? true : false;
 			if ((vlan_mgr_ctx.port_role[port] == FAL_QINQ_EDGE_PORT) &&
 			    (v->vid != v->ppe_cvid)) {
-				if (!vlan_over_bond)
-					nss_ppe_vlan_mgr_port_role_update(v, v->vid, PPE_VSI_INVALID, v->port[0]);
-				else
-					nss_ppe_vlan_mgr_port_role_over_bond_update(v, v->vid, PPE_VSI_INVALID);
+				if (!vlan_over_bond) {
+					nss_ppe_vlan_mgr_port_role_update(v, v->vid, FAL_VLAN_INVALID, v->port[0]);
+				} else {
+					nss_ppe_vlan_mgr_port_role_over_bond_update(v, v->vid, FAL_VLAN_INVALID);
+				}
 			}
 
 			if ((vlan_mgr_ctx.port_role[port] == FAL_QINQ_CORE_PORT) &&
 			    (v->vid != v->ppe_svid)) {
-				if (!vlan_over_bond)
-					nss_ppe_vlan_mgr_port_role_update(v, PPE_VSI_INVALID, v->vid, v->port[0]);
-				else
-					nss_ppe_vlan_mgr_port_role_over_bond_update(v, PPE_VSI_INVALID, v->vid);
+				if (!vlan_over_bond) {
+					nss_ppe_vlan_mgr_port_role_update(v, FAL_VLAN_INVALID, v->vid, v->port[0]);
+				} else {
+					nss_ppe_vlan_mgr_port_role_over_bond_update(v, FAL_VLAN_INVALID, v->vid);
+				}
 			}
 		}
 	}
@@ -440,30 +308,60 @@ static void nss_ppe_vlan_mgr_port_role_event(int32_t port, int portindex)
  * nss_ppe_vlan_mgr_bond_configure_ppe()
  *	Configure PPE for bond device
  */
-static int nss_ppe_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct net_device *bond_dev)
+static int nss_ppe_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct net_device *bond_dev, struct net_device *dev)
 {
-	uint32_t vsi;
-	int ret = 0;
-	struct net_device *slave;
+	int res = 0;
+	struct net_device *slave_dev;
 	int32_t port_id;
 	int vlan_mgr_bond_port_role = -1;
+	ppe_drv_ret_t ret;
 
-	if (ppe_vsi_alloc(NSS_PPE_VLAN_MGR_SWITCH_ID, &vsi)) {
-		nss_ppe_vlan_mgr_warn("%s: failed to allocate VSI for bond vlan device", bond_dev->name);
+	struct net_device *base_dev = nss_ppe_vlan_mgr_get_real_dev(dev);
+	if (!base_dev) {
+		nss_ppe_vlan_mgr_warn("%s: failed to obtain bond_dev", dev->name);
+		return -1;
+	}
+
+	v->iface = ppe_drv_iface_alloc(PPE_DRV_IFACE_TYPE_VLAN, dev);
+	if (!v->iface) {
+		nss_ppe_vlan_mgr_warn("%s: failed to allocate IFACE for vlan device", bond_dev->name);
 		return -1;
 	}
 
 	/*
+	 * PPE expects base_dev here. So, for bond0.10, base_dev will be bond0.
+	 * Not the actual real device is needed.
+	 */
+	ret = ppe_drv_vlan_init(v->iface, base_dev, v->vid);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_trace("%s: failed to initialize, PPE updated, error = %d\n", dev->name, ret);
+		goto free_iface;
+	}
+
+	ret = ppe_drv_iface_mac_addr_set(v->iface, v->dev_addr);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: Failed to set MAC address, error = %d\n", dev->name, ret);
+		goto deinit_iface;
+	}
+
+	ret = ppe_drv_iface_mtu_set(v->iface, v->mtu);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_trace("%s: Failed to set MTU, error = %d\n", dev->name, ret);
+		goto clear_mac_addr;
+	}
+
+	/*
 	 * Set vlan_mgr_bond_port_role and check
-	 * if all the bond slaves are physical ports
+	 * if all the bond slaves are PPE ports
 	 */
 	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(bond_dev, slave) {
-		port_id = nss_ppe_vlan_mgr_get_port_num(slave);
-		if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port_id)) {
+	for_each_netdev_in_bond_rcu(bond_dev, slave_dev) {
+		port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+		if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
 			rcu_read_unlock();
-			nss_ppe_vlan_mgr_warn("%s: %d is not valid physical port\n", slave->name, port_id);
-			goto free_vsi;
+			nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n",
+									slave_dev, slave_dev->name, port_id);
+			goto clear_mac_addr;
 		}
 
 		/*
@@ -479,7 +377,7 @@ static int nss_ppe_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct ne
 	 * In case the bond interface has no slaves, we do not want to proceed further
 	 */
 	if (vlan_mgr_bond_port_role == -1) {
-		goto free_vsi;
+		goto clear_mac_addr;
 	}
 
 	/*
@@ -500,40 +398,29 @@ static int nss_ppe_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct ne
 		}
 	}
 
-	/*
-	 * Add egress vlan translation rule
-	 */
-	memset(&v->eg_xlt_rule, 0, sizeof(v->eg_xlt_rule));
-	memset(&v->eg_xlt_action, 0, sizeof(v->eg_xlt_action));
-
-	/*
-	 * Fields for match
-	 */
-	v->eg_xlt_rule.vsi_valid = true;	/* Use vsi as search key*/
-	v->eg_xlt_rule.vsi_enable = true;	/* Use vsi as search key*/
-	v->eg_xlt_rule.vsi = vsi;		/* Use vsi as search key*/
-	v->eg_xlt_rule.s_tagged = 0x7;		/* Accept tagged/untagged/priority tagged svlan */
-	v->eg_xlt_rule.c_tagged = 0x7;		/* Accept tagged/untagged/priority tagged cvlan */
-
-	/*
-	 * Fields for action
-	 */
-	v->eg_xlt_action.cvid_xlt_cmd = (v->ppe_cvid == FAL_VLAN_INVALID) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	v->eg_xlt_action.cvid_xlt = (v->ppe_cvid == FAL_VLAN_INVALID) ? 0 : v->ppe_cvid;
-	v->eg_xlt_action.svid_xlt_cmd = (v->ppe_svid == FAL_VLAN_INVALID) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	v->eg_xlt_action.svid_xlt = (v->ppe_svid == FAL_VLAN_INVALID) ? 0 : v->ppe_svid;
+	v->xlate_info.br = NULL;
+	v->xlate_info.svid = v->ppe_svid;
+	v->xlate_info.cvid = v->ppe_cvid;
 
 	/*
 	 * Add ingress vlan translation rule
 	 */
 	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(bond_dev, slave) {
-		port_id = nss_ppe_vlan_mgr_get_port_num(slave);
-		v->eg_xlt_rule.port_bitmap |= (1 << v->port[port_id - 1]);
-		if (!nss_ppe_vlan_mgr_ppe_add_vlan_rule(slave, v->port[port_id -1], vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
+	for_each_netdev_in_bond_rcu(bond_dev, slave_dev) {
+		port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+		if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
 			rcu_read_unlock();
-			nss_ppe_vlan_mgr_warn("%s: failed to set vlan translation, error: \n", slave->name);
-			goto free_vsi;
+			nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n",
+									slave_dev, slave_dev->name, port_id);
+			goto clear_mac_addr;
+		}
+
+		v->xlate_info.port_id = v->port[port_id - 1];
+		ret = ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%s: failed to set vlan translation, error = %d\n", slave_dev->name, ret);
+			goto clear_mac_addr;
 		}
 	}
 	rcu_read_unlock();
@@ -543,50 +430,103 @@ static int nss_ppe_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct ne
 	 */
 	if ((v->ppe_svid != FAL_VLAN_INVALID) && (vlan_mgr_bond_port_role != FAL_QINQ_CORE_PORT)) {
 		rcu_read_lock();
-		for_each_netdev_in_bond_rcu(bond_dev, slave) {
-			port_id = nss_ppe_vlan_mgr_get_port_num(slave);
-			if (nss_ppe_vlan_mgr_ppe_update_port_role(slave, port_id, true)) {
+		for_each_netdev_in_bond_rcu(bond_dev, slave_dev) {
+			port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+			if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
 				rcu_read_unlock();
-				nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", slave->name, port_id);
+				nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n",
+									slave_dev, slave_dev->name, port_id);
+				goto delete_ppe_rule;
+			}
+
+			if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, port_id, FAL_QINQ_CORE_PORT)) {
+				rcu_read_unlock();
+				nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", slave_dev->name, port_id);
 				goto delete_ppe_rule;
 			}
 		}
 		rcu_read_unlock();
-		ret = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
+		res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
 	}
 
-	v->ppe_vsi = vsi;
-	return ret;
+	return res;
 
 delete_ppe_rule:
 	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(bond_dev, slave) {
-		port_id = nss_ppe_vlan_mgr_get_port_num(slave);
-		if (!nss_ppe_vlan_mgr_ppe_del_vlan_rule(slave, port_id, vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-			nss_ppe_vlan_mgr_warn("%s: failed to delete vlan translation, error: \n", slave->name);
+	for_each_netdev_in_bond_rcu(bond_dev, slave_dev) {
+		port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+		if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+			nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n",
+									slave_dev, slave_dev->name, port_id);
+			rcu_read_unlock();
+			v->iface = NULL;
+			return -1;
+		}
+
+		v->xlate_info.port_id = port_id;
+		ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			nss_ppe_vlan_mgr_warn("%s: failed to delete vlan translation, error = %d \n", slave_dev->name, ret);
 		}
 	}
 	rcu_read_unlock();
 
-free_vsi:
-	if (ppe_vsi_free(NSS_PPE_VLAN_MGR_SWITCH_ID, vsi)) {
-		nss_ppe_vlan_mgr_warn("%px: Failed to free VLAN VSI\n", v);
-	}
+clear_mac_addr:
+	ppe_drv_iface_mac_addr_clear(v->iface);
+
+deinit_iface:
+	ppe_drv_vlan_deinit(v->iface);
+
+free_iface:
+	ppe_drv_iface_deref(v->iface);
+	v->iface = NULL;
 	return -1;
 }
 
 /*
  * nss_ppe_vlan_mgr_configure_ppe()
- *	Configure PPE for physical devices
+ *	Configure PPE for non-bond devices
  */
 static int nss_ppe_vlan_mgr_configure_ppe(struct nss_vlan_pvt *v, struct net_device *dev)
 {
-	uint32_t vsi;
-	int ret = 0;
+	int res = 0;
+	struct net_device *base_dev;
+	ppe_drv_ret_t ret;
 
-	if (ppe_vsi_alloc(NSS_PPE_VLAN_MGR_SWITCH_ID, &vsi)) {
-		nss_ppe_vlan_mgr_warn("%s: failed to allocate VSI for vlan device", dev->name);
+	v->iface = ppe_drv_iface_alloc(PPE_DRV_IFACE_TYPE_VLAN, dev);
+	if (!v->iface) {
+		nss_ppe_vlan_mgr_warn("%s: failed to allocate IFACE for vlan device", dev->name);
 		return -1;
+	}
+
+	/*
+	 * PPE expects base_dev here. So, for eth0.10, base_dev will be eth0.
+	 * For eth0.10.20, base_dev will be eth0.10.
+	 * Not the actual real device is needed.
+	 */
+	base_dev = nss_ppe_vlan_mgr_get_real_dev(dev);
+	if (!base_dev) {
+		nss_ppe_vlan_mgr_warn("%s: failed to obtain base_dev", dev->name);
+		goto free_iface;
+	}
+
+	ret = ppe_drv_vlan_init(v->iface, base_dev, v->vid);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_trace("%s: failed to initialize PPE, error = %d\n", dev->name, ret);
+		goto free_iface;
+
+	}
+
+	ret = ppe_drv_iface_mac_addr_set(v->iface, v->dev_addr);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: Failed to set MAC address, error = %d\n", dev->name, ret);
+		goto deinit_iface;
+	}
+
+	ret = ppe_drv_iface_mtu_set(v->iface, v->mtu);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_trace("%s: Failed to set MTU, error = %d\n", dev->name, ret);
+		goto clear_mac_addr;
 	}
 
 	/*
@@ -607,56 +547,42 @@ static int nss_ppe_vlan_mgr_configure_ppe(struct nss_vlan_pvt *v, struct net_dev
 		}
 	}
 
-	/*
-	 * Add egress vlan translation rule
-	 */
-	memset(&v->eg_xlt_rule, 0, sizeof(v->eg_xlt_rule));
-	memset(&v->eg_xlt_action, 0, sizeof(v->eg_xlt_action));
+	v->xlate_info.port_id = v->port[0];
+	v->xlate_info.br = NULL;
+	v->xlate_info.svid = v->ppe_svid;
+	v->xlate_info.cvid = v->ppe_cvid;
 
-	/*
-	 * Fields for match
-	 */
-	v->eg_xlt_rule.vsi_valid = true;	/* Use vsi as search key*/
-	v->eg_xlt_rule.vsi_enable = true;	/* Use vsi as search key*/
-	v->eg_xlt_rule.vsi = vsi;		/* Use vsi as search key*/
-	v->eg_xlt_rule.s_tagged = 0x7;		/* Accept tagged/untagged/priority tagged svlan */
-	v->eg_xlt_rule.c_tagged = 0x7;		/* Accept tagged/untagged/priority tagged cvlan */
-	v->eg_xlt_rule.port_bitmap = (1 << v->port[0]); /* Use port as search key*/
-
-	/*
-	 * Fields for action
-	 */
-	v->eg_xlt_action.cvid_xlt_cmd = (v->ppe_cvid == FAL_VLAN_INVALID) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	v->eg_xlt_action.cvid_xlt = (v->ppe_cvid == FAL_VLAN_INVALID) ? 0 : v->ppe_cvid;
-	v->eg_xlt_action.svid_xlt_cmd = (v->ppe_svid == FAL_VLAN_INVALID) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	v->eg_xlt_action.svid_xlt = (v->ppe_svid == FAL_VLAN_INVALID) ? 0 : v->ppe_svid;
-
-	if (!nss_ppe_vlan_mgr_ppe_add_vlan_rule(dev, v->port[0], vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-		nss_ppe_vlan_mgr_warn("%s: failed to set vlan translation, error: \n", dev->name);
-		goto free_vsi;
+	ret = ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: failed to set vlan translation, error = %d \n", dev->name, ret);
+		goto clear_mac_addr;
 	}
 
 	if ((v->ppe_svid != FAL_VLAN_INVALID) && (vlan_mgr_ctx.port_role[v->port[0]] != FAL_QINQ_CORE_PORT)) {
-		if (!nss_ppe_vlan_mgr_ppe_update_port_role(dev, v->port[0], true)) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[0], FAL_QINQ_CORE_PORT)) {
 			nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", dev->name, v->port[0]);
 			goto delete_ppe_rule;
 		}
-		ret = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
+		res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
 	}
 
-	v->ppe_vsi = vsi;
-	return ret;
+	return res;
 
 delete_ppe_rule:
-	if (!nss_ppe_vlan_mgr_ppe_del_vlan_rule(dev, v->port[0], vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-		nss_ppe_vlan_mgr_warn("%s: failed to delete vlan translation, error: \n", dev->name);
+	ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: failed to delete vlan translation, error = %d \n", dev->name, ret);
 	}
 
-free_vsi:
-	if (ppe_vsi_free(NSS_PPE_VLAN_MGR_SWITCH_ID, vsi)) {
-		nss_ppe_vlan_mgr_warn("%px: Failed to free VLAN VSI\n", v);
-	}
+clear_mac_addr:
+	ppe_drv_iface_mac_addr_clear(v->iface);
 
+deinit_iface:
+	ppe_drv_vlan_deinit(v->iface);
+
+free_iface:
+	ppe_drv_iface_deref(v->iface);
+	v->iface = NULL;
 	return -1;
 }
 
@@ -667,6 +593,7 @@ free_vsi:
 static void nss_ppe_vlan_mgr_instance_free(struct nss_vlan_pvt *v, struct net_device *dev)
 {
 	int32_t i;
+	ppe_drv_ret_t ret;
 
 	spin_lock(&vlan_mgr_ctx.lock);
 	--v->refs;
@@ -676,32 +603,32 @@ static void nss_ppe_vlan_mgr_instance_free(struct nss_vlan_pvt *v, struct net_de
 	}
 	spin_unlock(&vlan_mgr_ctx.lock);
 
-	if (v->ppe_vsi) {
+	if (v->iface) {
 
-		v->eg_xlt_rule.port_bitmap = 0;
-		for (i = 0; i < NSS_PPE_VLAN_MGR_PHY_PORT_MAX; i++) {
+		v->xlate_info.port_id = 0;
+		for (i = 0; i < NSS_PPE_VLAN_MGR_PORT_MAX; i++) {
 			if (!v->port[i]) {
 				continue;
 			}
 
-			v->eg_xlt_rule.port_bitmap |= (1 << v->port[i]);
-			if (!nss_ppe_vlan_mgr_ppe_del_vlan_rule(dev, v->port[i], v->ppe_vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-				nss_ppe_vlan_mgr_warn("%s: failed to delete vlan translation, error: \n", dev->name);
+			v->xlate_info.port_id = v->port[i];
+			ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+			if (ret != PPE_DRV_RET_SUCCESS) {
+				nss_ppe_vlan_mgr_warn("%s: failed to delete vlan translation, error = %d \n", dev->name, ret);
 			}
+			v->xlate_info.port_id = 0;
 		}
 
-		if (ppe_vsi_free(NSS_PPE_VLAN_MGR_SWITCH_ID, v->ppe_vsi)) {
-			nss_ppe_vlan_mgr_warn("%px: Failed to free VLAN VSI\n", v);
-		}
+		ppe_drv_iface_mac_addr_clear(v->iface);
 	}
 
 	/*
-	 * Need to change the physical port role. While adding
-	 * eth0.10.20/bond0.10.20, the role of the physical port(s) changed
+	 * Need to change the port role. While adding
+	 * eth0.10.20/bond0.10.20, the role of the port(s) changed
 	 * from EDGE to CORE. So, while removing eth0.10.20/bond0.10.20, the
-	 * role of the physical port(s) should be changed from CORE to EDGE.
+	 * role of the port(s) should be changed from CORE to EDGE.
 	 */
-	for (i = 0; i < NSS_PPE_VLAN_MGR_PHY_PORT_MAX; i++) {
+	for (i = 0; i < NSS_PPE_VLAN_MGR_PORT_MAX; i++) {
 		if (v->port[i]) {
 			if (nss_ppe_vlan_mgr_calculate_new_port_role(v->port[i], i, dev)) {
 				nss_ppe_vlan_mgr_port_role_event(v->port[i], i);
@@ -713,6 +640,11 @@ static void nss_ppe_vlan_mgr_instance_free(struct nss_vlan_pvt *v, struct net_de
 		nss_ppe_vlan_mgr_instance_deref(v->parent);
 	}
 
+	if (v->iface) {
+		ppe_drv_vlan_deinit(v->iface);
+		ppe_drv_iface_deref(v->iface);
+		v->iface = NULL;
+	}
 	kfree(v);
 }
 
@@ -726,8 +658,8 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 	struct nss_vlan_pvt *v;
 	struct vlan_dev_priv *vlan;
 	struct net_device *real_dev;
-	struct net_device *slave;
-	int32_t port, bond_id = -1;
+	struct net_device *slave_dev;
+	int32_t port_id, bond_id = -1;
 
 	if (!is_vlan_dev(dev)) {
 		return NULL;
@@ -746,6 +678,7 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 	real_dev = vlan->real_dev;
 	v->vid = vlan->vlan_id;
 	v->tpid = ntohs(vlan->vlan_proto);
+	v->bond_id = -1;
 
 	/*
 	 * Check if the vlan has any parent.
@@ -758,7 +691,7 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 	 * become eth0.10/bond0.10, so v->parent should be valid. But v->parent->parent
 	 * should be NULL, as explained above. In this case, we need to copy the
 	 * v->parent->port numbers to v->ports as the double vlan is created
-	 * on the same physical port(s).
+	 * on the same port(s).
 	 *
 	 * 3. We ignore the remaining case as we support only 2 vlan tags.
 	 *
@@ -767,9 +700,9 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 	v->parent = nss_ppe_vlan_mgr_instance_find_and_ref(real_dev);
 	if (!v->parent) {
 		if (!netif_is_bond_master(real_dev)) {
-			v->port[0] = nss_ppe_vlan_mgr_get_port_num(real_dev);
-			if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(v->port[0])) {
-				nss_ppe_vlan_mgr_warn("%s: %d is not valid physical port\n", real_dev->name, v->port[0]);
+			v->port[0] = nss_ppe_vlan_mgr_get_port_id(real_dev);
+			if (v->port[0] == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+				nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", real_dev, real_dev->name, v->port[0]);
 				kfree(v);
 				return NULL;
 			}
@@ -782,16 +715,18 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 				kfree(v);
 				return NULL;
 			}
+
 			rcu_read_lock();
-			for_each_netdev_in_bond_rcu(real_dev, slave) {
-				port = nss_ppe_vlan_mgr_get_port_num(slave);
-				if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port)) {
+			for_each_netdev_in_bond_rcu(real_dev, slave_dev) {
+				port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+				if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
 					rcu_read_unlock();
-					nss_ppe_vlan_mgr_warn("%s: %d is not valid physical port\n", slave->name, port);
+					nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n",
+									slave_dev, slave_dev->name, port_id);
 					kfree(v);
 					return NULL;
 				}
-				v->port[port - 1] = port;
+				v->port[port_id - 1] = port_id;
 			}
 			rcu_read_unlock();
 			v->bond_id = bond_id;
@@ -805,15 +740,18 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 			v->port[0] = v->parent->port[0];
 		} else {
 			rcu_read_lock();
-			for_each_netdev_in_bond_rcu(real_dev, slave) {
-				port = nss_ppe_vlan_mgr_get_port_num(slave);
-				if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port)) {
+			for_each_netdev_in_bond_rcu(real_dev, slave_dev) {
+				port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+				if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
 					rcu_read_unlock();
-					nss_ppe_vlan_mgr_warn("%s: %d is not valid physical port\n", slave->name, port);
+					nss_ppe_vlan_mgr_instance_deref(v->parent);
+					nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n",
+									slave_dev, slave_dev->name, port_id);
 					kfree(v);
 					return NULL;
 				}
-				v->port[port - 1] = v->parent->port[port - 1];
+
+				v->port[port_id - 1] = v->parent->port[port_id - 1];
 			}
 			rcu_read_unlock();
 			v->bond_id = v->parent->bond_id;
@@ -856,34 +794,38 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
  */
 static int nss_ppe_vlan_mgr_changemtu_event(struct netdev_notifier_info *info)
 {
+	ppe_drv_ret_t ret;
 	struct net_device *dev = netdev_notifier_info_to_dev(info);
-	struct nss_vlan_pvt *v_pvt = nss_ppe_vlan_mgr_instance_find_and_ref(dev);
-	uint32_t old_mtu = v_pvt->mtu;
+	struct nss_vlan_pvt *v = nss_ppe_vlan_mgr_instance_find_and_ref(dev);
+	uint32_t old_mtu;
 
-	if (!v_pvt) {
+	if (!v) {
 		return NOTIFY_DONE;
 	}
+
+	old_mtu = v->mtu;
 
 	spin_lock(&vlan_mgr_ctx.lock);
-	if (v_pvt->mtu == dev->mtu) {
+	if (v->mtu == dev->mtu) {
 		spin_unlock(&vlan_mgr_ctx.lock);
-		nss_ppe_vlan_mgr_instance_deref(v_pvt);
+		nss_ppe_vlan_mgr_instance_deref(v);
 		return NOTIFY_DONE;
 	}
-	v_pvt->mtu = dev->mtu;
-	spin_unlock(&vlan_mgr_ctx.lock);
 
-	if (!nss_ppe_vlan_mgr_update_mtu(dev, dev->mtu)) {
+	v->mtu = dev->mtu;
+	spin_unlock(&vlan_mgr_ctx.lock);
+	ret = ppe_drv_iface_mtu_set(v->iface, dev->mtu);
+	if (ret != PPE_DRV_RET_SUCCESS) {
 		spin_lock(&vlan_mgr_ctx.lock);
-		v_pvt->mtu = old_mtu;
+		v->mtu = old_mtu;
 		spin_unlock(&vlan_mgr_ctx.lock);
-		nss_ppe_vlan_mgr_warn("%s: Failed to send change MTU(%d) message to NSS\n", dev->name, dev->mtu);
-		nss_ppe_vlan_mgr_instance_deref(v_pvt);
+		nss_ppe_vlan_mgr_warn("%s: Failed to change MTU(%d) in PPE, error = %d\n", dev->name, dev->mtu, ret);
+		nss_ppe_vlan_mgr_instance_deref(v);
 		return NOTIFY_BAD;
 	}
 
-	nss_ppe_vlan_mgr_trace("%s: MTU changed to %d, NSS updated\n", dev->name, dev->mtu);
-	nss_ppe_vlan_mgr_instance_deref(v_pvt);
+	nss_ppe_vlan_mgr_trace("%s: MTU changed to %d, PPE updated\n", dev->name, dev->mtu);
+	nss_ppe_vlan_mgr_instance_deref(v);
 	return NOTIFY_DONE;
 }
 
@@ -892,34 +834,43 @@ static int nss_ppe_vlan_mgr_changemtu_event(struct netdev_notifier_info *info)
  */
 static int nss_ppe_vlan_mgr_changeaddr_event(struct netdev_notifier_info *info)
 {
+	ppe_drv_ret_t ret;
 	struct net_device *dev = netdev_notifier_info_to_dev(info);
 
-	struct nss_vlan_pvt *v_pvt = nss_ppe_vlan_mgr_instance_find_and_ref(dev);
-	if (!v_pvt) {
+	struct nss_vlan_pvt *v = nss_ppe_vlan_mgr_instance_find_and_ref(dev);
+	if (!v) {
 		nss_ppe_vlan_mgr_warn("%px: Interface not found name: %s\n",
 						dev, dev->name);
 		return NOTIFY_DONE;
 	}
 
 	spin_lock(&vlan_mgr_ctx.lock);
-	if (!memcmp(v_pvt->dev_addr, dev->dev_addr, ETH_ALEN)) {
+	if (!memcmp(v->dev_addr, dev->dev_addr, ETH_ALEN)) {
 		spin_unlock(&vlan_mgr_ctx.lock);
-		nss_ppe_vlan_mgr_instance_deref(v_pvt);
+		nss_ppe_vlan_mgr_instance_deref(v);
 		return NOTIFY_DONE;
 	}
 	spin_unlock(&vlan_mgr_ctx.lock);
 
-	if (!nss_ppe_vlan_mgr_update_mac_addr(dev, dev->dev_addr)) {
-		nss_ppe_vlan_mgr_warn("%s: Failed to send change MAC address message to NSS\n", dev->name);
-		nss_ppe_vlan_mgr_instance_deref(v_pvt);
+	ret = ppe_drv_iface_mac_addr_clear(v->iface);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: Failed to clear MAC address, error = %d\n", dev->name, ret);
+		nss_ppe_vlan_mgr_instance_deref(v);
+		return NOTIFY_BAD;
+	}
+
+	ret = ppe_drv_iface_mac_addr_set(v->iface, dev->dev_addr);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: Failed to change MAC address, error = %d\n", dev->name, ret);
+		nss_ppe_vlan_mgr_instance_deref(v);
 		return NOTIFY_BAD;
 	}
 
 	spin_lock(&vlan_mgr_ctx.lock);
-	ether_addr_copy(v_pvt->dev_addr, dev->dev_addr);
+	ether_addr_copy(v->dev_addr, dev->dev_addr);
 	spin_unlock(&vlan_mgr_ctx.lock);
-	nss_ppe_vlan_mgr_trace("%s: MAC changed to %pM, updated NSS\n", dev->name, dev->dev_addr);
-	nss_ppe_vlan_mgr_instance_deref(v_pvt);
+	nss_ppe_vlan_mgr_trace("%s: MAC changed to %pM, updated PPE\n", dev->name, dev->dev_addr);
+	nss_ppe_vlan_mgr_instance_deref(v);
 	return NOTIFY_DONE;
 }
 
@@ -930,11 +881,10 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 {
 	struct net_device *dev = netdev_notifier_info_to_dev(info);
 	struct nss_vlan_pvt *v;
-	int ret;
-	struct net_device *slave;
-	int32_t port;
+	int res;
+	struct net_device *slave_dev, *real_dev;
+	int32_t port_id;
 	struct vlan_dev_priv *vlan;
-	struct net_device *real_dev;
 	bool is_bond_master = false;
 
 	v = nss_ppe_vlan_mgr_create_instance(dev);
@@ -951,12 +901,12 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 
 	is_bond_master = netif_is_bond_master(real_dev);
 	if (!is_bond_master) {
-		ret = nss_ppe_vlan_mgr_configure_ppe(v, dev);
+		res = nss_ppe_vlan_mgr_configure_ppe(v, dev);
 	} else {
-		ret = nss_ppe_vlan_mgr_bond_configure_ppe(v, real_dev);
+		res = nss_ppe_vlan_mgr_bond_configure_ppe(v, real_dev, dev);
 	}
 
-	if (ret < 0) {
+	if (res < 0) {
 		nss_ppe_vlan_mgr_instance_free(v, dev);
 		return NOTIFY_DONE;
 	}
@@ -965,7 +915,7 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 	list_add(&v->list, &vlan_mgr_ctx.list);
 	spin_unlock(&vlan_mgr_ctx.lock);
 
-	if (ret != NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED) {
+	if (res != NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED) {
 		return NOTIFY_DONE;
 	}
 
@@ -974,19 +924,17 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 		return NOTIFY_DONE;
 	}
 
-	/*
-	 * TODO: Need a new mechanism for getting ports
-	 */
 	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(real_dev, slave) {
-		port = nss_ppe_vlan_mgr_get_port_num(slave);
-		if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port)) {
+	for_each_netdev_in_bond_rcu(real_dev, slave_dev) {
+		port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+		if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
 			rcu_read_unlock();
-			nss_ppe_vlan_mgr_warn("%s: %d is not valid physical port\n", slave->name, port);
-			return NOTIFY_DONE;
+			nss_ppe_vlan_mgr_instance_free(v, dev);
+			nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", slave_dev, slave_dev->name, port_id);
+			return -1;
 		}
 
-		nss_ppe_vlan_mgr_port_role_event(v->port[port - 1], port - 1);
+		nss_ppe_vlan_mgr_port_role_event(v->port[port_id - 1], port_id - 1);
 	}
 
 	rcu_read_unlock();
@@ -1051,141 +999,121 @@ static struct notifier_block nss_ppe_vlan_mgr_netdevice_nb __read_mostly = {
 };
 
 /*
- * nss_ppe_vlan_mgr_port_vsi_update()
- *	Update vlan port with the new vsi value
- */
-static int nss_ppe_vlan_mgr_port_vsi_update(struct nss_vlan_pvt *v, uint32_t new_vsi)
-{
-	uint32_t old_vsi;
-
-	if (!nss_ppe_vlan_mgr_ppe_del_vlan_rule(NULL, v->port[0], new_vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-		nss_ppe_vlan_mgr_warn("%px: Failed to delete old translation rule for port: %d\n", v, v->port[0]);
-			return -1;
-	}
-
-	old_vsi = v->eg_xlt_rule.vsi;
-	v->eg_xlt_rule.vsi = new_vsi;
-	if (!nss_ppe_vlan_mgr_ppe_add_vlan_rule(NULL, v->port[0], new_vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-		v->eg_xlt_rule.vsi = old_vsi;
-		nss_ppe_vlan_mgr_warn("%px: Failed to add new translation rule for port: %d\n", v, v->port[0]);
-		return -1;
-	}
-	return 0;
-}
-
-/*
- * nss_ppe_vlan_mgr_over_bond_port_vsi_update()
- *	Update bond slaves with the new vsi value
- */
-static int nss_ppe_vlan_mgr_over_bond_port_vsi_update(struct net_device *real_dev, struct nss_vlan_pvt *v, uint32_t new_vsi)
-{
-	int port;
-	uint32_t old_vsi;
-	struct net_device *slave;
-
-	v->eg_xlt_rule.port_bitmap = 0;
-	old_vsi = v->eg_xlt_rule.vsi;
-
-	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(real_dev, slave) {
-		port = nss_ppe_vlan_mgr_get_port_num(slave);
-		if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port)) {
-			rcu_read_unlock();
-			nss_ppe_vlan_mgr_warn("%px: bond: %s, slave is not a physical interface\n", v, real_dev->name);
-			return -1;
-		}
-		v->eg_xlt_rule.port_bitmap |= (1 << v->port[port - 1]);
-
-		if (!nss_ppe_vlan_mgr_ppe_del_vlan_rule(slave, v->port[port - 1], new_vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-			rcu_read_unlock();
-			nss_ppe_vlan_mgr_warn("%px: Failed to delete old translation rule for port: %d\n", v, v->port[port - 1]);
-			return -1;
-		}
-
-		v->eg_xlt_rule.vsi = new_vsi;
-		if (!nss_ppe_vlan_mgr_ppe_add_vlan_rule(slave, v->port[port - 1], new_vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
-			rcu_read_unlock();
-			v->eg_xlt_rule.vsi = old_vsi;
-			nss_ppe_vlan_mgr_warn("%px: Failed to add new translation rule for port: %d\n", v, v->port[port - 1]);
-			return -1;
-		}
-		v->eg_xlt_rule.vsi = old_vsi;
-	}
-	rcu_read_unlock();
-
-	v->eg_xlt_rule.vsi = new_vsi;
-	return 0;
-}
-
-/*
  * nss_ppe_vlan_mgr_over_bond_leave_bridge()
  *	Leave bond interface from bridge
  */
 static int nss_ppe_vlan_mgr_over_bond_leave_bridge(struct net_device *real_dev, struct nss_vlan_pvt *v)
 {
-	int port, ret;
-	struct net_device *slave;
-	uint32_t bridge_vsi;
-
-	bridge_vsi = v->eg_xlt_rule.vsi;
-	ret = nss_ppe_vlan_mgr_over_bond_port_vsi_update(real_dev, v, v->ppe_vsi);
-	if (ret) {
-		nss_ppe_vlan_mgr_warn("%px: failed to update bond slaves with the vlan vsi: %d\n", v, v->ppe_vsi);
-		goto return_with_error;
-	}
-	v->bridge_vsi = 0;
+	struct net_device *slave_dev;
+	struct ppe_drv_iface *bridge_iface = v->bridge_iface;
+	int32_t port_id;
+	ppe_drv_ret_t ret;
 
 	rcu_read_lock();
-	for_each_netdev_in_bond_rcu(real_dev, slave) {
-		port = nss_ppe_vlan_mgr_get_port_num(slave);
-		if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port)) {
+	for_each_netdev_in_bond_rcu(real_dev, slave_dev) {
+		port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+		if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
 			rcu_read_unlock();
-			nss_ppe_vlan_mgr_warn("%s: %d is not valid physical port\n", slave->name, port);
-			goto return_with_error;
+			nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", slave_dev, slave_dev->name, port_id);
+			return -1;
+		}
+
+		if (v->port[port_id - 1] != port_id) {
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%px: %s: Given port (%d) is not in this VLAN \n", slave_dev, slave_dev->name, port_id);
+			return -1;
+		}
+
+		v->xlate_info.br = bridge_iface;
+		v->xlate_info.port_id = port_id;
+		ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%px: Failed to delete old translation rule for port: %d, error = %d\n", v, port_id, ret);
+			return -1;
+		}
+
+		v->xlate_info.br = NULL;
+		ret = ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			v->xlate_info.br = bridge_iface;
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%px: Failed to add new translation rule for port: %d, error = %d\n", v, port_id, ret);
+			return -1;
 		}
 
 		/*
 		 * Set port STP state to forwarding after bond interfaces leave bridge
 		 */
-		fal_stp_port_state_set(NSS_PPE_VLAN_MGR_SWITCH_ID, NSS_PPE_VLAN_MGR_STP_ID,
-				v->port[port - 1], FAL_STP_FORWARDING);
+		ret = ppe_drv_br_stp_state_set(bridge_iface, slave_dev, FAL_STP_FORWARDING);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%px: failed to set STP state to FORWARDING %s, error = %d\n", v, real_dev->name, ret);
+			return -1;
+		}
+
 	}
+
+	v->xlate_info.br = NULL;
+	v->bridge_iface = NULL;
 	rcu_read_unlock();
 	return 0;
-
-return_with_error:
-	ret = nss_ppe_vlan_mgr_over_bond_port_vsi_update(real_dev, v, bridge_vsi);
-	if (ret) {
-		nss_ppe_vlan_mgr_warn("%px: failed to update bond slaves with the bridge vsi: %d\n", v, bridge_vsi);
-	}
-	return -1;
 }
 
 /*
  * nss_ppe_vlan_mgr_over_bond_join_bridge()
  *	Join bond interface to bridge
  */
-static int nss_ppe_vlan_mgr_over_bond_join_bridge(struct net_device *real_dev, struct nss_vlan_pvt *v, uint32_t bridge_vsi)
+static int nss_ppe_vlan_mgr_over_bond_join_bridge(struct nss_vlan_pvt *v, struct net_device *real_dev, struct ppe_drv_iface *bridge_iface)
 {
-	int ret;
-	uint32_t vlan_vsi;
+	int32_t port_id;
+	struct net_device *slave_dev;
+	ppe_drv_ret_t ret;
 
-	vlan_vsi = v->eg_xlt_rule.vsi;
-	ret = nss_ppe_vlan_mgr_over_bond_port_vsi_update(real_dev, v, bridge_vsi);
-	if (ret) {
-		nss_ppe_vlan_mgr_warn("%px: failed to update bond slaves with the bridge vsi: %d\n", v, bridge_vsi);
-		goto return_with_error;
+	v->xlate_info.port_id = 0;
+
+	rcu_read_lock();
+	for_each_netdev_in_bond_rcu(real_dev, slave_dev) {
+		port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+		if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", slave_dev, slave_dev->name, port_id);
+			return -1;
+		}
+
+		if (v->port[port_id - 1] != port_id) {
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%px: %s: Given port (%d) is not in this VLAN \n", slave_dev, slave_dev->name, port_id);
+			return -1;
+		}
+
+		/*
+		 * Iteratively, first deleting existing rule for the given port
+		 * Then, add the given port to the bridge.
+		 */
+		v->xlate_info.br = NULL;
+		v->xlate_info.port_id = port_id;
+		ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%px: Failed to delete old translation rule for port: %d, error = %d\n", v, port_id, ret);
+			return -1;
+		}
+
+		v->xlate_info.br = bridge_iface;
+		ret = ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			v->xlate_info.br = NULL;
+			rcu_read_unlock();
+			nss_ppe_vlan_mgr_warn("%px: Failed to add new translation rule for port: %d, error = %d\n", v, port_id, ret);
+			return -1;
+		}
 	}
 
-	v->bridge_vsi = bridge_vsi;
+	v->bridge_iface = bridge_iface;
+	v->xlate_info.br = bridge_iface;
+	rcu_read_unlock();
 	return 0;
-
-return_with_error:
-	ret = nss_ppe_vlan_mgr_over_bond_port_vsi_update(real_dev, v, vlan_vsi);
-	if (ret) {
-		nss_ppe_vlan_mgr_warn("%px: failed to update bond slaves with the vlan vsi: %d\n", v, vlan_vsi);
-	}
-	return -1;
 }
 
 /*
@@ -1241,7 +1169,7 @@ static struct ctl_table nss_vlan_dir[] = {
  */
 static struct ctl_table nss_vlan_root_dir[] = {
 	{
-		.procname		= "nss",
+		.procname		= "ppe",
 		.mode			= 0555,
 		.child			= nss_vlan_dir,
 	},
@@ -1250,22 +1178,24 @@ static struct ctl_table nss_vlan_root_dir[] = {
 
 /*
  * nss_ppe_vlan_mgr_leave_bridge()
- *	update ingress and egress vlan translation rule to restore vlan VSI
+ *	update ingress and egress vlan translation rule to restore vlan
  */
-int nss_ppe_vlan_mgr_leave_bridge(struct net_device *dev, uint32_t bridge_vsi)
+int nss_ppe_vlan_mgr_leave_bridge(struct net_device *dev, struct ppe_drv_iface *bridge_iface)
 {
 	struct nss_vlan_pvt *v = nss_ppe_vlan_mgr_instance_find_and_ref(dev);
 	struct net_device *real_dev;
-	int ret;
+	int32_t port_id;
+	ppe_drv_ret_t ret;
+	int res;
 
 	if (!v) {
-		nss_ppe_vlan_mgr_warn("%px: Interface not found name: %s VSI: %d\n",
-						dev, dev->name, bridge_vsi);
+		nss_ppe_vlan_mgr_warn("%px: Interface not found name: %s IFACE: %px\n",
+								dev, dev->name, bridge_iface);
 		return 0;
 	}
 
-	if (v->bridge_vsi != bridge_vsi) {
-		nss_ppe_vlan_mgr_warn("%s is not in bridge VSI %d, ignore\n", dev->name, bridge_vsi);
+	if (v->bridge_iface != bridge_iface) {
+		nss_ppe_vlan_mgr_warn("%s is not in bridge IFACE %px, ignore\n", dev->name, bridge_iface);
 		nss_ppe_vlan_mgr_instance_deref(v);
 		return 0;
 	}
@@ -1288,31 +1218,61 @@ int nss_ppe_vlan_mgr_leave_bridge(struct net_device *dev, uint32_t bridge_vsi)
 	 * Check if real_dev is bond master
 	 */
 	if (netif_is_bond_master(real_dev)) {
-		ret = nss_ppe_vlan_mgr_over_bond_leave_bridge(real_dev, v);
+		res = nss_ppe_vlan_mgr_over_bond_leave_bridge(real_dev, v);
 		nss_ppe_vlan_mgr_instance_deref(v);
-		if (ret) {
+		if (res) {
 			nss_ppe_vlan_mgr_warn("%px: Bond master: %s failed to leave bridge\n", v, real_dev->name);
 			return -1;
 		}
+
 		return 0;
 	}
 
-	/*
-	 * real_dev is not bond but a physical device
-	 */
-	ret = nss_ppe_vlan_mgr_port_vsi_update(v, v->ppe_vsi);
-	if (ret) {
-		nss_ppe_vlan_mgr_warn("%px: failed to leave bridge %s\n", v, real_dev->name);
+	port_id = nss_ppe_vlan_mgr_get_port_id(real_dev);
+	if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", real_dev, real_dev->name, port_id);
 		nss_ppe_vlan_mgr_instance_deref(v);
 		return -1;
 	}
-	v->bridge_vsi = 0;
+
+	/*
+	 * real_dev is not bond but a PPE device
+	 */
+	spin_lock(&vlan_mgr_ctx.lock);
+	v->xlate_info.br = v->bridge_iface;
+	v->xlate_info.port_id = port_id;
+	ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		spin_unlock(&vlan_mgr_ctx.lock);
+		nss_ppe_vlan_mgr_warn("%px: Failed vlan translation rule for port: %d, error = %d\n", dev, port_id, ret);
+		nss_ppe_vlan_mgr_instance_deref(v);
+		return -1;
+	}
+
+	bridge_iface = v->bridge_iface;
+	v->xlate_info.br = NULL;
+	v->bridge_iface = NULL;
+	ret = ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		spin_unlock(&vlan_mgr_ctx.lock);
+		nss_ppe_vlan_mgr_warn("%px: Failed to add new translation rule for port: %d, error = %d\n", dev, port_id, ret);
+		nss_ppe_vlan_mgr_instance_deref(v);
+		return -1;
+	}
+
+	spin_unlock(&vlan_mgr_ctx.lock);
 
 	/*
 	 * Set port STP state to forwarding after vlan interface leaves bridge
+	 * If this fails, not adding VLAN back to bridge.
 	 */
-	fal_stp_port_state_set(NSS_PPE_VLAN_MGR_SWITCH_ID, NSS_PPE_VLAN_MGR_STP_ID,
-					v->port[0], FAL_STP_FORWARDING);
+	ret = ppe_drv_br_stp_state_set(bridge_iface, real_dev, FAL_STP_FORWARDING);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%px: failed to set STP state to FORWARDING %s, error = %d\n", v, real_dev->name, ret);
+		nss_ppe_vlan_mgr_instance_deref(v);
+		return -1;
+	}
+
 	nss_ppe_vlan_mgr_instance_deref(v);
 	return 0;
 }
@@ -1320,30 +1280,29 @@ EXPORT_SYMBOL(nss_ppe_vlan_mgr_leave_bridge);
 
 /*
  * nss_ppe_vlan_mgr_join_bridge()
- *	update ingress and egress vlan translation rule to use bridge VSI
+ *	update ingress and egress vlan translation rule to use bridge iface
  */
-int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, uint32_t bridge_vsi)
+int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, struct ppe_drv_iface *bridge_iface)
 {
 	struct net_device *real_dev;
-	int ret;
+	int res;
+	int32_t port_id;
+	ppe_drv_ret_t ret;
 	struct nss_vlan_pvt *v = nss_ppe_vlan_mgr_instance_find_and_ref(dev);
 
 	if (!v) {
-		nss_ppe_vlan_mgr_warn("%px: Interface not found name: %s VSI: %d\n",
-						dev, dev->name, bridge_vsi);
+		nss_ppe_vlan_mgr_warn("%px: Interface not found name: %s IFACE: %px\n",
+						dev, dev->name, bridge_iface);
 		return 0;
 	}
 
-	if ((v->bridge_vsi == bridge_vsi) || v->bridge_vsi) {
-		nss_ppe_vlan_mgr_warn("%s is already in bridge VSI %d, can't change to %d\n",
-								dev->name, v->bridge_vsi, bridge_vsi);
+	if ((v->bridge_iface == bridge_iface) || v->bridge_iface) {
+		nss_ppe_vlan_mgr_warn("%s is already in bridge IFACE %px, can't change to %px\n",
+								dev->name, v->bridge_iface, bridge_iface);
 		nss_ppe_vlan_mgr_instance_deref(v);
 		return 0;
 	}
 
-	/*
-	 * If real_dev is bond_master, update for all slaves
-	 */
 	real_dev = nss_ppe_vlan_mgr_get_real_dev(dev);
 	if (real_dev && is_vlan_dev(real_dev)) {
 		real_dev = nss_ppe_vlan_mgr_get_real_dev(real_dev);
@@ -1356,28 +1315,54 @@ int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, uint32_t bridge_vsi)
 	}
 
 	/*
+	 * If real_dev is bond_master, update for all slaves
 	 * Check if real_dev is bond master
 	 */
 	if (netif_is_bond_master(real_dev)) {
-		ret = nss_ppe_vlan_mgr_over_bond_join_bridge(real_dev, v, bridge_vsi);
+		res = nss_ppe_vlan_mgr_over_bond_join_bridge(v, real_dev, bridge_iface);
 		nss_ppe_vlan_mgr_instance_deref(v);
-		if (ret) {
+		if (res) {
 			nss_ppe_vlan_mgr_warn("%px: Bond master: %s failed to join bridge\n", v, real_dev->name);
 			return -1;
 		}
+
 		return 0;
 	}
 
-	/*
-	 * real_dev is not bond but a physical device
-	 */
-	ret = nss_ppe_vlan_mgr_port_vsi_update(v, bridge_vsi);
-	if (ret) {
-		nss_ppe_vlan_mgr_warn("%px: failed to join bridge %s\n", v, real_dev->name);
-	} else {
-		v->bridge_vsi = bridge_vsi;
+	port_id = nss_ppe_vlan_mgr_get_port_id(real_dev);
+	if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", real_dev, real_dev->name, port_id);
+		nss_ppe_vlan_mgr_instance_deref(v);
+		return -1;
 	}
 
+	/*
+	 * real_dev is not bond but a PPE device
+	 */
+	spin_lock(&vlan_mgr_ctx.lock);
+	v->xlate_info.br = NULL;
+	v->xlate_info.port_id = port_id;
+	ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		spin_unlock(&vlan_mgr_ctx.lock);
+		nss_ppe_vlan_mgr_instance_deref(v);
+		nss_ppe_vlan_mgr_warn("%px: Failed to delete old translation rule for port: %d, error = %d\n", v, port_id, ret);
+		return -1;
+	}
+
+	v->xlate_info.br = bridge_iface;
+	v->xlate_info.port_id = port_id;
+	ret = ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		v->xlate_info.br = NULL;
+		spin_unlock(&vlan_mgr_ctx.lock);
+		nss_ppe_vlan_mgr_warn("%px: Failed vlan translation rule for port: %d, error = %d\n", dev, port_id, ret);
+		nss_ppe_vlan_mgr_instance_deref(v);
+		return -1;
+	}
+
+	v->bridge_iface = bridge_iface;
+	spin_unlock(&vlan_mgr_ctx.lock);
 	nss_ppe_vlan_mgr_instance_deref(v);
 	return 0;
 }
@@ -1390,15 +1375,12 @@ EXPORT_SYMBOL(nss_ppe_vlan_mgr_join_bridge);
 int nss_ppe_vlan_mgr_delete_bond_slave(struct net_device *slave_dev)
 {
 	struct nss_vlan_pvt *v;
-	uint32_t port_id;
-	int32_t vsi;
+	int32_t port_id;
+	ppe_drv_ret_t ret;
 
-	/*
-	 * Find port id for the slave
-	 */
-	port_id = nss_ppe_vlan_mgr_get_port_num(slave_dev);
-	if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port_id)) {
-		nss_ppe_vlan_mgr_warn("%s: %d is not valid physical port\n", slave_dev->name, port_id);
+	port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+	if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", slave_dev, slave_dev->name, port_id);
 		return -1;
 	}
 
@@ -1408,37 +1390,27 @@ int nss_ppe_vlan_mgr_delete_bond_slave(struct net_device *slave_dev)
 			continue;
 		}
 
-		/*
-		 * Set correct vsi if delete fails.
-		 */
-		vsi = v->bridge_vsi ? v->bridge_vsi : v->ppe_vsi;
-
-
-		if (!nss_ppe_vlan_mgr_ppe_del_vlan_rule(slave_dev, port_id, vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
+		v->xlate_info.port_id = v->port[port_id - 1];
+		ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
 			spin_unlock(&vlan_mgr_ctx.lock);
-			nss_ppe_vlan_mgr_warn("slave: %s: failed to remove VLAN rule\n", slave_dev->name);
+			nss_ppe_vlan_mgr_warn("slave: %s: failed to remove VLAN rule, error = %d\n", slave_dev->name, ret);
 			return -1;
 		}
 
-		v->eg_xlt_rule.port_bitmap = v->eg_xlt_rule.port_bitmap ^ (1 << port_id);
-
-		if (!nss_ppe_vlan_mgr_ppe_update_port_role(slave_dev, v->port[port_id - 1], false)) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[port_id - 1], FAL_QINQ_EDGE_PORT)) {
+			v->xlate_info.port_id = v->port[port_id - 1];
+			ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
 			spin_unlock(&vlan_mgr_ctx.lock);
-			nss_ppe_vlan_mgr_ppe_add_vlan_rule(slave_dev, port_id, vsi, v->ppe_svid, v->ppe_cvid,
-										&v->eg_xlt_rule, &v->eg_xlt_action);
 			nss_ppe_vlan_mgr_warn("%px: Failed to update role\n", v);
 			return -1;
 		}
 
 		vlan_mgr_ctx.port_role[port_id] = FAL_QINQ_EDGE_PORT;
-
-		/*
-		 * Set vlan port
-		 */
 		v->port[port_id - 1] = 0;
 	}
-	spin_unlock(&vlan_mgr_ctx.lock);
 
+	spin_unlock(&vlan_mgr_ctx.lock);
 	return 0;
 }
 EXPORT_SYMBOL(nss_ppe_vlan_mgr_delete_bond_slave);
@@ -1451,7 +1423,8 @@ int nss_ppe_vlan_mgr_add_bond_slave(struct net_device *bond_dev,
 			struct net_device *slave_dev)
 {
 	struct nss_vlan_pvt *v;
-	int32_t vsi = 0, port_id, bond_id = -1;
+	int32_t port_id, bond_id = -1;
+	ppe_drv_ret_t ret;
 
 	BUG_ON(!netif_is_bond_master(bond_dev));
 
@@ -1460,6 +1433,12 @@ int nss_ppe_vlan_mgr_add_bond_slave(struct net_device *bond_dev,
 #endif
 	if (bond_id < 0) {
 		nss_ppe_vlan_mgr_warn("%s: Invalid LAG group id 0x%x\n", bond_dev->name, bond_id);
+		return -1;
+	}
+
+	port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
+	if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", slave_dev, slave_dev->name, port_id);
 		return -1;
 	}
 
@@ -1473,25 +1452,16 @@ int nss_ppe_vlan_mgr_add_bond_slave(struct net_device *bond_dev,
 		}
 
 		/*
-		 * Add Ingress and Egress vlan_vsi
+		 * Instantaneous info of xlate_info.port_id is not important.
+		 * It only used to pass information to PPE. Since it is lock protected.
+		 * It is fine to use.
 		 */
-		port_id = nss_ppe_vlan_mgr_get_port_num(slave_dev);
-		if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port_id)) {
-			spin_unlock(&vlan_mgr_ctx.lock);
-			nss_ppe_vlan_mgr_warn("%s: %d is not valid physical port\n", slave_dev->name, port_id);
-			return -1;
-		}
 		v->port[port_id - 1] = port_id;
-
-		/*
-		 * Set correct vsi for the bond slave
-		 */
-		vsi = v->bridge_vsi ? v->bridge_vsi : v->ppe_vsi;
-		v->eg_xlt_rule.port_bitmap |= (1 << v->port[port_id - 1]);
-
-		if (!nss_ppe_vlan_mgr_ppe_add_vlan_rule(slave_dev, port_id, vsi, v->ppe_svid, v->ppe_cvid, &v->eg_xlt_rule, &v->eg_xlt_action)) {
+		v->xlate_info.port_id = v->port[port_id - 1];
+		ret = ppe_drv_vlan_add_xlate_rule(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
 			spin_unlock(&vlan_mgr_ctx.lock);
-			nss_ppe_vlan_mgr_warn("bond: %s -> slave: %s: failed to add VLAN rule\n", bond_dev->name, slave_dev->name);
+			nss_ppe_vlan_mgr_warn("bond: %s -> slave: %s: failed to add VLAN rule, error = %d\n", bond_dev->name, slave_dev->name, ret);
 			return -1;
 		}
 
@@ -1502,19 +1472,20 @@ int nss_ppe_vlan_mgr_add_bond_slave(struct net_device *bond_dev,
 				(vlan_mgr_ctx.port_role[v->port[port_id - 1]] != FAL_QINQ_CORE_PORT)) {
 
 			/*
-			 * If double tag, we should set physical port as core port
+			 * If double tag, we should set the port as core port
 			 */
-			vlan_mgr_ctx.port_role[v->port[port_id - 1]] = FAL_QINQ_CORE_PORT;
-			if (!nss_ppe_vlan_mgr_ppe_update_port_role(slave_dev, v->port[port_id - 1], true)) {
-				nss_ppe_vlan_mgr_ppe_del_vlan_rule(slave_dev, port_id, vsi, v->ppe_svid, v->ppe_cvid,
-											&v->eg_xlt_rule, &v->eg_xlt_action);
+			if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[port_id - 1], FAL_QINQ_CORE_PORT)) {
+				v->xlate_info.port_id = v->port[port_id - 1];
+				ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
 				spin_unlock(&vlan_mgr_ctx.lock);
 				nss_ppe_vlan_mgr_warn("%px: Failed to update role\n", v);
 				return -1;
 			}
 
+			vlan_mgr_ctx.port_role[v->port[port_id - 1]] = FAL_QINQ_CORE_PORT;
 		}
 	}
+
 	spin_unlock(&vlan_mgr_ctx.lock);
 	return 0;
 }
@@ -1524,42 +1495,35 @@ EXPORT_SYMBOL(nss_ppe_vlan_mgr_add_bond_slave);
  * nss_ppe_vlan_mgr_del_vlan_rule()
  *	Delete VLAN translation rule in PPE
  */
-void nss_ppe_vlan_mgr_del_vlan_rule(struct net_device *dev, int bridge_vsi, int vid)
+void nss_ppe_vlan_mgr_del_vlan_rule(struct net_device *dev, struct ppe_drv_iface *bridge_iface, int vid)
 {
-	int port_id;
-	fal_vlan_trans_adv_rule_t eg_xlt_rule;	/* VLAN Translation Rule */
-	fal_vlan_trans_adv_action_t eg_xlt_action;	/* VLAN Translation Action */
+	struct ppe_drv_vlan_xlate_info xlate_info;
+	int32_t port_id;
+	ppe_drv_ret_t ret;
 
-	port_id = nss_ppe_vlan_mgr_get_port_num(dev);
-	if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port_id)) {
-		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid physical port\n", dev, dev->name, port_id);
+	nss_ppe_vlan_mgr_assert(!bridge_iface);
+	port_id = nss_ppe_vlan_mgr_get_port_id(dev);
+	if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", dev, dev->name, port_id);
 		return;
 	}
 
 	/*
-	 * Delete egress vlan translation rule
+	 * In this use case, bridge_iface is always not NULL
+	 * So, passed iface value is irrelevant.
 	 */
-	memset(&eg_xlt_rule, 0, sizeof(eg_xlt_rule));
-	memset(&eg_xlt_action, 0, sizeof(eg_xlt_action));
+	xlate_info.br = bridge_iface;
+	xlate_info.port_id = port_id;
+	xlate_info.svid = FAL_VLAN_INVALID;
+	xlate_info.cvid = vid;
 
-	/*
-	 * Fields for match
-	 */
-	eg_xlt_rule.vsi_valid = true;	/* Use vsi as search key */
-	eg_xlt_rule.vsi_enable = true;	/* Use vsi as search key */
-	eg_xlt_rule.vsi = bridge_vsi;	/* Use vsi as search key */
-	eg_xlt_rule.s_tagged = 0x7;	/* Accept tagged/untagged/priority tagged svlan */
-	eg_xlt_rule.c_tagged = 0x7;	/* Accept tagged/untagged/priority tagged cvlan */
-	eg_xlt_rule.port_bitmap = (1 << port_id); /* Use port as search key */
+	ret = ppe_drv_vlan_del_xlate_rule(bridge_iface, &xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%px: Failed deleting vlan(%x) translation rule for port: %d, error = %d\n", dev, vid, port_id, ret);
+		return;
+	}
 
-	/*
-	 * Fields for action
-	 */
-	eg_xlt_action.cvid_xlt_cmd = FAL_VID_XLT_CMD_ADDORREPLACE;
-	eg_xlt_action.cvid_xlt = vid;
-
-	nss_ppe_vlan_mgr_ppe_del_vlan_rule(dev, port_id, bridge_vsi, FAL_VLAN_INVALID, vid, &eg_xlt_rule, &eg_xlt_action);
-	nss_ppe_vlan_mgr_info("%px: deleted egress vlan(%x) translation rule for port: %d\n", dev, vid, port_id);
+	nss_ppe_vlan_mgr_info("%px: Deleted vlan(%x) translation rule for port: %d\n", dev, vid, port_id);
 }
 EXPORT_SYMBOL(nss_ppe_vlan_mgr_del_vlan_rule);
 
@@ -1567,42 +1531,34 @@ EXPORT_SYMBOL(nss_ppe_vlan_mgr_del_vlan_rule);
  * nss_ppe_vlan_mgr_add_vlan_rule()
  *	Add VLAN translation rule in PPE
  */
-void nss_ppe_vlan_mgr_add_vlan_rule(struct net_device *dev, int bridge_vsi, int vid)
+void nss_ppe_vlan_mgr_add_vlan_rule(struct net_device *dev, struct ppe_drv_iface *bridge_iface, int vid)
 {
-	fal_vlan_trans_adv_rule_t eg_xlt_rule;
-	fal_vlan_trans_adv_action_t eg_xlt_action;
-	int port_id;
+	struct ppe_drv_vlan_xlate_info xlate_info;
+	int32_t port_id;
+	ppe_drv_ret_t ret;
 
-	port_id = nss_ppe_vlan_mgr_get_port_num(dev);
-	if (!NSS_PPE_VLAN_MGR_PHY_PORT_CHK(port_id)) {
-		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid physical port\n", dev, dev->name, port_id);
+	nss_ppe_vlan_mgr_assert(!bridge_iface);
+	port_id = nss_ppe_vlan_mgr_get_port_id(dev);
+	if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", dev, dev->name, port_id);
 		return;
 	}
 
 	/*
-	 * Add egress vlan translation rule
+	 * In this use case, bridge_iface is always not NULL
+	 * So, passed iface value is irrelevant.
 	 */
-	memset(&eg_xlt_rule, 0, sizeof(eg_xlt_rule));
-	memset(&eg_xlt_action, 0, sizeof(eg_xlt_action));
+	xlate_info.br = bridge_iface;
+	xlate_info.port_id = port_id;
+	xlate_info.svid = FAL_VLAN_INVALID;
+	xlate_info.cvid = vid;
+	ret = ppe_drv_vlan_add_xlate_rule(bridge_iface, &xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%px: Failed vlan(%x) translation rule for port: %d, error = %d\n", dev, vid, port_id, ret);
+		return;
+	}
 
-	/*
-	 * Fields for match
-	 */
-	eg_xlt_rule.vsi_valid = true;	/* Use vsi as search key */
-	eg_xlt_rule.vsi_enable = true;	/* Use vsi as search key */
-	eg_xlt_rule.vsi = bridge_vsi;	/* Use vsi as search key */
-	eg_xlt_rule.s_tagged = 0x7;	/* Accept tagged/untagged/priority tagged svlan */
-	eg_xlt_rule.c_tagged = 0x7;	/* Accept tagged/untagged/priority tagged cvlan */
-	eg_xlt_rule.port_bitmap = (1 << port_id); /* Use port as search key */
-
-	/*
-	 * Fields for action
-	 */
-	eg_xlt_action.cvid_xlt_cmd = FAL_VID_XLT_CMD_ADDORREPLACE;
-	eg_xlt_action.cvid_xlt = vid;
-
-	nss_ppe_vlan_mgr_ppe_add_vlan_rule(dev, port_id, bridge_vsi, FAL_VLAN_INVALID, vid, &eg_xlt_rule, &eg_xlt_action);
-	nss_ppe_vlan_mgr_info("%px: Added egress vlan(%x) translation rule for port: %d\n", dev, vid, port_id);
+	nss_ppe_vlan_mgr_info("%px: Added vlan(%x) translation rule for port: %d\n", dev, vid, port_id);
 }
 EXPORT_SYMBOL(nss_ppe_vlan_mgr_add_vlan_rule);
 
@@ -1634,6 +1590,7 @@ void __exit nss_ppe_vlan_mgr_exit_module(void)
 	if (vlan_mgr_ctx.sys_hdr) {
 		unregister_sysctl_table(vlan_mgr_ctx.sys_hdr);
 	}
+
 	nss_ppe_vlan_mgr_info("Module unloaded\n");
 }
 
@@ -1662,9 +1619,10 @@ int __init nss_ppe_vlan_mgr_init_module(void)
 		return -EFAULT;
 	}
 
-	for (idx = 0; idx < NSS_PPE_VLAN_MGR_PHY_PORT_NUM; idx++) {
+	for (idx = 0; idx < NSS_PPE_VLAN_MGR_PORT_MAX; idx++) {
 		vlan_mgr_ctx.port_role[idx] = FAL_QINQ_EDGE_PORT;
 	}
+
 	register_netdevice_notifier(&nss_ppe_vlan_mgr_netdevice_nb);
 
 	nss_ppe_vlan_mgr_info("Module (Build %s) loaded\n", NSS_PPE_BUILD_ID);

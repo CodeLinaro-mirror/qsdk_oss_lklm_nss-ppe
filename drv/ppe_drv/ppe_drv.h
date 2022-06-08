@@ -110,6 +110,12 @@
 #define PPE_DRV_JUMBO_MAX 9216
 
 /*
+ * DSCP macros
+ */
+#define PPE_DRV_DSCP_SHIFT 2
+#define PPE_DRV_DSCP_MASK 0xFC
+
+/*
  * VLAN macros
  */
 #define PPE_DRV_VLAN_NOT_CONFIGURED	0xFFF

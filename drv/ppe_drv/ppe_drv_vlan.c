@@ -274,9 +274,6 @@ void ppe_drv_vlan_deinit(struct ppe_drv_iface *iface)
 
 	spin_lock_bh(&p->lock);
 	vsi = ppe_drv_iface_vsi_get(iface);
-	ppe_drv_iface_base_clear(iface);
-	ppe_drv_iface_vsi_clear(iface);
-	ppe_drv_iface_l3_if_clear(iface);
 
 	/*
 	 * Detach VLAN vsi to port.
@@ -297,6 +294,9 @@ void ppe_drv_vlan_deinit(struct ppe_drv_iface *iface)
 		ppe_drv_vsi_deref(vsi);
 	}
 
+	ppe_drv_iface_base_clear(iface);
+	ppe_drv_iface_vsi_clear(iface);
+	ppe_drv_iface_l3_if_clear(iface);
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_vlan_deinit);

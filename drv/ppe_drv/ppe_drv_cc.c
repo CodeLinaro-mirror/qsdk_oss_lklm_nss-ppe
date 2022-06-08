@@ -23,7 +23,7 @@
  * ppe_drv_cc_process_v4()
  *	Try flush for a given flow key.
  */
-static void ppe_drv_cc_process_v4(uint8_t cc, struct flow_keys *keys)
+static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_flow *flow;
@@ -91,7 +91,7 @@ static void ppe_drv_cc_process_v4(uint8_t cc, struct flow_keys *keys)
  * ppe_drv_cc_process_v6()
  *	Try flush for a given flow key.
  */
-static void ppe_drv_cc_process_v6(uint8_t cc, struct flow_keys *keys)
+static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_flow *flow;
@@ -164,24 +164,24 @@ bool ppe_drv_cc_process_skbuff(uint8_t cc, struct sk_buff *skb)
 	struct ppe_drv_cc *pcc;
 	struct flow_keys keys = {0};
 	ppe_drv_cc_callback_t cb;
+	ppe_drv_cc_t exp_code;
 	void *app_data;
 	bool ret = false;
 
-	ppe_drv_assert(cc < PPE_DRV_CC_MAX, "%p: invalid cpu code %u", p, cc);
+	ppe_drv_assert((cc > 0) && (cc < PPE_DRV_CC_MAX), "%p: invalid cpu code %u", p, cc);
+
+	/*
+	 * Map CPU code to exception code
+	 */
+	exp_code = PPE_DRV_CC_TO_EXP(cc);
 
 	/*
 	 * Check if this CPU code needs flush.
 	 */
-	spin_lock_bh(&p->lock);
-	pcc = &p->cc[cc];
-	cb = pcc->cb;
-	app_data = pcc->app_data;
+	pcc = &p->cc[exp_code];
 	if (!pcc->flush) {
-		spin_unlock_bh(&p->lock);
 		goto done;
 	}
-
-	spin_unlock_bh(&p->lock);
 
 	/*
 	 * Extract flow key from skbuff
@@ -210,11 +210,11 @@ bool ppe_drv_cc_process_skbuff(uint8_t cc, struct sk_buff *skb)
 	 */
 	switch (keys.control.addr_type) {
 		case FLOW_DISSECTOR_KEY_IPV4_ADDRS:
-			ppe_drv_cc_process_v4(cc, &keys);
+			ppe_drv_cc_process_v4(exp_code, &keys);
 			break;
 
 		case FLOW_DISSECTOR_KEY_IPV6_ADDRS:
-			ppe_drv_cc_process_v6(cc, &keys);
+			ppe_drv_cc_process_v6(exp_code, &keys);
 			break;
 
 		default:
@@ -222,7 +222,13 @@ bool ppe_drv_cc_process_skbuff(uint8_t cc, struct sk_buff *skb)
 	}
 
 done:
-	ppe_drv_trace("%p: processing skb:%p cc:%u cb:%p app:%p", p, skb, cc, cb, app_data);
+	spin_lock_bh(&p->lock);
+	cb = pcc->cb;
+	app_data = pcc->app_data;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("%p: processing skb:%p cc:%u exp_code: %u cb:%p app:%p",
+			p, skb, cc, exp_code, cb, app_data);
 
 	if (cb) {
 		ret = cb(app_data, skb);

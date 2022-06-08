@@ -1,9 +1,12 @@
 /*
  **************************************************************************
  * Copyright (c) 2017, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -26,20 +29,20 @@
  *	update ingress and egress vlan translation rule to restore vlan VSI
  *
  * @param dev[IN] vlan device which left from bridge
- * @param bridge_vsi[IN] bridge VSI to detach from
+ * @param bridge_iface[IN] bridge interface to detach from
  * @return 0 for success, -1 for failure
  */
-int nss_ppe_vlan_mgr_leave_bridge(struct net_device *dev, uint32_t bridge_vsi);
+int nss_ppe_vlan_mgr_leave_bridge(struct net_device *dev, struct ppe_drv_iface *bridge_iface);
 
 /*
  * nss_vlan_mgr_join_bridge()
  *	update ingress and egress vlan translation rule to use bridge VSI
  *
  * @param dev[IN] vlan device which joined in bridge
- * @param bridge_vsi[IN] bridge VSI to attach to
+ * @param bridge_iface[IN] bridge interface to attach to
  * @return 0 for success, -1 for failure
  */
-int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, uint32_t bridge_vsi);
+int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, struct ppe_drv_iface *bridge_iface);
 
 /*
  * nss_ppe_vlan_mgr_get_real_dev()
@@ -75,18 +78,18 @@ int nss_ppe_vlan_mgr_add_bond_slave(struct net_device *bond_dev,
  *	Delete VLAN translation rule in PPE
  *
  * @param dev[IN] physical device
- * @param bridge_vsi[IN] bridge VSI
+ * @param bridge_iface[IN] bridge PPE interface
  * @param vid[IN] VLAN ID
  */
-void nss_ppe_vlan_mgr_del_vlan_rule(struct net_device *dev, int bridge_vsi, int vid);
+void nss_ppe_vlan_mgr_del_vlan_rule(struct net_device *dev, struct ppe_drv_iface *bridge_iface, int vid);
 
 /*
  * nss_ppe_vlan_mgr_add_vlan_rule()
  *	Add VLAN translation rule in PPE
  *
  * @param dev[IN] physical device
- * @param bridge_vsi[IN] bridge VSI
+ * @param bridge_iface[IN] bridge PPE interface
  * @param vid[IN] VLAN ID
  */
-void nss_ppe_vlan_mgr_add_vlan_rule(struct net_device *dev, int bridge_vsi, int vid);
+void nss_ppe_vlan_mgr_add_vlan_rule(struct net_device *dev, struct ppe_drv_iface *bridge_iface, int vid);
 #endif /* _NSS_PPE_VLAN_MGR_H_ */

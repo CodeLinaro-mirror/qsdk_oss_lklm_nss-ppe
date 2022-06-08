@@ -83,6 +83,7 @@ static ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create,
 	struct ppe_drv_v6_5tuple *tuple = &create->tuple;
 	struct ppe_drv_pppoe_session *flow_pppoe_rule = &create->pppoe_rule.flow_session;
 	struct ppe_drv_pppoe_session *return_pppoe_rule = &create->pppoe_rule.return_session;
+	struct ppe_drv_dscp_rule *dscp_rule = &create->dscp_rule;
 	struct ppe_drv_vlan_info *vlan_primary_rule = &create->vlan_rule.primary_vlan;
 	struct ppe_drv_vlan_info *vlan_secondary_rule = &create->vlan_rule.secondary_vlan;
 	struct ppe_drv_iface *if_rx, *if_tx, *top_if_rx, *top_if_tx;
@@ -174,6 +175,11 @@ static ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create,
 		ppe_drv_v6_conn_flow_xmit_interface_mtu_set(pcf, conn->return_mtu);
 		ppe_drv_v6_conn_flow_xmit_dest_mac_addr_set(pcf, conn->return_mac);
 
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
+			ppe_drv_v6_conn_flow_egress_dscp_set(pcf, dscp_rule->flow_dscp);
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
+		}
+
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
 			pcf->ingress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
 			pcf->ingress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
@@ -234,6 +240,11 @@ static ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create,
 		 */
 		ppe_drv_v6_conn_flow_xmit_interface_mtu_set(pcr, conn->flow_mtu);
 		ppe_drv_v6_conn_flow_xmit_dest_mac_addr_set(pcr, conn->flow_mac);
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
+			ppe_drv_v6_conn_flow_egress_dscp_set(pcr, dscp_rule->return_dscp);
+			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
+		}
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
 			pcr->ingress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
