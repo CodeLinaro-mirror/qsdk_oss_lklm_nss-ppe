@@ -244,7 +244,6 @@ ppe_drv_ret_t ppe_drv_br_leave(struct ppe_drv_iface *br_iface, struct net_device
 	/*
 	 * Detach vsi and l3_if to port
 	 */
-	ppe_drv_port_l3_if_detach(pp, l3_if);
 	ppe_drv_port_vsi_detach(pp, vsi);
 
 	spin_unlock_bh(&p->lock);
@@ -327,7 +326,6 @@ ppe_drv_ret_t ppe_drv_br_join(struct ppe_drv_iface *br_iface, struct net_device 
 	 * Attach vsi and l3_if to port
 	 */
 	ppe_drv_port_vsi_attach(pp, vsi);
-	ppe_drv_port_l3_if_attach(pp, l3_if);
 
 	spin_unlock_bh(&p->lock);
 	return PPE_DRV_RET_SUCCESS;
