@@ -54,6 +54,7 @@ enum ppe_drv_iface_type {
 	PPE_DRV_IFACE_TYPE_VLAN,		/**< Interface type VLAN. */
 	PPE_DRV_IFACE_TYPE_PHYSICAL,		/**< Interface type physical port. */
 	PPE_DRV_IFACE_TYPE_VIRTUAL,		/**< Interface type virtual port. */
+	PPE_DRV_IFACE_TYPE_VIRTUAL_PO,		/**< Interface type virtual port for point offload. */
 	PPE_DRV_IFACE_TYPE_VP_L2_TUN,		/**< Interface type VP for hardware L2 tunnel. */
 	PPE_DRV_IFACE_TYPE_VP_L3_TUN,		/**< Interface type VP for hardware L3 tunnel. */
 	PPE_DRV_IFACE_TYPE_EIP,			/**< Interface type EIP. */

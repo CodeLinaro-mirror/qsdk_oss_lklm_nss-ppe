@@ -208,6 +208,7 @@ static inline struct ppe_drv_port *ppe_drv_port_get_free_port(enum ppe_drv_port_
 	 */
 	switch (type) {
 	case PPE_DRV_PORT_VIRTUAL:
+	case PPE_DRV_PORT_VIRTUAL_PO:
 		/*
 		 * Fetch the first available virtual port
 		 */
@@ -1141,6 +1142,7 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 {
 	sw_error_t err;
 	fal_ucast_queue_dest_t q_dst = {0};
+	uint8_t profile = 0;
 
 	/*
 	 * Set unicast queue base for port
@@ -1148,11 +1150,18 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 	ppe_drv_assert(kref_read(&pp->ref_cnt), "%p: setting queue ID for an unused port:%u", pp, pp->port);
 
 	/*
+	 * Select point offload profile ID for virtual point offload ports.
+	 */
+	if (pp->type == PPE_DRV_PORT_VIRTUAL_PO) {
+		profile = FAL_QM_PROFILE_PO_ID;
+	}
+
+	/*
 	 * TODO confirm with SSDK team if using profile-ID 0 for CPU port
 	 */
 	q_dst.src_profile = 0;
 	q_dst.dst_port = pp->port;
-	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, 0);
+	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, profile);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p unable to change port queue base ID: %u", pp, queue_id);
 		return false;
@@ -1560,11 +1569,11 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	if (type == PPE_DRV_PORT_PHYSICAL) {
 		ppe_drv_warn("%p: physical port dynamic allocation not supported dev: %p", p, dev);
 		return NULL;
-	} else if (type == PPE_DRV_PORT_VIRTUAL) {
+	} else if (type == PPE_DRV_PORT_VIRTUAL || type == PPE_DRV_PORT_VIRTUAL_PO) {
 		/*
 		 * Get a free virtual port entry
 		 */
-		pp = ppe_drv_port_get_free_port(PPE_DRV_PORT_VIRTUAL);
+		pp = ppe_drv_port_get_free_port(type);
 		if (!pp) {
 			ppe_drv_warn("%p: unable to find a free port", p);
 			return NULL;

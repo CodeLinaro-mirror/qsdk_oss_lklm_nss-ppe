@@ -89,6 +89,7 @@ typedef bool(*ppe_vp_callback_t)(struct net_device *, struct sk_buff *, void *cb
 typedef enum ppe_vp_type {
 	PPE_VP_TYPE_SW_L2,		/**< VP type for L2 SW interfaces */
 	PPE_VP_TYPE_SW_L3,		/**< VP type for L3 SW interfaces */
+	PPE_VP_TYPE_SW_PO,		/**< VP type for point offload tunnels */
 	PPE_VP_TYPE_HW_L2TUN,		/**< VP type for L2 HW tunnels */
 	PPE_VP_TYPE_HW_L3TUN,		/**< VP type for L3 HW tunnels */
 	PPE_VP_TYPE_MAX,		/**< Maximum VP types */
