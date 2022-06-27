@@ -166,6 +166,8 @@ bool nss_ppe_ds_wlan_inst_register(ppeds_wlan_handle_t *wlan_handle, struct pped
 {
 	struct nss_ppe_ds_wlan *node = container_of(wlan_handle, struct nss_ppe_ds_wlan, wlan_handle);
 	edma_ppeds_handle_t *edma_handle = node->edma_handle;
+	unsigned int cpu = 0;
+	static unsigned int count = 1;
 
 	/*
 	 * Setup dummy netdev for all the NAPIs associated with this node
@@ -173,9 +175,27 @@ bool nss_ppe_ds_wlan_inst_register(ppeds_wlan_handle_t *wlan_handle, struct pped
 	init_dummy_netdev(&node->napi_ndev);
 
 	/*
+	 * For time being, doing the static mapping for PPE-DS VAP and the cpu core.
+	 * Below is the present PPE-DS VAP to cpu mapping
+	 * 1. VAP0 is mapped to core#2
+	 * 2. VAP1 is mapped to core#1
+	 * 3. VAP2 is mapped to core#2
+	 */
+	if (count == 1) {
+		cpu = 2;
+	} else if (count == 2) {
+		cpu = 1;
+	} else if (count == 3) {
+		cpu = 2;
+	}
+	count++;
+
+	ppe_ds_info("node %px ndev %px, cpu: %u, count: %u\n", node, &node->napi_ndev, cpu, count);
+
+	/*
 	 * Init high res timer.
 	 */
-	hrtimer_init(&node->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrtimer_init_and_bind(&node->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL, cpu);
 	node->timer.function = nss_ppe_ds_wlan_timer;
 
 	edma_handle->ppe2tcl_ba = reg_info->ppe2tcl_ba;
@@ -204,7 +224,7 @@ int nss_ppe_ds_wlan_inst_start(ppeds_wlan_handle_t *wlan_handle)
 	edma_ppeds_inst_refill(edma_handle, edma_handle->ppe2tcl_num_desc -1);
 
 	node->timer_enabled = true;
-	hrtimer_start_range_ns(&node->timer, ns_to_ktime(IDX_MGMT_PERIOD), 0, HRTIMER_MODE_REL_PINNED);
+	hrtimer_start_range_ns_on_cpu(&node->timer, ns_to_ktime(IDX_MGMT_PERIOD), 0, HRTIMER_MODE_REL_PINNED);
 
 	ret = edma_ppeds_inst_start(edma_handle, PPE_DS_INTR_ENABLE);
 	if (ret != 0) {
