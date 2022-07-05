@@ -353,6 +353,7 @@ static void __exit ppe_vp_base_module_exit(void)
 	struct ppe_vp_base *pvb = &vp_base;
 
 	nss_dp_vp_rx_unregister_cb();
+	del_timer_sync(&pvb->hw_port_stats_timer);
 
 	if (pvb->vp_hdr) {
 		unregister_sysctl_table(pvb->vp_hdr);
