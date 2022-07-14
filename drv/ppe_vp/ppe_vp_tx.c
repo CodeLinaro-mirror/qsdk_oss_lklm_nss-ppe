@@ -74,15 +74,15 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 	if (NETDEV_TX_OK != nss_dp_vp_xmit(vp_base.edma_vp_dev, &dptxi, skb)) {
 		ppe_vp_info("Dropping skb %pxd, edma failed to enqueue to PPE, VP %d", skb, vp_num);
 		u64_stats_update_begin(&tx_stats->syncp);
-		atomic64_inc(&tx_stats->tx_drops);
+		tx_stats->tx_drops++;
 		u64_stats_update_end(&tx_stats->syncp);
 		dev_kfree_skb_any(skb);
 		return true;
 	}
 
 	u64_stats_update_begin(&tx_stats->syncp);
-	atomic64_inc(&tx_stats->tx_pkts);
-	atomic64_add(skb->len, &tx_stats->tx_bytes);
+	tx_stats->tx_pkts++;
+	tx_stats->tx_bytes += skb->len;
 	u64_stats_update_end(&tx_stats->syncp);
 
 	return true;

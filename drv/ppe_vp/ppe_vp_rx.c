@@ -73,7 +73,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 
 				rx_stats = this_cpu_ptr(dvp->vp_stats.rx_stats);
 				u64_stats_update_begin(&rx_stats->syncp);
-				atomic64_inc(&rx_stats->rx_drops);
+				rx_stats->rx_drops++;
 				u64_stats_update_end(&rx_stats->syncp);
 
 				dev_kfree_skb_any(skb);
@@ -98,8 +98,8 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 
 		rx_stats = this_cpu_ptr(dvp->vp_stats.rx_stats);
 		u64_stats_update_begin(&rx_stats->syncp);
-		atomic64_inc(&rx_stats->rx_pkts);
-		atomic64_add(skb->len, &rx_stats->rx_bytes);
+		rx_stats->rx_pkts++;
+		rx_stats->rx_bytes +=skb->len;
 		u64_stats_update_end(&rx_stats->syncp);
 
 		/*
@@ -161,7 +161,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 				rcu_read_unlock();
 
 				u64_stats_update_begin(&rx_stats->syncp);
-				atomic64_inc(&rx_stats->rx_drops);
+				rx_stats->rx_drops++;
 				u64_stats_update_end(&rx_stats->syncp);
 
 				dev_kfree_skb_any(skb);
@@ -175,8 +175,8 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		}
 
 		u64_stats_update_begin(&rx_stats->syncp);
-		atomic64_inc(&rx_stats->rx_excp_pkts);
-		atomic64_add(skb->len, &rx_stats->rx_excp_bytes);
+		rx_stats->rx_excp_pkts++;
+		rx_stats->rx_excp_bytes += skb->len;
 		u64_stats_update_end(&rx_stats->syncp);
 
 		skb_reset_mac_header(skb);
