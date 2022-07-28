@@ -909,6 +909,15 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 	}
 
 	/*
+	 * If the flow count is not zero decrement the flow count taken and return
+	 * Do not deactivate the tunnel since other flows are still in use.
+	 */
+	if (!atomic_dec_and_test(&ptun->flow_count)) {
+		ppe_drv_info("%p: Flow count is %d , skipping deactivation", ptun, atomic_read(&ptun->flow_count));
+		goto skip_tunnel_deactivation;
+	}
+
+	/*
 	 * For MAP-T cases eg edit rule table is used for encapsulation
 	 */
 	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
@@ -965,6 +974,7 @@ disable_encap:
 		goto error;
 	}
 
+skip_tunnel_deactivation:
 	/*
 	 * Release reference
 	 */
@@ -1205,6 +1215,15 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 		ppe_drv_tun_v4_parse_l2_hdr(vcreate_rule, cn_v4, l2_hdr);
 	}
 
+	/*
+	 * In case of MAPT we can expect multiple create connection request for same tunnel.
+	 * In this case we dont need to configure the tunnel again. for rest of the tunnel
+	 * it is expected to get create conection request only once
+	 */
+	if (atomic_read(&ptun->flow_count)) {
+		goto skip_tunnel_activation;
+	}
+
 	port_id = ptun->vp_num;
 
 	/*
@@ -1284,10 +1303,16 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 
 	ptun->xmit_port = xmit_port;
 
+skip_tunnel_activation:
 	/*
 	 * Take reference
 	 */
 	ppe_drv_tun_ref(ptun);
+
+	/*
+	 * Increment flow count as connection is added to the list
+	 */
+	atomic_inc(&ptun->flow_count);
 
 	if (cn_v6) {
 		list_add(&cn_v6->list, &p->conn_tun_v6);
