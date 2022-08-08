@@ -133,6 +133,13 @@
 #define PPE_DRV_HW_FLOW_STATS_MS	1000
 
 /*
+ * Core to service code mapping
+ */
+#define PPE_DRV_CORE2SC_NOEDIT(core_id) (PPE_DRV_SC_NOEDIT_REDIR_CORE0 + core_id)
+#define PPE_DRV_CORE2SC_EDIT(core_id) (PPE_DRV_SC_EDIT_REDIR_CORE0 + core_id)
+#define PPE_DRV_REDIR_PROFILE_ID 9
+
+/*
  * ppe_drv_entry_valid
  *	PPE entry validity
  */
@@ -206,6 +213,7 @@ struct ppe_drv {
 	struct list_head conn_v6;			/* List of v6 connection in PPE */
 	struct list_head conn_tun_v4;		/* List of v4 tunnel connection in PPE */
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
+
 	bool toggled;				/* Toggled bit for sync during a particular iteration */
 	bool tun_toggled;		        /* Tunnel specific Toggled bit for sync during a particular iteration*/
 };

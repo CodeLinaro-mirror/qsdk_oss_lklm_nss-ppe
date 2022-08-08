@@ -42,6 +42,14 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_VLAN_FILTER_BYPASS,	/* VLAN filter bypass for bridge flows between 2 different VSIs */
 	PPE_DRV_SC_L3_EXCEPT,		/* Indicate exception post tunnel/tap operation */
 	PPE_DRV_SC_SPF_BYPASS,		/* Source port filtering bypass */
+	PPE_DRV_SC_NOEDIT_REDIR_CORE0,	/* Service code to re-direct packets to core 0 without editing the packet */
+	PPE_DRV_SC_NOEDIT_REDIR_CORE1,	/* Service code to re-direct packets to core 1 without editing the packet */
+	PPE_DRV_SC_NOEDIT_REDIR_CORE2,	/* Service code to re-direct packets to core 2 without editing the packet */
+	PPE_DRV_SC_NOEDIT_REDIR_CORE3,	/* Service code to re-direct packets to core 3 without editing the packet */
+	PPE_DRV_SC_EDIT_REDIR_CORE0,	/* Service code to re-direct packets to core 0 with editing required for regular forwarding */
+	PPE_DRV_SC_EDIT_REDIR_CORE1,	/* Service code to re-direct packets to core 1 with editing required for regular forwarding */
+	PPE_DRV_SC_EDIT_REDIR_CORE2,	/* Service code to re-direct packets to core 2 with editing required for regular forwarding */
+	PPE_DRV_SC_EDIT_REDIR_CORE3,	/* Service code to re-direct packets to core 3 with editing required for regular forwarding */
 	PPE_DRV_SC_MAX,			/* Max service code */
 } ppe_drv_sc_t;
 

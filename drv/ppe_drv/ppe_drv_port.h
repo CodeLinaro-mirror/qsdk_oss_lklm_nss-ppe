@@ -19,6 +19,18 @@
 #define PPE_DRV_VIRTUAL_PORT_CHK(n) ((n) >= PPE_DRV_VIRTUAL_START && (n) < PPE_DRV_PORTS_MAX)
 #define PPE_DRV_PORT_VIRTUAL_L2_TUN		0x01	/* Port is L2 tunnel virtual port */
 #define PPE_DRV_PORT_VIRTUAL_L3_TUN		0x02	/* Port is L3 tunnel virtual port */
+#define PPE_DRV_PORT_SRC_PROFILE 0
+
+/**
+ * ppe_port_user_type
+ *	User's VP type
+ */
+enum ppe_port_user_type {
+	PPE_DRV_PORT_USER_TYPE_PASSIVE_VP = 1,		/**< VP for Passive use-case */
+	PPE_DRV_PORT_USER_TYPE_ACTIVE_VP,		/**< VP for Active use-case */
+	PPE_DRV_PORT_USER_TYPE_DS,			/**< VP for Direct-Switch use-case */
+	PPE_DRV_PORT_USER_TYPE_MAX,			/**< Maximum VP User types */
+};
 
 /*
  * ppe_drv_port_flag
@@ -28,7 +40,8 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_IIPSEC = 0x1,
 	PPE_DRV_PORT_FLAG_IDTLS = 0x2,
 	PPE_DRV_PORT_FLAG_DS = 0x4,
-	PPE_DRV_PORT_FLAG_MAX = 0x8
+	PPE_DRV_PORT_FLAG_MAX = 0x8,
+	PPE_DRV_PORT_RFS_ENABLED = 0x10
 } ppe_drv_port_flag_t;
 
 /*
@@ -59,6 +72,10 @@ struct ppe_drv_port {
 	uint8_t tunnel_vp_cfg;			/* Port is of type tunnel VP */
 	uint8_t active_vlan;			/* Number active VLAN configured on the port */
 	struct ppe_drv_port_hw_stats stats;		/* PPE HW port statistics */
+        uint8_t core_mask;			/* Core mask for VP flow */
+        uint8_t shadow_core_mask;		/* Shadow Core mask for VP flow */
+	uint8_t user_type;			/* PPE VP user type */
+	uint8_t next_core;			/* Next core to pick for RFS */
 };
 
 void ppe_drv_port_ucast_queue_update(struct ppe_drv_port *pp, uint8_t queue_id);

@@ -163,4 +163,16 @@ bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_st
  * True if the hw stats are cleared, false otherwise.
  */
 bool ppe_drv_port_clear_hw_vp_stats(int16_t port);
+
+/*
+ * ppe_drv_port_rfs_enabled
+ *	Is RFS enabled on Port.
+ *
+ * @param[in] port  Port number.
+ *
+ * @return
+ * True or False.
+ */
+bool ppe_drv_port_rfs_enabled(uint16_t pp_num);
+
 #endif /* _PPE_DRV_PORT_H_ */

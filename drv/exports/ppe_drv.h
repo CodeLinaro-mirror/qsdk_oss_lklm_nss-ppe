@@ -169,6 +169,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_INVALID_VP_NUM,			/**< Invalid VP number */
 	PPE_DRV_RET_TUN_ADD_CE_NULL,			/**< Add connection entry callback is NULL */
 	PPE_DRV_RET_INVALID_EIP_SERVICE,		/**< Invalid inline EIP service */
+	PPE_DRV_RET_FAILURE_DUMMY_RULE,			/**< Failed to push rule to PPE for passive VP */
 } ppe_drv_ret_t;
 
 /**
@@ -179,6 +180,18 @@ typedef enum ppe_drv_ret {
  * ppe dentry.
  */
 struct dentry *ppe_drv_get_dentry(void);
+
+/**
+ * ppe_drv_core2queue_mapping
+ *	Provide core to queue mapping.
+ *
+ * @param[in] core core_id.
+ * @param[in] queue_id  queue_id.
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_core2queue_mapping(uint8_t core, uint8_t queue_id);
 
 /** @} */ /* end_addtogroup ppe_drv_subsystem */
 

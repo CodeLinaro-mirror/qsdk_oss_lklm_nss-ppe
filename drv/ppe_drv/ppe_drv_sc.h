@@ -55,5 +55,6 @@ static inline bool ppe_drv_sc_check_and_set(ppe_drv_sc_t *scp, ppe_drv_sc_t sc)
 	return (*scp == PPE_DRV_SC_NONE) ? (*scp = sc) : false;
 }
 
+void ppe_drv_sc_ucast_queue_set(ppe_drv_sc_t sc, uint8_t queue_id, uint8_t profile_id);
 void ppe_drv_sc_entries_free(struct ppe_drv_sc *sc);
 struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void);

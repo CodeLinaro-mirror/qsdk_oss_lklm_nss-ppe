@@ -34,6 +34,7 @@
 struct ppe_drv_iface;
 enum ppe_drv_ret;
 typedef enum ppe_drv_eip_service ppe_drv_eip_service_t;
+enum ppe_vp_user_type;
 typedef enum ppe_drv_ret ppe_drv_ret_t;
 
 /**

@@ -346,17 +346,42 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
  * ppe_drv_flow_v6_service_code_get()
  *	Return service code required for this flow.
  */
-bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, uint8_t *scp)
+bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_port *pp, uint8_t *scp)
 {
 	ppe_drv_sc_t service_code = *scp;
+	int next_core;
+	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
 
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_VLAN_FILTER_BYPASS)) {
+	if (pp->core_mask) {
+		if (pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
+			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			pp->shadow_core_mask &= ~(1 << next_core);
+			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+			if (!pp->shadow_core_mask) {
+				pp->shadow_core_mask = pp->core_mask;
+			}
+		} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
+			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			sc = PPE_DRV_CORE2SC_EDIT(next_core);
+			pp->shadow_core_mask &= ~(1 << next_core);
+			if (!pp->shadow_core_mask) {
+				pp->shadow_core_mask = pp->core_mask;
+			}
+		}
+
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
-					pcf, service_code, PPE_DRV_SC_VLAN_FILTER_BYPASS);
+					pcf, service_code, sc);
+			return false;
+		}
+	} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
@@ -501,7 +526,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
         flow_cfg.invalid = !entry_valid;
 
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
-	if (!ppe_drv_flow_v6_service_code_get(pcf, &flow_cfg.sevice_code)) {
+	if (!ppe_drv_flow_v6_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
 		ppe_drv_warn("%p: failed to obtain a valid service code", pcf);
 		return NULL;
 	}
@@ -790,17 +815,42 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
  * ppe_drv_flow_v4_service_code_get()
  *	Return service code required for this flow.
  */
-bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, uint8_t *scp)
+bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_port *pp, uint8_t *scp)
 {
 	ppe_drv_sc_t service_code = *scp;
+	int next_core;
+	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
 
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_VLAN_FILTER_BYPASS)) {
+	if (pp->core_mask) {
+		if (pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
+			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			pp->shadow_core_mask &= ~(1 << next_core);
+			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+			if (!pp->shadow_core_mask) {
+				pp->shadow_core_mask = pp->core_mask;
+			}
+		} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
+			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			pp->shadow_core_mask &= ~(1 << next_core);
+			sc = PPE_DRV_CORE2SC_EDIT(next_core);
+			if (!pp->shadow_core_mask) {
+				pp->shadow_core_mask = pp->core_mask;
+			}
+		}
+
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
-					pcf, service_code, PPE_DRV_SC_VLAN_FILTER_BYPASS);
+					pcf, service_code, sc);
+			return false;
+		}
+	} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
@@ -985,7 +1035,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
         flow_cfg.invalid = !entry_valid;
 
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
-	if (!ppe_drv_flow_v4_service_code_get(pcf, &flow_cfg.sevice_code)) {
+	if (!ppe_drv_flow_v4_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
 		ppe_drv_warn("%p: failed to obtain a valid service code", pcf);
 		return NULL;
 	}

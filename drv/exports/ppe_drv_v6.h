@@ -197,6 +197,34 @@ bool ppe_drv_v6_stats_callback_register(ppe_drv_v6_sync_callback_t cb, void *app
 void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t num_conn);
 
 /**
+ * ppe_drv_v6_rfs_destroy
+ *	Destroys IPv4 RFS connection rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v6_rfs_destroy
+ *
+ * @param[in] destroy   Pointer to the NSS PPE IPv6 destroy rule message.
+ *
+ * @return
+ * Status of the destroy operation.
+ */
+ppe_drv_ret_t ppe_drv_v6_rfs_destroy(struct ppe_drv_v6_rule_destroy *destroy);
+
+/**
+ * ppe_drv_v6_rfs_create
+ *	Creates IPv6 RFS connection rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v6_rfs_create
+ *
+ * @param[in] create   Pointer to the NSS PPE IPv6 create rule message.
+ *
+ * @return
+ * Status of the create operation.
+ */
+ppe_drv_ret_t ppe_drv_v6_rfs_create(struct ppe_drv_v6_rule_create *create);
+
+/**
  * ppe_drv_v6_destroy
  *	Destroys IPv6 connection rule in PPE.
  *

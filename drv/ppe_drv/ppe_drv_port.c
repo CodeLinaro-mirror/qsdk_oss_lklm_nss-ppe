@@ -950,21 +950,36 @@ int32_t ppe_drv_port_num_from_dev(struct net_device *dev)
 EXPORT_SYMBOL(ppe_drv_port_num_from_dev);
 
 /*
+ * ppe_drv_port_rfs_enabled()
+ *	RFS enabled on a Port
+ */
+bool ppe_drv_port_rfs_enabled(uint16_t pp_num)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *pp;
+	uint32_t flags;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_port_num(pp_num);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	flags = pp->flags;
+	spin_unlock_bh(&p->lock);
+
+	return !!(flags & PPE_DRV_PORT_RFS_ENABLED);
+}
+EXPORT_SYMBOL(ppe_drv_port_rfs_enabled);
+
+/*
  * ppe_drv_port_is_physical()
  *	Returns true if ppe port is physical.
  */
 bool ppe_drv_port_is_physical(struct ppe_drv_port *pp)
 {
 	return pp->port < PPE_DRV_PHYSICAL_MAX;
-}
-
-/*
- * ppe_drv_port_is_virtual()
- *	Returns true if ppe port is virtual.
- */
-bool ppe_drv_port_is_virtual(struct ppe_drv_port *pp)
-{
-	return pp->port >= PPE_DRV_VIRTUAL_START;
 }
 
 /*

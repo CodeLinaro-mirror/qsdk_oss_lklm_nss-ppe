@@ -35,6 +35,14 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_VLAN_FILTER_BYPASS",  /* VLAN filter bypass for bridge flows between 2 different VSIs */
 	"PPE_DRV_SC_L3_EXCEPT",           /* Indicate exception post tunnel/tap operation */
 	"PPE_DRV_SC_SPF_BYPASS",          /* Source port filtering bypass */
+	"PPE_DRV_SC_NOEDIT_REDIR_CORE0",	/* PPE RFS service code for core0 for Passive VP */
+	"PPE_DRV_SC_NOEDIT_REDIR_CORE1",	/* PPE RFS service code for core1 for Passive VP */
+	"PPE_DRV_SC_NOEDIT_REDIR_CORE2",	/* PPE RFS service code for core2 for Passive VP */
+	"PPE_DRV_SC_NOEDIT_REDIR_CORE3",	/* PPE RFS service code for core3 for Passive VP */
+	"PPE_DRV_SC_EDIT_REDIR_CORE0",	  /* PPE RFS service code for core0 for Active VP */
+	"PPE_DRV_SC_EDIT_REDIR_CORE1",	  /* PPE RFS service code for core1 for Active VP */
+	"PPE_DRV_SC_EDIT_REDIR_CORE2",	  /* PPE RFS service code for core2 for Active VP */
+	"PPE_DRV_SC_EDIT_REDIR_CORE3",	  /* PPE RFS service code for core3 for Active VP */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 
@@ -50,6 +58,7 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"v4_flush_req",				/* No of v4 flush requests */
 	"v4_flush_fail",			/* No of v4 flush requests fail */
 	"v4_flush_conn_not_found",		/* No of v4 connection not found during flush. */
+	"v4_flush_skip_conn_rfs",		/* No of v4 rfs connection not found during flush. */
 
 	"v6_l3_flows",				/* No of v6 routed flows */
 	"v6_l2_flows",				/* No of v6 bridge flows */
@@ -59,6 +68,7 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"v6_flush_req",				/* No of v6 flush requests */
 	"v6_flush_fail",			/* No of v6 flush requests fail */
 	"v6_flush_conn_not_found",		/* No of v6 connection not found during flush. */
+	"v6_flush_skip_conn_rfs",		/* No of v6 rfs connection not found during flush. */
 
 	"fail_vp_full",					/* Create req fail due to virtual port table full */
 	"fail_pp_full",					/* create req fail due to physical port table full */
@@ -106,6 +116,21 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 
 	"v4_create_fail_vlan_filter",		/* No of v4 create failure due to interface not in bridge */
 
+	"v4_create_rfs_req",			/* No of v4 RFS create requests */
+	"v4_create_rfs_fail",			/* No of v4 RFS create failure */
+	"v4_destroy_rfs_req",			/* No of v4 RFS delete requests */
+	"v4_destroy_rfs_fail",			/* No of v4 RFS delete failure */
+	"v4_destroy_rfs_conn_not_found",		/* No of v4 RFS delete failure due to connection not found */
+	"v4_create_rfs_fail_mem",			/* No of v4 RFS create failure due to OOM */
+	"v4_create_rfs_fail_conn",			/* No of v4 RFS create failure due to invalid parameters */
+	"v4_create_rfs_fail_collision",		/* No of v4 RFS create failure due to connection already exist */
+	"v4_unknown_rfs_interface",			/* No of v4 RFS create failure due to invalid IF */
+	"v4_create_rfs_fail_invalid_rx_if",		/* No of v4 RFS create failure due to invalid Rx IF */
+	"v4_create_rfs_fail_invalid_tx_if",		/* No of v4 RFS create failure due to invalid Tx IF */
+	"v4_create_rfs_fail_invalid_rx_port",	/* No of v4 RFS create failure due to invalid Rx Port */
+	"v4_create_rfs_fail_invalid_tx_port",	/* No of v4 RFS create failure due to invalid Tx Port */
+	"v4_create_rfs_noedit_rule",	/* No of v4 rfs non edit rule create */
+
 	"v6_create_req",			/* No of v6 create requests */
 	"v6_create_fail",			/* No of v6 create failure */
 	"v6_destroy_req",			/* No of v6 delete requests */
@@ -121,6 +146,21 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_fail_if_hierarchy",		/* No of v6 create failure due to interface hierarchy walk fail */
 
 	"v6_create_fail_vlan_filter",		/* No of v6 create failure due to interface not in bridge */
+
+	"v6_create_rfs_req",			/* No of v6 RFS create requests */
+	"v6_create_rfs_fail",			/* No of v6 RFS create failure */
+	"v6_destroy_rfs_req",			/* No of v6 RFS delete requests */
+	"v6_destroy_rfs_fail",			/* No of v6 RFS delete failure */
+	"v6_destroy_rfs_conn_not_found",		/* No of v6 RFS delete failure due to connection not found */
+	"v6_create_rfs_fail_mem",			/* No of v6 RFS create failure due to OOM */
+	"v6_create_rfs_fail_conn",			/* No of v6 RFS create failure due to invalid parameters */
+	"v6_create_rfs_fail_collision",		/* No of v6 RFS create failure due to connection already exist */
+	"v6_unknown_rfs_interface",			/* No of v6 RFS create failure due to invalid IF */
+	"v6_create_rfs_fail_invalid_rx_if",		/* No of v6 RFS create failure due to invalid Rx IF */
+	"v6_create_rfs_fail_invalid_tx_if",		/* No of v6 RFS create failure due to invalid Tx IF */
+	"v6_create_rfs_fail_invalid_rx_port",	/* No of v6 RFS create failure due to invalid Rx Port */
+	"v6_create_rfs_fail_invalid_tx_port",	/* No of v6 RFS create failure due to invalid Tx Port */
+	"v6_create_rfs_noedit_rule",	/* No of v6 rfs non edit rule create */
 };
 
 /*
@@ -146,6 +186,21 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_create_fail_if_hierarchy",	/* No of v4 create failure due to interface hierarchy walk fail */
 
 	"v4_tun_create_fail_vlan_filter",	/* No of v4 create failure due to interface not in bridge */
+	"v4_tun_create_rfs_noedit_rule",	/* No of v4 rfs non edit rule create */
+
+	"v4_tun_create_rfs_req",			/* No of v4 RFS create requests */
+	"v4_tun_create_rfs_fail",			/* No of v4 RFS create failure */
+	"v4_tun_destroy_rfs_req",			/* No of v4 RFS delete requests */
+	"v4_tun_destroy_rfs_fail",			/* No of v4 RFS delete failure */
+	"v4_tun_destroy_rfs_conn_not_found",		/* No of v4 RFS delete failure due to connection not found */
+	"v4_tun_create_rfs_fail_mem",			/* No of v4 RFS create failure due to OOM */
+	"v4_tun_create_rfs_fail_conn",			/* No of v4 RFS create failure due to invalid parameters */
+	"v4_tun_create_rfs_fail_collision",		/* No of v4 RFS create failure due to connection already exist */
+	"v4_tun_unknown_rfs_interface",			/* No of v4 RFS create failure due to invalid IF */
+	"v4_tun_create_rfs_fail_invalid_rx_if",		/* No of v4 RFS create failure due to invalid Rx IF */
+	"v4_tun_create_rfs_fail_invalid_tx_if",		/* No of v4 RFS create failure due to invalid Tx IF */
+	"v4_tun_create_rfs_fail_invalid_rx_port",	/* No of v4 RFS create failure due to invalid Rx Port */
+	"v4_tun_create_rfs_fail_invalid_tx_port",	/* No of v4 RFS create failure due to invalid Tx Port */
 
 	"v6_tun_create_req",			/* No of v6 create requests */
 	"v6_tun_create_fail",			/* No of v6 create failure */
@@ -162,6 +217,21 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_fail_if_hierarchy",	/* No of v6 create failure due to interface hierarchy walk fail */
 
 	"v6_tun_create_fail_vlan_filter",	/* No of v6 create failure due to interface not in bridge */
+
+	"v6_tun_create_rfs_req",			/* No of v6 RFS create requests */
+	"v6_tun_create_rfs_fail",			/* No of v6 RFS create failure */
+	"v6_tun_destroy_rfs_req",			/* No of v6 RFS delete requests */
+	"v6_tun_destroy_rfs_fail",			/* No of v6 RFS delete failure */
+	"v6_tun_destroy_rfs_conn_not_found",		/* No of v6 RFS delete failure due to connection not found */
+	"v6_tun_create_rfs_fail_mem",			/* No of v6 RFS create failure due to OOM */
+	"v6_tun_create_rfs_fail_conn",			/* No of v6 RFS create failure due to invalid parameters */
+	"v6_tun_create_rfs_fail_collision",		/* No of v6 RFS create failure due to connection already exist */
+	"v6_tun_unknown_rfs_interface",			/* No of v6 RFS create failure due to invalid IF */
+	"v6_tun_create_rfs_fail_invalid_rx_if",		/* No of v6 RFS create failure due to invalid Rx IF */
+	"v6_tun_create_rfs_fail_invalid_tx_if",		/* No of v6 RFS create failure due to invalid Tx IF */
+	"v6_tun_create_rfs_fail_invalid_rx_port",	/* No of v6 RFS create failure due to invalid Rx Port */
+	"v6_tun_create_rfs_fail_invalid_tx_port",	/* No of v6 RFS create failure due to invalid Tx Port */
+	"v6_tun_create_rfs_noedit_rule",	/* No of v6 rfs non edit rule create */
 };
 
 /*

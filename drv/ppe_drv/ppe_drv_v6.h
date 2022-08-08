@@ -36,6 +36,8 @@
 					/* QoS valid */
 #define PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC 0x00000020
 					/* Inline IPSec flow */
+#define PPE_DRV_V6_CONN_FLAG_FLOW_PPE_ASSIST 0x00000040
+					/* Flow needs PPE assistance for RFS */
 
 /*
  * ppe_drv_v6_conn_flow

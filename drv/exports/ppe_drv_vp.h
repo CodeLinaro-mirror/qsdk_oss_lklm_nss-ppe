@@ -22,6 +22,8 @@
 #ifndef _PPE_DRV_VP_H_
 #define _PPE_DRV_VP_H_
 
+enum ppe_port_user_type;
+
 /**
  * @addtogroup ppe_drv_vp_subsystem
  * @{
@@ -48,12 +50,14 @@ ppe_drv_ret_t ppe_drv_vp_deinit(struct ppe_drv_iface *iface);
  * @datatypes
  * ppe_drv_iface
  *
- * @param[in] iface   Pointer to the interface object.
+ * @param[in] iface Pointer to the interface object.
+ * @param[in] core_mask Core mask to be used for RFS.
+ * @param[in] usr_type PPE VP user type.
  *
  * @return
  * Status of the initialization operation.
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface);
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type);
 
 /** @} */ /* end_addtogroup ppe_drv_vp_subsystem */
 

@@ -656,7 +656,7 @@ uint8_t ppe_tun_xcpn_mode_get(enum ppe_drv_tun_cmn_ctx_type type)
 bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type)
 {
 	struct ppe_tun *tun;
-	struct ppe_vp_ai vpai;
+	struct ppe_vp_ai vpai = {0};
 	int32_t idx;
 	ppe_vp_num_t vp_num;
 	uint8_t action;

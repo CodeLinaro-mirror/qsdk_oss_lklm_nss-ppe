@@ -207,6 +207,41 @@ static bool ppe_drv_phy_port_base_queue_init(struct ppe_drv *p)
 }
 
 /*
+ * ppe_drv_core2queue_mapping()
+ *	Core to queue mapping
+ *
+ * This API will be invoked by DP driver to provide core to queue
+ * mapping. This internally will be used to configure service code
+ * to queue mapping for PPE RFS feature.
+ */
+void ppe_drv_core2queue_mapping(uint8_t core, uint8_t queue_id)
+{
+	ppe_drv_trace("%d: queue mapping called for core(%d)\n", queue_id, core);
+
+	switch(core) {
+	case 0:
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_NOEDIT_REDIR_CORE0, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_EDIT_REDIR_CORE0, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		break;
+	case 1:
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_NOEDIT_REDIR_CORE1, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_EDIT_REDIR_CORE1, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		break;
+	case 2:
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_NOEDIT_REDIR_CORE2, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_EDIT_REDIR_CORE2, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		break;
+	case 3:
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_NOEDIT_REDIR_CORE3, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_EDIT_REDIR_CORE3, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		break;
+	default:
+		ppe_drv_warn("%d Invalid core(%d)\n", queue_id, core);
+	}
+}
+EXPORT_SYMBOL(ppe_drv_core2queue_mapping);
+
+/*
  * ppe_drv_l3_route_ctrl_init()
  *	Initialize PPE global configuration
  */

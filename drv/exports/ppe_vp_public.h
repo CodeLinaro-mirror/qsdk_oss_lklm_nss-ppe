@@ -101,6 +101,17 @@ typedef enum ppe_vp_type {
  */
 typedef bool(*ppe_vp_stats_callback_t)(struct net_device *, ppe_vp_hw_stats_t *);
 
+/*
+ * ppe_vp_user_type
+ *	Types of VPs user
+ */
+enum ppe_vp_user_type {
+	PPE_VP_USER_TYPE_PASSIVE = 1,	/**< VP for Passive use-case */
+	PPE_VP_USER_TYPE_ACTIVE,	/**< VP for Active use-case */
+	PPE_VP_USER_TYPE_DS,		/**< VP for Direct-Switch use-case */
+	PPE_VP_USER_TYPE_MAX,		/**< Maximum VP User types */
+};
+
 /**
  * ppe_vp_ai
  *	Data structure VP allocation.
@@ -115,8 +126,9 @@ struct ppe_vp_ai {
 					/**< VP src callback */
 	uint8_t queue_num;		/**< Queue number */
 	ppe_vp_status_t status;		/**< VP return status */
+	enum ppe_vp_user_type usr_type;	/**< VP user type */
+	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
 };
-
 
 /*
  * ppe_vp_get_netdev_by_port_num()

@@ -47,6 +47,7 @@ struct ppe_drv_gen_stats {
 	atomic64_t v4_flush_req;			/* No of v4 flush requests */
 	atomic64_t v4_flush_fail;			/* No of v4 flush requests fail */
 	atomic64_t v4_flush_conn_not_found;		/* No of v4 connection not found during flush. */
+	atomic64_t v4_flush_skip_conn_rfs;		/* No of rfs v4 connection not found during flush. */
 
 	atomic64_t v6_l3_flows;			/* No of v6 routed flows */
 	atomic64_t v6_l2_flows;			/* No of v6 bridge flows */
@@ -56,6 +57,7 @@ struct ppe_drv_gen_stats {
 	atomic64_t v6_flush_req;			/* No of v6 flush requests */
 	atomic64_t v6_flush_fail;			/* No of v6 flush requests fail */
 	atomic64_t v6_flush_conn_not_found;		/* No of v6 connection not found during flush. */
+	atomic64_t v6_flush_skip_conn_rfs;		/* No of v6 connection not found during flush. */
 
 	atomic64_t fail_vp_full;		/* Create req fail due to VP table full */
 	atomic64_t fail_pp_full;		/* Create req fail due to physical port table full */
@@ -102,6 +104,22 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_create_fail_if_hierarchy;		/* No of v4 create failure due to interface hierarchy walk fail */
 
 	atomic64_t v4_create_fail_vlan_filter;		/* No of v4 create failure due to interface not in bridge */
+
+	atomic64_t v4_create_rfs_req;		/* No of v4 RFS create requests */
+	atomic64_t v4_create_rfs_fail;		/* No of v4 RFS create failure */
+	atomic64_t v4_destroy_rfs_req;		/* No of v4 RFS delete requests */
+	atomic64_t v4_destroy_rfs_fail;		/* No of v4 RFS delete failure */
+	atomic64_t v4_destroy_rfs_conn_not_found;	/* No of v4 RFS delete failure due to connection not found */
+	atomic64_t v4_create_rfs_fail_mem;			/* No of v4 RFS create failure due to OOM */
+	atomic64_t v4_create_rfs_fail_conn;			/* No of v4 RFS create failure due to invalid parameters */
+	atomic64_t v4_create_rfs_fail_collision;		/* No of v4 RFS create failure due to connection already exist */
+	atomic64_t v4_unknown_rfs_interface;		/* No of v4 RFS create failure due to invalid IF */
+	atomic64_t v4_create_rfs_fail_invalid_rx_if;	/* No of v4 RFS create failure due to invalid Rx IF */
+	atomic64_t v4_create_rfs_fail_invalid_tx_if;	/* No of v4 RFS create failure due to invalid Tx IF */
+	atomic64_t v4_create_rfs_fail_invalid_rx_port;	/* No of v4 RFS create failure due to invalid Rx Port */
+	atomic64_t v4_create_rfs_fail_invalid_tx_port;	/* No of v4 RFS create failure due to invalid Tx Port */
+	atomic64_t v4_create_rfs_noedit_flow;		/* No of v4 request for non edit rfs mode */
+
 	atomic64_t v6_create_req;		/* No of v6 create requests */
 	atomic64_t v6_create_fail;		/* No of v6 create failure */
 	atomic64_t v6_destroy_req;		/* No of v6 delete requests */
@@ -118,6 +136,20 @@ struct ppe_drv_comm_stats {
 
 	atomic64_t v6_create_fail_vlan_filter;		/* No of v6 create failure due to interface not in bridge */
 
+	atomic64_t v6_create_rfs_req;		/* No of v6 RFS create requests */
+	atomic64_t v6_create_rfs_fail;		/* No of v6 RFS create failure */
+	atomic64_t v6_destroy_rfs_req;		/* No of v6 RFS delete requests */
+	atomic64_t v6_destroy_rfs_fail;		/* No of v6 RFS delete failure */
+	atomic64_t v6_destroy_rfs_conn_not_found;	/* No of v6 RFS delete failure due to connection not found */
+	atomic64_t v6_create_rfs_fail_mem;			/* No of v6 RFS create failure due to OOM */
+	atomic64_t v6_create_rfs_fail_conn;			/* No of v6 RFS create failure due to invalid parameters */
+	atomic64_t v6_create_rfs_fail_collision;		/* No of v6 RFS create failure due to connection already exist */
+	atomic64_t v6_unknown_rfs_interface;		/* No of v6 RFS create failure due to invalid IF */
+	atomic64_t v6_create_rfs_fail_invalid_rx_if;	/* No of v6 RFS create failure due to invalid Rx IF */
+	atomic64_t v6_create_rfs_fail_invalid_tx_if;	/* No of v6 RFS create failure due to invalid Tx IF */
+	atomic64_t v6_create_rfs_fail_invalid_rx_port;	/* No of v6 RFS create failure due to invalid Rx Port */
+	atomic64_t v6_create_rfs_fail_invalid_tx_port;	/* No of v6 RFS create failure due to invalid Tx Port */
+	atomic64_t v6_create_rfs_noedit_flow;		/* No of v6 request for non edit rfs mode */
 };
 
 /*
