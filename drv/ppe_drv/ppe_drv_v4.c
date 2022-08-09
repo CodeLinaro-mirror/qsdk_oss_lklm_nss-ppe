@@ -150,6 +150,10 @@ ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, st
 	ppe_drv_v4_conn_flow_match_src_ident_set(pcf, tuple->flow_ident);
 	ppe_drv_v4_conn_flow_match_dest_ip_set(pcf, tuple->return_ip);
 	ppe_drv_v4_conn_flow_match_dest_ident_set(pcf, tuple->return_ident);
+	ppe_drv_v4_conn_flow_xlate_src_ip_set(pcf, conn->flow_ip_xlate);
+	ppe_drv_v4_conn_flow_xlate_src_ident_set(pcf, conn->flow_ident_xlate);
+	ppe_drv_v4_conn_flow_xlate_dest_ip_set(pcf, conn->return_ip_xlate);
+	ppe_drv_v4_conn_flow_xlate_dest_ident_set(pcf, conn->return_ident_xlate);
 
 	/*
 	 * Flow MTU and transmit MAC address.

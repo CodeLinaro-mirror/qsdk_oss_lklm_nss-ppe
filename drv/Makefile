@@ -11,5 +11,8 @@ else
 obj-m += ppe_drv/
 endif
 endif
+ifneq ($(ppe-rule),)
+obj-m += ppe_rule/
+endif
 
 obj ?= .
