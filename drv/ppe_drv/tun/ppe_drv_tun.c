@@ -30,6 +30,7 @@
 #include "ppe_drv_tun_v4.h"
 #include "ppe_drv_tun_v6.h"
 #include <linux/in.h>
+#include <fal/fal_tunnel_program.h>
 
 /*
  * ppe_drv_tun_check_support()
@@ -1584,6 +1585,8 @@ bool ppe_drv_tun_global_init(struct ppe_drv *p)
 	fal_tunnel_global_cfg_t ptglcfg =  {0};
 	fal_mapt_decap_ctrl_t ptmapglcfg = {0};
 	fal_tunnel_udp_entry_t ftue = {0};
+	fal_tunnel_program_entry_t pgm = {0};
+	fal_tunnel_program_cfg_t cfg = {0};
 	fal_tunnel_type_t tunnel_type;
 
 	spin_lock_bh(&p->lock);
@@ -1610,6 +1613,39 @@ bool ppe_drv_tun_global_init(struct ppe_drv *p)
 	if (err != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: Tunnel Decap key set failure for GREIPV6", p);
+		return false;
+	}
+
+	ptdkcfg.tunnel_info_mask = ~FAL_TUNNEL_DECAP_TUNNEL_INFO_MASK;
+
+	tunnel_type = FAL_TUNNEL_TYPE_PROGRAM5;
+	err = fal_tunnel_decap_key_set(PPE_DRV_SWITCH_ID, tunnel_type, &ptdkcfg);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Tunnel Decap key set failed for GRE with error %d", p, err);
+		return false;
+	}
+
+	/*
+	 * Configure tunnel program entry for GRETAP without key
+	 */
+	pgm.outer_hdr_type = FAL_GRE_HDR;
+	pgm.protocol = ETH_P_TEB;
+	pgm.protocol_mask = FAL_TUNNEL_PROGRAM_GRE_PROTOCOL_MASK;
+	pgm.ip_ver = FAL_TUNNEL_PROGRAM_IPV4_IPV6;
+
+	err = fal_tunnel_program_entry_add(PPE_DRV_SWITCH_ID, FAL_TUNNEL_PROGRAM_TYPE_5, &pgm);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: program entry add failed for GRE with error %d", p, err);
+		return false;
+	}
+
+	/*
+	 * Set program entry to PROGRAM5 for GRETAP without key
+	 */
+	err = fal_tunnel_program_cfg_set(PPE_DRV_SWITCH_ID, FAL_TUNNEL_PROGRAM_TYPE_5, &cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: program entry configuration failed for GRE with error %d", p, err);
 		return false;
 	}
 

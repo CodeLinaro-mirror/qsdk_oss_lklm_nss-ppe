@@ -23,6 +23,7 @@
 #include <ppe_drv/ppe_drv.h>
 #include "ppe_drv_tun.h"
 #include <fal_vxlan.h>
+#include <fal/fal_tunnel_program.h>
 
 /*
  * ppe_drv_tun_decap_deconfigure
@@ -104,8 +105,6 @@ struct ppe_drv_tun_decap *ppe_drv_tun_decap_ref(struct ppe_drv_tun_decap *ptdc)
 static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 				struct ppe_drv_tun_cmn_ctx *pth, fal_tunnel_rule_t *decap_entry)
 {
-	fal_tunnel_decap_key_t ptdkcfg =  {0};
-	sw_error_t err;
 
 	if (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
 		decap_entry->tunnel_type = FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV4;
@@ -122,31 +121,10 @@ static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 		decap_entry->key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_TLINFO_EN);
 		ppe_drv_trace("%p: GRE remote Key: %d", pth, gre_key);
 	} else {
-
-		/* TODO:
-		 * Set program0 instead to support gretap interface without key
+		/*
+		 * Configure PPE in PROGRAM5 mode for GRETAP without key accelration
 		 */
-		err = fal_tunnel_decap_key_get(PPE_DRV_SWITCH_ID, FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV4, &ptdkcfg);
-		if (err != SW_OK) {
-			ppe_drv_warn("Error getting decap key set errno %d\n", err);
-		}
-
-		ptdkcfg.tunnel_info_mask = 0;
-		err = fal_tunnel_decap_key_set(PPE_DRV_SWITCH_ID, FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV4, &ptdkcfg);
-		if (err != SW_OK) {
-			ppe_drv_warn("Error decap key set errno %d\n", err);
-		}
-
-		err = fal_tunnel_decap_key_get(PPE_DRV_SWITCH_ID, FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV6, &ptdkcfg);
-		if (err != SW_OK) {
-			ppe_drv_warn("Error decap key get errno %d\n", err);
-		}
-
-		ptdkcfg.tunnel_info_mask = 0;
-		err = fal_tunnel_decap_key_set(PPE_DRV_SWITCH_ID, FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV6, &ptdkcfg);
-		if (err != SW_OK) {
-			ppe_drv_warn("Error decap key set errno %d\n", err);
-		}
+		decap_entry->tunnel_type = FAL_TUNNEL_TYPE_PROGRAM5;
 	}
 
 	return true;
