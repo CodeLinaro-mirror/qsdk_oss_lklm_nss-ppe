@@ -861,6 +861,131 @@ bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6)
 }
 
 /*
+ *  ppe_drv_tun_v6_conn_tun_del
+ *	delete all connections corresponding to tunnel
+ */
+void ppe_drv_tun_v6_conn_tun_del(struct ppe_drv_tun *ptun)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_v6_conn_flow *pcf, *pcr;
+	struct ppe_drv_v6_conn *cn, *cn_tmp;
+	struct ppe_drv_tun *cn_ptun;
+	struct ppe_drv_v6_conn_sync *cns;
+
+	cns = ppe_drv_v6_conn_stats_alloc();
+	if (!cns) {
+		ppe_drv_warn("%p: memory allocation failed for v6 connection sync", p);
+		return;
+	}
+
+	list_for_each_entry_safe(cn, cn_tmp,  &p->conn_tun_v6, list) {
+		pcf = &cn->pcf;
+		pcr = &cn->pcr;
+
+		cn_ptun = ppe_drv_port_tun_get(pcf->tx_port) ? ppe_drv_port_tun_get(pcf->tx_port) : ppe_drv_port_tun_get(pcf->rx_port);
+
+		if (cn_ptun !=  ptun) {
+			continue;
+		}
+
+		/*
+		 * Release references on interfaces.
+		 */
+		ppe_drv_v6_if_walk_release(pcf);
+
+		/*
+		 * Release references on interfaces.
+		 */
+		ppe_drv_v6_if_walk_release(pcr);
+
+		/*
+		 * Detach v6 tun pcf from v4 flow before deleting cn from the list for MAPT
+		 */
+		if (cn_ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
+			if (!ppe_drv_tun_detach_mapt_v6_to_v4(cn_ptun)) {
+				ppe_drv_warn("%p: MAP-T v6 to v4 detach failed", p);
+			}
+		}
+
+		list_del(&cn->list);
+
+		/*
+		 * Capture remaining stats.
+		 */
+		ppe_drv_v6_conn_sync_one(cn, cns, PPE_DRV_STATS_SYNC_REASON_FLUSH);
+
+		ppe_drv_v6_conn_free(cn);
+
+		/*
+		 * Release the reference taken during activation
+		 */
+		ppe_drv_tun_deref(cn_ptun);
+	}
+
+	ppe_drv_v6_conn_stats_free(cns);
+
+	return;
+}
+
+/*
+ *  ppe_drv_tun_v4_conn_tun_del
+ *	Delete all instances of connections corresponding to tunnel
+ */
+void ppe_drv_tun_v4_conn_tun_del(struct ppe_drv_tun *ptun)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_v4_conn_flow *pcf, *pcr;
+	struct ppe_drv_v4_conn *cn, *tmp_cn;
+	struct ppe_drv_tun *cn_ptun;
+	struct ppe_drv_v4_conn_sync *cns;
+
+	cns = ppe_drv_v4_conn_stats_alloc();
+	if (!cns) {
+		ppe_drv_warn("%p: memory allocation failed for v4 connection sync", p);
+		return;
+	}
+
+	list_for_each_entry_safe(cn, tmp_cn, &p->conn_tun_v4, list) {
+		pcf = &cn->pcf;
+		pcr = &cn->pcr;
+
+		cn_ptun = ppe_drv_port_tun_get(pcf->tx_port) ? ppe_drv_port_tun_get(pcf->tx_port) : ppe_drv_port_tun_get(pcf->rx_port);
+
+		if (cn_ptun !=  ptun) {
+			continue;
+		}
+
+		/*
+		 * Release references on interfaces.
+		 */
+		ppe_drv_v4_if_walk_release(pcf);
+
+		/*
+		 * Release references on interfaces.
+		 */
+		ppe_drv_v4_if_walk_release(pcr);
+
+		list_del(&cn->list);
+
+		/*
+		 * Capture remaining stats.
+		 */
+		ppe_drv_v4_conn_sync_one(cn, cns, PPE_DRV_STATS_SYNC_REASON_FLUSH);
+
+		ppe_drv_v4_conn_free(cn);
+
+		/*
+		 * Release the reference taken during activation
+		 */
+		ppe_drv_tun_deref(cn_ptun);
+	}
+
+	ppe_drv_v4_conn_stats_free(cns);
+
+	return;
+}
+
+/*
  * ppe_drv_tun_deactivate
  *	Deactivate PPE tunnel
  */
@@ -966,9 +1091,21 @@ disable_encap:
 	}
 
 	/*
-	 * Release reference
+	 * Delete all the instances of tunnel stored in cn list
+	 * and release acquired references
 	 */
-	ppe_drv_tun_deref(ptun);
+	if (!vdestroy_rule && is_ipv6) {
+		ppe_drv_tun_v6_conn_tun_del(ptun);
+	} else if (!vdestroy_rule){
+		ppe_drv_tun_v4_conn_tun_del(ptun);
+	} else {
+		/*
+		 * Release reference if the deactivate
+		 * call is from ECM
+		 */
+		ppe_drv_tun_deref(ptun);
+	}
+
 	spin_unlock_bh(&p->lock);
 
 	/*
