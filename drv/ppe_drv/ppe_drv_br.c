@@ -199,6 +199,15 @@ ppe_drv_ret_t ppe_drv_br_leave(struct ppe_drv_iface *br_iface, struct net_device
 	}
 
 	/*
+	 * Make sure the member interface has joined the bridge earlier.
+	 */
+	if (ppe_drv_iface_parent_get(member_iface) != br_iface) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: member is not en-slaved to bridge %p", br_iface, member_iface);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	/*
 	 * Clear bridge interface as parent from member interface
 	 */
 	ppe_drv_iface_parent_clear(member_iface);
