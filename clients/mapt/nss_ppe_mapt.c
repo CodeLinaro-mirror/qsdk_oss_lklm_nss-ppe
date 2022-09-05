@@ -119,7 +119,7 @@ bool nss_ppe_mapt_validate_rule(struct net_device *dev, struct nat46_xlate_rulep
 	 */
 	switch (rule_pair->local.style) {
 	case NAT46_XLATE_NONE:
-		break;
+		return false;
 
 	case NAT46_XLATE_MAP:
 		if (!nss_ppe_mapt_validate_rule_style_mapt(dev, &rule_pair->local, true)) {
