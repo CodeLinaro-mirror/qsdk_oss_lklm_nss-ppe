@@ -270,6 +270,8 @@ static bool ppe_tun_exception_dest_cb(struct net_device *dev, struct sk_buff *sk
 		goto free_skb;
 	}
 
+	ppe_tun_deref(tun);
+
 	cb(dev, skb);
 	return true;
 
@@ -337,6 +339,7 @@ uint32_t ppe_tun_mtu_get(struct net_device *dev)
 
 	if (ppe_vp_mtu_get(tun->vp_num, &mtu) != PPE_VP_STATUS_SUCCESS) {
 		ppe_tun_warn("%p: MTU Failed to get for dev %s", tun, dev->name);
+		ppe_tun_deref(tun);
 		return false;
 	}
 
