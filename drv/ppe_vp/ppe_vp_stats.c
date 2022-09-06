@@ -15,6 +15,9 @@
  */
 
 #include <linux/debugfs.h>
+#include <fal/fal_tunnel.h>
+#include <ppe_drv_port.h>
+#include <ppe_drv_iface.h>
 #include "ppe_vp_base.h"
 
 #define RX_STATS_COUNT		6
@@ -49,6 +52,91 @@ static const char *ppe_vp_stats_tx_str[] = {
 	"Tx errors",				/* Total tx errors */
 	"Tx drops"				/* Total tx drops */
 };
+
+/*
+ * ppe_vp_stats_hw_port_stats_sync()
+ *	Sync PPE HW stats
+ */
+static void ppe_vp_stats_hw_port_stats_sync(struct timer_list *tm)
+{
+	struct ppe_vp_base *pvb = &vp_base;
+	struct ppe_vp *vp;
+	struct net_device *netdev;
+	struct ppe_drv_port_hw_stats port_stats;
+        ppe_vp_hw_stats_t *vp_hw_stats;
+	ppe_vp_hw_stats_t delta_stats;
+	int i;
+
+	for (i = 0; i < PPE_DRV_VIRTUAL_MAX; i++) {
+		vp = ppe_vp_base_get_vp_by_idx(i);
+		if (!vp) {
+			continue;
+		}
+
+		spin_lock(&vp->lock);
+
+		/*
+		 * Get the current PPE port stats for the VP port from PPE HW.
+		 */
+		if (!ppe_drv_port_get_vp_stats(vp->port_num, &port_stats)) {
+			spin_unlock(&vp->lock);
+			ppe_vp_warn("%p: failed to get port stats for the vp_num: %u", vp, vp->port_num);
+			continue;
+		}
+
+		/*
+		 * Get the stats snapshot from the previous timer interrupt.
+		 */
+		vp_hw_stats = &vp->vp_stats.vp_hw_stats;
+
+		/*
+		 * Calculate RX delta stats.
+		 * This will handle hw stats counter overflow case as well.
+		 */
+		delta_stats.rx_pkt_cnt = (port_stats.rx_pkt_cnt - vp_hw_stats->rx_pkt_cnt + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1)
+				& FAL_TUNNEL_DECAP_PKT_CNT_MASK;
+		delta_stats.rx_byte_cnt = (port_stats.rx_byte_cnt - vp_hw_stats->rx_byte_cnt + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
+				& FAL_TUNNEL_DECAP_BYTE_CNT_MASK;
+		delta_stats.rx_drop_pkt_cnt = (port_stats.rx_drop_pkt_cnt - vp_hw_stats->rx_drop_pkt_cnt + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1)
+				& FAL_TUNNEL_DECAP_PKT_CNT_MASK;
+		delta_stats.rx_drop_byte_cnt = (port_stats.rx_drop_byte_cnt - vp_hw_stats->rx_drop_byte_cnt + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
+				& FAL_TUNNEL_DECAP_BYTE_CNT_MASK;
+
+		/*
+		 * Calculate Tx delta stats.
+		 */
+		delta_stats.tx_pkt_cnt = (port_stats.tx_pkt_cnt - vp_hw_stats->tx_pkt_cnt + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1)
+				& FAL_TUNNEL_DECAP_PKT_CNT_MASK;
+		delta_stats.tx_byte_cnt = (port_stats.tx_byte_cnt - vp_hw_stats->tx_byte_cnt + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
+				& FAL_TUNNEL_DECAP_BYTE_CNT_MASK;
+		delta_stats.tx_drop_pkt_cnt = (port_stats.tx_drop_pkt_cnt - vp_hw_stats->tx_drop_pkt_cnt + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1)
+				& FAL_TUNNEL_DECAP_PKT_CNT_MASK;
+		delta_stats.tx_drop_byte_cnt = (port_stats.tx_drop_byte_cnt - vp_hw_stats->tx_drop_byte_cnt + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
+				& FAL_TUNNEL_DECAP_BYTE_CNT_MASK;
+
+		/*
+		 * Take a snapshot of PPE HW stats for delta calculation in the next
+		 * timer.
+		 */
+		memcpy(vp_hw_stats, &port_stats, sizeof(ppe_vp_hw_stats_t));
+		spin_unlock(&vp->lock);
+
+		/*
+		 * Send the delta stats to VP callback function.
+		 */
+		if (vp->stats_cb) {
+			netdev = vp->netdev;
+			vp->stats_cb(netdev, &delta_stats);
+		}
+		ppe_vp_trace("%px: Sync VP port %u statistics", vp, vp->port_num);
+
+	}
+
+	/*
+	 * Re arm the hardware stats timer
+	 */
+	mod_timer(&pvb->hw_port_stats_timer, jiffies + pvb->hw_port_stats_ticks);
+}
 
 /*
  * ppe_vp_stats_reset_per_cpu_stats()
@@ -96,7 +184,7 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 	 * 1. PPE-VP base, 2. PPE-VP
 	 */
 	pvb_stats = kmalloc(sizeof(struct ppe_vp_base), GFP_KERNEL);
-	if (!pvb) {
+	if (!pvb_stats) {
 		ppe_vp_warn("Failed to allocate memory for pvb\n");
 		return -ENOMEM;
 	}
@@ -120,7 +208,7 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 	active_vp_counter = ppe_vp_base_get_active_vp_count(pvb);
 	seq_printf(m, "\nVP Statistics (Active Count = %u)\n", active_vp_counter);
 
-	for (idx = 0; idx < active_vp_counter; idx++) {
+	for (idx = 0; idx < PPE_DRV_VIRTUAL_MAX; idx++) {
 
 		memset(rx_aggr, 0, sizeof(rx_aggr));
 		memset(tx_aggr, 0, sizeof(tx_aggr));
@@ -179,10 +267,10 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 			}
 
 			seq_printf(m, "\n\t\tHW port counters\n");
-			seq_printf(m, "\t\t\trx_pkts: %llu\n", atomic64_read(&vp_stats->vp_hw_stats.rx_pkts));
-			seq_printf(m, "\t\t\trx_bytes: %llu\n", atomic64_read(&vp_stats->vp_hw_stats.rx_bytes));
-			seq_printf(m, "\t\t\ttx_pkts: %llu\n", atomic64_read(&vp_stats->vp_hw_stats.tx_pkts));
-			seq_printf(m, "\t\t\ttx_bytes: %llu\n\n", atomic64_read(&vp_stats->vp_hw_stats.tx_bytes));
+			seq_printf(m, "\t\t\trx_pkts: %u\n", vp_stats->vp_hw_stats.rx_pkt_cnt);
+			seq_printf(m, "\t\t\trx_bytes: %llu\n", vp_stats->vp_hw_stats.rx_byte_cnt);
+			seq_printf(m, "\t\t\ttx_pkts: %u\n", vp_stats->vp_hw_stats.tx_pkt_cnt);
+			seq_printf(m, "\t\t\ttx_bytes: %llu\n\n", vp_stats->vp_hw_stats.tx_byte_cnt);
 		}
 
 		rcu_read_unlock();
@@ -220,7 +308,7 @@ static const struct file_operations ppe_vp_stats_ops = {
  */
 void ppe_vp_stats_reset_vp_stats(struct ppe_vp_stats *vp_stats)
 {
-	memset(vp_stats, 0, (sizeof(struct ppe_vp_hw_stats) + sizeof(struct ppe_vp_misc_info)));
+	memset(vp_stats, 0, (sizeof(ppe_vp_hw_stats_t) + sizeof(struct ppe_vp_misc_info)));
 	ppe_vp_stats_reset_per_cpu_stats(vp_stats);
 }
 
@@ -294,6 +382,14 @@ ppe_vp_status_t ppe_vp_base_stats_init(struct ppe_vp_base *pvb)
 		ppe_vp_warn("%px: Failed to create debug entry for all VP stats\n", pvb);
 		return PPE_VP_STATUS_FAILURE;
 	}
+
+	pvb->hw_port_stats_ticks = msecs_to_jiffies(PPE_VP_HW_PORT_STATS_MS);
+	timer_setup(&pvb->hw_port_stats_timer, ppe_vp_stats_hw_port_stats_sync, 0);
+
+	/*
+	* Start sync timer for hardware stats collection.
+	*/
+	mod_timer(&pvb->hw_port_stats_timer, jiffies + pvb->hw_port_stats_ticks);
 
 	return PPE_VP_STATUS_SUCCESS;
 }

@@ -190,7 +190,7 @@ ppe_vp_status_t ppe_vp_free(ppe_vp_num_t port_num)
 	struct net_device *netdev;
 	struct ppe_vp *vp;
 	ppe_vp_stats_callback_t stats_cb;
-	struct ppe_vp_hw_stats hw_stats;
+	ppe_vp_hw_stats_t hw_stats;
 	ppe_drv_ret_t ret;
 	ppe_vp_status_t status = PPE_VP_STATUS_SUCCESS;
 
@@ -245,7 +245,7 @@ ppe_vp_status_t ppe_vp_free(ppe_vp_num_t port_num)
 	/*
 	 * Clear out the stats for this VP. Also free out the per cpu stats.
 	 */
-	memcpy(&hw_stats, &vp->vp_stats.vp_hw_stats, sizeof(struct ppe_vp_hw_stats));
+	memcpy(&hw_stats, &vp->vp_stats.vp_hw_stats, sizeof(ppe_vp_hw_stats_t));
 
 	/*
 	 * Clear the stats for this VP. We can only clear non-per CPU stats.
@@ -361,7 +361,7 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 
 	ret = ppe_drv_iface_mtu_set(ppe_iface, netdev->mtu);
 	if (ret != PPE_DRV_RET_SUCCESS) {
-		ppe_vp_warn("%px: netdev: %px, ppe iface %px PPE VP mtu set to %u failed, Err code %d", pvb, vp->netdev, ppe_iface, netdev->mtu, ret);
+		ppe_vp_warn("%px: netdev: %px, ppe iface %px PPE VP mtu set to %u failed, Err code %d", pvb, netdev, ppe_iface, netdev->mtu, ret);
 		vpai->status = PPE_VP_STATUS_MTU_SET_FAIL;
 		goto mtu_set_failed;
 	}
@@ -369,6 +369,7 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	ret = ppe_drv_iface_ucast_queue_set(ppe_iface, vpai->queue_num);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_vp_warn("%px: netdev: %px, ppe vp ucast queue %d set failed", pvb, netdev, vpai->queue_num);
+		vpai->status = PPE_VP_STATUS_VP_QUEUE_SET_FAILED;
 		goto alloc_fail;
 	}
 
@@ -402,9 +403,11 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	} else {
 		vp->src_cb = ppe_vp_rx_process_cb;
 	}
+	vp->stats_cb = vpai->stats_cb;
 
 	vp->vp_stats.misc_info.netdev_if_num = netdev->ifindex;
 	vp->vp_stats.misc_info.ppe_port_num = pp_num;
+
 	spin_unlock_bh(&vp->lock);
 
 	return pp_num;

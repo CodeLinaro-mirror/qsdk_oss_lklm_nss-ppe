@@ -16,7 +16,8 @@
 
 struct ppe_vp_base;
 
-#define PPE_VP_FLAG_VP_ACTIVE	0x01
+#define PPE_VP_FLAG_VP_ACTIVE		0x01
+#define PPE_VP_HW_PORT_STATS_MS		1000
 
 /*
  * ppe_vp_rx_info
@@ -34,16 +35,19 @@ struct ppe_vp {
 	struct ppe_vp_base *pvb;			/* Pointer to the PPE VP base object */
 	struct net_device *netdev;			/* net_device for this VP */
 	struct ppe_drv_iface *ppe_iface;		/* Pointer to the PPE interface object */
+
 	struct ppe_vp_stats vp_stats;			/* Stats for this VP */
+	ppe_vp_stats_callback_t stats_cb;		/* Tunnel statistics callback */
+
 	uint32_t netdev_if_num;				/* net_device interface number */
 	uint16_t mtu;					/* MTU for VP */
 	ppe_vp_num_t port_num;				/* PPE Port number */
 	ppe_vp_type_t vp_type;				/* Virtual Port type */
 	uint32_t flags;					/* Flags associated with the VP */
 	spinlock_t lock;				/* Lock for VP instance */
+
 	ppe_vp_callback_t dst_cb;			/* Packet to interface for transmit callback */
 	void *dst_cb_data;				/* Callback data */
 	ppe_vp_callback_t src_cb;			/* Packet to be handed over to stack by VP user callback */
 	void *src_cb_data;				/* Callback data */
-	ppe_vp_stats_callback_t stats_cb;		/* Tunnel statistics callback */
 };

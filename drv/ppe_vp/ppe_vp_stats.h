@@ -73,7 +73,7 @@ struct ppe_vp_tx_stats {
  *	Structure for VP Per CPU stats
  */
 struct ppe_vp_stats {
-	struct ppe_vp_hw_stats vp_hw_stats;	/* HW port statistics */
+	ppe_vp_hw_stats_t vp_hw_stats;	/* HW port statistics */
 	struct ppe_vp_misc_info misc_info;	/* Misc statistics */
 	struct ppe_vp_rx_stats __percpu *rx_stats;
 						/* VP Rx statistics */
