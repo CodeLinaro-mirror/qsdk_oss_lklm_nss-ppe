@@ -272,8 +272,8 @@ int nss_ppe_vxlanmgr_tunnel_destroy(struct net_device *dev)
 	spin_lock_bh(&vxlan_ctx.tun_lock);
 	list_del(&tun_ctx->head);
 	vxlan_ctx.tun_count--;
-	nss_ppe_vxlanmgr_tun_stats_dentry_remove(tun_ctx);
 	spin_unlock_bh(&vxlan_ctx.tun_lock);
+	nss_ppe_vxlanmgr_tun_stats_dentry_remove(tun_ctx);
 
 	/*
 	 * Unregister fdb notifier chain if
@@ -303,7 +303,6 @@ int nss_ppe_vxlanmgr_tunnel_create(struct net_device *dev)
 {
 	struct nss_ppe_vxlanmgr_tun_ctx *tun_ctx;
 	struct vxlan_dev *priv;
-	uint32_t vni;
 	uint32_t priv_flags;
 	struct ppe_drv_tun_cmn_ctx_l3 *l3;
 
@@ -336,8 +335,12 @@ int nss_ppe_vxlanmgr_tunnel_create(struct net_device *dev)
 	}
 
 	priv = netdev_priv(dev);
-	vni = vxlan_get_vni(priv);
-	tun_ctx->vni = vni << 16;
+
+	/*
+	 * The EG-header data should be pushed to the PPE in Big-endian format.
+	 * The vxlan_dev structue has the contents in the Big-Endian format.
+	 */
+	tun_ctx->vni = vxlan_vni_field(priv->cfg.vni);
 	tun_ctx->tunnel_flags = VXLAN_HF_VNI;
 	tun_ctx->src_port_min = priv->cfg.port_min;
 	tun_ctx->src_port_max = priv->cfg.port_max;
