@@ -165,7 +165,7 @@ struct ppe_drv {
 	 * Timer
 	 */
 	unsigned long hw_flow_stats_ticks;		/* Ticks to re-arm the hardware stats timer */
-	struct timer_list hw_flow_stats_timer;      	/* Timer used to poll for stats from PPE_HW */
+	struct timer_list hw_flow_stats_timer;		/* Timer used to poll for stats from PPE_HW */
 	struct ppe_drv_stats stats;			/* PPE statistics */
 
 	/*

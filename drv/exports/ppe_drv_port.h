@@ -45,6 +45,21 @@ struct ppe_drv_vsi;
 struct ppe_drv_l3_if;
 
 /*
+ * ppe_drv_port_hw_stats
+ *	PPE port Hardware statistics.
+ */
+struct ppe_drv_port_hw_stats {
+	uint32_t rx_pkt_cnt;	/* rx packet counter */
+	uint32_t rx_drop_pkt_cnt;	/* rx drop packet counter */
+	uint32_t tx_pkt_cnt;	/* tx packet counter */
+	uint32_t tx_drop_pkt_cnt;	/* tx drop packet counter */
+	uint64_t rx_byte_cnt;	/* rx byte counter */
+	uint64_t rx_drop_byte_cnt;	/* rx drop byte counter */
+	uint64_t tx_byte_cnt;	/* tx byte counter */
+	uint64_t tx_drop_byte_cnt;	/* tx drop byte counter */
+};
+
+/*
  * ppe_drv_port_type
  *	PPE Port types - values derived from HW spec
  */
@@ -122,5 +137,20 @@ struct net_device *ppe_drv_port_num_to_dev(uint8_t port);
  * 1 for success, 0 for failure.
  */
 bool ppe_drv_port_xcpn_mode_set(uint16_t vp_num, uint8_t action);
+
+/**
+ * ppe_drv_port_get_vp_stats
+ * 	Get PPE hardware stats for the VP port.
+ *
+ * @datatypes
+ * ppe_drv_port_hw_stats
+ *
+ * @param[in] port PPE port number.
+ * @param[in,out] vp_stats VP hardware stats.
+ *
+ * @return
+ * True if the hw stats are copied, false otherwise.
+ */
+bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_stats);
 
 #endif /* _PPE_DRV_PORT_H_ */

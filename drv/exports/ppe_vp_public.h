@@ -23,11 +23,18 @@
 #define _PPE_VP_PUBLIC_H_
 
 #include <linux/module.h>
+#include <ppe_drv_port.h>
 
 /**
  * @addtogroup ppe_vp_public_subsystem
  * @{
  */
+
+/**
+ * ppe_vp_hw_stats_t
+ *	 PPE VP port statistics.
+ */
+typedef struct ppe_drv_port_hw_stats ppe_vp_hw_stats_t;
 
 /**
  * ppe_vp_status
@@ -81,15 +88,16 @@ typedef enum ppe_vp_type {
 } ppe_vp_type_t;
 
 /**
- * ppe_vp_hw_stats
- *	PPE VP HW port Statistics
+ * Callback function for VP HW port statistics.
+ *
+ * @datatypes
+ * net_device
+ * ppe_vp_hw_stats_t
+ *
+ * @param[in] net_device Pointer to the net device.
+ * @param[in,out] ppe_vp_hw_stats_t Pointer to PPE-VP HW stats structure.
  */
-struct ppe_vp_hw_stats {
-	atomic64_t rx_pkts;		/**< Total rx packets on VP port */
-	atomic64_t rx_bytes;		/**< Total rx bytes on VP port */
-	atomic64_t tx_pkts;		/**< Total tx packets on VP port */
-	atomic64_t tx_bytes;		/**< Total tx bytes on VP port */
-};
+typedef bool(*ppe_vp_stats_callback_t)(struct net_device *, ppe_vp_hw_stats_t *);
 
 /**
  * ppe_vp_ai
@@ -101,21 +109,12 @@ struct ppe_vp_ai {
 	void *dst_cb_data;		/**< VP dst callback data */
 	ppe_vp_callback_t src_cb;	/**< VP src callback */
 	void *src_cb_data;		/**< VP src callback data */
+	ppe_vp_stats_callback_t stats_cb;
+					/**< VP src callback */
 	uint8_t queue_num;		/**< Queue number */
 	ppe_vp_status_t status;		/**< VP return status */
 };
 
-/**
- * Callback function for VP HW port statistics.
- *
- * @datatypes
- * net_device
- * ppe_vp_hw_stats
- *
- * @param[in] net_device  	Pointer to the net device.
- * @param[in] ppe_vp_hw_stats	Pointer to the skb.
- */
-typedef bool(*ppe_vp_stats_callback_t)(struct net_device *, struct ppe_vp_hw_stats *);
 
 /*
  * ppe_vp_get_netdev_by_port_num()

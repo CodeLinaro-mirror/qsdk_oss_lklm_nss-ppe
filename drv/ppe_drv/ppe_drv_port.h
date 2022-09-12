@@ -58,10 +58,7 @@ struct ppe_drv_port {
 	uint8_t ucast_queue;			/* Base queue ID for the port */
 	uint8_t tunnel_vp_cfg;			/* Port is of type tunnel VP */
 	uint8_t active_vlan;			/* Number active VLAN configured on the port */
-	uint32_t tx_packets;			/* tx packets count sent from port */
-	uint32_t rx_packets;			/* rx packets count received on port */
-	uint64_t tx_bytes;                      /* tx bytes sent from port */
-	uint64_t rx_bytes;		        /* rx bytes received on port */
+	struct ppe_drv_port_hw_stats stats;		/* PPE HW port statistics */
 };
 
 void ppe_drv_port_ucast_queue_update(struct ppe_drv_port *pp, uint8_t queue_id);

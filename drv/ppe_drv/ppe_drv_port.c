@@ -788,6 +788,48 @@ struct net_device *ppe_drv_port_get_vp_phys_dev(struct net_device *dev)
 EXPORT_SYMBOL(ppe_drv_port_get_vp_phys_dev);
 
 /*
+ * ppe_drv_port_get_vp_stats()
+ *	Get PPE hardware stats for the VP port.
+ */
+bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_stats)
+{
+	fal_port_cnt_t hw_stats;
+	uint32_t v_port;
+	sw_error_t err;
+
+	ppe_drv_assert(((port >= PPE_DRV_VIRTUAL_START) && (port < PPE_DRV_VIRTUAL_END)), "Port should be a Virtual Port %d", port);
+
+	/*
+	 * Convert the port number to a format as required by the FAL API.
+	 */
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port);
+	err = fal_port_cnt_get(PPE_DRV_SWITCH_ID, v_port, &hw_stats);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to get hardware stats for port %u\n", port);
+		return false;
+	}
+
+	/*
+	 * Copy over the RX stats.
+	 */
+	vp_stats->rx_pkt_cnt = hw_stats.rx_pkt_cnt;
+	vp_stats->rx_byte_cnt = hw_stats.rx_byte_cnt;
+	vp_stats->rx_drop_pkt_cnt = hw_stats.rx_drop_pkt_cnt;
+	vp_stats->rx_drop_byte_cnt = hw_stats.rx_drop_byte_cnt;
+
+	/*
+	 * Copy over the TX stats.
+	 */
+	vp_stats->tx_pkt_cnt = hw_stats.tx_pkt_cnt;
+	vp_stats->tx_byte_cnt = hw_stats.tx_byte_cnt;
+	vp_stats->tx_drop_pkt_cnt = hw_stats.tx_drop_pkt_cnt;
+	vp_stats->tx_drop_byte_cnt = hw_stats.tx_drop_byte_cnt;
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_port_get_vp_stats);
+
+/*
  * ppe_drv_port_from_dev()
  *	Get PPE port from net-device
  */

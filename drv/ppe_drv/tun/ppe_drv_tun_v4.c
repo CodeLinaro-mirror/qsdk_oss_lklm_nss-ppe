@@ -54,8 +54,8 @@ void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	/*
 	 * Update PORT RX/TX  packet and byte counters
 	 */
-	delta_pkts = (port_cnt.rx_pkt_cnt - pp->rx_packets + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1) & FAL_TUNNEL_DECAP_PKT_CNT_MASK;
-	delta_bytes = (port_cnt.rx_byte_cnt - pp->rx_bytes + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
+	delta_pkts = (port_cnt.rx_pkt_cnt - pp->stats.rx_pkt_cnt + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1) & FAL_TUNNEL_DECAP_PKT_CNT_MASK;
+	delta_bytes = (port_cnt.rx_byte_cnt - pp->stats.rx_byte_cnt + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
 		                                              & FAL_TUNNEL_DECAP_BYTE_CNT_MASK;
 
 	/*
@@ -69,11 +69,11 @@ void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 		ppe_drv_v4_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
 	}
 
-	pp->rx_packets = port_cnt.rx_pkt_cnt;
-	pp->rx_bytes = port_cnt.rx_byte_cnt;
+	pp->stats.rx_pkt_cnt = port_cnt.rx_pkt_cnt;
+	pp->stats.rx_byte_cnt = port_cnt.rx_byte_cnt;
 
-	delta_pkts = (port_cnt.tx_pkt_cnt - pp->tx_packets + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1) & FAL_TUNNEL_DECAP_PKT_CNT_MASK;
-	delta_bytes = (port_cnt.tx_pkt_cnt - pp->tx_bytes + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
+	delta_pkts = (port_cnt.tx_pkt_cnt - pp->stats.tx_pkt_cnt + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1) & FAL_TUNNEL_DECAP_PKT_CNT_MASK;
+	delta_bytes = (port_cnt.tx_byte_cnt - pp->stats.tx_byte_cnt + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
 		                                              & FAL_TUNNEL_DECAP_BYTE_CNT_MASK;
 
 	/*
@@ -82,8 +82,8 @@ void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	 */
 	ppe_drv_v4_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
 
-	pp->tx_packets = port_cnt.tx_pkt_cnt;
-	pp->tx_bytes = port_cnt.tx_byte_cnt;
+	pp->stats.tx_pkt_cnt = port_cnt.tx_pkt_cnt;
+	pp->stats.tx_byte_cnt = port_cnt.tx_byte_cnt;
 }
 
 /*

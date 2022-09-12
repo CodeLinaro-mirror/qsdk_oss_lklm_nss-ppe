@@ -85,7 +85,11 @@ struct ppe_vp_table {
  */
 struct ppe_vp_base {
 	struct ppe_vp_table vp_table;			/* VP allocation Table object */
+
+	unsigned long hw_port_stats_ticks;		/* Ticks to re-arm the hardware stats timer */
+	struct timer_list hw_port_stats_timer;		/* Timer used to poll for HW stats from PPE_HW */
 	struct ppe_vp_base_stats base_stats;		/* VP Stats */
+
 	struct net_device *edma_vp_dev;			/* EDMA Device to queue VP packets */
 	uint32_t flags;					/* Base VP flags */
 	struct dentry *dentry;				/* Debugfs entry */

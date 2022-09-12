@@ -32,15 +32,21 @@ struct ppe_tun_priv *ptp;
  * ppe_tun_stats()
  *	Update the netdevice stats
  */
-void ppe_tun_stats(struct net_device *dev, struct ppe_drv_tun_cmn_ctx_stats *stats)
+bool ppe_tun_stats(struct net_device *dev, ppe_vp_hw_stats_t *stats)
 {
-	struct net_device_stats *dev_stats = &dev->stats;
+	struct pcpu_sw_netstats *tstats = this_cpu_ptr(dev->tstats);
 
-	dev_stats->rx_packets += stats->rx_pkts;
-	dev_stats->tx_packets += stats->tx_pkts;
-	dev_stats->rx_bytes += stats->rx_bytes;
-	dev_stats->tx_bytes += stats->tx_bytes;
-	dev_stats->rx_dropped += stats->rx_drop_pkts;
+	u64_stats_update_begin(&tstats->syncp);
+	tstats->tx_bytes += stats->tx_byte_cnt;
+	tstats->tx_packets += stats->tx_pkt_cnt;
+	tstats->rx_bytes += stats->rx_byte_cnt;
+	tstats->rx_packets += stats->rx_pkt_cnt;
+	u64_stats_update_end(&tstats->syncp);
+
+	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);
+	atomic_long_add(stats->rx_drop_pkt_cnt, &dev->rx_dropped);
+
+	return true;
 }
 
 /*
@@ -264,6 +270,8 @@ static bool ppe_tun_exception_dest_cb(struct net_device *dev, struct sk_buff *sk
 		goto free_skb;
 	}
 
+	ppe_tun_deref(tun);
+
 	cb(dev, skb);
 	return true;
 
@@ -331,6 +339,7 @@ uint32_t ppe_tun_mtu_get(struct net_device *dev)
 
 	if (ppe_vp_mtu_get(tun->vp_num, &mtu) != PPE_VP_STATUS_SUCCESS) {
 		ppe_tun_warn("%p: MTU Failed to get for dev %s", tun, dev->name);
+		ppe_tun_deref(tun);
 		return false;
 	}
 
@@ -509,14 +518,17 @@ bool ppe_tun_conf_accel(enum ppe_drv_tun_cmn_ctx_type type, bool action)
 
 		if (tun->type == type) {
 			/*
+			 * Deactivate tunnel
+			 */
+			if (tun->phys_dev) {
+				ppe_tun_deactivate(tun->dev);
+			}
+
+			/*
 			 * deconfigure the tunnel
 			 */
 			ppe_drv_tun_deconfigure(tun->vp_num);
-
-			/*
-			 * deactivate the tunnel
-			 */
-			ppe_tun_deactivate(tun->dev);
+			ppe_tun_deref(tun);
 		}
 		ppe_tun_deref(tun);
 	}
@@ -691,6 +703,7 @@ bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type)
 	vpai.src_cb = &ppe_tun_exception_src_cb;
 	vpai.dst_cb_data = NULL;
 	vpai.src_cb_data = NULL;
+	vpai.stats_cb = ppe_tun_stats;
 	vp_num = ppe_vp_alloc(dev, &vpai);
 	if (vp_num == -1) {
 		ppe_tun_warn("%p: vp alloc failed for dev %s", ptp, dev->name);
@@ -1042,6 +1055,10 @@ static int ppe_tun_stats_show(struct seq_file *m, void __attribute__((unused))*p
 		tun = ptp->tun[i];
 		if (tun) {
 			seq_printf(m, "dev: %s\n", tun->dev->name);
+			seq_printf(m, "\t index %d\n", tun->idx);
+			seq_printf(m, "\t VP number %d\n", tun->vp_num);
+			seq_printf(m, "\t type %u\n", tun->type);
+			seq_printf(m, "\t physical dev: %s\n", (tun->phys_dev) ? (tun->phys_dev->name) : (""));
 			seq_printf(m, "\t exception packet: %llu\n", atomic64_read(&tun->exception_packet));
 			seq_printf(m, "\t exception bytes: %llu\n", atomic64_read(&tun->exception_bytes));
 			seq_puts(m, "\n");
