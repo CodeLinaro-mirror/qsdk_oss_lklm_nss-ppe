@@ -1417,7 +1417,7 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 	 * Fill the connection entry.
 	 */
 	spin_lock_bh(&p->lock);
-	ret = ppe_drv_v6_conn_fill(create, cn, PPE_DRV_CONN_TYPE_TUNNEL);
+	ret = ppe_drv_v6_conn_fill(create, cn, PPE_DRV_CONN_TYPE_FLOW);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_fail_conn);
 		ppe_drv_warn("%p: failed to fill connection object: %p", p, create);
