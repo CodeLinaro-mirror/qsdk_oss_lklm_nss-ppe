@@ -178,6 +178,21 @@ static struct ppe_drv_tun *ppe_drv_v6_tun_get_tun_from_create_rule(struct ppe_dr
 }
 
 /*
+ * ppe_drv_v6_vxlan_tunnel()
+ *	Check if create request for Vxlan tunnel.
+ */
+static bool ppe_drv_v6_vxlan_tunnel(struct ppe_drv_v6_rule_create *create)
+{
+	if ((create->tuple.protocol == IPPROTO_UDP) &&
+		((create->tuple.flow_ident == IANA_VXLAN_UDP_PORT) ||
+		(create->tuple.return_ident == IANA_VXLAN_UDP_PORT))) {
+		return true;
+	}
+
+	return false;
+}
+
+/*
  * ppe_drv_v6_tun_allow_tunnel_create()
  *	Check if the create rule is received for tunnel activation
  *
@@ -198,8 +213,7 @@ bool ppe_drv_v6_tun_allow_tunnel_create(struct ppe_drv_v6_rule_create *create)
 	/*
 	 * Vxlan PPE accelearation is only supported for default port currently.
 	 */
-	if ((create->tuple.flow_ident == IANA_VXLAN_UDP_PORT) ||
-	    (create->tuple.return_ident == IANA_VXLAN_UDP_PORT)) {
+	if (ppe_drv_v6_vxlan_tunnel(create)) {
 		return true;
 	}
 
