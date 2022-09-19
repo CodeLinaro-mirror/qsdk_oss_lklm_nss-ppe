@@ -964,7 +964,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	sw_error_t err;
 
 	pp = ppe_drv_iface_port_get(port_if);
-	if (!pp && !ipv4_is_multicast(match_dest_ip)) {
+	if (!pp && !ipv4_is_multicast(htonl(match_dest_ip))) {
 		ppe_drv_warn("%p: Invalid egress port", pcf);
 		return NULL;
 	}
@@ -973,7 +973,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	 * Ensure it falls under SNAT, DNAT or simple L3 routing
 	 */
 	if ((match_src_ip != xlate_src_ip && match_dest_ip != xlate_dest_ip)
-		&& (!ipv4_is_multicast(match_dest_ip))) {
+		&& (!ipv4_is_multicast(htonl(match_dest_ip)))) {
 		ppe_drv_warn("%p: both source and dest IPs are getting translated", pcf);
 		return NULL;
 	}
@@ -1019,7 +1019,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	/*
 	 * Set forwarding type
 	 */
-	if (ipv4_is_multicast(match_dest_ip)) {
+	if (ipv4_is_multicast(htonl(match_dest_ip))) {
 		/*
 		 * Multicast flow
 		 */
@@ -1145,7 +1145,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	 * of all the interfaces, since PPE also check MTU for each destination interface
 	 * and exception the packet (without cloning) if MTU check fail for any interface.
 	 */
-	xmit_mtu = ipv4_is_multicast(match_dest_ip) ? ppe_drv_v4_conn_flow_mc_min_mtu_get(pcf)
+	xmit_mtu = ipv4_is_multicast(htonl(match_dest_ip)) ? ppe_drv_v4_conn_flow_mc_min_mtu_get(pcf)
 		: ppe_drv_v4_conn_flow_xmit_interface_mtu_get(pcf);
 	if (xmit_mtu > PPE_DRV_PORT_JUMBO_MAX) {
 		ppe_drv_trace("%p: xmit_mtu: %d is larger, restricting to max: %d", pcf, xmit_mtu, PPE_DRV_PORT_JUMBO_MAX);
