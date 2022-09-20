@@ -29,6 +29,7 @@ qca-nss-ppe-objs += ppe_drv_port.o
 qca-nss-ppe-objs += ppe_drv_pppoe.o
 qca-nss-ppe-objs += ppe_drv_pppoe_session.o
 qca-nss-ppe-objs += ppe_drv_pub_ip.o
+qca-nss-ppe-objs += ppe_drv_qos.o
 qca-nss-ppe-objs += ppe_drv_sc.o
 qca-nss-ppe-objs += ppe_drv_stats.o
 qca-nss-ppe-objs += ppe_drv_vlan.o

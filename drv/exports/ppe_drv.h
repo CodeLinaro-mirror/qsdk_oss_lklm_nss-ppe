@@ -373,9 +373,9 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_ADD_FDB_FAIL,			/**< Failed to add new fdb entry */
 	PPE_DRV_RET_SET_FDB_AGEING_TIME_FAIL,		/**< Failed to set Ageing time */
 	PPE_DRV_RET_SET_MIRROR_FAIL,			/**<Failed to set Mirror interface */
-	PPE_DRV_RET_SET_MIRROR_IN_FAIL,		/**< Failed to set Mirror ingress */
-	PPE_DRV_RET_SET_MIRROR_EG_FAIL,		/**< Failed to set Mirror egress */
-	PPE_DRV_RET_FLUSH_FDB_BY_PORT_FAIL,	/**< Failed to flush FDB by port */
+	PPE_DRV_RET_SET_MIRROR_IN_FAIL,			/**< Failed to set Mirror ingress */
+	PPE_DRV_RET_SET_MIRROR_EG_FAIL,			/**< Failed to set Mirror egress */
+	PPE_DRV_RET_FLUSH_FDB_BY_PORT_FAIL,		/**< Failed to flush FDB by port */
 	PPE_DRV_RET_FLUSH_FDB_FAIL,			/**< Failed to flush all FDB */
 	PPE_DRV_RET_SET_MIRROR_ANALYSIS_FAIL,	/**< Failed to set Mirror analysis port */
 	PPE_DRV_RET_GET_MIRROR_ANALYSIS_FAIL,	/**< Failed to get Mirror analysis port */
@@ -384,6 +384,10 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_ACL_RULE_INVALID,			/**< ACL rule invalid */
 	PPE_DRV_RET_ACL_RULE_ADD_FAIL,			/**< Failed to add ACL rule */
 	PPE_DRV_RET_ACL_RULE_BIND_FAIL,			/**< Failed to bind ACL rule to src */
+	PPE_DRV_RET_QOS_QUEUE_CFG_FAIL,			/**< QoS queue configuration failed. */
+	PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL,		/**< QoS scheduler configuration failed. */
+	PPE_DRV_RET_QOS_SHAPER_CFG_FAIL,		/**< QoS shaper configuration failed. */
+	PPE_DRV_RET_QOS_PORT_CFG_FAIL			/**< QoS port configuration failed. */
 } ppe_drv_ret_t;
 
 /**
