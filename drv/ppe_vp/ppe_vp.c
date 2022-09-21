@@ -373,6 +373,15 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 		goto alloc_fail;
 	}
 
+	/*
+	 * Clear ppe hardware stats for the vp before using it.
+	 */
+	if (!ppe_drv_port_clear_hw_vp_stats(pp_num)) {
+	       ppe_vp_warn("%px: port_num: %x, ppe vp port reset hw stats failed", pvb, pp_num);
+	       vpai->status = PPE_VP_STATUS_HW_VP_STATS_CLEAR_FAILED;
+	       goto alloc_fail;
+	}
+
 	ppe_vp_trace("%px: netdev: %px, ppe vp %d ucase queue %d set", pvb, netdev, pp_num, vpai->queue_num);
 
 	/*

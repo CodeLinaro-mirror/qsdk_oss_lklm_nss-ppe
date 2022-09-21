@@ -830,6 +830,31 @@ bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_st
 EXPORT_SYMBOL(ppe_drv_port_get_vp_stats);
 
 /*
+ * ppe_drv_port_clear_hw_vp_stats()
+ *	Clear PPE HW stats for the VP.
+ */
+bool ppe_drv_port_clear_hw_vp_stats(int16_t port)
+{
+	uint32_t v_port;
+	sw_error_t err;
+
+	ppe_drv_assert(((port >= PPE_DRV_VIRTUAL_START) && (port < PPE_DRV_VIRTUAL_END)), "Port should be a Virtual Port %d", port);
+
+	/*
+	 * Convert the port number to a format as required by the FAL API.
+	 */
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port);
+	err = fal_port_cnt_flush(PPE_DRV_SWITCH_ID, v_port);
+	if(err != SW_OK) {
+		ppe_drv_warn("Failed to clear hardware VP stats for port %u\n", port);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_port_clear_hw_vp_stats);
+
+/*
  * ppe_drv_port_from_dev()
  *	Get PPE port from net-device
  */
