@@ -34,7 +34,8 @@ static const char *ppe_vp_stats_base_str[] = {
 	"Rx Source VP Inactive",		/* Packet received from PPE with inactive Source VP */
 	"Rx Destination VP Invalid",		/* Packet received from PPE without valid SVP */
 	"Rx Source VP Invalid",			/* Packet received from PPE without valid DVP */
-	"Tx VP Inactive"			/* VP of Packet forwarded by VP user is inactive */
+	"Tx VP Inactive",			/* VP of Packet forwarded by VP user is inactive */
+	"Rx Fast tramist failed"		/* Rx packet fast transmit failed */
 };
 
 static const char *ppe_vp_stats_rx_str[] = {
