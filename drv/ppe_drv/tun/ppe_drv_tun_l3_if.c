@@ -123,8 +123,14 @@ bool ppe_drv_tun_l3_if_configure(struct ppe_drv_tun_l3_if *tun_l3_if)
 	tun_l3_if_cfg.ipv4_decap_en = true;
 	tun_l3_if_cfg.ipv6_decap_en = true;
 	tun_l3_if_cfg.lpm_en = true;
+
+	/*
+	 * Configure ttl exceed action to redirect the packet to CPU as of now.
+	 * As there is no mechanism to flush the connection if deacce_en is set
+	 * Will update this once the mechanism to handle this exception is added
+	 */
 	tun_l3_if_cfg.ttl_exceed_action = FAL_MAC_RDT_TO_CPU;
-	tun_l3_if_cfg.ttl_exceed_deacce_en = 1;
+	tun_l3_if_cfg.ttl_exceed_deacce_en = 0;
 
 	err = fal_tunnel_intf_set(PPE_DRV_SWITCH_ID, tun_l3_if->index, &tun_l3_if_cfg);
 	if (err != SW_OK) {
