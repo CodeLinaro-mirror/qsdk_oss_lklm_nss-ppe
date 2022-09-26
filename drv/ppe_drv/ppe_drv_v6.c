@@ -745,7 +745,7 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 		/*
 		 * If budget reached, break
 		 */
-		if (count == num_conn - max_flow_conn_count) {
+		if (count == max_flow_conn_count) {
 			break;
 		}
 
