@@ -466,6 +466,11 @@ void ppe_drv_port_l3_if_detach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 
 	ppe_drv_assert(kref_read(&pp->ref_cnt), "%p: attaching l3_if to unused port:%u", pp, pp->port);
 
+	if ((pl3->type == PPE_DRV_L3_IF_TYPE_PORT) && !pp->port_l3_if_attached) {
+		ppe_drv_warn("%p: port(%d) is already detached from port type l3_if(%d): ", pp, pp->port, pl3->l3_if_index);
+		return;
+	}
+
 	/*
 	 * Delete l3_if from port's l3 list
 	 */
