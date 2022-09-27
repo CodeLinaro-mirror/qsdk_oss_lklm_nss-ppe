@@ -16,6 +16,7 @@
  */
 
 #include "ppe_qdisc.h"
+#include "ppe_fifo.h"
 
 /*
  * Max number of PRIO bands supported based on level.
@@ -499,11 +500,28 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
  */
 static int __init ppe_qdisc_module_init(void)
 {
+	int ret;
 
 	ppe_qdisc_port_alloc();
 	ppe_qdisc_info("ppe qdisc module initialized");
 
+	ret = register_qdisc(&ppe_pfifo_qdisc_ops);
+	if (ret != 0)
+		goto fail1;
+	ppe_qdisc_info("ppepfifo registered");
+
+	ret = register_qdisc(&ppe_bfifo_qdisc_ops);
+	if (ret != 0)
+		goto fail2;
+	ppe_qdisc_info("ppebfifo registered");
+
 	return 0;
+
+fail2:
+	unregister_qdisc(&ppe_pfifo_qdisc_ops);
+fail1:
+	ppe_qdisc_port_free();
+	return ret;
 }
 
 /*
@@ -512,6 +530,12 @@ static int __init ppe_qdisc_module_init(void)
  */
 static void __exit ppe_qdisc_module_exit(void)
 {
+	unregister_qdisc(&ppe_pfifo_qdisc_ops);
+	ppe_qdisc_info("ppepfifo unregistered");
+
+	unregister_qdisc(&ppe_bfifo_qdisc_ops);
+	ppe_qdisc_info("ppebfifo unregistered");
+
 	ppe_qdisc_port_free();
 	ppe_qdisc_info("ppe qdisc module exited");
 }
