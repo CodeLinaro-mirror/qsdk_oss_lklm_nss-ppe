@@ -177,7 +177,7 @@ static int nss_ppe_vxlanmgr_tunnel_fdb_event(struct notifier_block *nb, unsigned
 
 	case RTM_NEWNEIGH:
 		nss_ppe_vxlanmgr_trace("%px: remote detected: %u", dev, tun_ctx->remote_detected);
-		if (!tun_ctx->remote_detected) {
+		if (!tun_ctx->remote_detected && !is_zero_ether_addr(vfe->eth_addr)) {
 			nss_ppe_vxlanmgr_tunnel_parse_end_points(dev, tun_ctx->tun_hdr, &vfe->rdst->remote_ip);
 			nss_ppe_vxlanmgr_tunnel_config(dev, tun_ctx->tun_hdr);
 			tun_ctx->remote_detected = true;
