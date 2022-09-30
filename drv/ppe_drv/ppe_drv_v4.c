@@ -971,15 +971,15 @@ void ppe_drv_v4_conn_sync_many(struct ppe_drv_v4_conn_sync_many *cn_syn, uint8_t
 		 */
 		return_flow_valid = ppe_drv_v4_conn_flags_check(cn, PPE_DRV_V4_CONN_FLAG_RETURN_VALID);
 
-                /*
-                 * Check if the stats are already updated in the ppe driver for the connection flow.
-                 * The sync is ignored if there are no updations from the forward flow or the reverse flow.
-                 */
-		if (cn->toggle == p->tun_toggled || !(atomic_read(&cn->pcf.rx_packets) || atomic_read(&cn->pcf.tx_packets)
+		/*
+		 * check if there are connections that need stats update; if yes then
+		 * invoke stats_sync api for all those connections
+		 */
+		if (cn->toggle == p->tun_toggled_v4 || !(atomic_read(&cn->pcf.rx_packets) || atomic_read(&cn->pcf.tx_packets)
 				|| (return_flow_valid && atomic_read(&cn->pcr.rx_packets))
 				|| (return_flow_valid && atomic_read(&cn->pcr.tx_packets)))) {
 			if (list_is_last(&cn->list, &p->conn_tun_v4)) {
-				p->tun_toggled = !p->tun_toggled;
+				p->tun_toggled_v4 = !p->tun_toggled_v4;
 				break;
 			}
 
@@ -1008,7 +1008,7 @@ void ppe_drv_v4_conn_sync_many(struct ppe_drv_v4_conn_sync_many *cn_syn, uint8_t
 		 * for the next interation
 		 */
 		if (list_is_last(&cn->list, &p->conn_tun_v4)) {
-			p->tun_toggled = !p->tun_toggled;
+			p->tun_toggled_v4 = !p->tun_toggled_v4;
 		}
 	}
 
