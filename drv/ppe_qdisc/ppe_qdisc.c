@@ -18,6 +18,7 @@
 #include "ppe_qdisc.h"
 #include "ppe_htb.h"
 #include "ppe_fifo.h"
+#include "ppe_prio.h"
 
 /*
  * Max number of PRIO bands supported based on level.
@@ -314,7 +315,7 @@ int ppe_qdisc_configure(struct ppe_qdisc *pq, struct ppe_qdisc *prev_pq)
 	 */
 	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_NODE_CONFIGURED);
 
-	ppe_qdisc_info("Qdisc:%px configuration complete", pq->qdisc);
+	ppe_qdisc_info("Qdisc:%px configuration complete\n", pq->qdisc);
 	return 0;
 
 fail:
@@ -440,12 +441,12 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 	 */
 	dev = qdisc_dev(sch);
 	if (dev->priv_flags & IFF_EBRIDGE) {
-		ppe_qdisc_warning("PPE Qdisc not supported on bridge interfaces %px", pq->qdisc);
+		ppe_qdisc_warning("PPE Qdisc not supported on bridge interfaces %px\n", pq->qdisc);
 		return -1;
 	}
 
 	ppe_qdisc_info("Qdisc %px (type %d) init root: %px, qos tag: %x, "
-		"parent: %x rootid: %s owner: %px", pq->qdisc, pq->type, root,
+		"parent: %x rootid: %s owner: %px\n", pq->qdisc, pq->type, root,
 		pq->qos_tag, parent, root->ops->id, root->ops->owner);
 
 	/*
@@ -520,8 +521,16 @@ static int __init ppe_qdisc_module_init(void)
 	if (ret != 0)
 		goto fail3;
 	ppe_qdisc_info("ppehtb registered");
+
+	ret = register_qdisc(&ppe_prio_qdisc_ops);
+	if (ret != 0)
+		goto fail4;
+	ppe_qdisc_info("ppeprio registered");
+
 	return 0;
 
+fail4:
+	unregister_qdisc(&ppe_htb_qdisc_ops);
 fail3:
 	unregister_qdisc(&ppe_bfifo_qdisc_ops);
 fail2:
@@ -545,6 +554,9 @@ static void __exit ppe_qdisc_module_exit(void)
 
 	unregister_qdisc(&ppe_htb_qdisc_ops);
 	ppe_qdisc_info("ppehtb unregistered");
+
+	unregister_qdisc(&ppe_prio_qdisc_ops);
+	ppe_qdisc_info("ppeprio unregistered");
 
 	ppe_qdisc_port_free();
 	ppe_qdisc_info("ppe qdisc module exited");
