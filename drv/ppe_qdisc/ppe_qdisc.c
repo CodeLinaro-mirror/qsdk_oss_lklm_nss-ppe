@@ -16,6 +16,7 @@
  */
 
 #include "ppe_qdisc.h"
+#include "ppe_htb.h"
 #include "ppe_fifo.h"
 
 /*
@@ -515,8 +516,14 @@ static int __init ppe_qdisc_module_init(void)
 		goto fail2;
 	ppe_qdisc_info("ppebfifo registered");
 
+	ret = register_qdisc(&ppe_htb_qdisc_ops);
+	if (ret != 0)
+		goto fail3;
+	ppe_qdisc_info("ppehtb registered");
 	return 0;
 
+fail3:
+	unregister_qdisc(&ppe_bfifo_qdisc_ops);
 fail2:
 	unregister_qdisc(&ppe_pfifo_qdisc_ops);
 fail1:
@@ -535,6 +542,9 @@ static void __exit ppe_qdisc_module_exit(void)
 
 	unregister_qdisc(&ppe_bfifo_qdisc_ops);
 	ppe_qdisc_info("ppebfifo unregistered");
+
+	unregister_qdisc(&ppe_htb_qdisc_ops);
+	ppe_qdisc_info("ppehtb unregistered");
 
 	ppe_qdisc_port_free();
 	ppe_qdisc_info("ppe qdisc module exited");
