@@ -515,14 +515,17 @@ bool ppe_tun_conf_accel(enum ppe_drv_tun_cmn_ctx_type type, bool action)
 
 		if (tun->type == type) {
 			/*
+			 * Deactivate tunnel
+			 */
+			if (tun->phys_dev) {
+				ppe_tun_deactivate(tun->dev);
+			}
+
+			/*
 			 * deconfigure the tunnel
 			 */
 			ppe_drv_tun_deconfigure(tun->vp_num);
-
-			/*
-			 * deactivate the tunnel
-			 */
-			ppe_tun_deactivate(tun->dev);
+			ppe_tun_deref(tun);
 		}
 		ppe_tun_deref(tun);
 	}
@@ -1049,6 +1052,10 @@ static int ppe_tun_stats_show(struct seq_file *m, void __attribute__((unused))*p
 		tun = ptp->tun[i];
 		if (tun) {
 			seq_printf(m, "dev: %s\n", tun->dev->name);
+			seq_printf(m, "\t index %d\n", tun->idx);
+			seq_printf(m, "\t VP number %d\n", tun->vp_num);
+			seq_printf(m, "\t type %u\n", tun->type);
+			seq_printf(m, "\t physical dev: %s\n", (tun->phys_dev) ? (tun->phys_dev->name) : (""));
 			seq_printf(m, "\t exception packet: %llu\n", atomic64_read(&tun->exception_packet));
 			seq_printf(m, "\t exception bytes: %llu\n", atomic64_read(&tun->exception_bytes));
 			seq_puts(m, "\n");
