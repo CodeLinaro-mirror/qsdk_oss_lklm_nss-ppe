@@ -153,4 +153,14 @@ bool ppe_drv_port_xcpn_mode_set(uint16_t vp_num, uint8_t action);
  */
 bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_stats);
 
+/**
+ * ppe_drv_port_clear_hw_vp_stats
+ * 	Clear PPE HW stats for the VP.
+ *
+ * @param[in] port PPE port number.
+ *
+ * @return
+ * True if the hw stats are cleared, false otherwise.
+ */
+bool ppe_drv_port_clear_hw_vp_stats(int16_t port);
 #endif /* _PPE_DRV_PORT_H_ */
