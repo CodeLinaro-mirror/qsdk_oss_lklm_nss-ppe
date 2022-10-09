@@ -125,7 +125,15 @@ ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, st
 		return PPE_DRV_RET_FAILURE_IFACE_PORT_MAP;
 	}
 
-	pcf->eg_port_if = ppe_drv_iface_ref(if_tx);
+	/*
+	 * Set the egress point based on direction of the flow
+	 * TODO: Handle the else case and add error counter for it
+	 */
+	if ((pp_tx->flags & PPE_DRV_PORT_RFS_ENABLED) && (pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP)) {
+		pcf->eg_port_if = ppe_drv_iface_ref(if_tx);
+	} else if ((pp_rx->flags & PPE_DRV_PORT_RFS_ENABLED) && (pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP)) {
+		pcf->eg_port_if = ppe_drv_iface_ref(if_rx);
+	}
 
 	/*
 	 * Bridge flow

@@ -124,7 +124,15 @@ ppe_drv_ret_t ppe_drv_v6_rfs_conn_fill(struct ppe_drv_v6_rule_create *create, st
 		return PPE_DRV_RET_FAILURE_IFACE_PORT_MAP;
 	}
 
-	pcf->eg_port_if = ppe_drv_iface_ref(if_tx);
+	/*
+	 * Set the egress point based on direction of the flow
+	 * TODO: Handle the else case and add error counter for it
+	 */
+	if ((pp_tx->flags & PPE_DRV_PORT_RFS_ENABLED) && (pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP)) {
+		pcf->eg_port_if = ppe_drv_iface_ref(if_tx);
+	} else if ((pp_rx->flags & PPE_DRV_PORT_RFS_ENABLED) && (pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP)) {
+		pcf->eg_port_if = ppe_drv_iface_ref(if_rx);
+	}
 
 	/*
 	 * Bridge flow
@@ -903,6 +911,7 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 		 * Skip if stats are already synced for this connection in previous iteration.
 		 */
 		return_flow_valid = ppe_drv_v6_conn_flags_check(cn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID);
+
 		if (cn->toggle == p->tun_toggled || !(atomic_read(&cn->pcf.rx_packets) || atomic_read(&cn->pcf.tx_packets)
 					|| (return_flow_valid && atomic_read(&cn->pcr.rx_packets))
 					|| (return_flow_valid && atomic_read(&cn->pcr.tx_packets)))) {
