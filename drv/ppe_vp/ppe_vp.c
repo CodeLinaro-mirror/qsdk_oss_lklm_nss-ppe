@@ -13,11 +13,53 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-
+#include <net/sch_generic.h>
 #include "ppe_vp_base.h"
 #include "ppe_vp_rx.h"
 
 extern struct ppe_vp_base vp_base;
+
+/*
+ * ppe_vp_can_fast_xmit()
+ *	Check if VP packets can be fast transmitted.
+ */
+static bool ppe_vp_can_fast_xmit(struct ppe_vp *vp)
+{
+	struct net_device *vpdev = vp->netdev;
+	struct Qdisc *q;
+	int i;
+	struct netdev_queue *txq;
+#if defined(CONFIG_NET_CLS_ACT) && defined(CONFIG_NET_EGRESS)
+	struct mini_Qdisc *miniq;
+#endif
+
+	/*
+	 * TODO: It assumes that the qdisc attribute won't change after traffic
+	 * running, if the qdisc changed, we need flush all of the rule.
+	 */
+	rcu_read_lock_bh();
+	for (i = 0; i < vpdev->real_num_tx_queues; i++) {
+		txq = netdev_get_tx_queue(vpdev, i);
+		q = rcu_dereference_bh(txq->qdisc);
+		if (q && q->enqueue) {
+			ppe_vp_info("Qdisc is present for device[%s]\n", vpdev->name);
+			rcu_read_unlock_bh();
+			return false;
+		}
+	}
+
+#if defined(CONFIG_NET_CLS_ACT) && defined(CONFIG_NET_EGRESS)
+	miniq = rcu_dereference_bh(vpdev->miniq_egress);
+	if (miniq) {
+		ppe_vp_info("Egress needed\n");
+		rcu_read_unlock_bh();
+		return false;
+	}
+#endif
+	rcu_read_unlock_bh();
+
+	return true;
+}
 
 /*
  * ppe_vp_get_netdev_by_port_num()
@@ -411,8 +453,6 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	vp->port_num = pp_num;
 	vp->mtu = netdev->mtu;
 	vp->flags = PPE_VP_FLAG_VP_ACTIVE;
-	vp->dst_cb = vpai->dst_cb;
-	vp->dst_cb_data = vpai->dst_cb_data;
 	if (vpai->src_cb) {
 		vp->src_cb = vpai->src_cb;
 		vp->src_cb_data = vpai->src_cb_data;
@@ -423,6 +463,17 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 
 	vp->vp_stats.misc_info.netdev_if_num = netdev->ifindex;
 	vp->vp_stats.misc_info.ppe_port_num = pp_num;
+
+	/*
+	 * Check if the virtual port device has registered a callback
+	 * to use. If not, we try to fast-transmit
+	 */
+	if (vpai->dst_cb) {
+		vp->dst_cb = vpai->dst_cb;
+		vp->dst_cb_data = vpai->dst_cb_data;
+	} else if(ppe_vp_can_fast_xmit(vp)) {
+		vp->flags |= PPE_VP_FLAG_VP_FAST_XMIT;
+	}
 
 	spin_unlock_bh(&vp->lock);
 

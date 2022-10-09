@@ -31,6 +31,7 @@ struct ppe_vp_base_stats {
 	atomic64_t rx_dvp_invalid;		/* Packet received from PPE without valid DVP */
 	atomic64_t rx_svp_invalid;		/* Packet received from PPE without valid SVP */
 	atomic64_t tx_vp_inactive;		/* VP of Packet forwarded by VP user is inactive */
+	atomic64_t rx_fastxmit_fails;		/* Rx packet fast transmit failed */
 };
 
 /*
