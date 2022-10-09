@@ -234,12 +234,12 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 					memcpy(&rx_stats, rx_pcpu_stats, sizeof(*rx_pcpu_stats));
 				} while (u64_stats_fetch_retry_irq(&rx_pcpu_stats->syncp, start));
 
-				rx_aggr[0] += atomic64_read(&rx_stats.rx_pkts);
-				rx_aggr[1] += atomic64_read(&rx_stats.rx_bytes);
-				rx_aggr[2] += atomic64_read(&rx_stats.rx_excp_pkts);
-				rx_aggr[3] += atomic64_read(&rx_stats.rx_excp_bytes);
-				rx_aggr[4] += atomic64_read(&rx_stats.rx_errors);
-				rx_aggr[5] += atomic64_read(&rx_stats.rx_drops);
+				rx_aggr[0] += rx_stats.rx_pkts;
+				rx_aggr[1] += rx_stats.rx_bytes;
+				rx_aggr[2] += rx_stats.rx_excp_pkts;
+				rx_aggr[3] += rx_stats.rx_excp_bytes;
+				rx_aggr[4] += rx_stats.rx_errors;
+				rx_aggr[5] += rx_stats.rx_drops;
 
 				tx_pcpu_stats = per_cpu_ptr(vp_stats->tx_stats, i);
 
@@ -248,10 +248,10 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 					memcpy(&tx_stats, tx_pcpu_stats, sizeof(*tx_pcpu_stats));
 				} while (u64_stats_fetch_retry_irq(&tx_pcpu_stats->syncp, start));
 
-				tx_aggr[0] += atomic64_read(&tx_stats.tx_pkts);
-				tx_aggr[1] += atomic64_read(&tx_stats.tx_bytes);
-				tx_aggr[2] += atomic64_read(&tx_stats.tx_errors);
-				tx_aggr[3] += atomic64_read(&tx_stats.tx_drops);
+				tx_aggr[0] += tx_stats.tx_pkts;
+				tx_aggr[1] += tx_stats.tx_bytes;
+				tx_aggr[2] += tx_stats.tx_errors;
+				tx_aggr[3] += tx_stats.tx_drops;
 			}
 
 			seq_printf(m, "\n\t\tVP Rx Stats:\n");
