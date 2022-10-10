@@ -514,7 +514,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 
 	ppe_drv_v6_conn_flow_match_dest_ip_get(pcf, &match_dest_ip[0]);
 	pp = ppe_drv_iface_port_get(port_if);
-	if (!pp && !ipv6_addr_is_multicast((struct in6_addr *)match_dest_ip)) {
+	if (!pp) {
 		ppe_drv_warn("%p: Invalid egress port", pcf);
 		return NULL;
 	}
@@ -1014,7 +1014,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	sw_error_t err;
 
 	pp = ppe_drv_iface_port_get(port_if);
-	if (!pp && !ipv4_is_multicast(htonl(match_dest_ip))) {
+	if (!pp) {
 		ppe_drv_warn("%p: Invalid egress port", pcf);
 		return NULL;
 	}
