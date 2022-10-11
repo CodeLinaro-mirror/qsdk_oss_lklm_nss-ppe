@@ -866,6 +866,7 @@ void ppe_drv_v4_conn_sync_one(struct ppe_drv_v4_conn *cn, struct ppe_drv_v4_conn
 		ppe_drv_v4_conn_flow_tx_stats_get(pcr, &cns->return_tx_packet_count, &cns->return_tx_byte_count);
 		ppe_drv_v4_conn_flow_rx_stats_sub(pcr, cns->return_rx_packet_count, cns->return_rx_byte_count);
 		ppe_drv_v4_conn_flow_tx_stats_sub(pcr, cns->return_tx_packet_count, cns->return_tx_byte_count);
+
 	} else {
 		cns->return_rx_packet_count = 0;
 		cns->return_rx_byte_count = 0;
@@ -949,9 +950,14 @@ void ppe_drv_v4_conn_sync_many(struct ppe_drv_v4_conn_sync_many *cn_syn, uint8_t
 		 * Skip if stats are already synced for this connection in previous iteration.
 		 */
 		return_flow_valid = ppe_drv_v4_conn_flags_check(cn, PPE_DRV_V4_CONN_FLAG_RETURN_VALID);
+
+                /*
+                 * Check if the stats are already updated in the ppe driver for the connection flow.
+                 * The sync is ignored if there are no updations from the forward flow or the reverse flow.
+                 */
 		if (cn->toggle == p->tun_toggled || !(atomic_read(&cn->pcf.rx_packets) || atomic_read(&cn->pcf.tx_packets)
-					|| (return_flow_valid && !atomic_read(&cn->pcr.rx_packets))
-					|| (return_flow_valid && !atomic_read(&cn->pcr.tx_packets)))) {
+				|| (return_flow_valid && atomic_read(&cn->pcr.rx_packets))
+				|| (return_flow_valid && atomic_read(&cn->pcr.tx_packets)))) {
 			if (list_is_last(&cn->list, &p->conn_tun_v4)) {
 				p->tun_toggled = !p->tun_toggled;
 				break;
@@ -965,7 +971,6 @@ void ppe_drv_v4_conn_sync_many(struct ppe_drv_v4_conn_sync_many *cn_syn, uint8_t
 		 */
 		ppe_drv_v4_conn_sync_one(cn, &cn_syn->conn_sync[count], reason);
 		count++;
-
 		/*
 		 * Flip the toggle bit to avoid syncing the stats for this connection until
 		 * one full iteration of active list is done

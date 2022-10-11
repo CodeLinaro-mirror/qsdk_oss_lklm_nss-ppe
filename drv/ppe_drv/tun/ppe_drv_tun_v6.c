@@ -84,8 +84,12 @@ void ppe_drv_tun_v6_port_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 	 * Tx packets from the VP port would be RX count for WAN port
 	 *  hence updating the VP tx stats to FLOW Rx
 	 */
-	ppe_drv_v6_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
-
+	 if (ppe_drv_v6_conn_flags_check(pcf->conn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
+                pcr = &pcf->conn->pcr;
+                ppe_drv_v6_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
+        } else {
+                ppe_drv_v6_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
+        }
 	pp->stats.tx_pkt_cnt = port_cnt.tx_pkt_cnt;
 	pp->stats.tx_byte_cnt = port_cnt.tx_byte_cnt;
 }
