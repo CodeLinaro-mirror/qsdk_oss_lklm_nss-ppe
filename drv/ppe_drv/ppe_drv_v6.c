@@ -865,10 +865,10 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 		 *	- Or there is no change in the stats from previous read.
 		 */
 		return_flow_valid = ppe_drv_v6_conn_flags_check(cn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID);
-		if ((cn->toggle == p->toggled) || !(atomic_read(&cn->pcf.rx_packets)
+		if ((cn->toggle == p->toggled_v6) || !(atomic_read(&cn->pcf.rx_packets)
 				|| (return_flow_valid && atomic_read(&cn->pcr.rx_packets)))){
 			if (list_is_last(&cn->list, &p->conn_v6)) {
-				p->toggled = !p->toggled;
+				p->toggled_v6 = !p->toggled_v6;
 				break;
 			}
 
@@ -899,7 +899,7 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 		 * for the next interation
 		 */
 		if (list_is_last(&cn->list, &p->conn_v6)) {
-			p->toggled = !p->toggled;
+			p->toggled_v6 = !p->toggled_v6;
 		}
 	}
 
@@ -1493,7 +1493,7 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 	/*
 	 * Set the toggle bit to mark this connection as due for stats update in next sync.
 	 */
-	cn->toggle = !p->toggled;
+	cn->toggle = !p->toggled_v6;
 
 	/*
 	 * Add connection entry to the active connection list.
