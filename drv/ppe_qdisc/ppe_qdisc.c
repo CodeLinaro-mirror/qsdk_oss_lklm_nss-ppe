@@ -19,6 +19,7 @@
 #include "ppe_htb.h"
 #include "ppe_fifo.h"
 #include "ppe_prio.h"
+#include "ppe_red.h"
 
 /*
  * Max number of PRIO bands supported based on level.
@@ -186,8 +187,8 @@ int ppe_qdisc_is_depth_valid(struct ppe_qdisc *pq)
  *	Extracts qopt from opt.
  */
 void *ppe_qdisc_qopt_get(struct nlattr *opt, struct nla_policy *policy,
-			struct nlattr *tb[], uint32_t tca_max,
-			uint32_t tca_params, struct netlink_ext_ack *extack)
+		struct nlattr *tb[], uint32_t tca_max,
+		uint32_t tca_params, struct netlink_ext_ack *extack)
 {
 	int err;
 
@@ -196,13 +197,13 @@ void *ppe_qdisc_qopt_get(struct nlattr *opt, struct nla_policy *policy,
 	}
 
 	err = nla_parse_nested_deprecated(tb, tca_max, opt, policy, extack);
-
-	if (err < 0)
+	if (err < 0) {
 		return NULL;
+	}
 
-	if (tb[tca_params] == NULL)
+	if (tb[tca_params] == NULL) {
 		return NULL;
-
+	}
 	return nla_data(tb[tca_params]);
 }
 
@@ -315,7 +316,7 @@ int ppe_qdisc_configure(struct ppe_qdisc *pq, struct ppe_qdisc *prev_pq)
 	 */
 	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_NODE_CONFIGURED);
 
-	ppe_qdisc_info("Qdisc:%px configuration complete\n", pq->qdisc);
+	ppe_qdisc_info("Qdisc:%px configuration complete", pq->qdisc);
 	return 0;
 
 fail:
@@ -331,7 +332,7 @@ fail:
 	 * to old configuration by again deallocating/allocating them.
 	 */
 	if ((PPE_QDISC_FLAG_NODE_DEFAULT & (pq->flags ^ prev_pq->flags))
-		&& (PPE_QDISC_FLAG_MCAST_QUEUE_VALID & (pq->flags ^ prev_pq->flags))) {
+			&& (PPE_QDISC_FLAG_MCAST_QUEUE_VALID & (pq->flags ^ prev_pq->flags))) {
 		ppe_qdisc_flags_set(prev_pq, pq->flags & PPE_QDISC_FLAG_MCAST_QUEUE_VALID);
 		prev_rp->q.mcast_qid = rp->q.mcast_qid;
 	}
@@ -441,13 +442,13 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 	 */
 	dev = qdisc_dev(sch);
 	if (dev->priv_flags & IFF_EBRIDGE) {
-		ppe_qdisc_warning("PPE Qdisc not supported on bridge interfaces %px\n", pq->qdisc);
+		ppe_qdisc_warning("PPE Qdisc not supported on bridge interfaces %px", pq->qdisc);
 		return -1;
 	}
 
 	ppe_qdisc_info("Qdisc %px (type %d) init root: %px, qos tag: %x, "
-		"parent: %x rootid: %s owner: %px\n", pq->qdisc, pq->type, root,
-		pq->qos_tag, parent, root->ops->id, root->ops->owner);
+			"parent: %x rootid: %s owner: %px", pq->qdisc, pq->type, root,
+			pq->qos_tag, parent, root->ops->id, root->ops->owner);
 
 	/*
 	 * The root must be of PPE type.
@@ -527,8 +528,16 @@ static int __init ppe_qdisc_module_init(void)
 		goto fail4;
 	ppe_qdisc_info("ppeprio registered");
 
+	ret = register_qdisc(&ppe_red_qdisc_ops);
+	if (ret != 0) {
+		goto fail5;
+	}
+	ppe_qdisc_info("ppered registered");
+
 	return 0;
 
+fail5:
+	unregister_qdisc(&ppe_prio_qdisc_ops);
 fail4:
 	unregister_qdisc(&ppe_htb_qdisc_ops);
 fail3:
@@ -557,6 +566,9 @@ static void __exit ppe_qdisc_module_exit(void)
 
 	unregister_qdisc(&ppe_prio_qdisc_ops);
 	ppe_qdisc_info("ppeprio unregistered");
+
+	unregister_qdisc(&ppe_red_qdisc_ops);
+	ppe_qdisc_info("ppered unregistered");
 
 	ppe_qdisc_port_free();
 	ppe_qdisc_info("ppe qdisc module exited");
