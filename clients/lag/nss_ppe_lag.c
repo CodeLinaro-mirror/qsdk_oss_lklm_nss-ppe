@@ -132,12 +132,21 @@ static int nss_ppe_lag_update_slave(struct netdev_notifier_info *info)
 			return NOTIFY_DONE;
 		}
 
+		/*
+		 * Make sure the bond device has a valid ppe interface.
+		 */
+		if (!entry->iface) {
+			spin_unlock(&nss_ppe_lag_spinlock);
+			nss_ppe_lag_warn("%px: Lag device is not a valid ppe interface\n", bond_dev);
+			return NOTIFY_DONE;
+		}
+
 		entry->slaves[i] = slave_dev;
 		ret = ppe_drv_lag_join(entry->iface, slave_dev);
 		if (ret != PPE_DRV_RET_SUCCESS) {
 			entry->slaves[i] = NULL;
 			spin_unlock(&nss_ppe_lag_spinlock);
-			nss_ppe_lag_warn("%px: Unable to deinitialize LAG session in PPE\n", bond_dev);
+			nss_ppe_lag_warn("%px: Unable to join LAG slave in PPE\n", bond_dev);
 			return NOTIFY_DONE;
 		}
 
@@ -174,6 +183,15 @@ static int nss_ppe_lag_update_slave(struct netdev_notifier_info *info)
 		return NOTIFY_DONE;
 	}
 
+	/*
+	 * Make sure the bond device has a valid ppe interface.
+	 */
+	if (!entry->iface) {
+		spin_unlock(&nss_ppe_lag_spinlock);
+		nss_ppe_lag_warn("%px: Lag device is not a valid ppe interface\n", bond_dev);
+		return NOTIFY_DONE;
+	}
+
 	nss_ppe_lag_info("%px: Interface %s removed from LAG ID=%d\n", bond_dev, slave_dev->name, bond_id);
 
 	ret = ppe_drv_lag_leave(entry->iface, slave_dev);
@@ -201,7 +219,10 @@ static int nss_ppe_lag_unregister_event(struct netdev_notifier_info *info)
 	struct nss_ppe_lag_bond_entry *entry;
 	ppe_drv_ret_t ret, ret_mac;
 	int32_t bond_id;
-	struct net_device *bond_dev = netdev_notifier_info_to_dev(info);
+	uint8_t i;
+	struct net_device *bond_dev;
+
+	bond_dev = netdev_notifier_info_to_dev(info);
 	if (!netif_is_bond_master(bond_dev)) {
 		return NOTIFY_DONE;
 	}
@@ -217,6 +238,17 @@ static int nss_ppe_lag_unregister_event(struct netdev_notifier_info *info)
 
 	spin_lock(&nss_ppe_lag_spinlock);
 	entry = &bond_entry[bond_id];
+
+	/*
+	 * There may be active slaves while the lag interface is deleted.
+	 * Go through the list of slaves and remove each one of them from lag.
+	 */
+	for (i = 0; i < NSS_PPE_LAG_MAX_SLAVES_PER_BOND_ID; i++) {
+		if (entry->slaves[i]) {
+			ppe_drv_lag_leave(entry->iface, entry->slaves[i]);
+			entry->slaves[i] = NULL;
+		}
+	}
 
 	ret_mac = ppe_drv_iface_mac_addr_clear(entry->iface);
 
@@ -345,6 +377,14 @@ static int nss_ppe_lag_changemtu_event(struct netdev_notifier_info *info)
 	}
 	spin_unlock(&nss_ppe_lag_spinlock);
 
+	/*
+	 * Make sure the bond device has a valid ppe interface.
+	 */
+	if (!entry->iface) {
+		nss_ppe_lag_warn("%px: Lag device is not a valid ppe interface\n", bond_dev);
+		return NOTIFY_DONE;
+	}
+
 	nss_ppe_lag_info("%px: MTU changed to %d, \n", bond_dev, bond_dev->mtu);
 	ret = ppe_drv_iface_mtu_set(entry->iface, bond_dev->mtu);
 	if (ret != PPE_DRV_RET_SUCCESS) {
@@ -384,6 +424,14 @@ static int nss_ppe_lag_changeaddr_event(struct netdev_notifier_info *info)
 	spin_lock(&nss_ppe_lag_spinlock);
 	entry = &bond_entry[bond_id];
 	spin_unlock(&nss_ppe_lag_spinlock);
+
+	/*
+	 * Make sure the bond device has a valid ppe interface.
+	 */
+	if (!entry->iface) {
+		nss_ppe_lag_warn("%px: Lag device is not a valid ppe interface\n", bond_dev);
+		return NOTIFY_DONE;
+	}
 
 	ret = ppe_drv_iface_mac_addr_clear(entry->iface);
 	if (ret != PPE_DRV_RET_SUCCESS) {
