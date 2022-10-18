@@ -20,6 +20,7 @@
 #include "ppe_fifo.h"
 #include "ppe_prio.h"
 #include "ppe_red.h"
+#include "ppe_tbl.h"
 
 /*
  * Max number of PRIO bands supported based on level.
@@ -534,8 +535,16 @@ static int __init ppe_qdisc_module_init(void)
 	}
 	ppe_qdisc_info("ppered registered");
 
+	ret = register_qdisc(&ppe_tbl_qdisc_ops);
+	if (ret != 0) {
+		goto fail6;
+	}
+	ppe_qdisc_info("ppetbl registered");
+
 	return 0;
 
+fail6:
+	unregister_qdisc(&ppe_red_qdisc_ops);
 fail5:
 	unregister_qdisc(&ppe_prio_qdisc_ops);
 fail4:
@@ -569,6 +578,9 @@ static void __exit ppe_qdisc_module_exit(void)
 
 	unregister_qdisc(&ppe_red_qdisc_ops);
 	ppe_qdisc_info("ppered unregistered");
+
+	unregister_qdisc(&ppe_tbl_qdisc_ops);
+	ppe_qdisc_info("ppetbl unregistered");
 
 	ppe_qdisc_port_free();
 	ppe_qdisc_info("ppe qdisc module exited");
