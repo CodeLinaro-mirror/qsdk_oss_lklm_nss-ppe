@@ -42,6 +42,16 @@
 #define PPE_QDISC_FLAG_L1_SCHEDULER_VALID	0x00000100	/* L1 scheduler is valid for the qdisc */
 #define PPE_QDISC_FLAG_SHAPER_VALID		0x00000200	/* Shaper is valid for the qdisc */
 
+/*
+ * ppe_qdisc_hlist_for_each_entry - iterate over list of classes
+ */
+#define ppe_qdisc_hlist_for_each_entry(tpos, pos, head, member) hlist_for_each_entry(tpos, head, member)
+
+/*
+ * ppe_qdisc_hlist_for_each_entry_safe - iterate over list of classes safe against removal of list entry
+ */
+#define ppe_qdisc_hlist_for_each_entry_safe(tpos, pos, n, head, member) hlist_for_each_entry_safe(tpos, n, head, member)
+
 /**
  * ppe_qdisc_node_type
  *	Types of PPE Qdisc nodes.

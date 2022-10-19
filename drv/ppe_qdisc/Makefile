@@ -10,7 +10,8 @@ qca-nss-ppe-qdisc-objs += ppe_fifo.o \
 			ppe_qdisc_port.o \
 			ppe_qdisc_res.o \
 			ppe_red.o \
-			ppe_tbl.o
+			ppe_tbl.o \
+			ppe_wrr.o
 
 ccflags-y += -DPPE_QDISC_DEBUG_LEVEL=4
 ccflags-y += -Wall -Werror
