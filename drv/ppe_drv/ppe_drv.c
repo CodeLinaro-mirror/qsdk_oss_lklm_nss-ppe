@@ -431,7 +431,8 @@ static int ppe_drv_probe(struct platform_device *pdev)
 
 	p->toggled_v4 = false;
 	p->toggled_v6 = false;
-	p->tun_toggled = false;
+	p->tun_toggled_v4 = false;
+	p->tun_toggled_v6 = false;
 
 	/*
 	 * Allocate tunnel specific entries

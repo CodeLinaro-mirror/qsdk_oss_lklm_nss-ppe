@@ -564,7 +564,7 @@ ppe_drv_ret_t ppe_drv_v6_tun_add_ce_validate(void *vcreate_rule, struct ppe_drv_
 	/*
 	 * Set the toggle bit to mark this connection as due for stats update in next sync.
 	 */
-	cn->toggle = !p->tun_toggled;
+	cn->toggle = !p->tun_toggled_v6;
 
 	return PPE_DRV_RET_SUCCESS;
 

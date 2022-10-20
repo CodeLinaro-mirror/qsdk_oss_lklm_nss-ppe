@@ -916,11 +916,11 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 		 * check if there are connections that need stats update; if yes then
 		 * invoke stats_sync api for all those connections
 		 */
-		if (cn->toggle == p->tun_toggled || !(atomic_read(&cn->pcf.rx_packets) || atomic_read(&cn->pcf.tx_packets)
+		if (cn->toggle == p->tun_toggled_v6 || !(atomic_read(&cn->pcf.rx_packets) || atomic_read(&cn->pcf.tx_packets)
 					|| (return_flow_valid && atomic_read(&cn->pcr.rx_packets))
 					|| (return_flow_valid && atomic_read(&cn->pcr.tx_packets)))) {
 			if (list_is_last(&cn->list, &p->conn_tun_v6)) {
-				p->tun_toggled = !p->tun_toggled;
+				p->tun_toggled_v6 = !p->tun_toggled_v6;
 				break;
 			}
 
@@ -950,7 +950,7 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 		 * for the next interation
 		 */
 		if (list_is_last(&cn->list, &p->conn_tun_v6)) {
-			p->tun_toggled = !p->tun_toggled;
+			p->tun_toggled_v6 = !p->tun_toggled_v6;
 		}
 	}
 

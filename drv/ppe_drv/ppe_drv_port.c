@@ -700,9 +700,10 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		 * Attach port L3_IF if this is the last VLAN interface on this port,
 		 * so that PPE can use l3 if associated with port.
 		 */
-		if (pp->port_l3_if && !pp->active_vlan && !pp->port_l3_if_attached) {
+		if (!pp->br_vsi && pp->port_l3_if && !pp->active_vlan && !pp->port_l3_if_attached) {
 			ppe_drv_port_l3_if_attach(pp, pp->port_l3_if);
 		}
+
 		return;
 
 	default:
