@@ -28,14 +28,15 @@
  * ppe_drv_tun_v6_port_stats_update()
  *	Updates flow instance's stats counter from PPE port Tx and Rx counters.
  */
-void ppe_drv_tun_v6_port_stats_update(struct ppe_drv_v6_conn_flow *pcf)
+void ppe_drv_tun_v6_port_stats_update(struct ppe_drv_v6_conn *cn)
 {
 	sw_error_t err;
 	uint32_t delta_pkts;
 	uint32_t delta_bytes;
 	fal_port_t v_port;
 	struct ppe_drv_port *pp = NULL;
-	struct ppe_drv_v6_conn_flow *pcr;
+	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
+	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
 	fal_port_cnt_t port_cnt;
 
 	/*
@@ -66,32 +67,23 @@ void ppe_drv_tun_v6_port_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 	 * Rx packets from the VP port would be Tx count for WAN port
 	 * hence updating from VP tx stats
 	 */
-	if (ppe_drv_v6_conn_flags_check(pcf->conn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
-		pcr = &pcf->conn->pcr;
-		ppe_drv_v6_conn_flow_rx_stats_add(pcr, delta_pkts, delta_bytes);
-	} else {
-		ppe_drv_v6_conn_flow_tx_stats_add(pcf, delta_pkts, delta_bytes);
-	}
-
-	pp->stats.rx_pkt_cnt = port_cnt.rx_pkt_cnt;
-	pp->stats.rx_byte_cnt = port_cnt.rx_byte_cnt;
+	ppe_drv_v6_conn_flow_rx_stats_add(pcr, delta_pkts, delta_bytes);
+	ppe_drv_v6_conn_flow_tx_stats_add(pcf, delta_pkts, delta_bytes);
 
 	delta_pkts = (port_cnt.tx_pkt_cnt - pp->stats.tx_pkt_cnt + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1) & FAL_TUNNEL_DECAP_PKT_CNT_MASK;
 	delta_bytes = (port_cnt.tx_byte_cnt - pp->stats.tx_byte_cnt + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
 		                                              & FAL_TUNNEL_DECAP_BYTE_CNT_MASK;
-
 	/*
 	 * Tx packets from the VP port would be RX count for WAN port
 	 *  hence updating the VP tx stats to FLOW Rx
 	 */
-	 if (ppe_drv_v6_conn_flags_check(pcf->conn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
-                pcr = &pcf->conn->pcr;
-                ppe_drv_v6_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
-        } else {
-                ppe_drv_v6_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
-        }
+	ppe_drv_v6_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
+	ppe_drv_v6_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
+
 	pp->stats.tx_pkt_cnt = port_cnt.tx_pkt_cnt;
 	pp->stats.tx_byte_cnt = port_cnt.tx_byte_cnt;
+	pp->stats.rx_pkt_cnt = port_cnt.rx_pkt_cnt;
+	pp->stats.rx_byte_cnt = port_cnt.rx_byte_cnt;
 }
 
 /*
