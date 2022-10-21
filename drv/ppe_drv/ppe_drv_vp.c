@@ -67,7 +67,7 @@ EXPORT_SYMBOL(ppe_drv_vp_deinit);
  * ppe_drv_vp_init()
  *	Initialize API exposed to VP driver
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface)
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
@@ -117,6 +117,12 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface)
 	}
 
 	port->port_l3_if = l3_if;
+	port->core_mask = port->shadow_core_mask = core_mask;
+	port->user_type = usr_type;
+
+	if (core_mask) {
+		port->flags |= PPE_DRV_PORT_RFS_ENABLED;
+	}
 
 	ppe_drv_iface_port_set(iface, port);
 	ppe_drv_iface_l3_if_set(iface, l3_if);

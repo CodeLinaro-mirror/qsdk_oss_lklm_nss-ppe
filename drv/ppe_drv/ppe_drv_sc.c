@@ -15,6 +15,7 @@
  */
 
 #include <fal/fal_servcode.h>
+#include <fal/fal_qm.h>
 #include "ppe_drv.h"
 
 #if (PPE_DRV_DEBUG_LEVEL == 3)
@@ -54,6 +55,28 @@ static void ppe_drv_sc_dump(ppe_drv_sc_t sc)
 {
 }
 #endif
+
+/*
+ * ppe_drv_sc_ucast_queue_set()
+ *	Set queue ID of a given port in PPE for RFS.
+ */
+void ppe_drv_sc_ucast_queue_set(ppe_drv_sc_t sc, uint8_t queue_id, uint8_t profile_id)
+{
+	sw_error_t err;
+	fal_ucast_queue_dest_t q_dst = {0};
+
+	q_dst.src_profile = PPE_DRV_PORT_SRC_PROFILE;
+	q_dst.service_code_en = true;
+	q_dst.service_code = sc;
+
+	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, profile_id);
+	if (err != SW_OK) {
+		ppe_drv_warn("unable to change port queue base ID: %d", queue_id);
+		return;
+	}
+
+	ppe_drv_info("set port ucast queue base id: %d", queue_id);
+}
 
 /*
  * ppe_drv_sc_config()
@@ -150,6 +173,48 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 						| (1 << L2_SOURCE_SEC_BYP));
 		sc_cfg.dest_port_valid = false;
 
+		break;
+
+	case PPE_DRV_SC_NOEDIT_REDIR_CORE0:
+	case PPE_DRV_SC_NOEDIT_REDIR_CORE1:
+	case PPE_DRV_SC_NOEDIT_REDIR_CORE2:
+	case PPE_DRV_SC_NOEDIT_REDIR_CORE3:
+		/*
+		 * Don't update destination information and service code in EDMA
+		 */
+		sc_cfg.field_update_bitmap = ((1 << FLD_UPDATE_DEST_INFO) | (1 << FLD_UPDATE_SERVICE_CODE));
+
+		/*
+		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
+		 * packets sent to PPE, with SPF bypass service code.
+		 */
+		sc_cfg.bypass_bitmap[1] = ((1 << SOURCE_FLTR_BYP)
+						| (1 << BRIDGING_FWD_BYP)
+						| (1 << L2_SOURCE_SEC_BYP));
+
+		/*
+		 * Avoid any packet editing
+		 */
+		sc_cfg.bypass_bitmap[1] |= ((1 << L2_PKT_EDIT_BYP) | (1 << L3_PKT_EDIT_BYP));
+
+		break;
+
+	case PPE_DRV_SC_EDIT_REDIR_CORE0:
+	case PPE_DRV_SC_EDIT_REDIR_CORE1:
+	case PPE_DRV_SC_EDIT_REDIR_CORE2:
+	case PPE_DRV_SC_EDIT_REDIR_CORE3:
+		/*
+		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
+		 * packets sent to PPE, with SPF bypass service code.
+		 */
+		sc_cfg.bypass_bitmap[1] = ((1 << EG_VLAN_MEMBER_CHECK_BYP)
+						| (1 << SOURCE_FLTR_BYP)
+						| (1 << L2_SOURCE_SEC_BYP));
+
+		/*
+		 * Don't update service code in EDMA
+		 */
+		sc_cfg.field_update_bitmap = (1 << FLD_UPDATE_SERVICE_CODE);
 		break;
 
 	default:
@@ -286,6 +351,15 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_VLAN_FILTER_BYPASS, PPE_DRV_SC_VLAN_FILTER_BYPASS, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_L3_EXCEPT, PPE_DRV_SC_L3_EXCEPT, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_SPF_BYPASS, PPE_DRV_SC_SPF_BYPASS, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_REDIR_CORE0, PPE_DRV_SC_NOEDIT_REDIR_CORE0, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_REDIR_CORE1, PPE_DRV_SC_NOEDIT_REDIR_CORE1, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_REDIR_CORE2, PPE_DRV_SC_NOEDIT_REDIR_CORE2, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_REDIR_CORE3, PPE_DRV_SC_NOEDIT_REDIR_CORE3, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE0, PPE_DRV_SC_EDIT_REDIR_CORE0, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE1, PPE_DRV_SC_EDIT_REDIR_CORE1, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE2, PPE_DRV_SC_EDIT_REDIR_CORE2, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_PORT_CPU);
+
 
 	return sc;
 }

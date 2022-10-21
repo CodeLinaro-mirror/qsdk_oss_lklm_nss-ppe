@@ -157,8 +157,8 @@ struct ppe_drv_tun {
 	uint8_t vp_num;						/**< Tunnel VP number >*/
 	uint8_t tun_idx;					/**< Tunnel context ID >*/
 	uint8_t xmit_port;					/**< Egress I/O port for tunnel> */
-	bool tun_state;						/**< Tunnel status active >*/
 	struct ppe_drv_tun_mapt mapt;				/**< MAPT specific Tunnel structure > */
+	atomic_t flow_count;					/**< Number of active flows >*/
 };
 
 bool ppe_drv_tun_global_init(struct ppe_drv *p);

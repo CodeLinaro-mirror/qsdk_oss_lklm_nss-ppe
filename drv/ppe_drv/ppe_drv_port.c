@@ -466,6 +466,11 @@ void ppe_drv_port_l3_if_detach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 
 	ppe_drv_assert(kref_read(&pp->ref_cnt), "%p: attaching l3_if to unused port:%u", pp, pp->port);
 
+	if ((pl3->type == PPE_DRV_L3_IF_TYPE_PORT) && !pp->port_l3_if_attached) {
+		ppe_drv_warn("%p: port(%d) is already detached from port type l3_if(%d): ", pp, pp->port, pl3->l3_if_index);
+		return;
+	}
+
 	/*
 	 * Delete l3_if from port's l3 list
 	 */
@@ -695,9 +700,10 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		 * Attach port L3_IF if this is the last VLAN interface on this port,
 		 * so that PPE can use l3 if associated with port.
 		 */
-		if (pp->port_l3_if && !pp->active_vlan && !pp->port_l3_if_attached) {
+		if (!pp->br_vsi && pp->port_l3_if && !pp->active_vlan && !pp->port_l3_if_attached) {
 			ppe_drv_port_l3_if_attach(pp, pp->port_l3_if);
 		}
+
 		return;
 
 	default:
@@ -786,6 +792,73 @@ struct net_device *ppe_drv_port_get_vp_phys_dev(struct net_device *dev)
 	return ppe_drv_port_num_to_dev(phyport_id);
 }
 EXPORT_SYMBOL(ppe_drv_port_get_vp_phys_dev);
+
+/*
+ * ppe_drv_port_get_vp_stats()
+ *	Get PPE hardware stats for the VP port.
+ */
+bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_stats)
+{
+	fal_port_cnt_t hw_stats;
+	uint32_t v_port;
+	sw_error_t err;
+
+	ppe_drv_assert(((port >= PPE_DRV_VIRTUAL_START) && (port < PPE_DRV_VIRTUAL_END)), "Port should be a Virtual Port %d", port);
+
+	/*
+	 * Convert the port number to a format as required by the FAL API.
+	 */
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port);
+	err = fal_port_cnt_get(PPE_DRV_SWITCH_ID, v_port, &hw_stats);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to get hardware stats for port %u\n", port);
+		return false;
+	}
+
+	/*
+	 * Copy over the RX stats.
+	 */
+	vp_stats->rx_pkt_cnt = hw_stats.rx_pkt_cnt;
+	vp_stats->rx_byte_cnt = hw_stats.rx_byte_cnt;
+	vp_stats->rx_drop_pkt_cnt = hw_stats.rx_drop_pkt_cnt;
+	vp_stats->rx_drop_byte_cnt = hw_stats.rx_drop_byte_cnt;
+
+	/*
+	 * Copy over the TX stats.
+	 */
+	vp_stats->tx_pkt_cnt = hw_stats.tx_pkt_cnt;
+	vp_stats->tx_byte_cnt = hw_stats.tx_byte_cnt;
+	vp_stats->tx_drop_pkt_cnt = hw_stats.tx_drop_pkt_cnt;
+	vp_stats->tx_drop_byte_cnt = hw_stats.tx_drop_byte_cnt;
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_port_get_vp_stats);
+
+/*
+ * ppe_drv_port_clear_hw_vp_stats()
+ *	Clear PPE HW stats for the VP.
+ */
+bool ppe_drv_port_clear_hw_vp_stats(int16_t port)
+{
+	uint32_t v_port;
+	sw_error_t err;
+
+	ppe_drv_assert(((port >= PPE_DRV_VIRTUAL_START) && (port < PPE_DRV_VIRTUAL_END)), "Port should be a Virtual Port %d", port);
+
+	/*
+	 * Convert the port number to a format as required by the FAL API.
+	 */
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port);
+	err = fal_port_cnt_flush(PPE_DRV_SWITCH_ID, v_port);
+	if(err != SW_OK) {
+		ppe_drv_warn("Failed to clear hardware VP stats for port %u\n", port);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_port_clear_hw_vp_stats);
 
 /*
  * ppe_drv_port_from_dev()
@@ -883,21 +956,36 @@ int32_t ppe_drv_port_num_from_dev(struct net_device *dev)
 EXPORT_SYMBOL(ppe_drv_port_num_from_dev);
 
 /*
+ * ppe_drv_port_rfs_enabled()
+ *	RFS enabled on a Port
+ */
+bool ppe_drv_port_rfs_enabled(uint16_t pp_num)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *pp;
+	uint32_t flags;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_port_num(pp_num);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	flags = pp->flags;
+	spin_unlock_bh(&p->lock);
+
+	return !!(flags & PPE_DRV_PORT_RFS_ENABLED);
+}
+EXPORT_SYMBOL(ppe_drv_port_rfs_enabled);
+
+/*
  * ppe_drv_port_is_physical()
  *	Returns true if ppe port is physical.
  */
 bool ppe_drv_port_is_physical(struct ppe_drv_port *pp)
 {
 	return pp->port < PPE_DRV_PHYSICAL_MAX;
-}
-
-/*
- * ppe_drv_port_is_virtual()
- *	Returns true if ppe port is virtual.
- */
-bool ppe_drv_port_is_virtual(struct ppe_drv_port *pp)
-{
-	return pp->port >= PPE_DRV_VIRTUAL_START;
 }
 
 /*

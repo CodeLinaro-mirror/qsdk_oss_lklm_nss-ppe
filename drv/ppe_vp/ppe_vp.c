@@ -13,11 +13,53 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-
+#include <net/sch_generic.h>
 #include "ppe_vp_base.h"
 #include "ppe_vp_rx.h"
 
 extern struct ppe_vp_base vp_base;
+
+/*
+ * ppe_vp_can_fast_xmit()
+ *	Check if VP packets can be fast transmitted.
+ */
+static bool ppe_vp_can_fast_xmit(struct ppe_vp *vp)
+{
+	struct net_device *vpdev = vp->netdev;
+	struct Qdisc *q;
+	int i;
+	struct netdev_queue *txq;
+#if defined(CONFIG_NET_CLS_ACT) && defined(CONFIG_NET_EGRESS)
+	struct mini_Qdisc *miniq;
+#endif
+
+	/*
+	 * TODO: It assumes that the qdisc attribute won't change after traffic
+	 * running, if the qdisc changed, we need flush all of the rule.
+	 */
+	rcu_read_lock_bh();
+	for (i = 0; i < vpdev->real_num_tx_queues; i++) {
+		txq = netdev_get_tx_queue(vpdev, i);
+		q = rcu_dereference_bh(txq->qdisc);
+		if (q && q->enqueue) {
+			ppe_vp_info("Qdisc is present for device[%s]\n", vpdev->name);
+			rcu_read_unlock_bh();
+			return false;
+		}
+	}
+
+#if defined(CONFIG_NET_CLS_ACT) && defined(CONFIG_NET_EGRESS)
+	miniq = rcu_dereference_bh(vpdev->miniq_egress);
+	if (miniq) {
+		ppe_vp_info("Egress needed\n");
+		rcu_read_unlock_bh();
+		return false;
+	}
+#endif
+	rcu_read_unlock_bh();
+
+	return true;
+}
 
 /*
  * ppe_vp_get_netdev_by_port_num()
@@ -190,7 +232,7 @@ ppe_vp_status_t ppe_vp_free(ppe_vp_num_t port_num)
 	struct net_device *netdev;
 	struct ppe_vp *vp;
 	ppe_vp_stats_callback_t stats_cb;
-	struct ppe_vp_hw_stats hw_stats;
+	ppe_vp_hw_stats_t hw_stats;
 	ppe_drv_ret_t ret;
 	ppe_vp_status_t status = PPE_VP_STATUS_SUCCESS;
 
@@ -245,7 +287,7 @@ ppe_vp_status_t ppe_vp_free(ppe_vp_num_t port_num)
 	/*
 	 * Clear out the stats for this VP. Also free out the per cpu stats.
 	 */
-	memcpy(&hw_stats, &vp->vp_stats.vp_hw_stats, sizeof(struct ppe_vp_hw_stats));
+	memcpy(&hw_stats, &vp->vp_stats.vp_hw_stats, sizeof(ppe_vp_hw_stats_t));
 
 	/*
 	 * Clear the stats for this VP. We can only clear non-per CPU stats.
@@ -338,7 +380,7 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	/*
 	 * Initialize the virtual port in PPE.
 	 */
-	ret = ppe_drv_vp_init(ppe_iface);
+	ret = ppe_drv_vp_init(ppe_iface, vpai->core_mask, vpai->usr_type);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_vp_warn("%px: netdev: %px, ppe iface %px PPE VP initialization failed, Err code %d", pvb, netdev, ppe_iface, ret);
 		vpai->status = PPE_VP_STATUS_VP_INIT_FAIL;
@@ -361,15 +403,32 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 
 	ret = ppe_drv_iface_mtu_set(ppe_iface, netdev->mtu);
 	if (ret != PPE_DRV_RET_SUCCESS) {
-		ppe_vp_warn("%px: netdev: %px, ppe iface %px PPE VP mtu set to %u failed, Err code %d", pvb, vp->netdev, ppe_iface, netdev->mtu, ret);
+		ppe_vp_warn("%px: netdev: %px, ppe iface %px PPE VP mtu set to %u failed, Err code %d", pvb, netdev, ppe_iface, netdev->mtu, ret);
 		vpai->status = PPE_VP_STATUS_MTU_SET_FAIL;
 		goto mtu_set_failed;
 	}
 
-	ret = ppe_drv_iface_ucast_queue_set(ppe_iface, vpai->queue_num);
-	if (ret != PPE_DRV_RET_SUCCESS) {
-		ppe_vp_warn("%px: netdev: %px, ppe vp ucast queue %d set failed", pvb, netdev, vpai->queue_num);
-		goto alloc_fail;
+	/*
+	 * If core_mask is set then it indicates that user of this VP wants to do RFS for the flows
+	 * destined to this VP. In that case, queue configurations are done during PPE driver initialization
+	 * based on different service codes. Hence below queue configuration will only be done when VP user
+	 * dont want to enable RFS feature on the flows.
+	 */
+	if (!vpai->core_mask) {
+		ret = ppe_drv_iface_ucast_queue_set(ppe_iface, vpai->queue_num);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_vp_warn("%px: netdev: %px, ppe vp ucast queue %d set failed", pvb, netdev, vpai->queue_num);
+			goto alloc_fail;
+		}
+	}
+
+	/*
+	 * Clear ppe hardware stats for the vp before using it.
+	 */
+	if (!ppe_drv_port_clear_hw_vp_stats(pp_num)) {
+	       ppe_vp_warn("%px: port_num: %x, ppe vp port reset hw stats failed", pvb, pp_num);
+	       vpai->status = PPE_VP_STATUS_HW_VP_STATS_CLEAR_FAILED;
+	       goto alloc_fail;
 	}
 
 	ppe_vp_trace("%px: netdev: %px, ppe vp %d ucase queue %d set", pvb, netdev, pp_num, vpai->queue_num);
@@ -394,17 +453,28 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	vp->port_num = pp_num;
 	vp->mtu = netdev->mtu;
 	vp->flags = PPE_VP_FLAG_VP_ACTIVE;
-	vp->dst_cb = vpai->dst_cb;
-	vp->dst_cb_data = vpai->dst_cb_data;
 	if (vpai->src_cb) {
 		vp->src_cb = vpai->src_cb;
 		vp->src_cb_data = vpai->src_cb_data;
 	} else {
 		vp->src_cb = ppe_vp_rx_process_cb;
 	}
+	vp->stats_cb = vpai->stats_cb;
 
 	vp->vp_stats.misc_info.netdev_if_num = netdev->ifindex;
 	vp->vp_stats.misc_info.ppe_port_num = pp_num;
+
+	/*
+	 * Check if the virtual port device has registered a callback
+	 * to use. If not, we try to fast-transmit
+	 */
+	if (vpai->dst_cb) {
+		vp->dst_cb = vpai->dst_cb;
+		vp->dst_cb_data = vpai->dst_cb_data;
+	} else if(ppe_vp_can_fast_xmit(vp)) {
+		vp->flags |= PPE_VP_FLAG_VP_FAST_XMIT;
+	}
+
 	spin_unlock_bh(&vp->lock);
 
 	return pp_num;

@@ -31,6 +31,7 @@ struct ppe_vp_base_stats {
 	atomic64_t rx_dvp_invalid;		/* Packet received from PPE without valid DVP */
 	atomic64_t rx_svp_invalid;		/* Packet received from PPE without valid SVP */
 	atomic64_t tx_vp_inactive;		/* VP of Packet forwarded by VP user is inactive */
+	atomic64_t rx_fastxmit_fails;		/* Rx packet fast transmit failed */
 };
 
 /*
@@ -47,12 +48,12 @@ struct ppe_vp_misc_info {
  *	PPE VP Rx Statistics
  */
 struct ppe_vp_rx_stats {
-	atomic64_t rx_pkts;			/* Total rx packets */
-	atomic64_t rx_bytes;			/* Total rx bytes */
-	atomic64_t rx_excp_pkts;		/* Total exceptioned VP packets */
-	atomic64_t rx_excp_bytes;		/* Total exceptioned VP bytes */
-	atomic64_t rx_errors;			/* Total rx errors */
-	atomic64_t rx_drops;			/* Total rx drops */
+	uint64_t rx_pkts;			/* Total rx packets */
+	uint64_t rx_bytes;			/* Total rx bytes */
+	uint64_t rx_excp_pkts;		/* Total exceptioned VP packets */
+	uint64_t rx_excp_bytes;		/* Total exceptioned VP bytes */
+	uint64_t rx_errors;			/* Total rx errors */
+	uint64_t rx_drops;			/* Total rx drops */
 	struct u64_stats_sync syncp;		/* Stats sync status */
 };
 
@@ -61,10 +62,10 @@ struct ppe_vp_rx_stats {
  *	PPE VP Tx Statistics
  */
 struct ppe_vp_tx_stats {
-	atomic64_t tx_pkts;			/* Total tx packets */
-	atomic64_t tx_bytes;			/* Total tx bytes */
-	atomic64_t tx_errors;			/* Total tx errors */
-	atomic64_t tx_drops;			/* Total tx drops */
+	uint64_t tx_pkts;			/* Total tx packets */
+	uint64_t tx_bytes;			/* Total tx bytes */
+	uint64_t tx_errors;			/* Total tx errors */
+	uint64_t tx_drops;			/* Total tx drops */
 	struct u64_stats_sync syncp;		/* Stats sync status */
 };
 
@@ -73,7 +74,7 @@ struct ppe_vp_tx_stats {
  *	Structure for VP Per CPU stats
  */
 struct ppe_vp_stats {
-	struct ppe_vp_hw_stats vp_hw_stats;	/* HW port statistics */
+	ppe_vp_hw_stats_t vp_hw_stats;	/* HW port statistics */
 	struct ppe_vp_misc_info misc_info;	/* Misc statistics */
 	struct ppe_vp_rx_stats __percpu *rx_stats;
 						/* VP Rx statistics */

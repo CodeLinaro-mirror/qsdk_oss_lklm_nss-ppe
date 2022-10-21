@@ -133,6 +133,13 @@
 #define PPE_DRV_HW_FLOW_STATS_MS	1000
 
 /*
+ * Core to service code mapping
+ */
+#define PPE_DRV_CORE2SC_NOEDIT(core_id) (PPE_DRV_SC_NOEDIT_REDIR_CORE0 + core_id)
+#define PPE_DRV_CORE2SC_EDIT(core_id) (PPE_DRV_SC_EDIT_REDIR_CORE0 + core_id)
+#define PPE_DRV_REDIR_PROFILE_ID 9
+
+/*
  * ppe_drv_entry_valid
  *	PPE entry validity
  */
@@ -165,7 +172,7 @@ struct ppe_drv {
 	 * Timer
 	 */
 	unsigned long hw_flow_stats_ticks;		/* Ticks to re-arm the hardware stats timer */
-	struct timer_list hw_flow_stats_timer;      	/* Timer used to poll for stats from PPE_HW */
+	struct timer_list hw_flow_stats_timer;		/* Timer used to poll for stats from PPE_HW */
 	struct ppe_drv_stats stats;			/* PPE statistics */
 
 	/*
@@ -206,8 +213,10 @@ struct ppe_drv {
 	struct list_head conn_v6;			/* List of v6 connection in PPE */
 	struct list_head conn_tun_v4;		/* List of v4 tunnel connection in PPE */
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
-	bool toggled;				/* Toggled bit for sync during a particular iteration */
-	bool tun_toggled;		        /* Tunnel specific Toggled bit for sync during a particular iteration*/
+	bool toggled_v4;			/* Toggled bit for v4 sync during a particular iteration */
+	bool toggled_v6;			/* Toggled bit for v6 sync during a particular iteration */
+	bool tun_toggled_v4;		        /* Tunnel specific Toggled bit for v4 sync during a particular iteration*/
+	bool tun_toggled_v6;		        /* Tunnel specific Toggled bit for v6 sync during a particular iteration*/
 };
 
 extern struct ppe_drv ppe_drv_gbl;

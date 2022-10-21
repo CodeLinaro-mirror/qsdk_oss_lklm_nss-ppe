@@ -30,6 +30,7 @@
 #include "ppe_drv_tun_v4.h"
 #include "ppe_drv_tun_v6.h"
 #include <linux/in.h>
+#include <fal/fal_tunnel_program.h>
 
 /*
  * ppe_drv_tun_check_support()
@@ -861,6 +862,131 @@ bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6)
 }
 
 /*
+ *  ppe_drv_tun_v6_conn_tun_del
+ *	delete all connections corresponding to tunnel
+ */
+void ppe_drv_tun_v6_conn_tun_del(struct ppe_drv_tun *ptun)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_v6_conn_flow *pcf, *pcr;
+	struct ppe_drv_v6_conn *cn, *cn_tmp;
+	struct ppe_drv_tun *cn_ptun;
+	struct ppe_drv_v6_conn_sync *cns;
+
+	cns = ppe_drv_v6_conn_stats_alloc();
+	if (!cns) {
+		ppe_drv_warn("%p: memory allocation failed for v6 connection sync", p);
+		return;
+	}
+
+	list_for_each_entry_safe(cn, cn_tmp,  &p->conn_tun_v6, list) {
+		pcf = &cn->pcf;
+		pcr = &cn->pcr;
+
+		cn_ptun = ppe_drv_port_tun_get(pcf->tx_port) ? ppe_drv_port_tun_get(pcf->tx_port) : ppe_drv_port_tun_get(pcf->rx_port);
+
+		if (cn_ptun !=  ptun) {
+			continue;
+		}
+
+		/*
+		 * Release references on interfaces.
+		 */
+		ppe_drv_v6_if_walk_release(pcf);
+
+		/*
+		 * Release references on interfaces.
+		 */
+		ppe_drv_v6_if_walk_release(pcr);
+
+		/*
+		 * Detach v6 tun pcf from v4 flow before deleting cn from the list for MAPT
+		 */
+		if (cn_ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
+			if (!ppe_drv_tun_detach_mapt_v6_to_v4(cn_ptun)) {
+				ppe_drv_warn("%p: MAP-T v6 to v4 detach failed", p);
+			}
+		}
+
+		list_del(&cn->list);
+
+		/*
+		 * Capture remaining stats.
+		 */
+		ppe_drv_v6_conn_sync_one(cn, cns, PPE_DRV_STATS_SYNC_REASON_FLUSH);
+
+		ppe_drv_v6_conn_free(cn);
+
+		/*
+		 * Release the reference taken during activation
+		 */
+		ppe_drv_tun_deref(cn_ptun);
+	}
+
+	ppe_drv_v6_conn_stats_free(cns);
+
+	return;
+}
+
+/*
+ *  ppe_drv_tun_v4_conn_tun_del
+ *	Delete all instances of connections corresponding to tunnel
+ */
+void ppe_drv_tun_v4_conn_tun_del(struct ppe_drv_tun *ptun)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_v4_conn_flow *pcf, *pcr;
+	struct ppe_drv_v4_conn *cn, *tmp_cn;
+	struct ppe_drv_tun *cn_ptun;
+	struct ppe_drv_v4_conn_sync *cns;
+
+	cns = ppe_drv_v4_conn_stats_alloc();
+	if (!cns) {
+		ppe_drv_warn("%p: memory allocation failed for v4 connection sync", p);
+		return;
+	}
+
+	list_for_each_entry_safe(cn, tmp_cn, &p->conn_tun_v4, list) {
+		pcf = &cn->pcf;
+		pcr = &cn->pcr;
+
+		cn_ptun = ppe_drv_port_tun_get(pcf->tx_port) ? ppe_drv_port_tun_get(pcf->tx_port) : ppe_drv_port_tun_get(pcf->rx_port);
+
+		if (cn_ptun !=  ptun) {
+			continue;
+		}
+
+		/*
+		 * Release references on interfaces.
+		 */
+		ppe_drv_v4_if_walk_release(pcf);
+
+		/*
+		 * Release references on interfaces.
+		 */
+		ppe_drv_v4_if_walk_release(pcr);
+
+		list_del(&cn->list);
+
+		/*
+		 * Capture remaining stats.
+		 */
+		ppe_drv_v4_conn_sync_one(cn, cns, PPE_DRV_STATS_SYNC_REASON_FLUSH);
+
+		ppe_drv_v4_conn_free(cn);
+
+		/*
+		 * Release the reference taken during activation
+		 */
+		ppe_drv_tun_deref(cn_ptun);
+	}
+
+	ppe_drv_v4_conn_stats_free(cns);
+
+	return;
+}
+
+/*
  * ppe_drv_tun_deactivate
  *	Deactivate PPE tunnel
  */
@@ -906,6 +1032,15 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 			spin_unlock_bh(&p->lock);
 			return false;
 		}
+	}
+
+	/*
+	 * If the flow count is not zero decrement the flow count taken and return
+	 * Do not deactivate the tunnel since other flows are still in use.
+	 */
+	if (vdestroy_rule && !atomic_dec_and_test(&ptun->flow_count)) {
+		ppe_drv_info("%p: Flow count is %d , skipping deactivation", ptun, atomic_read(&ptun->flow_count));
+		goto skip_tunnel_deactivation;
 	}
 
 	/*
@@ -965,10 +1100,23 @@ disable_encap:
 		goto error;
 	}
 
+skip_tunnel_deactivation:
 	/*
-	 * Release reference
+	 * Delete all the instances of tunnel stored in cn list
+	 * and release acquired references
 	 */
-	ppe_drv_tun_deref(ptun);
+	if (!vdestroy_rule && is_ipv6) {
+		ppe_drv_tun_v6_conn_tun_del(ptun);
+	} else if (!vdestroy_rule){
+		ppe_drv_tun_v4_conn_tun_del(ptun);
+	} else {
+		/*
+		 * Release reference if the deactivate
+		 * call is from ECM
+		 */
+		ppe_drv_tun_deref(ptun);
+	}
+
 	spin_unlock_bh(&p->lock);
 
 	/*
@@ -1205,6 +1353,15 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 		ppe_drv_tun_v4_parse_l2_hdr(vcreate_rule, cn_v4, l2_hdr);
 	}
 
+	/*
+	 * In case of MAPT we can expect multiple create connection request for same tunnel.
+	 * In this case we dont need to configure the tunnel again. for rest of the tunnel
+	 * it is expected to get create conection request only once
+	 */
+	if (atomic_read(&ptun->flow_count)) {
+		goto skip_tunnel_activation;
+	}
+
 	port_id = ptun->vp_num;
 
 	/*
@@ -1284,10 +1441,16 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 
 	ptun->xmit_port = xmit_port;
 
+skip_tunnel_activation:
 	/*
 	 * Take reference
 	 */
 	ppe_drv_tun_ref(ptun);
+
+	/*
+	 * Increment flow count as connection is added to the list
+	 */
+	atomic_inc(&ptun->flow_count);
 
 	if (cn_v6) {
 		list_add(&cn_v6->list, &p->conn_tun_v6);
@@ -1422,6 +1585,8 @@ bool ppe_drv_tun_global_init(struct ppe_drv *p)
 	fal_tunnel_global_cfg_t ptglcfg =  {0};
 	fal_mapt_decap_ctrl_t ptmapglcfg = {0};
 	fal_tunnel_udp_entry_t ftue = {0};
+	fal_tunnel_program_entry_t pgm = {0};
+	fal_tunnel_program_cfg_t cfg = {0};
 	fal_tunnel_type_t tunnel_type;
 
 	spin_lock_bh(&p->lock);
@@ -1448,6 +1613,39 @@ bool ppe_drv_tun_global_init(struct ppe_drv *p)
 	if (err != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: Tunnel Decap key set failure for GREIPV6", p);
+		return false;
+	}
+
+	ptdkcfg.tunnel_info_mask = ~FAL_TUNNEL_DECAP_TUNNEL_INFO_MASK;
+
+	tunnel_type = FAL_TUNNEL_TYPE_PROGRAM5;
+	err = fal_tunnel_decap_key_set(PPE_DRV_SWITCH_ID, tunnel_type, &ptdkcfg);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Tunnel Decap key set failed for GRE with error %d", p, err);
+		return false;
+	}
+
+	/*
+	 * Configure tunnel program entry for GRETAP without key
+	 */
+	pgm.outer_hdr_type = FAL_GRE_HDR;
+	pgm.protocol = ETH_P_TEB;
+	pgm.protocol_mask = FAL_TUNNEL_PROGRAM_GRE_PROTOCOL_MASK;
+	pgm.ip_ver = FAL_TUNNEL_PROGRAM_IPV4_IPV6;
+
+	err = fal_tunnel_program_entry_add(PPE_DRV_SWITCH_ID, FAL_TUNNEL_PROGRAM_TYPE_5, &pgm);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: program entry add failed for GRE with error %d", p, err);
+		return false;
+	}
+
+	/*
+	 * Set program entry to PROGRAM5 for GRETAP without key
+	 */
+	err = fal_tunnel_program_cfg_set(PPE_DRV_SWITCH_ID, FAL_TUNNEL_PROGRAM_TYPE_5, &cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: program entry configuration failed for GRE with error %d", p, err);
 		return false;
 	}
 

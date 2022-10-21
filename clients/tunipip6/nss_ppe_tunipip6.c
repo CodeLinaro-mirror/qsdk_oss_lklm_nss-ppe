@@ -132,6 +132,11 @@ static int nss_ppe_tunipip6_dev_event(struct notifier_block  *nb,
 
 	switch (event) {
 	case NETDEV_REGISTER:
+		if (ip6_tunnel_is_fallback_dev(dev)) {
+			nss_ppe_tunipip6_warning("%p: IPIP6 tunnel creation skipped for fb dev %s\n", dev, dev->name);
+			break;
+		}
+
 		status = ppe_tun_alloc(dev, PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6);
 		if (status) {
 			nss_tunipip6_stats_dentry_create(dev);

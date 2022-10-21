@@ -67,6 +67,13 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 	dptxi.sc = PPE_DRV_SC_SPF_BYPASS;
 
 	/*
+	 * This would enable making list of skb's while freeing in edma tx complete
+	 */
+	if (likely(!skb_is_nonlinear(skb))) {
+		skb->fast_xmit = 1;
+	}
+
+	/*
 	 * If enqueue to PPE fails, better drop else
 	 * this could cause out of order packets. Hence returning
 	 * status as true to the user.
@@ -74,15 +81,16 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 	if (NETDEV_TX_OK != nss_dp_vp_xmit(vp_base.edma_vp_dev, &dptxi, skb)) {
 		ppe_vp_info("Dropping skb %pxd, edma failed to enqueue to PPE, VP %d", skb, vp_num);
 		u64_stats_update_begin(&tx_stats->syncp);
-		atomic64_inc(&tx_stats->tx_drops);
+		tx_stats->tx_drops++;
 		u64_stats_update_end(&tx_stats->syncp);
+		skb->fast_xmit = 0;
 		dev_kfree_skb_any(skb);
 		return true;
 	}
 
 	u64_stats_update_begin(&tx_stats->syncp);
-	atomic64_inc(&tx_stats->tx_pkts);
-	atomic64_add(skb->len, &tx_stats->tx_bytes);
+	tx_stats->tx_pkts++;
+	tx_stats->tx_bytes += skb->len;
 	u64_stats_update_end(&tx_stats->syncp);
 
 	return true;

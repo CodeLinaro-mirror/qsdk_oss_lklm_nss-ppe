@@ -30,6 +30,7 @@ bool ppe_vp_rx_process_cb(struct net_device *rxdev, struct sk_buff *skb, void *c
 
 	skb->protocol = eth_type_trans(skb, rxdev);
 	skb->dev = rxdev;
+	skb->fast_xmit = 0;
 	netif_receive_skb(skb);
 	return true;
 }
@@ -73,7 +74,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 
 				rx_stats = this_cpu_ptr(dvp->vp_stats.rx_stats);
 				u64_stats_update_begin(&rx_stats->syncp);
-				atomic64_inc(&rx_stats->rx_drops);
+				rx_stats->rx_drops++;
 				u64_stats_update_end(&rx_stats->syncp);
 
 				dev_kfree_skb_any(skb);
@@ -98,8 +99,8 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 
 		rx_stats = this_cpu_ptr(dvp->vp_stats.rx_stats);
 		u64_stats_update_begin(&rx_stats->syncp);
-		atomic64_inc(&rx_stats->rx_pkts);
-		atomic64_add(skb->len, &rx_stats->rx_bytes);
+		rx_stats->rx_pkts++;
+		rx_stats->rx_bytes +=skb->len;
 		u64_stats_update_end(&rx_stats->syncp);
 
 		/*
@@ -108,17 +109,33 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		skb->ip_summed = CHECKSUM_COMPLETE;
 
 		/*
-		 * Destination VP user would consume the skb
+		 * If it can be, try forwarding through fast_xmit.
 		 */
-		if (unlikely(!dvp->dst_cb(dvp->netdev, skb, dvp->dst_cb_data))) {
+		if (likely(dvp->flags & PPE_VP_FLAG_VP_FAST_XMIT)) {
+			if (unlikely(!dev_fast_xmit_vp(skb, dvp->netdev))) {
+				atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
+				dev_queue_xmit(skb);
+			}
+
 			rcu_read_unlock();
-			ppe_vp_info("%px: Destination VP:%d  Tx dev:%s skb:%p dropped by user\n", dvp, rxi->dvp, dvp->netdev->name, skb);
 			return;
 		}
 
 		/*
-		 * skb successfully processed by destination VP.
+		 * Destination VP user would consume the skb.
 		 */
+		if (unlikely(dvp->dst_cb)) {
+			if (unlikely(!dvp->dst_cb(dvp->netdev, skb, dvp->dst_cb_data))) {
+				ppe_vp_info("%px: Destination VP:%d  Tx dev:%s skb:%p \
+						dropped by user\n", dvp, rxi->dvp, dvp->netdev->name, skb);
+			}
+		} else {
+			/*
+			 * No registered callback with vp, forward through kernel.
+			 */
+			dev_queue_xmit(skb);
+		}
+
 		rcu_read_unlock();
 		return;
 	}
@@ -161,7 +178,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 				rcu_read_unlock();
 
 				u64_stats_update_begin(&rx_stats->syncp);
-				atomic64_inc(&rx_stats->rx_drops);
+				rx_stats->rx_drops++;
 				u64_stats_update_end(&rx_stats->syncp);
 
 				dev_kfree_skb_any(skb);
@@ -175,8 +192,8 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		}
 
 		u64_stats_update_begin(&rx_stats->syncp);
-		atomic64_inc(&rx_stats->rx_excp_pkts);
-		atomic64_add(skb->len, &rx_stats->rx_excp_bytes);
+		rx_stats->rx_excp_pkts++;
+		rx_stats->rx_excp_bytes += skb->len;
 		u64_stats_update_end(&rx_stats->syncp);
 
 		skb_reset_mac_header(skb);

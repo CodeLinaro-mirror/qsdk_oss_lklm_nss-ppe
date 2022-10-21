@@ -60,6 +60,14 @@ static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys)
 	}
 
 	pcf = flow->pcf.v4;
+
+	if (pcf->conn->flags & PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&p->stats.gen_stats.v4_flush_skip_conn_rfs);
+		ppe_drv_info("%p: connection flush called for ppe_rfs cpu_code: %d", keys, cc);
+		return;
+	}
+
 	if (ppe_drv_v4_flush(pcf->conn) != PPE_DRV_RET_SUCCESS) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_stats_inc(&p->stats.gen_stats.v4_flush_conn_not_found);
@@ -128,6 +136,13 @@ static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys)
 	}
 
 	pcf = flow->pcf.v6;
+	if (pcf->conn->flags & PPE_DRV_V6_CONN_FLAG_FLOW_PPE_ASSIST) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_skip_conn_rfs);
+		ppe_drv_info("%p: connection flush called for ppe_rfs cpu_code: %d", keys, cc);
+		return;
+	}
+
 	if (ppe_drv_v6_flush(pcf->conn) != PPE_DRV_RET_SUCCESS) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_info("%p: connection flush failed for cpu_code: %d", keys, cc);
