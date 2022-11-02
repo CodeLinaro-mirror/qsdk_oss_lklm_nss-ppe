@@ -542,6 +542,10 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 	sw_error_t err;
 	fal_intf_id_t intf_ctrl = {0};
 	struct ppe_drv_vsi *active_vsi;
+	fal_port_t fal_port;
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(pp->port) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, pp->port)
+			: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, pp->port);
 
 	ppe_drv_assert(kref_read(&pp->ref_cnt), "%p: attaching vsi to unused port:%d", pp, pp->port);
 
@@ -594,7 +598,7 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		return;
 
 	default:
-		ppe_drv_assert(false, "%p: attaching port: %u of unknown type vsi :%u", pp, pp->port, vsi->type);
+		ppe_drv_assert(false, "%p: attaching port: %u of unknown type vsi :%u", pp, fal_port, vsi->type);
 		ppe_drv_warn("%p: attaching port to unknown vsi type: %u", pp, vsi->type);
 		return;
 	}
@@ -606,7 +610,7 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 	active_vsi = pp->br_vsi ? pp->br_vsi : pp->port_vsi;
 	if (!active_vsi) {
 		ppe_drv_warn("%p No active VSI assigned to port: %u",
-				pp, pp->port);
+				pp, fal_port);
 		goto fail;
 	}
 
@@ -628,14 +632,14 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		goto fail;
 	}
 
-	err = ppe_port_vsi_set(PPE_DRV_SWITCH_ID, pp->port, active_vsi->index);
+	err = ppe_port_vsi_set(PPE_DRV_SWITCH_ID, fal_port, active_vsi->index);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p port vsi configuration failed: %p port_num: %u vsi_num: %u",
-				pp, active_vsi, pp->port, active_vsi->index);
+				pp, active_vsi, fal_port, active_vsi->index);
 		goto fail;
 	}
 
-	ppe_drv_trace("%p: attaching vsi %u to port %u", pp, active_vsi->index, pp->port);
+	ppe_drv_trace("%p: attaching vsi %u to port %u", pp, active_vsi->index, fal_port);
 
 	ppe_drv_port_dump(pp);
 	return;
@@ -656,7 +660,11 @@ fail:
  */
 void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 {
+	fal_port_t fal_port;
 	sw_error_t err;
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(pp->port) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, pp->port)
+			: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, pp->port);
 
 	switch (vsi->type) {
 	case PPE_DRV_VSI_TYPE_PORT:
@@ -711,12 +719,12 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		return;
 	}
 
-	ppe_drv_trace("%p: detached vsi %u from port %u", pp, vsi->index, pp->port);
+	ppe_drv_trace("%p: detached vsi %u from port %u", pp, vsi->index, fal_port);
 
-	err = ppe_port_vsi_set(PPE_DRV_SWITCH_ID, pp->port, FAL_VSI_INVALID);
+	err = ppe_port_vsi_set(PPE_DRV_SWITCH_ID, fal_port, FAL_VSI_INVALID);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p port vsi configuration failed: %p port_num: %u vsi_num: %u",
-				pp, vsi, pp->port, vsi->index);
+				pp, vsi, fal_port, vsi->index);
 	}
 
 	ppe_drv_port_dump(pp);
