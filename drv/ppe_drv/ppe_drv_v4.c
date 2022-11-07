@@ -296,6 +296,16 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		ppe_drv_v4_conn_flow_xlate_dest_ip_set(pcf, conn->return_ip_xlate);
 		ppe_drv_v4_conn_flow_xlate_dest_ident_set(pcf, conn->return_ident_xlate);
 
+		if ((ppe_drv_v4_conn_flow_match_src_ip_get(pcf) != ppe_drv_v4_conn_flow_xlate_src_ip_get(pcf))
+			|| (ppe_drv_v4_conn_flow_match_src_ident_get(pcf) != ppe_drv_v4_conn_flow_xlate_src_ident_get(pcf))) {
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_XLATE_SRC);
+		}
+
+		if ((ppe_drv_v4_conn_flow_match_dest_ip_get(pcf) != ppe_drv_v4_conn_flow_xlate_dest_ip_get(pcf))
+			|| (ppe_drv_v4_conn_flow_match_dest_ident_get(pcf) != ppe_drv_v4_conn_flow_xlate_dest_ident_get(pcf))) {
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_XLATE_DEST);
+		}
+
 		/*
 		 * Flow MTU and transmit MAC address.
 		 */
@@ -371,6 +381,16 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		ppe_drv_v4_conn_flow_xlate_src_ident_set(pcr, tuple->return_ident);
 		ppe_drv_v4_conn_flow_xlate_dest_ip_set(pcr, tuple->flow_ip);
 		ppe_drv_v4_conn_flow_xlate_dest_ident_set(pcr, tuple->flow_ident);
+
+		if ((ppe_drv_v4_conn_flow_match_src_ip_get(pcr) != ppe_drv_v4_conn_flow_xlate_src_ip_get(pcr))
+			|| (ppe_drv_v4_conn_flow_match_src_ident_get(pcr) != ppe_drv_v4_conn_flow_xlate_src_ident_get(pcr))) {
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_XLATE_SRC);
+		}
+
+		if ((ppe_drv_v4_conn_flow_match_dest_ip_get(pcr) != ppe_drv_v4_conn_flow_xlate_dest_ip_get(pcr))
+			|| (ppe_drv_v4_conn_flow_match_dest_ident_get(pcr) != ppe_drv_v4_conn_flow_xlate_dest_ident_get(pcr))) {
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_XLATE_DEST);
+		}
 
 		/*
 		 * Flow MTU and transmit MAC address.
