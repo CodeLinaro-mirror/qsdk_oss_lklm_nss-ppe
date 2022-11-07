@@ -164,9 +164,9 @@ struct ppe_drv_tun {
 bool ppe_drv_tun_global_init(struct ppe_drv *p);
 bool ppe_drv_tun_check_support(uint8_t protocol);
 void ppe_drv_tun_vxlan_deconfigure(struct ppe_drv *p);
-void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn_flow *pcf);
-void ppe_drv_tun_v6_port_stats_update(struct ppe_drv_v6_conn_flow *pcf);
-bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6);
+void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn *cn);
+void ppe_drv_tun_v6_port_stats_update(struct ppe_drv_v6_conn *cn);
+bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *cn);
 bool ppe_drv_tun_attach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn);
 bool ppe_drv_tun_detach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn);
 bool ppe_drv_tun_detach_mapt_v6_to_v4(struct ppe_drv_tun *ptun);

@@ -999,6 +999,8 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 	struct ppe_drv_tun *ptun;
 	struct ppe_drv_v4_conn_sync *cns_v4 = NULL;
 	struct ppe_drv_v6_conn_sync *cns_v6 = NULL;
+	struct ppe_drv_v6_conn *cn_v6 = NULL;
+	struct ppe_drv_v4_conn *cn_v4 = NULL;
 	bool is_ipv6;
 
 	spin_lock_bh(&p->lock);
@@ -1021,17 +1023,45 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 	is_ipv6 = ppe_drv_tun_cmn_ctx_tun_is_ipv6(pth);
 
 	if (vdestroy_rule && is_ipv6) {
-		ret = ppe_drv_v6_tun_del_ce_validate(vdestroy_rule, &cns_v6);
+		ret = ppe_drv_v6_tun_del_ce_validate(vdestroy_rule, &cns_v6, &cn_v6);
 		if (ret != PPE_DRV_RET_SUCCESS) {
 			spin_unlock_bh(&p->lock);
 			return false;
 		}
+
+		/*
+		 * Detach MAPT v6 tun pcf from v4 flow pcf  added to capture MAP-T stats
+		 */
+		if (ptun && (ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT)) {
+			if (!ppe_drv_tun_detach_mapt_v6_to_v4(ptun)) {
+				ppe_drv_warn("%p: MAP-T v6 -> v4 detach failed", p);
+			}
+		}
+
+		/*
+		 * Remove connection entry from the active connection list.
+		 */
+		list_del(&cn_v6->list);
+
+		/*
+		 * Capture remaining stats.
+		 */
+		ppe_drv_v6_conn_sync_one(cn_v6, cns_v6, PPE_DRV_STATS_SYNC_REASON_DESTROY);
 	} else if (vdestroy_rule) {
-		ret = ppe_drv_v4_tun_del_ce_validate(vdestroy_rule, &cns_v4);
+		ret = ppe_drv_v4_tun_del_ce_validate(vdestroy_rule, &cns_v4, &cn_v4);
 		if (ret != PPE_DRV_RET_SUCCESS) {
 			spin_unlock_bh(&p->lock);
 			return false;
 		}
+
+		/*
+		 * Remove connection entry from the active connection list.
+		 */
+		list_del(&cn_v4->list);
+		/*
+		 * Capture remaining stats.
+		 */
+		ppe_drv_v4_conn_sync_one(cn_v4, cns_v4, PPE_DRV_STATS_SYNC_REASON_DESTROY);
 	}
 
 	/*
@@ -1129,6 +1159,9 @@ skip_tunnel_deactivation:
 		ppe_drv_v6_conn_stats_sync_invoke_cb(cns_v6);
 		ppe_drv_v6_conn_stats_free(cns_v6);
 	}
+
+	ppe_drv_v6_conn_free(cn_v6);
+	ppe_drv_v4_conn_free(cn_v4);
 
 	return true;
 

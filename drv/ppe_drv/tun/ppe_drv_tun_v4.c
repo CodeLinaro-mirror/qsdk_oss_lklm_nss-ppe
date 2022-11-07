@@ -25,13 +25,14 @@
  * ppe_drv_tun_v4_port_stats_update()
  *	Updates flow instance's stats counter from PPE port Tx and Rx counters.
  */
-void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn_flow *pcf)
+void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn *cn)
 {
 	sw_error_t err;
 	uint32_t delta_pkts;
 	uint32_t delta_bytes;
 	fal_port_t v_port;
-	struct ppe_drv_v4_conn_flow *pcr;
+	struct ppe_drv_v4_conn_flow *pcf = &cn->pcf;
+	struct ppe_drv_v4_conn_flow *pcr = &cn->pcr;
 	struct ppe_drv_port *pp = NULL;
 	fal_port_cnt_t port_cnt;
 
@@ -62,15 +63,8 @@ void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	 * Rx packets from the VP port would be Tx count for WAN port
 	 * hence updating from VP tx stats
 	 */
-	if (ppe_drv_v4_conn_flags_check(pcf->conn, PPE_DRV_V4_CONN_FLAG_RETURN_VALID)) {
-		pcr = &pcf->conn->pcr;
-		ppe_drv_v4_conn_flow_rx_stats_add(pcr, delta_pkts, delta_bytes);
-	} else {
-		ppe_drv_v4_conn_flow_tx_stats_add(pcf, delta_pkts, delta_bytes);
-	}
-
-	pp->stats.rx_pkt_cnt = port_cnt.rx_pkt_cnt;
-	pp->stats.rx_byte_cnt = port_cnt.rx_byte_cnt;
+	ppe_drv_v4_conn_flow_rx_stats_add(pcr, delta_pkts, delta_bytes);
+	ppe_drv_v4_conn_flow_tx_stats_add(pcf, delta_pkts, delta_bytes);
 
 	delta_pkts = (port_cnt.tx_pkt_cnt - pp->stats.tx_pkt_cnt + FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1) & FAL_TUNNEL_DECAP_PKT_CNT_MASK;
 	delta_bytes = (port_cnt.tx_byte_cnt - pp->stats.tx_byte_cnt + FAL_TUNNEL_DECAP_BYTE_CNT_MASK + 1)
@@ -80,15 +74,13 @@ void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	 * Tx packets from the VP port would be RX count for WAN port
 	 *  hence updating the VP tx stats to FLOW Rx
 	 */
-	if (ppe_drv_v4_conn_flags_check(pcf->conn, PPE_DRV_V4_CONN_FLAG_RETURN_VALID)) {
-		pcr = &pcf->conn->pcr;
-		ppe_drv_v4_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
-	} else {
-		ppe_drv_v4_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
-	}
+	ppe_drv_v4_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
+	ppe_drv_v4_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
 
 	pp->stats.tx_pkt_cnt = port_cnt.tx_pkt_cnt;
 	pp->stats.tx_byte_cnt = port_cnt.tx_byte_cnt;
+	pp->stats.rx_pkt_cnt = port_cnt.rx_pkt_cnt;
+	pp->stats.rx_byte_cnt = port_cnt.rx_byte_cnt;
 }
 
 /*
@@ -107,10 +99,17 @@ struct ppe_drv_v4_conn *ppe_drv_v4_conn_tun_conn_get(struct ppe_drv_v4_5tuple *t
 			continue;
 		}
 
-		if ((ppe_drv_v4_addr_equal(cn->pcf.match_src_ip, tuple->flow_ip) &&
-			ppe_drv_v4_addr_equal(cn->pcf.match_dest_ip, tuple->return_ip)) ||
-			(ppe_drv_v4_addr_equal(cn->pcr.match_src_ip, tuple->flow_ip) &&
-			ppe_drv_v4_addr_equal(cn->pcr.match_dest_ip, tuple->return_ip))) {
+		if (!(ppe_drv_v4_addr_equal(cn->pcf.match_src_ip, tuple->flow_ip) &&
+					ppe_drv_v4_addr_equal(cn->pcf.match_dest_ip, tuple->return_ip)) &&
+				!(ppe_drv_v4_addr_equal(cn->pcr.match_src_ip, tuple->flow_ip) &&
+					ppe_drv_v4_addr_equal(cn->pcr.match_dest_ip, tuple->return_ip))) {
+			continue;
+		}
+
+		if (((cn->pcf.match_src_ident == tuple->flow_ident) &&
+					(cn->pcf.match_dest_ident == tuple->return_ident)) ||
+				((cn->pcr.match_src_ident == tuple->flow_ident) &&
+				 (cn->pcr.match_dest_ident == tuple->return_ident))) {
 			return cn;
 		}
 	}
@@ -202,7 +201,7 @@ void ppe_drv_tun_v4_parse_l2_hdr(struct ppe_drv_v4_rule_create *create, struct p
  *
  * Requires caller to hold lock on ppe_drv_gbl.
  */
-ppe_drv_ret_t ppe_drv_v4_tun_del_ce_validate(void *vdestroy_rule, struct ppe_drv_v4_conn_sync **cns_v4)
+ppe_drv_ret_t ppe_drv_v4_tun_del_ce_validate(void *vdestroy_rule, struct ppe_drv_v4_conn_sync **cns_v4, struct ppe_drv_v4_conn **cn_v4)
 {
 	struct ppe_drv_v4_rule_destroy *destroy = (struct ppe_drv_v4_rule_destroy *)vdestroy_rule;
 	ppe_drv_ret_t ret = PPE_DRV_RET_SUCCESS;
@@ -241,18 +240,8 @@ ppe_drv_ret_t ppe_drv_v4_tun_del_ce_validate(void *vdestroy_rule, struct ppe_drv
 	 */
 	ppe_drv_v4_if_walk_release(pcr);
 
-	/*
-	 * Add connection entry to the active connection list.
-	 */
-	list_del(&cn->list);
-
-	/*
-	 * Capture remaining stats.
-	 */
-	ppe_drv_v4_conn_sync_one(cn, cns, PPE_DRV_STATS_SYNC_REASON_DESTROY);
-
-	ppe_drv_v4_conn_free(cn);
 	*cns_v4 = cns;
+	*cn_v4 = cn;
 
 	return ret;
 }
