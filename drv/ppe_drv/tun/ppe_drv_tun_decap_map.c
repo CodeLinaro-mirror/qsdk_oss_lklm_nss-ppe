@@ -197,6 +197,14 @@ bool ppe_drv_tun_decap_map_configure(struct ppe_drv_tun_decap *ptdcm, uint32_t *
 done:
 	err = fal_mapt_decap_entry_add(PPE_DRV_SWITCH_ID, &fmde);
 	if (err != SW_OK) {
+		/*
+		 * This is a re-activate entry call. So, the decap map entry will be already present.
+		 */
+		if (err == SW_ALREADY_EXIST) {
+			ppe_drv_info("%p: Using existing MAPT decap entry %d", ptdcm, ptdcm->tl_index);
+			return true;
+		}
+
 		ppe_drv_warn("%p: failed to add MAP decap entry at index %d", ptdcm, ptdcm->index);
 		return false;
 	}
