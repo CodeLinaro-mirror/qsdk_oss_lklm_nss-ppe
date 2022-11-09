@@ -664,6 +664,26 @@ static struct notifier_block nss_ppe_bridge_mgr_netdevice_nb __read_mostly = {
 };
 
 /*
+ * nss_ppe_bridge_mgr_is_physical()
+ *	Check if the device is represented on PPE as physical interface.
+ */
+static bool nss_ppe_bridge_mgr_is_physical(struct net_device *dev)
+{
+	struct ppe_drv_iface *iface;
+	if (!dev) {
+		return false;
+	}
+
+	iface = ppe_drv_iface_get_by_dev(dev);
+	if (!iface) {
+		nss_ppe_bridge_mgr_warn("%px: failed to find PPE interface\n", dev);
+		return false;
+	}
+
+	return ppe_drv_iface_is_physical(iface);
+}
+
+/*
  * nss_ppe_bridge_mgr_is_ppe()
  *	Check if the device is represented on PPE.
  */
@@ -750,8 +770,8 @@ static int nss_ppe_bridge_mgr_fdb_update_callback(struct notifier_block *notifie
 		return NOTIFY_DONE;
 	}
 
-	if (nss_ppe_bridge_mgr_is_ppe(event->dev)) {
-		nss_ppe_bridge_mgr_trace("%px: new source is not a non-physical interface\n", event->dev);
+	if (nss_ppe_bridge_mgr_is_ppe(event->dev) && nss_ppe_bridge_mgr_is_physical(event->dev)) {
+		nss_ppe_bridge_mgr_trace("%px: new source is a PPE physical interface\n", event->dev);
 		dev_put(br_dev);
 		return NOTIFY_DONE;
 	}

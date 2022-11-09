@@ -61,6 +61,20 @@ enum ppe_drv_iface_type {
 };
 
 /*
+ * ppe_drv_iface_is_physical()
+ *	Check if a PPE iface is a physical interface.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ *
+ * @param[IN] iface  PPE interface.
+ *
+ * @return
+ * true or false
+ */
+bool ppe_drv_iface_is_physical(struct ppe_drv_iface *iface);
+
+/*
  * ppe_drv_iface_eip_set()
  *	Configure EIP VP for a specific inline service.
  *

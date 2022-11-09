@@ -102,6 +102,16 @@ struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx)
 }
 
 /*
+ * ppe_drv_iface_is_physical()
+ *	Check if PPE interface is a physical interface
+ */
+bool ppe_drv_iface_is_physical(struct ppe_drv_iface *iface)
+{
+	return iface->type == PPE_DRV_IFACE_TYPE_PHYSICAL;
+}
+EXPORT_SYMBOL(ppe_drv_iface_is_physical);
+
+/*
  * ppe_drv_iface_idx_get_by_dev()
  *	Get PPE interface by netdev
  */
