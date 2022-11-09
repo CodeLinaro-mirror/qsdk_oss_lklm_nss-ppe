@@ -50,6 +50,8 @@ struct ppe_ds_wlan_reg_info {
 	dma_addr_t reo2ppe_ba;		/**< REO2PPE ring base address */
 	uint32_t ppe2tcl_num_desc;	/**< PPE2TCL ring descriptor count */
 	uint32_t reo2ppe_num_desc;	/**< REO2PPE ring descriptor count */
+	uint32_t ppe2tcl_start_idx;		/**< PPE2TCL ring index */
+	uint32_t reo2ppe_start_idx;		/**< REO2PPE ring index */
 };
 
 /**
