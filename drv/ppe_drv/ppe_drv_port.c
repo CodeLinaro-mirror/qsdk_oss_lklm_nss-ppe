@@ -1157,6 +1157,15 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 	}
 
 	/*
+	 * Select PPE-DS profile ID for PPE-DS user ports.
+	 */
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		profile = PPE_DRV_REDIR_PROFILE_ID;
+	}
+
+	ppe_drv_info("user type: %d, profile: %d\n", pp->user_type, profile);
+
+	/*
 	 * TODO confirm with SSDK team if using profile-ID 0 for CPU port
 	 */
 	q_dst.src_profile = 0;
