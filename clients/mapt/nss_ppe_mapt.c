@@ -284,17 +284,25 @@ static int nss_ppe_mapt_dev_event(struct notifier_block  *nb,
 		tun_hdr = kzalloc(sizeof(struct ppe_drv_tun_cmn_ctx), GFP_ATOMIC);
 		if (!tun_hdr) {
 			nss_ppe_mapt_warning("%p: memory allocation for tunnel failed", dev);
+			ppe_tun_free(dev);
+			nss_mapt_stats_dentry_free(dev);
 			break;
 		}
 
 		if (!nss_ppe_mapt_dev_parse_param(dev, tun_hdr)) {
-			nss_ppe_mapt_trace("%p: Unable to parse param for PPE tunnel for dev: %s", dev, dev->name);
+			nss_ppe_mapt_warning("%p: Unable to parse param for PPE tunnel for dev: %s", dev, dev->name);
+			ppe_tun_free(dev);
+			nss_mapt_stats_dentry_free(dev);
 			kfree(tun_hdr);
 			break;
 		}
 
 		if (!(ppe_tun_configure(dev, tun_hdr, nss_ppe_mapt_src_exception, NULL))) {
-			nss_ppe_mapt_trace("%p: Unable to configure PPE tunnel for dev: %s", dev, dev->name);
+			nss_ppe_mapt_warning("%p: Unable to configure PPE tunnel for dev: %s", dev, dev->name);
+			ppe_tun_free(dev);
+			nss_mapt_stats_dentry_free(dev);
+			kfree(tun_hdr);
+			break;
 		}
 
 		kfree(tun_hdr);
