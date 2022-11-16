@@ -244,6 +244,20 @@ ppe_drv_ret_t ppe_drv_iface_ucast_queue_get(struct ppe_drv_iface *iface, uint8_t
  */
 ppe_drv_ret_t ppe_drv_iface_ucast_queue_set(struct ppe_drv_iface *iface, uint8_t queue_id);
 
+/**
+ * ppe_drv_iface_get_by_idx
+ *	Get the ppe iface associated with a physical port index.
+ *
+ * @datatypes
+ * ppe_drv_iface_t
+ *
+ * @param[in] idx  physical port index.
+ *
+ * @return
+ * ppe_drv_iface
+ */
+struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx);
+
 /** @} */ /* end_addtogroup ppe_drv_iface_subsystem */
 
 #endif /* _PPE_DRV_IFACE_H_ */

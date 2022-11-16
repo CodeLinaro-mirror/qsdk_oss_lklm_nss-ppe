@@ -100,6 +100,7 @@ struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx)
 
 	return NULL;
 }
+EXPORT_SYMBOL(ppe_drv_iface_get_by_idx);
 
 /*
  * ppe_drv_iface_is_physical()
