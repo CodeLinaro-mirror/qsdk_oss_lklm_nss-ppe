@@ -1273,12 +1273,9 @@ static int __init nss_ppe_bridge_mgr_init_module(void)
 	/*
 	 * Monitor bridge activity only on supported platform
 	 */
-	/*
-	 * TODO: To update the 'devsoc' with correct string during SOD
-	 */
 	if (!of_machine_is_compatible("qcom,ipq9574-emulation")
 			&& !of_machine_is_compatible("qcom,ipq9574")
-			&& !of_machine_is_compatible("qcom,devsoc")) {
+			&& !of_machine_is_compatible("qcom,ipq5332")) {
 		return -EINVAL;
 	}
 
