@@ -30,6 +30,7 @@
 #include "ppe_qdisc_debug.h"
 #include "ppe_qdisc_port.h"
 #include "ppe_qdisc_res.h"
+#include "ppe_qdisc_stats.h"
 
 #define PPE_QDISC_FLAG_NODE_ROOT		0x00000001	/* Qdisc node is root node */
 #define PPE_QDISC_FLAG_NODE_CLASS		0x00000002	/* Qdisc node is a class */
@@ -41,6 +42,8 @@
 #define PPE_QDISC_FLAG_L0_SCHEDULER_VALID	0x00000080	/* L0 scheduler is valid for the qdisc */
 #define PPE_QDISC_FLAG_L1_SCHEDULER_VALID	0x00000100	/* L1 scheduler is valid for the qdisc */
 #define PPE_QDISC_FLAG_SHAPER_VALID		0x00000200	/* Shaper is valid for the qdisc */
+
+#define PPE_QDISC_STATS_SYNC_MANY_PERIOD msecs_to_jiffies(1000)	/* Statistics sync peroid */
 
 /*
  * ppe_qdisc_hlist_for_each_entry - iterate over list of classes
@@ -78,8 +81,20 @@ enum ppe_qdisc_node_type {
 typedef enum ppe_qdisc_node_type ppe_qdisc_node_type_t;
 
 /*
+ * ppe_qdisc_stats_wq
+ * 	Qdisc stats sync info object
+ */
+struct ppe_qdisc_stats_wq {
+	struct ppe_qdisc *pq;			/* Pointer to root ppe_qdisc */
+	struct list_head stats_list;		/* List of root nodes for stats sync management work */
+	struct timer_list stats_get_timer;	/* Timer used to start fresh iteration */
+	bool stats_polling_stopped;		/* True when polling is stopped due to qdisc delete */
+	struct list_head q_list_head;		/* List head to manage leaf node stats */
+};
+
+/*
  * ppe_qdisc
- *	PPE Qdisc structure
+ *      PPE Qdisc structure
  */
 struct ppe_qdisc {
 	struct Qdisc *qdisc;		/* Handy pointer back to containing qdisc */
@@ -96,6 +111,8 @@ struct ppe_qdisc {
 	struct gnet_stats_queue qstats;	/* Qstats for use by classes */
 	refcount_t refcnt;		/* Reference count for class use */
 	spinlock_t lock;		/* Lock to protect the nss qdisc structure */
+	struct list_head q_list_element;	/*List element in the list of leaf nodes */
+	struct ppe_qdisc_stats_wq *stats_wq;	/* Stats info and stats work object */
 	struct tcf_proto __rcu *filter_list;	/* Filter list */
 	struct tcf_block *block;	/* TC filter block */
 };
@@ -208,8 +225,8 @@ static inline struct sk_buff *ppe_qdisc_dequeue(struct Qdisc *sch)
  * shaped by the interface shaper in the PPE by the usual transmit path.
  */
 static inline int ppe_qdisc_enqueue(struct sk_buff *skb,
-			struct Qdisc *sch,
-			struct sk_buff **to_free)
+		struct Qdisc *sch,
+		struct sk_buff **to_free)
 {
 	__qdisc_enqueue_tail(skb, &sch->q);
 	__netif_schedule(sch);
@@ -221,8 +238,8 @@ static inline int ppe_qdisc_enqueue(struct sk_buff *skb,
  *	Used to replace old qdisc with a new qdisc.
  */
 static inline struct Qdisc *ppe_qdisc_replace(struct Qdisc *sch,
-				struct Qdisc *new,
-				struct Qdisc **pold)
+		struct Qdisc *new,
+		struct Qdisc **pold)
 {
 	return qdisc_replace(sch, new, pold);
 }
@@ -232,7 +249,7 @@ static inline struct Qdisc *ppe_qdisc_replace(struct Qdisc *sch,
  *  Wrapper around gnet_stats_copy_basic()
  */
 static inline int ppe_qdisc_gnet_stats_copy_basic(struct Qdisc *sch, struct gnet_dump *d,
-				struct gnet_stats_basic_packed *b)
+		struct gnet_stats_basic_packed *b)
 {
 	return gnet_stats_copy_basic(qdisc_root_sleeping_running(sch), d, NULL, b);
 }
@@ -242,7 +259,7 @@ static inline int ppe_qdisc_gnet_stats_copy_basic(struct Qdisc *sch, struct gnet
  *  Wrapper around gnet_stats_copy_queue()
  */
 static inline int ppe_qdisc_gnet_stats_copy_queue(struct gnet_dump *d,
-			struct gnet_stats_queue *q)
+		struct gnet_stats_queue *q)
 {
 	return gnet_stats_copy_queue(d, NULL, q, q->qlen);
 }
@@ -303,8 +320,8 @@ int ppe_qdisc_is_depth_valid(struct ppe_qdisc *pq);
  *	Extracts qopt from opt.
  */
 void *ppe_qdisc_qopt_get(struct nlattr *opt, struct nla_policy *policy,
-			struct nlattr *tb[], uint32_t tca_max,
-			uint32_t tca_params, struct netlink_ext_ack *extack);
+		struct nlattr *tb[], uint32_t tca_max,
+		uint32_t tca_params, struct netlink_ext_ack *extack);
 
 /*
  * ppe_qdisc_set_default()

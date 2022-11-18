@@ -23,6 +23,7 @@
 #include "ppe_tbl.h"
 #include "ppe_wrr.h"
 #include "ppe_wfq.h"
+#include "ppe_qdisc_stats.h"
 
 /*
  * Max number of PRIO bands supported based on level.
@@ -367,10 +368,15 @@ void ppe_qdisc_destroy(struct ppe_qdisc *pq)
 		tcf_block_put(pq->block);
 	}
 
+	if (pq->type > PPE_QDISC_NODE_SCH_MAX) {
+		ppe_qdisc_stats_qdisc_detach(pq);
+	}
+
 	ppe_qdisc_res_free(pq);
 
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
 		ppe_qdisc_port_default_conf_set(pq->port_id);
+		ppe_qdisc_stats_stop_polling(pq);
 	}
 
 	pq->flags = 0;
@@ -433,6 +439,7 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 				qdisc_dev(sch), qdisc_dev(sch)->name, qdisc_dev(sch)->qdisc, qdisc_dev(sch)->qdisc->handle, pq->type);
 		ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_NODE_ROOT);
 		root = sch;
+		ppe_qdisc_stats_sync_many_init(pq);
 	} else {
 		ppe_qdisc_info("Qdisc %px (type %d) not root", pq->qdisc, pq->type);
 		root = qdisc_dev(sch)->qdisc;
@@ -494,9 +501,16 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 		return -1;
 	}
 
-	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_NODE_INITIALIZED);
-	ppe_qdisc_info("Qdisc %px (type %d): initialized", pq->qdisc, pq->type);
+	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_CLASS)) {
+		ppe_qdisc_stats_qdisc_attach(pq);
 
+		if (sch->parent == TC_H_ROOT) {
+			ppe_qdisc_stats_start_polling(pq);
+		}
+	}
+
+	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_NODE_INITIALIZED);
+	ppe_qdisc_info("%px Qdisc (type %d): initialized", pq->qdisc, pq->type);
 	return 0;
 }
 
@@ -532,15 +546,13 @@ static int __init ppe_qdisc_module_init(void)
 	ppe_qdisc_info("ppeprio registered");
 
 	ret = register_qdisc(&ppe_red_qdisc_ops);
-	if (ret != 0) {
+	if (ret != 0)
 		goto fail5;
-	}
 	ppe_qdisc_info("ppered registered");
 
 	ret = register_qdisc(&ppe_tbl_qdisc_ops);
-	if (ret != 0) {
+	if (ret != 0)
 		goto fail6;
-	}
 	ppe_qdisc_info("ppetbl registered");
 
 	ret = register_qdisc(&ppe_wrr_qdisc_ops);
@@ -553,8 +565,15 @@ static int __init ppe_qdisc_module_init(void)
 		goto fail8;
 	ppe_qdisc_info("ppewfq registered");
 
+	if (!ppe_qdisc_stats_work_queue_init()) {
+		ppe_qdisc_warning("Failed to initialized stats workqueue thread");
+		goto fail9;
+	}
+
 	return 0;
 
+fail9:
+	unregister_qdisc(&ppe_wfq_qdisc_ops);
 fail8:
 	unregister_qdisc(&ppe_wrr_qdisc_ops);
 fail7:
@@ -580,6 +599,8 @@ fail1:
  */
 static void __exit ppe_qdisc_module_exit(void)
 {
+	ppe_qdisc_stats_work_queue_exit();
+
 	unregister_qdisc(&ppe_pfifo_qdisc_ops);
 	ppe_qdisc_info("ppepfifo unregistered");
 

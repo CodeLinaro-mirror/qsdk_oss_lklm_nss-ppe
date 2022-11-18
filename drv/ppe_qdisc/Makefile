@@ -9,6 +9,7 @@ qca-nss-ppe-qdisc-objs += ppe_fifo.o \
 			ppe_qdisc.o \
 			ppe_qdisc_port.o \
 			ppe_qdisc_res.o \
+			ppe_qdisc_stats.o \
 			ppe_red.o \
 			ppe_tbl.o \
 			ppe_wrr.o
