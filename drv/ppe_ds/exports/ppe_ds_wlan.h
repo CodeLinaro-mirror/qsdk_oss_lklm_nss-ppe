@@ -64,6 +64,7 @@ struct ppe_ds_wlan_reg_info {
 	uint32_t ppe2tcl_start_idx;		/**< PPE2TCL ring index */
 	uint32_t reo2ppe_start_idx;		/**< REO2PPE ring index */
 	ppe_ds_wlan_node_type_t node_type;	/**< PPE-DS node type */
+	bool ppe_ds_int_mode_enabled;  /**< Interrupt mode to process PPE2TCL */
 };
 
 /**
@@ -96,6 +97,9 @@ struct ppe_ds_wlan_ops {
 	void (*release_rx_desc)(ppe_ds_wlan_handle_t *ppeds_handle,
 			struct ppe_ds_wlan_rxdesc_elem *arr, uint16_t count);
 				/**< Callback to release WLAN Rx descriptors and buffers */
+	void (*enable_tx_consume_intr)(ppe_ds_wlan_handle_t *ppeds_handle,
+					bool enable);
+				/**< Callback to toggle wlan interrupt */
 };
 
 /**
@@ -226,4 +230,32 @@ void ppe_ds_wlan_inst_free(ppe_ds_wlan_handle_t *wlan_handle);
  */
 ppe_ds_wlan_handle_t *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_size);
 
+/**
+ * ppe_ds_ppe2tcl_wlan_handle_intr
+ *	PPE-DS WLAN irq handling for ppe2tcl ring
+ *
+ * @param[in] ctxt IRQ context
+ *
+ */
+int ppe_ds_ppe2tcl_wlan_handle_intr(void *ctxt);
+
+/**
+ * ppe_ds_reo2ppe_wlan_handle_intr
+ *	PPE-DS WLAN irq handling for reo2ppe ring
+ *
+ * @param[in] ctxt IRQ context
+ *
+ */
+int ppe_ds_reo2ppe_wlan_handle_intr(void *ctxt);
+
+/**
+ * ppe_ds_wlan_get_intr_ctxt
+ *	PPE-DS get wlan context
+ *
+ * @datatypes
+ * ppeds_wlan_handle_t
+ *
+ * @param[in] wlan_handle   PPE-DS WLAN handle
+ */
+void *ppe_ds_wlan_get_intr_ctxt(ppe_ds_wlan_handle_t *wlan_handle);
 #endif	/* _PPE_DS_WLAN_H_ */

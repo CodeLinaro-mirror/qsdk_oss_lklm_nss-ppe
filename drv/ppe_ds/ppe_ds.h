@@ -21,6 +21,9 @@
 #include "nss_dp_ppeds.h"
 #include "ppe_ds_wlan.h"
 
+#define PPE_DS_POLL_MODE	1
+#define PPE_DS_INTR_MODE	0
+
 #if defined(CONFIG_DYNAMIC_DEBUG)
 /*
  * If dynamic debug is enabled, use pr_debug.
@@ -100,6 +103,7 @@ struct ppe_ds {
 	struct hrtimer timer;			/* HR timer */
 	struct net_device napi_ndev;		/* Dummy NAPI device */
 	bool timer_enabled;			/* Timer enabled flag */
+	bool en_process_irq;			/* Safe to handle irq */
 	struct ppe_ds_wlan_ops *wlan_ops;	/* PPE-DS WLAN operations */
 	struct nss_dp_ppeds_ops *dp_ops;	/* PPE-DS EDMA operations */
 	uint32_t node_cfg_idx;			/* Index of PPE-DS node configuration */
