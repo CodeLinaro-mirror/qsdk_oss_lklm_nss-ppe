@@ -23,6 +23,9 @@
 
 extern unsigned int idx_mgmt_freq;
 extern unsigned int max_move;
+extern unsigned int cpu_mask_2g;
+extern unsigned int cpu_mask_5g;
+extern unsigned int cpu_mask_6g;
 extern struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
 
 #define IDX_MGMT_PERIOD max_t(u64, 10000, NSEC_PER_SEC / idx_mgmt_freq)
@@ -226,6 +229,8 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
 	struct ppe_ds_node_config *node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
 	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
+	unsigned int cpu;
+	static unsigned int ppeds_node_iter_cnt;
 	bool ret;
 
 	write_lock_bh(&node_cfg->lock);
@@ -250,6 +255,28 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 	}
 
 	/*
+	 * Currently assuming the below PPE-DS node to SoC mapping:
+	 * 1st PPE-DS node is used by 2G SoC
+	 * 2nd PPE-DS node is used by 6g SoC
+	 * 3rd PPE-DS node is used by 5g SoC
+	 */
+	ppeds_node_iter_cnt++;
+	if (ppeds_node_iter_cnt > PPE_DS_MAX_NODE) {
+		ppeds_node_iter_cnt = 1;
+	}
+
+	if (ppeds_node_iter_cnt == 1) {
+		cpu = cpu_mask_2g;
+	} else if (ppeds_node_iter_cnt == 2) {
+		cpu = cpu_mask_6g;
+	} else if (ppeds_node_iter_cnt == 3) {
+		cpu = cpu_mask_5g;
+	} else {
+		ppe_ds_err("Invalid PPE-DS iteration count: %d\n", ppeds_node_iter_cnt);
+		return false;
+	}
+
+	/*
 	 * Setup dummy netdev for all the NAPIs associated with this node
 	 */
 	init_dummy_netdev(&node->napi_ndev);
@@ -257,8 +284,10 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 	/*
 	 * Init high res timer.
 	 */
-	hrtimer_init(&node->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrtimer_init_and_bind(&node->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL, cpu);
 	node->timer.function = ppe_ds_timer;
+	ppe_ds_info("For PPE-DS node iteration count: %d, cpu mask is 0x%x\n",
+					ppeds_node_iter_cnt, cpu);
 
 	edma_handle->ppe2tcl_ba = reg_info->ppe2tcl_ba;
 	edma_handle->reo2ppe_ba = reg_info->reo2ppe_ba;
@@ -361,7 +390,7 @@ int ppe_ds_wlan_inst_start(ppe_ds_wlan_handle_t *wlan_handle)
 	dp_ops->refill(edma_handle, edma_handle->ppe2tcl_num_desc -1);
 
 	node->timer_enabled = true;
-	hrtimer_start_range_ns(&node->timer, ns_to_ktime(IDX_MGMT_PERIOD), 0, HRTIMER_MODE_REL_PINNED);
+	hrtimer_start_range_ns_on_cpu(&node->timer, ns_to_ktime(IDX_MGMT_PERIOD), 0, HRTIMER_MODE_REL_PINNED);
 
 	ret = dp_ops->start(edma_handle, PPE_DS_INTR_ENABLE);
 	if (ret != 0) {

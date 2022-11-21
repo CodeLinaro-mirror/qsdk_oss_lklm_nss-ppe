@@ -23,6 +23,17 @@
 #define _PPE_DS_WLAN_H_
 #include <ppe_vp_public.h>
 
+/*
+ * ppe_ds_wlan_node_type_t
+ *	PPE-DS node type
+ */
+typedef enum {
+	PPE_DS_NODE_TYPE_2G,
+	PPE_DS_NODE_TYPE_5G,
+	PPE_DS_NODE_TYPE_6G,
+	PPE_DS_NODE_TYPE_MAX,
+} ppe_ds_wlan_node_type_t;
+
 /**
  * ppe_ds_wlan_txdesc_elem
  *	PPEDS WLAN Tx descriptor element information
@@ -52,6 +63,7 @@ struct ppe_ds_wlan_reg_info {
 	uint32_t reo2ppe_num_desc;	/**< REO2PPE ring descriptor count */
 	uint32_t ppe2tcl_start_idx;		/**< PPE2TCL ring index */
 	uint32_t reo2ppe_start_idx;		/**< REO2PPE ring index */
+	ppe_ds_wlan_node_type_t node_type;	/**< PPE-DS node type */
 };
 
 /**
