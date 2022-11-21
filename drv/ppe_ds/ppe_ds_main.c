@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -16,7 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include "nss_ppe_ds_wlan.h"
+#include "ppe_ds.h"
 
 /*
  * PPE-DS timer frequency for polling function.
@@ -35,26 +36,39 @@ unsigned int max_move = 1024;
 module_param(max_move, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(max_move, "Max movement of the Prod idx that is allowed");
 
+struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
+
 /*
- * nss_ppe_ds_module_init()
- *	module init for PPE-DS driver
+ * ppe_ds_module_init()
+ *	Module init for PPE-DS driver
  */
-static int __init nss_ppe_ds_module_init(void)
+static int __init ppe_ds_module_init(void)
 {
+	uint32_t i;
+
+	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
+		rwlock_init(&ppe_ds_node_cfg[i].lock);
+		ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
+	}
 	ppe_ds_info("PPE-DS module loaded successfully %d", idx_mgmt_freq);
 	return 0;
 }
-module_init(nss_ppe_ds_module_init);
+module_init(ppe_ds_module_init);
 
 /*
- * nss_ppe_ds_module_exit()
- *	module exit for PPE-DS driver
+ * ppe_ds_module_exit()
+ *	Module exit for PPE-DS driver
  */
-static void __exit nss_ppe_ds_module_exit(void)
+static void __exit ppe_ds_module_exit(void)
 {
+	uint32_t i;
+
+	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
+		ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
+	}
 	ppe_ds_info("PPE-DS module unloaded successfully %d", idx_mgmt_freq);
 }
-module_exit(nss_ppe_ds_module_exit);
+module_exit(ppe_ds_module_exit);
 
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_DESCRIPTION("QCA NSS PPE DS driver");
+MODULE_DESCRIPTION("QCA PPE DS driver");
