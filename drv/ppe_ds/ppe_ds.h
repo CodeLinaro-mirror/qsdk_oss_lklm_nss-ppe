@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -13,12 +14,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __NSS_PPE_DS_WLAN__
-#define __NSS_PPE_DS_WLAN__
+#ifndef __PPE_DS__
+#define __PPE_DS__
 #include <linux/netdevice.h>
 
-#include "edma_ppeds.h"
-#include "ppeds_wlan.h"
+#include "nss_dp_ppeds.h"
+#include "ppe_ds_wlan.h"
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
 /*
@@ -58,22 +59,55 @@
 #endif
 #endif
 
-#define PPE_DS_INTR_ENABLE	0
+#define PPE_DS_INTR_ENABLE	0	/* Flag for PPE-DS mode.
+					   0 means timer mode and 1 means interrupt mode */
+#define PPE_DS_MAX_NODE		3	/* Max DS node supported */
+#define PPE_DS_TXCMPL_BUDGET	256	/* PPE-DS node's Tx complete budget */
+#define PPE_DS_RXFILL_LOW_THRES_DIVISOR	3	/* PPE-DS node's Rxfill low threshold divisor */
 
 /*
- * nss_ppe_ds_wlan
- *	PPE-DS WLAN node information
+ * ppe_ds_node_state_t
+ *	PPE-DS node states
  */
-struct nss_ppe_ds_wlan {
+typedef enum {
+	PPE_DS_NODE_STATE_NOT_AVAIL,
+	PPE_DS_NODE_STATE_AVAIL,
+	PPE_DS_NODE_STATE_ALLOC,
+	PPE_DS_NODE_STATE_REG_IN_PROG,
+	PPE_DS_NODE_STATE_REG_DONE,
+	PPE_DS_NODE_STATE_START_IN_PROG,
+	PPE_DS_NODE_STATE_START_DONE,
+	PPE_DS_NODE_STATE_STOP_IN_PROG,
+	PPE_DS_NODE_STATE_STOP_DONE,
+	PPE_DS_NODE_STATE_FREE_IN_PROG,
+} ppe_ds_node_state_t;
+
+/*
+ * ppe_ds_node_config
+ *	PPE-DS node configuration
+ */
+struct ppe_ds_node_config {
+	ppe_ds_node_state_t node_state;		/* PPE-DS node state information */
+	rwlock_t lock;				/* Lock for accessing node configuration */
+};
+
+/*
+ * ppe_ds
+ *	PPE-DS node information
+ */
+struct ppe_ds {
 	struct napi_struct napi;		/* NAPI structure */
 	struct hrtimer timer;			/* HR timer */
 	struct net_device napi_ndev;		/* Dummy NAPI device */
 	bool timer_enabled;			/* Timer enabled flag */
-	struct ppeds_wlan_ops *ops;		/* PPE-DS WLAN operations */
-	uint16_t last_edma_cons_idx;		/* Last read EDMA Rx consumer index */
-	uint16_t last_wlan_cons_idx;		/* Last read WLAN REO2PPE consumer index */
-	uint16_t last_edma_prod_idx;		/* Last read EDMA producer index */
-	edma_ppeds_handle_t *edma_handle;	/* EDMA handle */
-	ppeds_wlan_handle_t wlan_handle;	/* WLAN handle */
+	struct ppe_ds_wlan_ops *wlan_ops;	/* PPE-DS WLAN operations */
+	struct nss_dp_ppeds_ops *dp_ops;	/* PPE-DS EDMA operations */
+	uint32_t node_cfg_idx;			/* Index of PPE-DS node configuration */
+	uint16_t last_edma_rx_cons_idx;		/* Last read EDMA Rx consumer index */
+	uint16_t last_reo2ppe_cons_idx;		/* Last read WLAN REO2PPE consumer index */
+	uint16_t last_edma_tx_prod_idx;		/* Last read EDMA Tx producer index */
+	nss_dp_ppeds_handle_t *edma_handle;	/* EDMA handle */
+	ppe_ds_wlan_handle_t wlan_handle;	/* WLAN handle */
 };
-#endif	/* __NSS_PPE_DS_WLAN__ */
+
+#endif	/* __PPE_DS__ */
