@@ -223,7 +223,7 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 		ppe_drv_v4_conn_flow_tx_stats_add(pcf, delta_pkts, delta_bytes);
 	}
 
-	if (pf->flags & PPE_DRV_FLOW_MAPT) {
+	if ((pf->flags & PPE_DRV_FLOW_MAPT) && pf->mapt_info.mapt_v6) {
 		mapt_pcf_v6 = pf->mapt_info.mapt_v6;
 		mapt_cn_v6 = mapt_pcf_v6->conn;
 

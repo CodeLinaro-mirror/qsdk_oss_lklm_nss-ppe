@@ -1037,7 +1037,7 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 	 * If the flow count is not zero decrement the flow count taken and return
 	 * Do not deactivate the tunnel since other flows are still in use.
 	 */
-	if (!atomic_dec_and_test(&ptun->flow_count)) {
+	if (vdestroy_rule && !atomic_dec_and_test(&ptun->flow_count)) {
 		ppe_drv_info("%p: Flow count is %d , skipping deactivation", ptun, atomic_read(&ptun->flow_count));
 		goto skip_tunnel_deactivation;
 	}
