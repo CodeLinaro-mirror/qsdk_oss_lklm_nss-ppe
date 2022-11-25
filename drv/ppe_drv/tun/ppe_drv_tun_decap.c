@@ -282,6 +282,13 @@ bool ppe_drv_tun_decap_activate(struct ppe_drv_tun_decap *ptdc, struct ppe_drv_t
 	ftde.verify_entry.verify_bmp |= FAL_TUNNEL_L3IF_CHECK_EN;
 	ftde.verify_entry.tl_l3_if = ptdc->tl_l3_if_idx;
 
+	/*
+	 * Suppose deacce_en bit got set for last rule by HW, before activating
+	 * again we need to clear this bit.
+	 */
+	ftde.update_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_DEACCE_UPDATE);
+	ftde.deacce_en = false;
+
 	err = fal_tunnel_decap_action_update(PPE_DRV_SWITCH_ID, ptdc->tl_index, &ftde);
 	if (err != SW_OK) {
 		ppe_drv_trace("%p: decap entry %d action update failed", ptdc, ptdc->tl_index);
