@@ -210,72 +210,77 @@ static int nss_ppe_gretap_dev_event(struct notifier_block  *nb,
 	}
 
 	switch (event) {
-		case NETDEV_REGISTER:
-			status = ppe_tun_alloc(netdev, PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP);
-			if (status) {
-				nss_gretap_stats_dentry_create(netdev);
-			}
+	case NETDEV_REGISTER:
+		if (gre_tunnel_is_fallback_dev(netdev)) {
+			nss_ppe_gretap_warning("%p: GRETAP tunnel creation skipped for fb dev %s\n", netdev, netdev->name);
 			break;
+		}
 
-		case NETDEV_UNREGISTER:
-			ppe_tun_free(netdev);
-			nss_gretap_stats_dentry_free(netdev);
+		status = ppe_tun_alloc(netdev, PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP);
+		if (status) {
+			nss_gretap_stats_dentry_create(netdev);
+		}
+		break;
+
+	case NETDEV_UNREGISTER:
+		ppe_tun_free(netdev);
+		nss_gretap_stats_dentry_free(netdev);
+		break;
+
+	case NETDEV_UP:
+		nss_ppe_gretap_trace("%px: NETDEV_UP :event %lu name %s\n", netdev, event, netdev->name);
+
+		tun_hdr = kzalloc(sizeof(struct ppe_drv_tun_cmn_ctx), GFP_ATOMIC);
+		if (!tun_hdr) {
+			nss_ppe_gretap_warning("%px: memory allocation for tunnel %s failed\n", netdev, netdev->name);
 			break;
+		}
 
-		case NETDEV_UP:
-			nss_ppe_gretap_trace("%px: NETDEV_UP :event %lu name %s\n", netdev, event, netdev->name);
+		if (netif_is_ip6gretap(netdev)) {
+			status = nss_ppe_gretap_ip6_dev_parse_param(netdev, tun_hdr);
+		} else {
+			status = nss_ppe_gretap_ip4_dev_parse_param(netdev, tun_hdr);
+		}
 
-			tun_hdr = kzalloc(sizeof(struct ppe_drv_tun_cmn_ctx), GFP_ATOMIC);
-			if (!tun_hdr) {
-				nss_ppe_gretap_warning("%px: memory allocation for tunnel %s failed\n", netdev, netdev->name);
-				break;
-			}
-
-			if (netif_is_ip6gretap(netdev)) {
-				status = nss_ppe_gretap_ip6_dev_parse_param(netdev, tun_hdr);
-			} else {
-				status = nss_ppe_gretap_ip4_dev_parse_param(netdev, tun_hdr);
-			}
-
-			if (!status) {
-				kfree(tun_hdr);
-				break;
-			}
-
-			if (!(ppe_tun_configure(netdev, tun_hdr, nss_ppe_gretap_src_exception, NULL))) {
-				nss_ppe_gretap_trace("%px: Not able to create tunnel for dev: %s\n", netdev, netdev->name);
-			}
-
+		if (!status) {
 			kfree(tun_hdr);
 			break;
+		}
 
-		case NETDEV_DOWN:
-			nss_ppe_gretap_trace("%px: NETDEV_DOWN :event %lu name %s\n", netdev, event, netdev->name);
-			ppe_tun_deconfigure(netdev);
-			break;
+		if (!(ppe_tun_configure(netdev, tun_hdr, nss_ppe_gretap_src_exception, NULL))) {
+			nss_ppe_gretap_trace("%px: Not able to create tunnel for dev: %s\n", netdev, netdev->name);
+		}
 
-		case NETDEV_CHANGEMTU:
-			nss_ppe_gretap_trace("%px: NETDEV_CHANGEMTU :event %lu name %s\n", netdev, event, netdev->name);
-			ppe_tun_mtu_set(netdev, netdev->mtu);
-			break;
+		kfree(tun_hdr);
+		break;
 
-		case NETDEV_BR_LEAVE:
-			nss_ppe_gretap_trace("%px: NETDEV_BR_LEAVE: name %s\n", netdev, netdev->name);
-			if (!ppe_tun_decap_disable(netdev)) {
-				nss_ppe_gretap_warning("%p: Failed disabling decap at index %s", netdev, netdev->name);
-			}
-			break;
+	case NETDEV_DOWN:
+		nss_ppe_gretap_trace("%px: NETDEV_DOWN :event %lu name %s\n", netdev, event, netdev->name);
+		ppe_tun_deconfigure(netdev);
+		break;
 
-		case NETDEV_BR_JOIN:
-			nss_ppe_gretap_trace("%px: NETDEV_BR_JOIN: name %s\n", netdev,  netdev->name);
-			if (!ppe_tun_decap_enable(netdev)) {
-				nss_ppe_gretap_warning("%p: Failed enabling decap at index %s", netdev, netdev->name);
-			}
-			break;
+	case NETDEV_CHANGEMTU:
+		nss_ppe_gretap_trace("%px: NETDEV_CHANGEMTU :event %lu name %s\n", netdev, event, netdev->name);
+		ppe_tun_mtu_set(netdev, netdev->mtu);
+		break;
 
-		default:
-			nss_ppe_gretap_trace("%px: Unhandled notifier dev %s event %x\n", netdev, netdev->name, (int)event);
-			break;
+	case NETDEV_BR_LEAVE:
+		nss_ppe_gretap_trace("%px: NETDEV_BR_LEAVE: name %s\n", netdev, netdev->name);
+		if (!ppe_tun_decap_disable(netdev)) {
+			nss_ppe_gretap_warning("%p: Failed disabling decap at index %s", netdev, netdev->name);
+		}
+		break;
+
+	case NETDEV_BR_JOIN:
+		nss_ppe_gretap_trace("%px: NETDEV_BR_JOIN: name %s\n", netdev,  netdev->name);
+		if (!ppe_tun_decap_enable(netdev)) {
+			nss_ppe_gretap_warning("%p: Failed enabling decap at index %s", netdev, netdev->name);
+		}
+		break;
+
+	default:
+		nss_ppe_gretap_trace("%px: Unhandled notifier dev %s event %x\n", netdev, netdev->name, (int)event);
+		break;
 	}
 
 	return NOTIFY_DONE;
