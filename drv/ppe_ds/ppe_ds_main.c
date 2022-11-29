@@ -36,6 +36,18 @@ unsigned int max_move = 1024;
 module_param(max_move, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(max_move, "Max movement of the Prod idx that is allowed");
 
+unsigned int cpu_mask_2g = 0x2;
+module_param(cpu_mask_2g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cpu_mask_2g, "CPU mask for the 2G radio VAP");
+
+unsigned int cpu_mask_5g = 0x2;
+module_param(cpu_mask_5g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cpu_mask_5g, "CPU mask for the 5G radio VAP");
+
+unsigned int cpu_mask_6g = 0x1;
+module_param(cpu_mask_6g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cpu_mask_6g, "CPU mask for the 6G radio VAP");
+
 struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
 
 /*
