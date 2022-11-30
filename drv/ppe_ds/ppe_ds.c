@@ -304,6 +304,11 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 
 	ret = dp_ops->reg(edma_handle);
 
+	reg_info->reo2ppe_start_idx = dp_ops->get_tx_cons_idx(edma_handle);
+	dp_ops->set_tx_prod_idx(edma_handle, reg_info->reo2ppe_start_idx);
+	reg_info->ppe2tcl_start_idx = dp_ops->get_rx_prod_idx(edma_handle);
+	dp_ops->set_rx_cons_idx(edma_handle, reg_info->ppe2tcl_start_idx);
+
 	write_lock_bh(&node_cfg->lock);
 	node_cfg->node_state = PPE_DS_NODE_STATE_REG_DONE;
 	write_unlock_bh(&node_cfg->lock);

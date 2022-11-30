@@ -43,6 +43,7 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_EDIT_REDIR_CORE1",	  /* PPE RFS service code for core1 for Active VP */
 	"PPE_DRV_SC_EDIT_REDIR_CORE2",	  /* PPE RFS service code for core2 for Active VP */
 	"PPE_DRV_SC_EDIT_REDIR_CORE3",	  /* PPE RFS service code for core3 for Active VP */
+	"PPE_DRV_SC_SAWF",			/* Service code for SAWF telemetry */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 
@@ -242,6 +243,9 @@ static const char *ppe_drv_stats_sc_str[] = {
 	"sc_cb_unregister",		/* Per service-code counter for callback not registered */
 	"sc_cb_success",		/* Per service-code coutner for successful callback */
 	"sc_cb_failure",		/* Per service-code counter for failure callback */
+	"sc_rx_packets",		/* Per service-class counter for packets recieved on the ethernet port */
+	"sc_rx_bytes",			/* Per service-class counter for bytes recieved on the ethernet port */
+	"sc_flow_count",		/* Per service-class counter for number of flows present */
 };
 
 /*
@@ -267,12 +271,29 @@ static int ppe_drv_conn_stats_sc_show(struct seq_file *m, void __attribute__((un
 
 	seq_puts(m, "\nPPE_sc_stats:\n\n");
 	stats_shadow = (uint64_t *)sc_stats;
-	for (i = 0; i < PPE_DRV_SC_MAX; i++) {
+	for (i = 0; i <= PPE_DRV_SC_EDIT_REDIR_CORE3; i++) {
 		uint64_t stats1 = *stats_shadow++;
 		uint64_t stats2 = *stats_shadow++;
 		uint64_t stats3 = *stats_shadow++;
-		seq_printf(m, "\t\t %s\t %s:%llu  %s:%llu  %s:%llu\n", ppe_drv_stats_sc_name_str[i], ppe_drv_stats_sc_str[0], stats1,
-				ppe_drv_stats_sc_str[1], stats2, ppe_drv_stats_sc_str[2], stats3);
+		uint64_t stats4 = *stats_shadow++;
+		uint64_t stats5 = *stats_shadow++;
+		uint64_t stats6 = *stats_shadow++;
+		seq_printf(m, "\t\t %s\t %s:%llu  %s:%llu  %s:%llu  %s:%llu  %s:%llu  %s:%llu\n", ppe_drv_stats_sc_name_str[i], ppe_drv_stats_sc_str[0], stats1, ppe_drv_stats_sc_str[1], stats2, ppe_drv_stats_sc_str[2], stats3, ppe_drv_stats_sc_str[3], stats4, ppe_drv_stats_sc_str[4], stats5, ppe_drv_stats_sc_str[5], stats6);
+	}
+
+	/*
+	 * SAWF service codes.
+	 */
+	stats_shadow = (uint64_t *)(sc_stats + 128);
+	for (i = PPE_DRV_SC_SAWF_START; i <= PPE_DRV_SC_SAWF_END; i++) {
+		uint8_t sawf_stats_idx = PPE_DRV_SC_SAWF_STR;
+		uint64_t stats1 = *stats_shadow++;
+		uint64_t stats2 = *stats_shadow++;
+		uint64_t stats3 = *stats_shadow++;
+		uint64_t stats4 = *stats_shadow++;
+		uint64_t stats5 = *stats_shadow++;
+		uint64_t stats6 = *stats_shadow++;
+		seq_printf(m, "\t\t %s:%u\t %s:%llu  %s:%llu  %s:%llu  %s:%llu  %s:%llu  %s:%llu\n", ppe_drv_stats_sc_name_str[sawf_stats_idx], i, ppe_drv_stats_sc_str[0], stats1, ppe_drv_stats_sc_str[1], stats2, ppe_drv_stats_sc_str[2], stats3, ppe_drv_stats_sc_str[3], stats4, ppe_drv_stats_sc_str[4], stats5, ppe_drv_stats_sc_str[5], stats6);
 	}
 
 	kfree(sc_stats);

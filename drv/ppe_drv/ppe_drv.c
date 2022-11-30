@@ -114,6 +114,34 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 }
 
 /*
+ * ppe_drv_nsm_queue_stats_update()
+ *	Get queue stats from fal to nsm.
+ */
+bool ppe_drv_nsm_queue_stats_update(struct ppe_drv_nsm_stats *nsm_stats, uint32_t queue_id, uint8_t item_id)
+{
+	fal_queue_stats_t queue_info;
+	sw_error_t err;
+
+	if (item_id >= FAL_QM_DROP_ITEMS) {
+		ppe_drv_warn("invalid drop item id: %u", item_id);
+		return false;
+	}
+
+	err = fal_queue_counter_get(PPE_DRV_SWITCH_ID, queue_id, &queue_info);
+	if (err != SW_OK) {
+		ppe_drv_warn("failed to get stats for queue id: %u", queue_id);
+		return false;
+	}
+
+	nsm_stats->queue_stats.drop_packets = queue_info.drop_packets[item_id];
+	nsm_stats->queue_stats.drop_bytes = queue_info.drop_bytes[item_id];
+	ppe_drv_trace("queue id: %u, item id: %u, drop_packet = %llu, drop_bytes = %llu", queue_id, item_id, nsm_stats->queue_stats.drop_packets, nsm_stats->queue_stats.drop_bytes);
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_nsm_queue_stats_update);
+
+/*
  * ppe_drv_hash_init()
  *	Initialize the PPE hash registers
  */

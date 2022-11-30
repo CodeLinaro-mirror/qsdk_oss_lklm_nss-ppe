@@ -62,6 +62,8 @@ struct ppe_ds_wlan_reg_info {
 	uint32_t ppe2tcl_num_desc;	/**< PPE2TCL ring descriptor count */
 	uint32_t reo2ppe_num_desc;	/**< REO2PPE ring descriptor count */
 	ppe_ds_wlan_node_type_t node_type;	/**< PPE-DS node type */
+	uint32_t ppe2tcl_start_idx;		/**< PPE2TCL ring index */
+	uint32_t reo2ppe_start_idx;		/**< REO2PPE ring index */
 };
 
 /**

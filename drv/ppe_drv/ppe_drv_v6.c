@@ -182,10 +182,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 	struct ppe_drv_vlan_info *vlan_secondary_rule = &create->vlan_rule.secondary_vlan;
 	struct ppe_drv_iface *if_rx, *if_tx, *top_if_rx, *top_if_tx;
 	struct ppe_drv_top_if_rule *top_rule = &create->top_rule;
+	struct ppe_drv_service_class_rule *sawf_rule = &create->sawf_rule;
+	struct ppe_drv_qos_rule *qos_rule = &create->qos_rule;
 	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
 	uint16_t valid_flags = create->valid_flags;
 	uint16_t rule_flags = create->rule_flags;
+	uint32_t sawf_tag;
 	struct ppe_drv_comm_stats *comm_stats;
 	struct ppe_drv_port *pp_rx, *pp_tx;
 	struct ppe_drv *p = &ppe_drv_gbl;
@@ -276,6 +279,20 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
 		}
 
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
+					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->flow_mark);
+			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
+				ppe_drv_v6_conn_flow_sawf_set(pcf, sawf_rule->flow_mark);
+				ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING);
+
+				if (valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
+					ppe_drv_v6_conn_flow_int_pri_set(pcf, qos_rule->flow_qos_tag);
+					ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
+				}
+			}
+		}
+
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
 			pcf->ingress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
 			pcf->ingress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
@@ -347,6 +364,20 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
 			ppe_drv_v6_conn_flow_egress_dscp_set(pcr, dscp_rule->return_dscp);
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
+		}
+
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
+				(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->return_mark);
+			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
+				ppe_drv_v6_conn_flow_sawf_set(pcr, sawf_rule->return_mark);
+				ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING);
+
+				if (valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
+					ppe_drv_v6_conn_flow_int_pri_set(pcr, qos_rule->return_qos_tag);
+					ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
+				}
+			}
 		}
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
@@ -581,6 +612,11 @@ static bool ppe_drv_v6_flow_del(struct ppe_drv_v6_conn_flow *pcf)
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_flow *flow = pcf->pf;
 
+	/*
+	 * Get service code corresponding to the service class from pcf.
+	 */
+	uint8_t service_code = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
+
 	ppe_drv_trace("%p, flow deletion request for flow-idx: %d host-idx: %u", pcf, flow->index, flow->host->index);
 
 	/*
@@ -627,6 +663,14 @@ static bool ppe_drv_v6_flow_del(struct ppe_drv_v6_conn_flow *pcf)
 		ppe_drv_stats_dec(&p->stats.gen_stats.v6_l2_flows);
 	} else {
 		ppe_drv_stats_dec(&p->stats.gen_stats.v6_l3_flows);
+	}
+
+	/*
+	 * Decrement flow count if SAWF service code corresponds to a service class.
+	 */
+	if ((service_code >= PPE_DRV_SC_SAWF_START) && (service_code <= PPE_DRV_SC_SAWF_END)) {
+		ppe_drv_stats_dec(&p->stats.sc_stats[service_code].sc_flow_count);
+		ppe_drv_trace("Stats Updated: service code %u : flow  %llu\n", service_code, atomic64_read(&p->stats.sc_stats[service_code].sc_flow_count));
 	}
 
 	/*
@@ -1531,3 +1575,30 @@ fail:
 	return ret;
 }
 EXPORT_SYMBOL(ppe_drv_v6_create);
+
+/*
+ * ppe_drv_v6_nsm_stats_update()
+ *	Update nsm stats for the given 5 tuple flow.
+ */
+bool ppe_drv_v6_nsm_stats_update(struct ppe_drv_nsm_stats *nsm_stats, struct ppe_drv_v6_5tuple *tuple)
+{
+	struct ppe_drv_flow *flow;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	flow = ppe_drv_flow_v6_get(tuple);
+
+	if (!flow) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p : Flow not found for give tuple information", tuple);
+		return false;
+	}
+
+	nsm_stats->flow_stats.rx_bytes = flow->bytes;
+	nsm_stats->flow_stats.rx_packets = flow->pkts;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("nsm stats : packets = %llu bytes = %llu", nsm_stats->flow_stats.rx_packets, nsm_stats->flow_stats.rx_bytes);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_v6_nsm_stats_update);

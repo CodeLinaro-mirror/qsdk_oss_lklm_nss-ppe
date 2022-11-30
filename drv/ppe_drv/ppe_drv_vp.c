@@ -60,7 +60,7 @@ EXPORT_SYMBOL(ppe_drv_vp_deinit);
  * ppe_drv_vp_init()
  *	Initialize API exposed to VP driver
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type)
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
@@ -115,6 +115,10 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, ui
 
 	if (core_mask) {
 		port->flags |= PPE_DRV_PORT_RFS_ENABLED;
+	}
+
+	if (net_dev_type == PPE_DRV_PORT_NETDEV_TYPE_WIFI) {
+		port->flags |= PPE_DRV_PORT_FLAG_WIFI_DEV;
 	}
 
 	ppe_drv_iface_port_set(iface, port);

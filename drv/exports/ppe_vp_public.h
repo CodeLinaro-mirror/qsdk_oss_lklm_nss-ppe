@@ -30,6 +30,11 @@
  * @{
  */
 
+/*
+ * VP netdev flags.
+ */
+#define PPE_VP_NET_DEV_TYPE_WIFI	0x1	/**< VP net dev type WiFi */
+
 /**
  * ppe_vp_hw_stats_t
  *	 PPE VP port statistics.
@@ -124,6 +129,7 @@ struct ppe_vp_ai {
 	void *src_cb_data;		/**< VP src callback data */
 	ppe_vp_stats_callback_t stats_cb;
 					/**< VP src callback */
+	uint8_t net_dev_type;		/**< VP netdev type flags */
 	uint8_t queue_num;		/**< Queue number */
 	ppe_vp_status_t status;		/**< VP return status */
 	enum ppe_vp_user_type usr_type;	/**< VP user type */

@@ -22,6 +22,8 @@
 #ifndef _PPE_DRV_V6_H_
 #define _PPE_DRV_V6_H_
 
+#include <ppe_drv.h>
+
 /**
  * @addtogroup ppe_drv_v6_subsystem
  * @{
@@ -68,6 +70,7 @@
 #define PPE_DRV_V6_VALID_FLAG_VLAN		0x0004  /**< VLAN fields are valid. */
 #define PPE_DRV_V6_VALID_FLAG_QOS		0x0008  /**< QoS fields are valid. */
 #define PPE_DRV_V6_VALID_FLAG_DSCP_MARKING	0x0010  /**< DSCP fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_SAWF		0x0020  /**< SAWF fields are valid. */
 
 #define PPE_DRV_V6_MAX_CONN_COUNT               1024
 
@@ -113,6 +116,7 @@ struct ppe_drv_v6_rule_create {
 	struct ppe_drv_dscp_rule dscp_rule;		/**< DSCP-related acceleration parameters. */
 	struct ppe_drv_vlan_rule vlan_rule;		/**< VLAN-related acceleration parameters. */
 	struct ppe_drv_top_if_rule top_rule;		/**< Parameters related to the top interface in hierarchy. */
+	struct ppe_drv_service_class_rule sawf_rule;    /**< Service class related information. */
 };
 
 /**
@@ -251,6 +255,18 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy);
  * Status of the create operation.
  */
 ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create);
+
+/**
+ * ppe_drv_v6_nsm_stats_update
+ *	Update stats in NSM for the given 5 tuple.
+ *
+ * @param[in] nsm_stats		Pointer to stats maintained in NSM.
+ * @param[in] tuple		5 tuple corresponding to which stats are needed.
+ *
+ * @return
+ * Status of the API.
+ */
+extern bool ppe_drv_v6_nsm_stats_update(struct ppe_drv_nsm_stats *nsm_stats, struct ppe_drv_v6_5tuple *tuple);
 
 /** @} */ /* end_addtogroup ppe_drv_v6_subsystem */
 

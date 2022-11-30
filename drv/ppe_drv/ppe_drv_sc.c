@@ -57,6 +57,52 @@ static void ppe_drv_sc_dump(ppe_drv_sc_t sc)
 #endif
 
 /*
+ * ppe_drv_sc_stats_add()
+ *	Update stats for given service class.
+ */
+void ppe_drv_sc_stats_add(uint8_t service_code, uint32_t delta_pkts, uint32_t delta_bytes)
+{
+	struct ppe_drv_stats_sc *sc_stats = &ppe_drv_gbl.stats.sc_stats[service_code];
+
+	atomic64_add(delta_pkts, &sc_stats->sc_rx_packets);
+	atomic64_add(delta_bytes, &sc_stats->sc_rx_bytes);
+
+	ppe_drv_trace("Stats Updated: service code %u : packets %llu : bytes %llu\n",
+			service_code, atomic64_read(&sc_stats->sc_rx_packets), atomic64_read(&sc_stats->sc_rx_bytes));
+}
+
+/*
+ * ppe_drv_sc_nsm_stats_update()
+ *	Export service-class stats to nsm.
+ */
+bool ppe_drv_sc_nsm_stats_update(struct ppe_drv_nsm_stats *nsm_stats, uint8_t service_class)
+{
+	uint8_t service_code = service_class + PPE_DRV_SC_SAWF_START;
+	struct ppe_drv_stats_sc *sc_stats;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	if ((service_code < PPE_DRV_SC_SAWF_START) || (service_code > PPE_DRV_SC_SAWF_END)) {
+		ppe_drv_warn("%u Invalid SAWF service class", service_code);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+
+	sc_stats = &ppe_drv_gbl.stats.sc_stats[service_code];
+
+	nsm_stats->sc_stats.rx_packets = atomic64_read(&sc_stats->sc_rx_packets);
+	nsm_stats->sc_stats.rx_bytes = atomic64_read(&sc_stats->sc_rx_bytes);
+	nsm_stats->sc_stats.flow_count = atomic64_read(&sc_stats->sc_flow_count);
+
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("Stats Updated: service class %u : packets %llu : bytes %llu : flows %u\n",
+			service_class, nsm_stats->sc_stats.rx_packets, nsm_stats->sc_stats.rx_bytes, nsm_stats->sc_stats.flow_count);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_sc_nsm_stats_update);
+
+/*
  * ppe_drv_sc_ucast_queue_set()
  *	Set queue ID of a given port in PPE for RFS.
  */
@@ -215,6 +261,19 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 		 * Don't update service code in EDMA
 		 */
 		sc_cfg.field_update_bitmap = (1 << FLD_UPDATE_SERVICE_CODE);
+
+		break;
+
+	case PPE_DRV_SC_SAWF_START ... PPE_DRV_SC_SAWF_END:
+		/*
+		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
+		 * packets sent to PPE, with SPF bypass service code.
+		 */
+		sc_cfg.bypass_bitmap[1] = ((1 << SOURCE_FLTR_BYP)
+						| (1 << BRIDGING_FWD_BYP)
+						| (1 << L2_SOURCE_SEC_BYP));
+		sc_cfg.dest_port_valid = false;
+
 		break;
 
 	default:
@@ -332,6 +391,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_sc *sc;
+	int i = 0;
 
 	sc = vzalloc(sizeof(struct ppe_drv_sc) * p->sc_num);
 	if (!sc) {
@@ -360,6 +420,9 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE2, PPE_DRV_SC_EDIT_REDIR_CORE2, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_PORT_CPU);
 
+	for (i = PPE_DRV_SC_SAWF_START; i <= PPE_DRV_SC_SAWF_END; i++) {
+		ppe_drv_sc_config(i, i, PPE_DRV_PORT_CPU);
+	}
 
 	return sc;
 }

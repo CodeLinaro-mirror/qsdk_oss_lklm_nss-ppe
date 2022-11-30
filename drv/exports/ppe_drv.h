@@ -104,6 +104,53 @@ struct ppe_drv_top_if_rule {
 	ppe_drv_iface_t tx_if;		/**< Top PPE interface for return direction */
 };
 
+/**
+ * ppe_drv_service_class_rule
+ *	Service class related information.
+ */
+struct ppe_drv_service_class_rule {
+	uint32_t flow_mark;		/**< Service class information in flow direction. */
+	uint32_t return_mark;		/**< Service class information in return direction. */
+};
+
+/*
+ * ppe_drv_nsm_queue_drop_stats
+ *	Per-queue stats to be send to NSM.
+ */
+struct ppe_drv_nsm_queue_drop_stats {
+	uint64_t drop_packets;		/**< Drop packets for given queue and item. */
+	uint64_t drop_bytes;		/**< Drop bytes for given queue and item. */
+};
+
+/*
+ * ppe_drv_nsm_flow_stats
+ *	Per-flow stats to be send to NSM.
+ */
+struct ppe_drv_nsm_flow_stats {
+	uint64_t rx_packets;		/**< Packets received on the ethernet port. */
+	uint64_t rx_bytes;		/**< Bytes received on the ethernet port */
+};
+
+/*
+ * ppe_drv_nsm_sc_stats
+ *	Per-service class stats to be send to NSM.
+ */
+struct ppe_drv_nsm_sc_stats {
+	uint64_t rx_packets;		/**< Packets recieved on the ethernet port. */
+	uint64_t rx_bytes;		/**< Bytes recieved on the ethernet port. */
+	uint16_t flow_count;		/**< Number of flows per service class. */
+};
+
+/*
+ * ppe_drv_nsm_stats
+ *	Information to be send to NSM.
+ */
+struct ppe_drv_nsm_stats {
+	struct ppe_drv_nsm_sc_stats sc_stats;		/**< Per-service class stats. */
+	struct ppe_drv_nsm_flow_stats flow_stats;	/**< Per-flow stats. */
+	struct ppe_drv_nsm_queue_drop_stats queue_stats;	/**< Per-queue stats. */
+};
+
 /*
  * ppe_drv_stats_sync_reason
  *	Stats sync reasons.
@@ -192,6 +239,19 @@ struct dentry *ppe_drv_get_dentry(void);
  * none.
  */
 void ppe_drv_core2queue_mapping(uint8_t core, uint8_t queue_id);
+
+/*
+ * ppe_drv_nsm_queue_stats_update()
+ *	Update stats in NSM for given queue id.
+ *
+ * @param[IN] nsm_stats		Pointer to stats structure in NSM.
+ * @param[IN] queue_id		Queue ID corresponding to which stats are needed.
+ * @param[IN] item_id		Drop Item ID for the Queue.
+ *
+ * @return
+ * Status of the API.
+ */
+extern bool ppe_drv_nsm_queue_stats_update(struct ppe_drv_nsm_stats *nsm_stats, uint32_t queue_id, uint8_t item_id);
 
 /** @} */ /* end_addtogroup ppe_drv_subsystem */
 

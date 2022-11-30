@@ -20,6 +20,7 @@
 #define PPE_DRV_PORT_VIRTUAL_L2_TUN		0x01	/* Port is L2 tunnel virtual port */
 #define PPE_DRV_PORT_VIRTUAL_L3_TUN		0x02	/* Port is L3 tunnel virtual port */
 #define PPE_DRV_PORT_SRC_PROFILE 0
+#define PPE_DRV_PORT_NETDEV_TYPE_WIFI		0x1	/* Port Netdev is WiFi */
 
 /**
  * ppe_port_user_type
@@ -41,7 +42,8 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_IDTLS = 0x2,
 	PPE_DRV_PORT_FLAG_DS = 0x4,
 	PPE_DRV_PORT_FLAG_MAX = 0x8,
-	PPE_DRV_PORT_RFS_ENABLED = 0x10
+	PPE_DRV_PORT_RFS_ENABLED = 0x10,
+	PPE_DRV_PORT_FLAG_WIFI_DEV = 0x20
 } ppe_drv_port_flag_t;
 
 /*
