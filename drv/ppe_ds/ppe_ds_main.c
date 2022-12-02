@@ -21,11 +21,11 @@
 
 /*
  * PPE-DS ring processing mode selection parameter.
- * The default mode PPE_DS_POLL_MODE (1) will use polling mode
- * and PPE_DS_INTR_MODE (0) will use interrupt mode.
+ * The default mode PPE_DS_INTR_MODE (0) will use interrupt mode
+ * and PPE_DS_POLL_MODE (1) will use polling mode.
  *
  */
-unsigned int polling_for_idx_update = PPE_DS_POLL_MODE;
+unsigned int polling_for_idx_update = PPE_DS_INTR_MODE;
 module_param(polling_for_idx_update,
 		uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(polling_for_idx_update, "Enable/Disable PPE DS poll mode");
