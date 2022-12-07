@@ -41,6 +41,10 @@
 					/* Inline IPSec flow */
 #define PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST 0x00000100
 					/* Flow needs PPE assistance for RFS */
+#define PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING 0x00000200
+					/* SAWF marking is valid for the flow */
+#define PPE_DRV_V4_CONN_FLOW_FLAG_FSE 0x00000400
+                                        /* Flow is also pushed to FSE HW in Wifi */
 
 /*
  * ppe_drv_v4_addr_equal()

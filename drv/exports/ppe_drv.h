@@ -252,6 +252,24 @@ void ppe_drv_fse_ops_unregister(void);
  */
 bool ppe_drv_fse_ops_register(struct ppe_drv_fse_ops *ops);
 
+/**
+ * ppe_drv_fse_feature_enable
+ *	Enable PPE-FSE feature.
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_fse_feature_enable(void);
+
+/**
+ * ppe_drv_fse_feature_disable
+ *	Disable PPE-FSE feature.
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_fse_feature_disable(void);
+
 /** @} */ /* end_addtogroup ppe_drv_subsystem */
 
 #endif /* _PPE_DRV_H_ */

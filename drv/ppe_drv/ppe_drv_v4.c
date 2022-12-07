@@ -19,6 +19,89 @@
 #include "tun/ppe_drv_tun_v4.h"
 #include <net/vxlan.h>
 
+/*
+ * ppe_drv_fill_fse_v4_tuple_info()
+ *	Fill FSE v4 tuple information
+ */
+static void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct ppe_drv_fse_rule_info *fse_info, bool is_ds)
+{
+	struct ppe_drv_port *pp;
+
+	fse_info->tuple.src_ip[0] = ppe_drv_v4_conn_flow_match_src_ip_get(conn);
+	fse_info->tuple.src_port = ppe_drv_v4_conn_flow_match_src_ident_get(conn);
+	fse_info->tuple.dest_ip[0] = ppe_drv_v4_conn_flow_match_dest_ip_get(conn);
+	fse_info->tuple.dest_port = ppe_drv_v4_conn_flow_match_dest_ident_get(conn);
+	fse_info->tuple.protocol = ppe_drv_v4_conn_flow_match_protocol_get(conn);
+
+	pp = ppe_drv_v4_conn_flow_rx_port_get(conn);
+	fse_info->dev = ppe_drv_port_to_dev(pp);
+	fse_info->flags |= PPE_DRV_FSE_IPV4;
+	if (is_ds) {
+		fse_info->flags |= PPE_DRV_FSE_DS;
+	}
+
+	fse_info->vp_num = pp->port;
+
+	ppe_drv_trace("src_ip: %x\n", fse_info->tuple.src_ip[0]);
+	ppe_drv_trace("src_port: %x\n", fse_info->tuple.src_port);
+	ppe_drv_trace("dest_ip: %x\n", fse_info->tuple.dest_ip[0]);
+	ppe_drv_trace("dest_port: %x\n", fse_info->tuple.dest_port);
+	ppe_drv_trace("protocol: %x\n", fse_info->tuple.protocol);
+	ppe_drv_trace("dev: %s\n", fse_info->dev->name);
+	ppe_drv_trace("vp_num: %d\n", fse_info->vp_num);
+}
+
+/*
+ * ppe_drv_fse_interface_check()
+ *	check if interface is FSE capable
+ */
+static bool ppe_drv_fse_interface_check(struct ppe_drv_v4_conn_flow *pcf)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *rx_port = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+	struct ppe_drv_port *tx_port = ppe_drv_v4_conn_flow_tx_port_get(pcf);
+	bool is_tx_ds = (tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS);
+	bool is_rx_ds = (rx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS);
+	bool is_tx_active_vp = (tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP);
+	bool is_rx_active_vp = (rx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP);
+
+	/*
+	 * If FSE operation is not enabled; return true and continue with a successfull
+	 * PPE rule push
+	 */
+	if (!p->fse_enable || !p->fse_ops) {
+		ppe_drv_trace("FSE operation not enabled: enable: %d ops: %p\n", p->fse_enable, p->fse_ops);
+		return false;
+	}
+
+	/*
+	 * If interfaces are not Wi-FI VPs then return true and continue with a successfull
+	 * PPE rule push
+	 */
+	if (!is_tx_ds && !is_rx_ds && !is_tx_active_vp && !is_rx_active_vp) {
+		ppe_drv_trace("no active or ds vp\n");
+		return false;
+	}
+
+	/*
+	 * TODO: Handle Inter-VAP FSE rule push as a seperate patch
+	 */
+	if (is_tx_ds && is_rx_ds) {
+		ppe_drv_trace("Inter VAP FSE rule push not enabled for DS VP\n");
+		return false;
+	}
+
+	/*
+	 * TODO: Handle Inter-VAP FSE rule push as a seperate patch
+	 */
+	if (is_tx_active_vp && is_rx_active_vp) {
+		ppe_drv_trace("Inter VAP FSE rule push not enabled for active VP\n");
+		return false;
+	}
+
+	return true;
+}
+
 void ppe_drv_v4_flow_vlan_set(struct ppe_drv_v4_conn_flow *pcf,
 			      uint32_t primary_ingress_vlan_tag, uint32_t primary_egress_vlan_tag,
 			      uint32_t secondary_ingress_vlan_tag, uint32_t secondary_egress_vlan_tag)
@@ -634,6 +717,7 @@ static bool ppe_drv_v4_flow_del(struct ppe_drv_v4_conn_flow *pcf)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_flow *flow = pcf->pf;
+	struct ppe_drv_fse_rule_info fse_info = {0};
 
 	ppe_drv_trace("%p, flow deletion request for flow-idx: %d host-idx: %u", pcf, flow->index, flow->host->index);
 
@@ -691,6 +775,19 @@ static bool ppe_drv_v4_flow_del(struct ppe_drv_v4_conn_flow *pcf)
 	flow->flags = 0;
 	flow->service_code = 0;
 	flow->type = 0;
+
+	/*
+	 * Delete corresponding FSE rule for a Wi-Fi flow.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FSE)) {
+		ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
+		if (p->fse_ops->destroy_fse_rule(&fse_info)) {
+			ppe_drv_warn("%p: FSE v4 rule deletion failed\n", pcf);
+			return true;
+		}
+
+		ppe_drv_warn("%p: FSE v4 rule deletion successfull\n", pcf);
+	}
 
 	return true;
 }
@@ -1270,6 +1367,7 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	}
 
 	pcf = flow->pcf.v4;
+
 	if (!ppe_drv_v4_flow_del(pcf)) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_stats_inc(&comm_stats->v4_destroy_fail);
@@ -1282,11 +1380,12 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	 */
 	ppe_drv_v4_if_walk_release(pcf);
 
+	cn = ppe_drv_v4_conn_flow_conn_get(pcf);
+	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
+
 	/*
 	 * Find the other flow associated with this connection.
 	 */
-	cn = ppe_drv_v4_conn_flow_conn_get(pcf);
-	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
 	if (!ppe_drv_v4_flow_del(pcr)) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_stats_inc(&comm_stats->v4_destroy_fail);
@@ -1438,6 +1537,63 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 EXPORT_SYMBOL(ppe_drv_v4_rfs_create);
 
 /*
+ * ppe_drv_v4_fse_flow_configure()
+ *	FSE v4 flow programming
+ */
+static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create, struct ppe_drv_v4_conn_flow *pcf,
+					struct ppe_drv_v4_conn_flow *pcr)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+        struct ppe_drv_fse_rule_info fse_info = {0};
+        struct ppe_drv_v4_conn_flow *fse_cn = NULL;
+	struct ppe_drv_port *rx_port = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+	struct ppe_drv_port *tx_port = ppe_drv_v4_conn_flow_tx_port_get(pcf);
+	bool is_tx_ds = (tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS);
+	bool is_rx_ds = (rx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS);
+	bool is_tx_active_vp = (tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP);
+	bool is_rx_active_vp = (rx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP);
+
+	/*
+	 * Check if Connection manager is setting DS flag in the rule; if yes then decision
+	 * space to choose pcf or pcr needs to be done only for DS VP else flow could also
+	 * be for active VP so decision logic need to be executed for both active and DS VP.
+	 * TODO: Enable support for per-flow flag for VP datapath.
+	 */
+	if ((create->valid_flags & PPE_DRV_V4_VALID_FLAG_DS)  == PPE_DRV_V4_VALID_FLAG_DS) {
+		if (is_rx_ds && !is_tx_ds) {
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, true);
+			fse_cn = pcf;
+		} else if (is_tx_ds && !is_rx_ds) {
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info, true);
+			fse_cn = pcr;
+		}
+	} else {
+		if (is_rx_active_vp && !is_tx_active_vp) {
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
+			fse_cn = pcf;
+		} else if (is_tx_active_vp && !is_rx_active_vp) {
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info, false);
+			fse_cn = pcr;
+		} else if (is_rx_ds && !is_tx_ds) {
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, true);
+			fse_cn = pcf;
+		} else if (is_tx_ds && !is_rx_ds) {
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info, true);
+			fse_cn = pcr;
+		}
+	}
+
+	if (p->fse_ops->create_fse_rule(&fse_info)) {
+		ppe_drv_trace("%p: FSE rule configuration failed\n", p);
+		return false;
+	}
+
+	ppe_drv_trace("%p: FSE rule configuration successful\n", p);
+	ppe_drv_v4_conn_flow_flags_set(fse_cn, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
+	return true;
+}
+
+/*
  * ppe_drv_v4_create()
  *	Adds a connection entry in PPE.
  */
@@ -1584,7 +1740,6 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	pcf->conn = cn;
 	pcr->conn = cn;
 
-	list_add(&cn->list, &p->conn_v4);
 
 	if (ppe_drv_tun_mapt_port_tun_get(pcf->tx_port, pcf->rx_port)) {
 		if (!ppe_drv_tun_attach_mapt_v4_to_v6(cn)) {
@@ -1599,11 +1754,32 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	 * TODO: check if this needed
 	 */
 	/* ppe_drv_ref(p); */
+
+	/*
+	 * Add corresponding FSE rule for a Wi-Fi flow.
+	 */
+	if (ppe_drv_fse_interface_check(pcf)) {
+		if (!ppe_drv_v4_fse_flow_configure(create, pcf, pcr)) {
+			/* TODO: Add a counter for this failure */
+			ppe_drv_warn("%p: FSE flow table programming failed\n", p);
+			goto fail;
+		}
+	}
+
+	list_add(&cn->list, &p->conn_v4);
 	spin_unlock_bh(&p->lock);
 
 	return PPE_DRV_RET_SUCCESS;
 
 fail:
+	if (pcf && pcf->pf) {
+		ppe_drv_v4_flow_del(pcf);
+	}
+
+	if (pcr && pcr->pf) {
+		ppe_drv_v4_flow_del(pcr);
+	}
+
 	/*
 	 * Free flow direction references.
 	 */

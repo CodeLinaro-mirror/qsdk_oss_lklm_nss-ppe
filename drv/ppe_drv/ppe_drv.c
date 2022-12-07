@@ -195,6 +195,34 @@ static bool ppe_drv_phy_port_base_queue_init(struct ppe_drv *p)
 }
 
 /*
+ * ppe_drv_fse_feature_enable()
+ *	Enable PPE FSE feature
+ */
+void ppe_drv_fse_feature_enable()
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	p->fse_enable = true;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_fse_feature_enable);
+
+/*
+ * ppe_drv_fse_feature_disable()
+ *	Disable PPE FSE feature
+ */
+void ppe_drv_fse_feature_disable()
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	p->fse_enable = false;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_fse_feature_disable);
+
+/*
  * ppe_drv_core2queue_mapping()
  *	Core to queue mapping
  *
@@ -481,6 +509,8 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->toggled_v4 = false;
 	p->toggled_v6 = false;
 	p->tun_toggled = false;
+	p->fse_ops = NULL;
+	p->fse_enable = false;
 
 	/*
 	 * Allocate tunnel specific entries
@@ -724,6 +754,10 @@ static int ppe_drv_remove(struct platform_device *pdev)
 	}
 
 	ppe_drv_tun_vxlan_deconfigure(p);
+
+	if (p->fse_ops) {
+		ppe_drv_warn("FSE ops still registered while ppe module getting removed\n");
+	}
 
 	return 0;
 }
