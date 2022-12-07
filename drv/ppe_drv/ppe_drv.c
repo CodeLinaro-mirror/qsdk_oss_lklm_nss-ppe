@@ -267,6 +267,67 @@ static bool ppe_drv_l3_route_ctrl_init(struct ppe_drv *p)
 }
 
 /*
+ * ppe_drv_fse_ops_unregister()
+ *	Un-register FSE rule add/delete callbacks. This function will be called from Wi-Fi driver
+ */
+void ppe_drv_fse_ops_unregister(void)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_fse_ops *ops_internal;
+
+	spin_lock_bh(&p->lock);
+	if (!p->fse_ops) {
+		ppe_drv_warn("%p: No FSE ops registered\n", p);
+		spin_unlock_bh(&p->lock);
+		return;
+	}
+
+	ops_internal = p->fse_ops;
+	p->fse_ops = NULL;
+	spin_unlock_bh(&p->lock);
+	vfree(ops_internal);
+}
+EXPORT_SYMBOL(ppe_drv_fse_ops_unregister);
+
+/**
+ * ppe_drv_fse_ops_register()
+ *	Register FSE rule add/delete callbacks. This function will be called from Wi-Fi driver
+ */
+bool ppe_drv_fse_ops_register(struct ppe_drv_fse_ops *ops)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_fse_ops *ops_internal;
+
+	if (!ops->create_fse_rule || !ops->destroy_fse_rule) {
+		ppe_drv_warn("%p: Invalid FSE ops passed from Wi-FI driver\n", p);
+		return false;
+	}
+
+	ops_internal = (struct ppe_drv_fse_ops *)vzalloc(sizeof(struct ppe_drv_fse_ops));
+	if (!ops_internal) {
+		ppe_drv_warn("%p: FSE ops registration failed\n", p);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+	if (p->fse_ops) {
+		ppe_drv_warn("%p: FSE ops registration already done\n", p);
+		spin_unlock_bh(&p->lock);
+		vfree(ops_internal);
+		return false;
+	}
+
+	ops_internal->create_fse_rule = ops->create_fse_rule;
+	ops_internal->destroy_fse_rule = ops->destroy_fse_rule;
+	p->fse_ops = ops_internal;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("%p: FSE ops registration done successfully\n", p);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_fse_ops_register);
+
+/*
  * ppe_drv_get_dentry()
  *	Get PPE driver debugfs dentry
  */

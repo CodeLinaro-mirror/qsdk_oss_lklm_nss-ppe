@@ -213,6 +213,9 @@ struct ppe_drv {
 	struct list_head conn_v6;			/* List of v6 connection in PPE */
 	struct list_head conn_tun_v4;		/* List of v4 tunnel connection in PPE */
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
+
+	struct ppe_drv_fse_ops *fse_ops;        /* Wi-Fi FSE block operations */
+
 	bool toggled_v4;			/* Toggled bit for v4 sync during a particular iteration */
 	bool toggled_v6;			/* Toggled bit for v6 sync during a particular iteration */
 	bool tun_toggled;		        /* Tunnel specific Toggled bit for sync during a particular iteration*/
