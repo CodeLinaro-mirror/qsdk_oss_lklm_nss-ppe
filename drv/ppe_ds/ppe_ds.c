@@ -142,6 +142,25 @@ static enum hrtimer_restart ppe_ds_timer(struct hrtimer *hrtimer)
 }
 
 /*
+ * ppe_ds_get_cur_prod_cons_ring_idx()
+ *	Get the current EDMA producer and consumer ring indices
+ */
+static void ppe_ds_get_cur_prod_cons_ring_idx(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_wlan_reg_info *reg_info)
+{
+	struct ppe_ds *node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
+	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
+	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
+
+	reg_info->reo2ppe_start_idx = dp_ops->get_tx_cons_idx(edma_handle);
+	dp_ops->set_tx_prod_idx(edma_handle, reg_info->reo2ppe_start_idx);
+	reg_info->ppe2tcl_start_idx = dp_ops->get_rx_prod_idx(edma_handle);
+	dp_ops->set_rx_cons_idx(edma_handle, reg_info->ppe2tcl_start_idx);
+
+	ppe_ds_info("%px: PPE-DS get current EDMA ring indices API call successful", node);
+	return;
+}
+
+/*
  * ppe_ds_wlan_rx()
  *	PPE-DS REO2PPE Rx processing API
  */
@@ -232,9 +251,12 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 	unsigned int cpu;
 	static unsigned int ppeds_node_iter_cnt;
 	bool ret;
+	ppe_ds_node_state_t priv_node_state;
 
 	write_lock_bh(&node_cfg->lock);
-	if(node_cfg->node_state != PPE_DS_NODE_STATE_ALLOC) {
+	priv_node_state = node_cfg->node_state;
+	if ((priv_node_state != PPE_DS_NODE_STATE_ALLOC) &&
+		(priv_node_state != PPE_DS_NODE_STATE_STOP_DONE)) {
 		printk("Invalid node state: %d, PPE-DS registration failed\n",
 				node_cfg->node_state);
 		write_unlock_bh(&node_cfg->lock);
@@ -252,6 +274,19 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 			 !dp_ops->get_rx_prod_idx) {
 		printk("NULL EDMA operation in PPE-DS registration API\n");
 		return false;
+	}
+
+	/*
+	 * During wifi up/down we could come here, get the current
+	 * EDMA producer and consumer indices.
+	 */
+	if (priv_node_state == PPE_DS_NODE_STATE_STOP_DONE) {
+		ppe_ds_get_cur_prod_cons_ring_idx(wlan_handle, reg_info);
+
+		write_lock_bh(&node_cfg->lock);
+		node_cfg->node_state = PPE_DS_NODE_STATE_REG_DONE;
+		write_unlock_bh(&node_cfg->lock);
+		return true;
 	}
 
 	/*
@@ -304,10 +339,7 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 
 	ret = dp_ops->reg(edma_handle);
 
-	reg_info->reo2ppe_start_idx = dp_ops->get_tx_cons_idx(edma_handle);
-	dp_ops->set_tx_prod_idx(edma_handle, reg_info->reo2ppe_start_idx);
-	reg_info->ppe2tcl_start_idx = dp_ops->get_rx_prod_idx(edma_handle);
-	dp_ops->set_rx_cons_idx(edma_handle, reg_info->ppe2tcl_start_idx);
+	ppe_ds_get_cur_prod_cons_ring_idx(wlan_handle, reg_info);
 
 	write_lock_bh(&node_cfg->lock);
 	node_cfg->node_state = PPE_DS_NODE_STATE_REG_DONE;
