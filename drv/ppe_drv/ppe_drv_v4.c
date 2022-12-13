@@ -718,6 +718,8 @@ static bool ppe_drv_v4_flow_del(struct ppe_drv_v4_conn_flow *pcf)
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_flow *flow = pcf->pf;
 	struct ppe_drv_fse_rule_info fse_info = {0};
+	struct ppe_drv_port *tx_port = NULL;
+	struct ppe_drv_port *rx_port = NULL;
 
 	ppe_drv_trace("%p, flow deletion request for flow-idx: %d host-idx: %u", pcf, flow->index, flow->host->index);
 
@@ -767,6 +769,22 @@ static bool ppe_drv_v4_flow_del(struct ppe_drv_v4_conn_flow *pcf)
 		ppe_drv_stats_dec(&p->stats.gen_stats.v4_l3_flows);
 	}
 
+	tx_port = ppe_drv_v4_conn_flow_tx_port_get(pcf);
+	rx_port = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+
+	/*
+	 * Update the number of VP and DS flows.
+	 */
+	if (ppe_drv_port_flags_check(tx_port, PPE_DRV_PORT_FLAG_WIFI_DEV) ||
+			ppe_drv_port_flags_check(rx_port, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
+		ppe_drv_stats_dec(&p->stats.gen_stats.v4_vp_wifi_flows);
+	}
+
+	if ((tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS) ||
+			(rx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		ppe_drv_stats_dec(&p->stats.gen_stats.v4_ds_flows);
+	}
+
 	/*
 	 * Clear the flow entry in SW so that it can be reused.
 	 */
@@ -802,6 +820,8 @@ static struct ppe_drv_flow *ppe_drv_v4_flow_add(struct ppe_drv_v4_conn_flow *pcf
 	struct ppe_drv_nexthop *nh = NULL;
 	struct ppe_drv_flow *flow = NULL;
 	struct ppe_drv_host *host = NULL;
+	struct ppe_drv_port *tx_port = NULL;
+	struct ppe_drv_port *rx_port = NULL;
 
 	/*
 	 * Fetch a new nexthop entry.
@@ -859,6 +879,22 @@ static struct ppe_drv_flow *ppe_drv_v4_flow_add(struct ppe_drv_v4_conn_flow *pcf
 		ppe_drv_stats_inc(&p->stats.gen_stats.v4_l2_flows);
 	} else {
 		ppe_drv_stats_inc(&p->stats.gen_stats.v4_l3_flows);
+	}
+
+	tx_port = ppe_drv_v4_conn_flow_tx_port_get(pcf);
+	rx_port = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+
+	/*
+	 * Update the number of VP and DS flows.
+	 */
+	if (ppe_drv_port_flags_check(tx_port, PPE_DRV_PORT_FLAG_WIFI_DEV) ||
+			ppe_drv_port_flags_check(rx_port, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v4_vp_wifi_flows);
+	}
+
+	if ((tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS) ||
+			(rx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v4_ds_flows);
 	}
 
 	ppe_drv_host_dump(flow->host);

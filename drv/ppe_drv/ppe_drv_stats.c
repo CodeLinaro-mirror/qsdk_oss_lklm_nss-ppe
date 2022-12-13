@@ -53,6 +53,8 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 static const char *ppe_drv_stats_conn_str[] = {
 	"v4_l3_flows",				/* No of v4 routed flows */
 	"v4_l2_flows",				/* No of v4 bridge flows */
+	"v4_vp_wifi_flows",			/* No of v4 VP Wi-Fi flows */
+	"v4_ds_flows",				/* No of v4 Direct Switch flows */
 	"v4_host_add_fail",			/* v4 host table add failed */
 
 	"v4_flush_req",				/* No of v4 flush requests */
@@ -62,6 +64,8 @@ static const char *ppe_drv_stats_conn_str[] = {
 
 	"v6_l3_flows",				/* No of v6 routed flows */
 	"v6_l2_flows",				/* No of v6 bridge flows */
+	"v6_vp_wifi_flows",			/* No of v6 VP Wi-Fi flows */
+	"v6_ds_flows",				/* No of v6 Direct Switch flows */
 	"v6_host_add_fail",			/* v6 host table add failed */
 	"v6_create_fail_bridge_nat",		/* No of v6 create failure due to NAT with bridge flow */
 
