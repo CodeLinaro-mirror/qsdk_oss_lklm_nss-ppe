@@ -41,6 +41,57 @@ enum ppe_drv_qos_frame_mode {
 typedef enum ppe_drv_qos_frame_mode ppe_drv_qos_frame_mode_t;
 
 /*
+ * ppe_drv_qos_int_pri_callback_unregister()
+ *	API to unregister INT-PRI fetch callback.
+ */
+void ppe_drv_qos_int_pri_callback_unregister()
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	p->int_pri_get_cb = NULL;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_unregister);
+
+/*
+ * ppe_drv_qos_int_pri_callback_register()
+ *	API to register INT-PRI fetch callback.
+ */
+void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	/*
+	 * TODO: Return error in case cb is NULL
+	 */
+	spin_lock_bh(&p->lock);
+	p->int_pri_get_cb = cb;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_register);
+
+/*
+ * ppe_drv_qos_int_pri_get()
+ *	Returns the INT-PRI value for a class ID.
+  */
+int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t classid)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint8_t int_pri = 0;
+
+	spin_lock_bh(&p->lock);
+	if (p->int_pri_get_cb) {
+		int_pri = p->int_pri_get_cb(dev, classid);
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:get int_pri:%d successful for dev:%px classid:%u", p, int_pri, dev, classid);
+	return int_pri;
+}
+EXPORT_SYMBOL(ppe_drv_qos_int_pri_get);
+
+/*
  * ppe_drv_qos_queue_stats_get()
  *	API to fetch queue statistics from PPE HW.
  */

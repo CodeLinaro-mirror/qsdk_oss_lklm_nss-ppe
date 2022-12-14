@@ -37,6 +37,40 @@
 #define PPE_QDISC_PARENT_NOT_EXISTING -1
 
 /*
+ * ppe_qdisc_def_node_int_pri_get()
+ *      Returns the INT-PRI value for the default qdisc.
+ */
+static int ppe_qdisc_def_node_int_pri_get(struct net_device *dev)
+{
+	struct ppe_qdisc *pq_root, *pq_def = NULL;
+	pq_root = qdisc_priv(dev->qdisc);
+
+	/*
+	 * Return a valid int_pri in case of failure, say 0 as this will
+	 * eventually be set in the Tx Desc. This may either cause the traffic
+	 * to go through wrong queue or get disrupted if the queue 0 is not
+	 * enabled/connected to the hierarchy.
+	 *
+	 * TODO: Consider an approach that this function never fails
+	 * and we return an int_pri in such a way that traffic on the
+	 * port is not disrupted.
+	 */
+	if (!pq_root) {
+		ppe_qdisc_warning("%px root node not found for device", dev);
+		return 0;
+	}
+
+	pq_def = pq_root->def;
+	if ((!pq_def) || (!ppe_qdisc_flags_check(pq_def, PPE_QDISC_FLAG_INT_PRI_VALID))) {
+		ppe_qdisc_warning("%px no default node or valid int-pri for device", dev);
+		return 0;
+	}
+
+	ppe_qdisc_info("%px returning default node pq_def %px and pq_def->int_pri %u", dev, pq_def, pq_def->int_pri);
+	return pq_def->int_pri;
+}
+
+/*
  * ppe_qdisc_set_parent()
  *	Sets the parent of given qdisc.
  */
@@ -240,6 +274,16 @@ void ppe_qdisc_set_default(struct ppe_qdisc *pq)
  */
 void ppe_qdisc_node_detach(struct ppe_qdisc *pq, struct ppe_qdisc *pq_child)
 {
+	/*
+	 * pq child was set only if pq is leaf qdisc/class,
+	 * set its child as NULL
+	 */
+	spin_lock_bh(&pq->lock);
+	if (pq->child) {
+		pq->child = NULL;
+	}
+	spin_unlock_bh(&pq->lock);
+
 	ppe_qdisc_destroy(pq_child);
 	ppe_qdisc_info("Qdisc:%px, node:%px detach complete", pq, pq_child);
 }
@@ -260,6 +304,15 @@ int ppe_qdisc_node_attach(struct ppe_qdisc *pq, struct ppe_qdisc *pq_child)
 			return -EINVAL;
 		}
 	}
+
+	/*
+	 * Set the child qdisc for the leaf class
+	 */
+	spin_lock_bh(&pq->lock);
+	if (pq_child->type > PPE_QDISC_NODE_SCH_MAX) {
+		pq->child = pq_child;
+	}
+	spin_unlock_bh(&pq->lock);
 
 	ppe_qdisc_info("Qdisc:%px, node:%px attach complete", pq, pq_child);
 	return 0;
@@ -515,6 +568,80 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 }
 
 /*
+ * ppe_qdisc_int_pri_get()
+ *      Returns the INT-PRI value for a given classid.
+ *
+ * Note: Caller should check if Qdisc is PPE Qdisc before invoking it.
+ */
+int ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
+{
+	const struct Qdisc_class_ops *clops = NULL;
+	struct Qdisc *q = NULL;
+	struct ppe_qdisc *pq, *pq_child = NULL;
+	uint8_t int_pri = 0;
+
+	if (!classid) {
+		ppe_qdisc_info("%px:class Id is zero, returning default int_pri for device", dev);
+		return ppe_qdisc_def_node_int_pri_get(dev);
+	}
+
+	q = qdisc_lookup(dev, TC_H_MAJ(classid));
+	if (!q) {
+		ppe_qdisc_info("%px:qdisc not found for class:%u, returning default int_pri", dev, classid);
+		return ppe_qdisc_def_node_int_pri_get(dev);
+	}
+
+	/*
+	 * If it is ppefifo or ppered qdisc, these are root qdisc, return their int_pri
+	 */
+	pq = qdisc_priv(q);
+	if (pq->type > PPE_QDISC_NODE_SCH_MAX) {
+		if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_INT_PRI_VALID)) {
+			ppe_qdisc_info("%px:qdisc %px is root node with int_pri %u", dev, pq, pq->int_pri);
+			return pq->int_pri;
+		}
+
+		return ppe_qdisc_def_node_int_pri_get(dev);
+	}
+
+	/*
+	 * If qdisc is prio, we need to get the child qdisc attached to its band
+	 */
+	if (pq->type == PPE_QDISC_NODE_TYPE_PRIO) {
+		pq_child = ppe_prio_band_qdisc_get(q, classid);
+		if ((pq_child) && (ppe_qdisc_flags_check(pq_child, PPE_QDISC_FLAG_INT_PRI_VALID))) {
+			ppe_qdisc_info("%px:returning leaf node int_pri %u", dev, pq_child->int_pri);
+			return pq_child->int_pri;
+		}
+
+		return ppe_qdisc_def_node_int_pri_get(dev);
+	}
+
+	clops = q->ops->cl_ops;
+	if (!clops) {
+		ppe_qdisc_warning("%px:classid %u for unsupported qdisc %px, returning default int_pri", dev, classid, q);
+		return ppe_qdisc_def_node_int_pri_get(dev);
+	}
+
+	pq = (struct ppe_qdisc *)clops->find(q, classid);
+	if (!pq) {
+		ppe_qdisc_warning("%px: class %u not found for qdisc %px", dev, classid, q);
+		return ppe_qdisc_def_node_int_pri_get(dev);
+	}
+
+	spin_lock_bh(&pq->lock);
+	if ((pq->child) && (ppe_qdisc_flags_check(pq->child, PPE_QDISC_FLAG_INT_PRI_VALID))) {
+		int_pri = pq->child->int_pri;
+		spin_unlock_bh(&pq->lock);
+		ppe_qdisc_info("%px:returning leaf node int_pri %u", dev, int_pri);
+		return int_pri;
+	}
+
+	ppe_qdisc_info("%px:no child qdisc atytached to class:%u, returning default int_pri", dev, classid);
+	return ppe_qdisc_def_node_int_pri_get(dev);
+}
+
+/*
  * ppe_qdisc_module_init()
  *	Loads and initializes PPE qdisc module.
  */
@@ -523,7 +650,6 @@ static int __init ppe_qdisc_module_init(void)
 	int ret;
 
 	ppe_qdisc_port_alloc();
-	ppe_qdisc_info("ppe qdisc module initialized");
 
 	ret = register_qdisc(&ppe_pfifo_qdisc_ops);
 	if (ret != 0)
@@ -570,6 +696,9 @@ static int __init ppe_qdisc_module_init(void)
 		goto fail9;
 	}
 
+	ppe_drv_qos_int_pri_callback_register(ppe_qdisc_int_pri_get);
+
+	ppe_qdisc_info("ppe qdisc module initialized");
 	return 0;
 
 fail9:
@@ -599,6 +728,7 @@ fail1:
  */
 static void __exit ppe_qdisc_module_exit(void)
 {
+	ppe_drv_qos_int_pri_callback_unregister();
 	ppe_qdisc_stats_work_queue_exit();
 
 	unregister_qdisc(&ppe_pfifo_qdisc_ops);

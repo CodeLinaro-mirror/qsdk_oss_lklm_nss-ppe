@@ -252,6 +252,7 @@ struct ppe_drv {
 	void *ipv4_stats_sync_data;				/* Argument for above callback: ipv4_stats_sync_cb */
 	ppe_drv_v6_sync_callback_t ipv6_stats_sync_cb;		/* Callback to call to sync ipv6 statistics */
 	void *ipv6_stats_sync_data;				/* Argument for above callback: ipv6_stats_sync_cb */
+	ppe_drv_qos_int_pri_callback_t int_pri_get_cb;		/* Callback to call to get INT-PRI value */
 	struct list_head nh_active;			/* List of active nexthops */
 	struct list_head nh_free;			/* List of free nexthops */
 	struct kref ref;				/* Reference count */
@@ -263,7 +264,6 @@ struct ppe_drv {
 	struct list_head conn_v6;			/* List of v6 connection in PPE */
 	struct list_head conn_tun_v4;		/* List of v4 tunnel connection in PPE */
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
-
 	struct ppe_drv_fse_ops *fse_ops;        /* Wi-Fi FSE block operations */
 	struct kref fse_ops_ref;		/* FSE Reference count */
 	bool fse_enable;			/* FSE enabled */

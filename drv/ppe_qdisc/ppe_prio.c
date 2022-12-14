@@ -370,6 +370,23 @@ static int ppe_prio_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 }
 
 /*
+ * ppe_prio_band_qdisc_get()
+ *	Get the qdisc attached to prio band
+ */
+struct ppe_qdisc *ppe_prio_band_qdisc_get(struct Qdisc *sch, u32 classid)
+{
+	struct ppe_prio_sched_data *q = qdisc_priv(sch);
+	unsigned long band = TC_H_MIN(classid);
+
+	if (!band) {
+		ppe_qdisc_warning("%x ppeprio invalid band", sch->handle);
+		return NULL;
+	}
+
+	return qdisc_priv(q->queues[band - 1]);
+}
+
+/*
  * Registration structure for ppeprio class
  */
 const struct Qdisc_class_ops ppe_prio_class_ops = {

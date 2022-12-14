@@ -300,7 +300,11 @@ static int ppe_qdisc_res_l0_alloc(struct ppe_qdisc *pq)
 	 */
 	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_UCAST_QUEUE_VALID);
 	pq->res.q.ucast_qid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE) + q->offset;
-	pq->int_pri = q->offset;
+	if (pq->type > PPE_QDISC_NODE_SCH_MAX) {
+		pq->int_pri = q->offset;
+		ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_INT_PRI_VALID);
+		ppe_qdisc_info("%px:qdisc level0 scheduler resource int-pri:%d set", pq->qdisc, pq->int_pri);
+	}
 
 	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_L0_SCHEDULER_VALID);
 	pq->res.scheduler.l0c_drrid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_CDRR) + l0c_drr->offset;
@@ -556,10 +560,10 @@ int ppe_qdisc_res_mcast_queue_set(struct ppe_qdisc *pq)
 	 * has changed from enabled to disabled.
 	 * So, we need to reset it.
 	 */
-	 if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_DEFAULT)) {
+	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_DEFAULT)) {
 		ppe_qdisc_res_mcast_queue_reset(pq);
 		return 0;
-	 }
+	}
 
 	/*
 	 * If multicast queue configuartion is enabled,
@@ -816,6 +820,9 @@ res_alloc:
 	if (pq->level == PPE_DRV_QOS_SUB_QUEUE_LEVEL) {
 		pq->res.q = pq->parent->res.q;
 		ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_UCAST_QUEUE_VALID);
+		pq->int_pri = pq->parent->res.q.ucast_qid - ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
+		ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_INT_PRI_VALID);
+		ppe_qdisc_info("Qdisc:%px level0 scheduler resource int-pri:%d set\n", pq->qdisc, pq->int_pri);
 	}
 
 	ppe_qdisc_info("PPE Qdisc:%px initialization successful", pq->qdisc);

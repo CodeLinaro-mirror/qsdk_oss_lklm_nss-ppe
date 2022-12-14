@@ -42,6 +42,7 @@
 #define PPE_QDISC_FLAG_L0_SCHEDULER_VALID	0x00000080	/* L0 scheduler is valid for the qdisc */
 #define PPE_QDISC_FLAG_L1_SCHEDULER_VALID	0x00000100	/* L1 scheduler is valid for the qdisc */
 #define PPE_QDISC_FLAG_SHAPER_VALID		0x00000200	/* Shaper is valid for the qdisc */
+#define PPE_QDISC_FLAG_INT_PRI_VALID		0x00000400	/* INT-PRI is valid for the qdisc */
 
 #define PPE_QDISC_STATS_SYNC_MANY_PERIOD msecs_to_jiffies(1000)	/* Statistics sync peroid */
 
@@ -99,6 +100,7 @@ struct ppe_qdisc_stats_wq {
 struct ppe_qdisc {
 	struct Qdisc *qdisc;		/* Handy pointer back to containing qdisc */
 	struct ppe_qdisc *parent;	/* Pointer to parent PPE qdisc */
+	struct ppe_qdisc *child;	/* Pointer to child PPE qdisc */
 	struct ppe_qdisc *def;		/* Pointer to the default qdisc */
 	int32_t port_id;		/* PPE Port number we are shaping on */
 	uint32_t qos_tag;		/* QoS tag of this node */
@@ -116,6 +118,12 @@ struct ppe_qdisc {
 	struct tcf_proto __rcu *filter_list;	/* Filter list */
 	struct tcf_block *block;	/* TC filter block */
 };
+
+/*
+ * ppe_qdisc_int_pri_get()
+ *	Returns the INT-PRI value for a given classid.
+ */
+int ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid);
 
 /*
  * ppe_qdisc_nla_nest_start()
@@ -219,15 +227,16 @@ static inline struct sk_buff *ppe_qdisc_dequeue(struct Qdisc *sch)
 /*
  * ppe_qdisc_enqueue()
  *	Generic enqueue call for enqueuing packets into PPE for shaping
- *
- * Packet enueued in linux for transmit on a physical interface.
- * Simply allow the packet to be dequeued. The packet will be
- * shaped by the interface shaper in the PPE by the usual transmit path.
  */
 static inline int ppe_qdisc_enqueue(struct sk_buff *skb,
 		struct Qdisc *sch,
 		struct sk_buff **to_free)
 {
+	/*
+	 * Set the SKB int_pri from SKB priority.
+	 * This int_pri will be used in EDMA Tx descriptor for PPE Tx queue.
+	 */
+	skb_set_int_pri(skb, ppe_qdisc_int_pri_get(qdisc_dev(sch), skb->priority));
 	__qdisc_enqueue_tail(skb, &sch->q);
 	__netif_schedule(sch);
 	return NET_XMIT_SUCCESS;

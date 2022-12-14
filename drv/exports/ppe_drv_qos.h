@@ -167,6 +167,52 @@ struct ppe_drv_qos_port {
 };
 
 /**
+ * Callback function for getting INT-PRI value.
+ *
+ * @datatypes
+ * net_device
+ *
+ * @param[in] dev         Pointer to the associated net device.
+ * @param[in] tag         Qos tag.
+ */
+typedef int (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32_t tag);
+
+/**
+ * ppe_drv_qos_int_pri_callback_unregister
+ *	API to unregister INT-PRI fetch callback.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_int_pri_callback_unregister(void);
+
+/**
+ * ppe_drv_qos_int_pri_callback_register
+ *	API to register INT-PRI fetch callback.
+ *
+ * @param[in] cb     Pointer to the callback function.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb);
+
+/**
+ * ppe_drv_qos_int_pri_get
+ *	Returns the INT-PRI value for a class ID.
+ *
+ * @datatypes
+ * struct net_device
+ *
+ * @param[in] dev       Pointer to the network device.
+ * @param[in] classid   Class ID of the Qdisc/class.
+ *
+ * @return
+ * INT-PRI value
+ */
+int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t classid);
+
+/**
  * ppe_drv_qos_queue_stats_get
  *	API to fetch queue statistics from PPE HW.
  *

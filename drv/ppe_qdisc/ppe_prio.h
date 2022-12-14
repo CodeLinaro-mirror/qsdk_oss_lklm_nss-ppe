@@ -16,3 +16,4 @@
  */
 
 extern struct Qdisc_ops ppe_prio_qdisc_ops;
+struct ppe_qdisc *ppe_prio_band_qdisc_get(struct Qdisc *sch, u32 classid);
