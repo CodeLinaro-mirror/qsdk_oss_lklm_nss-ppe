@@ -54,6 +54,7 @@ enum ppe_drv_iface_type {
 	PPE_DRV_IFACE_TYPE_VLAN,		/**< Interface type VLAN. */
 	PPE_DRV_IFACE_TYPE_PHYSICAL,		/**< Interface type physical port. */
 	PPE_DRV_IFACE_TYPE_VIRTUAL,		/**< Interface type virtual port. */
+	PPE_DRV_IFACE_TYPE_VIRTUAL_PO,		/**< Interface type virtual port for point offload. */
 	PPE_DRV_IFACE_TYPE_VP_L2_TUN,		/**< Interface type VP for hardware L2 tunnel. */
 	PPE_DRV_IFACE_TYPE_VP_L3_TUN,		/**< Interface type VP for hardware L3 tunnel. */
 	PPE_DRV_IFACE_TYPE_EIP,			/**< Interface type EIP. */
@@ -243,6 +244,20 @@ ppe_drv_ret_t ppe_drv_iface_ucast_queue_get(struct ppe_drv_iface *iface, uint8_t
  * ppe_drv_iface_t
  */
 ppe_drv_ret_t ppe_drv_iface_ucast_queue_set(struct ppe_drv_iface *iface, uint8_t queue_id);
+
+/**
+ * ppe_drv_iface_get_by_idx
+ *	Get the ppe iface associated with a physical port index.
+ *
+ * @datatypes
+ * ppe_drv_iface_t
+ *
+ * @param[in] idx  physical port index.
+ *
+ * @return
+ * ppe_drv_iface
+ */
+struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx);
 
 /** @} */ /* end_addtogroup ppe_drv_iface_subsystem */
 

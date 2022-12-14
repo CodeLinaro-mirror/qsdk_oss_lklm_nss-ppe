@@ -353,6 +353,10 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 			ppe_type = PPE_DRV_IFACE_TYPE_VIRTUAL;
 			break;
 
+		case PPE_VP_TYPE_SW_PO:
+			ppe_type = PPE_DRV_IFACE_TYPE_VIRTUAL_PO;
+			break;
+
 		case PPE_VP_TYPE_HW_L2TUN:
 			ppe_type = PPE_DRV_IFACE_TYPE_VP_L2_TUN;
 			break;

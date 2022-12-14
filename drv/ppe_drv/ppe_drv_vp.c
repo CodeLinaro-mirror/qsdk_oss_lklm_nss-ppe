@@ -66,10 +66,15 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, ui
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 	uint8_t tunnel_vp_cfg = 0;
+	enum ppe_drv_port_type port_type = PPE_DRV_PORT_VIRTUAL;
 
 	switch (iface->type) {
 	case PPE_DRV_IFACE_TYPE_VIRTUAL:
 		tunnel_vp_cfg = 0x0;
+		break;
+	case PPE_DRV_IFACE_TYPE_VIRTUAL_PO:
+		tunnel_vp_cfg = 0x0;
+		port_type = PPE_DRV_PORT_VIRTUAL_PO;
 		break;
 	case PPE_DRV_IFACE_TYPE_VP_L2_TUN:
 		tunnel_vp_cfg = PPE_DRV_PORT_VIRTUAL_L2_TUN;
@@ -83,7 +88,7 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, ui
 	}
 
 	spin_lock_bh(&p->lock);
-	port = ppe_drv_port_alloc(PPE_DRV_PORT_VIRTUAL, iface->dev, tunnel_vp_cfg);
+	port = ppe_drv_port_alloc(port_type, iface->dev, tunnel_vp_cfg);
 	if (!port) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: unable to get a valid virtual port of iface type(%d)", iface, iface->type);

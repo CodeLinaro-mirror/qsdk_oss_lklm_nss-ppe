@@ -68,6 +68,7 @@ enum ppe_drv_port_type {
 	PPE_DRV_PORT_LAG,		/* LAG Port */
 	PPE_DRV_PORT_VIRTUAL,		/* Virtual Port */
 	PPE_DRV_PORT_EIP,		/* EIP inline Port */
+	PPE_DRV_PORT_VIRTUAL_PO,	/* Virtual point offload port */
 };
 
 /*
