@@ -45,11 +45,18 @@ static bool nss_mapt_stats_dentry_free(struct net_device *dev);
  */
 static bool nss_ppe_mapt_src_exception(struct net_device *dev, struct sk_buff *skb)
 {
-	skb_reset_network_header(skb);
-	skb->protocol = htons(ETH_P_IPV6);
+	int ret;
+
 	skb->dev = dev;
 	skb->skb_iif = dev->ifindex;
-	netif_receive_skb(skb);
+	skb->protocol = eth_type_trans(skb, dev);
+	skb_reset_network_header(skb);
+
+	ret = netif_receive_skb(skb);
+	if (ret != NET_RX_SUCCESS) {
+		nss_ppe_mapt_warning("%p: excpetion packet dropped\n", dev);
+	}
+
 	return true;
 }
 
