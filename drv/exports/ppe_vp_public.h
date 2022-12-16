@@ -102,6 +102,15 @@ typedef enum ppe_vp_type {
 typedef bool(*ppe_vp_stats_callback_t)(struct net_device *, ppe_vp_hw_stats_t *);
 
 /*
+ * ppe_vp_netdev_type
+ *	Types of VPs netdev
+ */
+enum ppe_vp_netdev_type {
+	PPE_VP_NET_DEV_TYPE_WIFI = 1,	/**< VP netdev is of type Wi-Fi */
+	PPE_VP_NET_DEV_TYPE_MAX,	/**< Maximum VP netdev types */
+};
+
+/*
  * ppe_vp_user_type
  *	Types of VPs user
  */
@@ -127,6 +136,8 @@ struct ppe_vp_ai {
 	uint8_t queue_num;		/**< Queue number */
 	ppe_vp_status_t status;		/**< VP return status */
 	enum ppe_vp_user_type usr_type;	/**< VP user type */
+	enum ppe_vp_netdev_type net_dev_type;
+					/**< VP netdev type */
 	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
 };
 

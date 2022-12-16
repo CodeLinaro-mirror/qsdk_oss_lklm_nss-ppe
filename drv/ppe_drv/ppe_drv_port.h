@@ -32,6 +32,15 @@ enum ppe_port_user_type {
 	PPE_DRV_PORT_USER_TYPE_MAX,			/**< Maximum VP User types */
 };
 
+/**
+ * ppe_port_netdev_type
+ *	Port's netdev type
+ */
+enum ppe_port_netdev_type {
+	PPE_DRV_PORT_NETDEV_TYPE_WIFI = 1,		/**< Port netdev is of Wi-Fi type */
+	PPE_DRV_PORT_NETDEV_TYPE_MAX,			/**< Maximum port netdev types */
+};
+
 /*
  * ppe_drv_port_flag
  *	Port flags
@@ -41,7 +50,8 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_IDTLS = 0x2,
 	PPE_DRV_PORT_FLAG_DS = 0x4,
 	PPE_DRV_PORT_FLAG_MAX = 0x8,
-	PPE_DRV_PORT_RFS_ENABLED = 0x10
+	PPE_DRV_PORT_RFS_ENABLED = 0x10,
+	PPE_DRV_PORT_FLAG_WIFI_DEV = 0x20
 } ppe_drv_port_flag_t;
 
 /*

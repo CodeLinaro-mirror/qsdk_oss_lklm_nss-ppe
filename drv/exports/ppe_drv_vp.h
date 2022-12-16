@@ -57,7 +57,7 @@ ppe_drv_ret_t ppe_drv_vp_deinit(struct ppe_drv_iface *iface);
  * @return
  * Status of the initialization operation.
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type);
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type);
 
 /** @} */ /* end_addtogroup ppe_drv_vp_subsystem */
 
