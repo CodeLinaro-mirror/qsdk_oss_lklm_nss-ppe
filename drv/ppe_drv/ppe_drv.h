@@ -215,11 +215,14 @@ struct ppe_drv {
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
 
 	struct ppe_drv_fse_ops *fse_ops;        /* Wi-Fi FSE block operations */
-	bool fse_enable;				/* FSE enabled */
+	struct kref fse_ops_ref;		/* FSE Reference count */
+	bool fse_enable;			/* FSE enabled */
+	bool is_wifi_fse_up;			/* Wi-FI FSE ops registered with PPE */
 
 	bool toggled_v4;			/* Toggled bit for v4 sync during a particular iteration */
 	bool toggled_v6;			/* Toggled bit for v6 sync during a particular iteration */
 	bool tun_toggled;		        /* Tunnel specific Toggled bit for sync during a particular iteration*/
 };
 
+void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv ppe_drv_gbl;

@@ -34,6 +34,7 @@ static void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, st
 	fse_info->tuple.protocol = ppe_drv_v4_conn_flow_match_protocol_get(conn);
 
 	pp = ppe_drv_v4_conn_flow_rx_port_get(conn);
+
 	fse_info->dev = ppe_drv_port_to_dev(pp);
 	fse_info->flags |= PPE_DRV_FSE_IPV4;
 	if (is_ds) {
@@ -69,7 +70,7 @@ static bool ppe_drv_fse_interface_check(struct ppe_drv_v4_conn_flow *pcf)
 	 * If FSE operation is not enabled; return true and continue with a successfull
 	 * PPE rule push
 	 */
-	if (!p->fse_enable || !p->fse_ops) {
+	if (!p->is_wifi_fse_up || !p->fse_enable || !p->fse_ops) {
 		ppe_drv_trace("FSE operation not enabled: enable: %d ops: %p\n", p->fse_enable, p->fse_ops);
 		return false;
 	}
@@ -797,14 +798,17 @@ static bool ppe_drv_v4_flow_del(struct ppe_drv_v4_conn_flow *pcf)
 	/*
 	 * Delete corresponding FSE rule for a Wi-Fi flow.
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FSE)) {
+	if (p->is_wifi_fse_up && ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FSE)) {
 		ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
+
 		if (p->fse_ops->destroy_fse_rule(&fse_info)) {
 			ppe_drv_warn("%p: FSE v4 rule deletion failed\n", pcf);
 			return true;
 		}
 
-		ppe_drv_warn("%p: FSE v4 rule deletion successfull\n", pcf);
+		ppe_drv_v4_conn_flow_flags_clear(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
+		kref_put(&p->fse_ops_ref, ppe_drv_fse_ops_free);
+		ppe_drv_trace("%p: FSE v4 rule deletion successfull\n", pcf);
 	}
 
 	return true;
@@ -1800,6 +1804,8 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 			ppe_drv_warn("%p: FSE flow table programming failed\n", p);
 			goto fail;
 		}
+
+		kref_get(&p->fse_ops_ref);
 	}
 
 	list_add(&cn->list, &p->conn_v4);
