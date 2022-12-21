@@ -68,6 +68,13 @@
 #define PPE_DS_TXCMPL_BUDGET	256	/* PPE-DS node's Tx complete budget */
 #define PPE_DS_RXFILL_LOW_THRES_DIVISOR	3	/* PPE-DS node's Rxfill low threshold divisor */
 
+extern unsigned int polling_for_idx_update;
+extern unsigned int idx_mgmt_freq;
+extern unsigned int max_move;
+extern unsigned int cpu_mask_2g;
+extern unsigned int cpu_mask_5g;
+extern unsigned int cpu_mask_6g;
+
 /*
  * ppe_ds_node_state_t
  *	PPE-DS node states
@@ -114,4 +121,5 @@ struct ppe_ds {
 	ppe_ds_wlan_handle_t wlan_handle;	/* WLAN handle */
 };
 
+extern struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
 #endif	/* __PPE_DS__ */

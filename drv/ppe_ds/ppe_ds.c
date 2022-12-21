@@ -20,14 +20,7 @@
 
 #include "ppe_vp_public.h"
 #include "ppe_ds.h"
-
-extern unsigned int idx_mgmt_freq;
-extern unsigned int max_move;
-extern unsigned int cpu_mask_2g;
-extern unsigned int cpu_mask_5g;
-extern unsigned int cpu_mask_6g;
-extern struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
-extern int polling_for_idx_update;
+#include "ppe_ds_stats.h"
 
 #define IDX_MGMT_PERIOD max_t(u64, 10000, NSEC_PER_SEC / idx_mgmt_freq)
 
@@ -187,7 +180,9 @@ int ppe_ds_ppe2tcl_wlan_handle_intr(void *ctxt)
 		if (move > max_move) {
 			prod_idx = (cons_idx + max_move) &
 							(ppe2tcl_ring_size - 1);
+			move = max_move;
 		}
+		atomic64_add(move, &ppe_ds_node_stats[node->node_cfg_idx].tx_pkts);
 		/*
 		 * Move Producer Idx
 		 */
@@ -237,6 +232,7 @@ int ppe_ds_reo2ppe_wlan_handle_intr(void *ctxt)
 		node->wlan_ops->set_reo_cons_idx(wlan_handle, cons_idx);
 		node->last_reo2ppe_cons_idx = cons_idx;
 	}
+	atomic64_add(move, &ppe_ds_node_stats[node->node_cfg_idx].rx_pkts);
 
 	return 0;
 }
