@@ -55,6 +55,12 @@
 #define PPE_DRV_VALID_FLAG_RETURN_POLICER	0x02	/**< Policer is enabled in return direction. */
 
 /*
+ * PPE QOS VALID FLAGS
+ */
+#define PPE_DRV_VALID_FLAG_FLOW_PPE_QOS		0x01	/**< PPE QOS is enabled in flow direction. */
+#define PPE_DRV_VALID_FLAG_RETURN_PPE_QOS	0x02	/**< PPE QOS is enabled in return direction. */
+
+/*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
  */
@@ -170,6 +176,10 @@ struct ppe_drv_vlan_rule {
 struct ppe_drv_qos_rule {
 	uint32_t flow_qos_tag;		/**< QoS tag associated with this rule for the flow direction. */
 	uint32_t return_qos_tag;	/**< QoS tag associated with this rule for the return direction. */
+	uint8_t flow_int_pri;		/**< PPE INT_PRI corresponding to flow_qos_tag when PPE Qdisc is configured. */
+	uint8_t return_int_pri;		/**< PPE INT_PRI corresponding to return_qos_tag when PPE Qdisc is configured. */
+	uint8_t qos_valid_flags;	/**< FLAGS to identify PPE QOS. */
+	uint8_t reserved[1];		/**< Reserved; padding for alignment. */
 };
 
 /**

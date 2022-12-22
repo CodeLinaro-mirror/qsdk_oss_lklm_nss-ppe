@@ -865,7 +865,13 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_QOS) {
 			qos_rule->flow_qos_tag = (qos_rule->flow_qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_rule->flow_qos_tag;
-			ppe_drv_v4_conn_flow_int_pri_set(pcf, qos_rule->flow_qos_tag);
+
+			if (qos_rule->qos_valid_flags & PPE_DRV_VALID_FLAG_FLOW_PPE_QOS) {
+				ppe_drv_v4_conn_flow_int_pri_set(pcf, qos_rule->flow_int_pri);
+			} else {
+				ppe_drv_v4_conn_flow_int_pri_set(pcf, qos_rule->flow_qos_tag);
+			}
+
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_QOS_VALID);
 		}
 
@@ -1002,7 +1008,13 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_QOS) {
 			qos_rule->return_qos_tag = (qos_rule->return_qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_rule->return_qos_tag;
-			ppe_drv_v4_conn_flow_int_pri_set(pcr, qos_rule->return_qos_tag);
+
+			if (qos_rule->qos_valid_flags & PPE_DRV_VALID_FLAG_RETURN_PPE_QOS) {
+				ppe_drv_v4_conn_flow_int_pri_set(pcr, qos_rule->return_int_pri);
+			} else {
+				ppe_drv_v4_conn_flow_int_pri_set(pcr, qos_rule->return_qos_tag);
+			}
+
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_QOS_VALID);
 		}
 

@@ -790,6 +790,10 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID);
 		}
 
+		/*
+		 * Check if SAWF info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
 		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
 					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
 			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->flow_mark);
@@ -801,7 +805,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
 			qos_rule->flow_qos_tag = (qos_rule->flow_qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_rule->flow_qos_tag;
-			ppe_drv_v6_conn_flow_int_pri_set(pcf, qos_rule->flow_qos_tag);
+
+			if (qos_rule->qos_valid_flags & PPE_DRV_VALID_FLAG_FLOW_PPE_QOS) {
+				ppe_drv_v6_conn_flow_int_pri_set(pcf, qos_rule->flow_int_pri);
+			} else {
+				ppe_drv_v6_conn_flow_int_pri_set(pcf, qos_rule->flow_qos_tag);
+			}
+
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
 		}
 
@@ -908,6 +918,10 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID);
 		}
 
+		/*
+		 * Check if SAWF info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
 		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
 				(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
 			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->return_mark);
@@ -919,7 +933,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
 			qos_rule->return_qos_tag = (qos_rule->return_qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_rule->return_qos_tag;
-			ppe_drv_v6_conn_flow_int_pri_set(pcr, qos_rule->return_qos_tag);
+
+			if (qos_rule->qos_valid_flags & PPE_DRV_VALID_FLAG_RETURN_PPE_QOS) {
+				ppe_drv_v6_conn_flow_int_pri_set(pcr, qos_rule->return_int_pri);
+			} else {
+				ppe_drv_v6_conn_flow_int_pri_set(pcr, qos_rule->return_qos_tag);
+			}
+
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
 		}
 
