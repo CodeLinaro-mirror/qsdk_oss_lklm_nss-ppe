@@ -136,6 +136,11 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_create_rfs_fail_invalid_tx_port",	/* No of v4 RFS create failure due to invalid Tx Port */
 	"v4_create_rfs_noedit_rule",	/* No of v4 rfs non edit rule create */
 
+	"v4_create_fse_success",			/* No of v4 Wi-Fi FSE rule create failure */
+	"v4_create_fse_fail",			/* No of v4 Wi-Fi FSE rule create failure */
+	"v4_destroy_fse_success",			/* No of v4 Wi-Fi FSE rule delete failure */
+	"v4_destroy_fse_fail",			/* No of v4 Wi-Fi FSE rule delete failure */
+
 	"v6_create_req",			/* No of v6 create requests */
 	"v6_create_fail",			/* No of v6 create failure */
 	"v6_destroy_req",			/* No of v6 delete requests */
@@ -166,6 +171,11 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_rfs_fail_invalid_rx_port",	/* No of v6 RFS create failure due to invalid Rx Port */
 	"v6_create_rfs_fail_invalid_tx_port",	/* No of v6 RFS create failure due to invalid Tx Port */
 	"v6_create_rfs_noedit_rule",	/* No of v6 rfs non edit rule create */
+
+	"v6_create_fse_success",			/* No of v4 Wi-Fi FSE rule create failure */
+	"v6_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
+	"v6_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
+	"v6_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
 };
 
 /*
@@ -207,6 +217,11 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_create_rfs_fail_invalid_rx_port",	/* No of v4 RFS create failure due to invalid Rx Port */
 	"v4_tun_create_rfs_fail_invalid_tx_port",	/* No of v4 RFS create failure due to invalid Tx Port */
 
+	"v4_tun_create_fse_success",			/* No of v6 Wi-Fi FSE rule create failure */
+	"v4_tun_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
+	"v4_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
+	"v4_tun_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
+
 	"v6_tun_create_req",			/* No of v6 create requests */
 	"v6_tun_create_fail",			/* No of v6 create failure */
 	"v6_tun_destroy_req",			/* No of v6 delete requests */
@@ -237,6 +252,11 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_rfs_fail_invalid_rx_port",	/* No of v6 RFS create failure due to invalid Rx Port */
 	"v6_tun_create_rfs_fail_invalid_tx_port",	/* No of v6 RFS create failure due to invalid Tx Port */
 	"v6_tun_create_rfs_noedit_rule",	/* No of v6 rfs non edit rule create */
+
+	"v6_tun_create_fse_success",			/* No of v6 Wi-Fi FSE rule create failure */
+	"v6_tun_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
+	"v6_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
+	"v6_tun_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
 };
 
 /*
