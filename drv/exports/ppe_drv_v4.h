@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -37,6 +37,8 @@
 #define PPE_DRV_V4_RULE_FLAG_FLOW_VALID		0x0010		/**< Rule creation for flow direction */
 #define PPE_DRV_V4_RULE_FLAG_RETURN_VALID	0x0020		/**< Rule creation for return direction */
 #define PPE_DRV_V4_RULE_FLAG_PPPOE_VALID       0x0040          /**< Rule creation for PPPoe */
+#define PPE_DRV_V4_RULE_FLAG_DS_FLOW                    0x0080  /**< Rule creation for DS flow */
+#define PPE_DRV_V4_RULE_FLAG_VP_FLOW                    0x0100  /**< Rule creation for VP flow */
 
 /*
  * v4 valid flags
