@@ -381,6 +381,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 	struct ppe_drv_nexthop *nh;
 	struct ppe_drv_vsi *vsi;
 	struct ppe_drv_port *pp;
+	struct ppe_drv_port *pp_rx;
 	sw_error_t err;
 
 	ppe_drv_v6_conn_flow_match_src_ip_get(pcf, match_src_ip);
@@ -448,6 +449,16 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 		return NULL;
 	}
 
+	pp_rx = ppe_drv_v6_conn_flow_rx_port_get(pcf);
+	if (!pp_rx) {
+		/*
+		 * Release next hop entry.
+		 */
+		ppe_drv_nexthop_deref(nh);
+		ppe_drv_warn("%p: inress port invalid", nh);
+		return NULL;
+	}
+
 	ppe_drv_info("%p: ppe_port: %d", nh, pp->port);
 
 	/*
@@ -478,7 +489,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 		fal_nh.type = FAL_NEXTHOP_VP;
 		fal_nh.port = pp->port;
 	} else {
-		if (vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled) {
+		if (vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled) {
 			fal_nh.type = FAL_NEXTHOP_L3;
 			fal_nh.vsi = vsi->index;
 		} else {
@@ -546,6 +557,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 	struct ppe_drv_nexthop *nh;
 	struct ppe_drv_vsi *vsi;
 	struct ppe_drv_port *pp;
+	struct ppe_drv_port *pp_rx;
 	sw_error_t err;
 
 	/*
@@ -610,6 +622,16 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 		return NULL;
 	}
 
+	pp_rx = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+	if (!pp_rx) {
+		/*
+		 * Release next hop entry.
+		 */
+		ppe_drv_nexthop_deref(nh);
+		ppe_drv_warn("%p: ingress port invalid", nh);
+		return NULL;
+	}
+
 	ppe_drv_info("%p: ppe_port: %d", nh, pp->port);
 
 	/*
@@ -658,7 +680,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 		fal_nh.type = FAL_NEXTHOP_VP;
 		fal_nh.port = pp->port;
 	} else {
-		if (vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled) {
+		if (vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled) {
 			fal_nh.type = FAL_NEXTHOP_L3;
 			fal_nh.vsi = vsi->index;
 		} else {
