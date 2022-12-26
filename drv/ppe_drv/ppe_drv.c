@@ -295,25 +295,43 @@ static bool ppe_drv_l3_route_ctrl_init(struct ppe_drv *p)
 }
 
 /*
+ * ppe_drv_fse_ops_free()
+ *	Function to release fse_ops related memory
+ *
+ * Should be called under ppe lock
+ */
+void ppe_drv_fse_ops_free(struct kref *kref)
+{
+	struct ppe_drv *p = container_of(kref, struct ppe_drv, fse_ops_ref);
+	struct ppe_drv_fse_ops *ops_internal;
+
+	if (!p->fse_ops) {
+		ppe_drv_warn("%p: No FSE ops registered\n", p);
+		return;
+	}
+
+	ops_internal = p->fse_ops;
+	p->fse_ops = NULL;
+	kfree(ops_internal);
+}
+
+/*
  * ppe_drv_fse_ops_unregister()
  *	Un-register FSE rule add/delete callbacks. This function will be called from Wi-Fi driver
  */
 void ppe_drv_fse_ops_unregister(void)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_fse_ops *ops_internal;
 
 	spin_lock_bh(&p->lock);
-	if (!p->fse_ops) {
-		ppe_drv_warn("%p: No FSE ops registered\n", p);
+	if (!p->fse_ops || !p->is_wifi_fse_up) {
 		spin_unlock_bh(&p->lock);
 		return;
 	}
 
-	ops_internal = p->fse_ops;
-	p->fse_ops = NULL;
+	p->is_wifi_fse_up = false;
+	kref_put(&p->fse_ops_ref, ppe_drv_fse_ops_free);
 	spin_unlock_bh(&p->lock);
-	vfree(ops_internal);
 }
 EXPORT_SYMBOL(ppe_drv_fse_ops_unregister);
 
@@ -331,7 +349,7 @@ bool ppe_drv_fse_ops_register(struct ppe_drv_fse_ops *ops)
 		return false;
 	}
 
-	ops_internal = (struct ppe_drv_fse_ops *)vzalloc(sizeof(struct ppe_drv_fse_ops));
+	ops_internal = (struct ppe_drv_fse_ops *)kzalloc(sizeof(struct ppe_drv_fse_ops), GFP_ATOMIC);
 	if (!ops_internal) {
 		ppe_drv_warn("%p: FSE ops registration failed\n", p);
 		return false;
@@ -341,13 +359,15 @@ bool ppe_drv_fse_ops_register(struct ppe_drv_fse_ops *ops)
 	if (p->fse_ops) {
 		ppe_drv_warn("%p: FSE ops registration already done\n", p);
 		spin_unlock_bh(&p->lock);
-		vfree(ops_internal);
+		kfree(ops_internal);
 		return false;
 	}
 
 	ops_internal->create_fse_rule = ops->create_fse_rule;
 	ops_internal->destroy_fse_rule = ops->destroy_fse_rule;
 	p->fse_ops = ops_internal;
+	p->is_wifi_fse_up = true;
+	kref_init(&p->fse_ops_ref);
 	spin_unlock_bh(&p->lock);
 
 	ppe_drv_trace("%p: FSE ops registration done successfully\n", p);
@@ -511,6 +531,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->tun_toggled = false;
 	p->fse_ops = NULL;
 	p->fse_enable = false;
+        p->is_wifi_fse_up = false;
 
 	/*
 	 * Allocate tunnel specific entries
