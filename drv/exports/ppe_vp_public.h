@@ -115,9 +115,10 @@ enum ppe_vp_netdev_type {
  *	Types of VPs user
  */
 enum ppe_vp_user_type {
-	PPE_VP_USER_TYPE_PASSIVE = 1,	/**< VP for Passive use-case */
-	PPE_VP_USER_TYPE_ACTIVE,	/**< VP for Active use-case */
-	PPE_VP_USER_TYPE_DS,		/**< VP for Direct-Switch use-case */
+	PPE_VP_USER_TYPE_NONE = 0,	/**< Non VP use case >*/
+	PPE_VP_USER_TYPE_PASSIVE,	/**< VP for Passive use case */
+	PPE_VP_USER_TYPE_ACTIVE,	/**< VP for Active use case */
+	PPE_VP_USER_TYPE_DS,		/**< VP for Direct-Switch use case */
 	PPE_VP_USER_TYPE_MAX,		/**< Maximum VP User types */
 };
 
