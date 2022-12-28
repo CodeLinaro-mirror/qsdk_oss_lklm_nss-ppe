@@ -531,6 +531,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	uint16_t xmit_mtu;
 	sw_error_t err;
 
+	if (!port_if) {
+		ppe_drv_warn("%p: Invalid egress port_if", pcf);
+		return NULL;
+	}
+
 	ppe_drv_v6_conn_flow_match_dest_ip_get(pcf, &match_dest_ip[0]);
 	pp = ppe_drv_iface_port_get(port_if);
 	if (!pp) {
@@ -1043,12 +1048,17 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	uint32_t match_protocol = ppe_drv_v4_conn_flow_match_protocol_get(pcf);
 	uint8_t vlan_hdr_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
 	struct ppe_drv_iface *port_if = ppe_drv_v4_conn_flow_eg_port_if_get(pcf);
-	struct ppe_drv_port *pp = ppe_drv_iface_port_get(port_if);
+	struct ppe_drv_port *pp;
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
 	bool wifi_qos_en;
 	uint16_t xmit_mtu;
 	sw_error_t err;
+
+	if (!port_if) {
+		ppe_drv_warn("%p: Invalid egress port_if", pcf);
+		return NULL;
+	}
 
 	pp = ppe_drv_iface_port_get(port_if);
 	if (!pp) {

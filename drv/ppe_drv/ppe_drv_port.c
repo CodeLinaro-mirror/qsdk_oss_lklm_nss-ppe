@@ -1019,25 +1019,42 @@ EXPORT_SYMBOL(ppe_drv_port_num_from_dev);
  * ppe_drv_port_rfs_enabled()
  *	RFS enabled on a Port
  */
-bool ppe_drv_port_rfs_enabled(uint16_t pp_num)
+static bool ppe_drv_port_rfs_enabled(struct ppe_drv_port *pp)
 {
+	return !!(pp->flags & PPE_DRV_PORT_RFS_ENABLED);
+}
+
+/*
+ * ppe_drv_port_check_rfs_support()
+ *	check rfs support
+ */
+bool ppe_drv_port_check_rfs_support(struct net_device *dev)
+{
+	struct ppe_drv_port *pp = NULL;
 	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_port *pp;
-	uint32_t flags;
 
 	spin_lock_bh(&p->lock);
-	pp = ppe_drv_port_from_port_num(pp_num);
+	pp = ppe_drv_port_from_dev(dev);
 	if (!pp) {
 		spin_unlock_bh(&p->lock);
 		return false;
 	}
 
-	flags = pp->flags;
-	spin_unlock_bh(&p->lock);
+	if (pp->user_type != PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
 
-	return !!(flags & PPE_DRV_PORT_RFS_ENABLED);
+	if (!ppe_drv_port_rfs_enabled(pp)) {
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	spin_unlock_bh(&p->lock);
+	return true;
 }
-EXPORT_SYMBOL(ppe_drv_port_rfs_enabled);
+EXPORT_SYMBOL(ppe_drv_port_check_rfs_support);
+
 
 /*
  * ppe_drv_is_wlan_vp_port_type()
