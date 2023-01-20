@@ -31,6 +31,13 @@
 #include "ppe_drv_iface.h"
 
 /*
+ * FSE flags
+ */
+#define PPE_DRV_FSE_IPV4 0x00000001	/**< Indicate if flow is IPv4 to FSE. */
+#define PPE_DRV_FSE_IPV6 0x00000002	/**< Indicate if flow is IPv6 to FSE. */
+#define PPE_DRV_FSE_DS 0x00000004	/**< Indicate if flow is Direct switch. */
+
+/*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
  */
@@ -39,6 +46,38 @@ enum ppe_drv_ip_type {
 	PPE_DRV_IP_TYPE_V6,	/**< IPv6 unicast IP-type. */
 	PPE_DRV_IP_TYPE_MC_V4,	/**< IPv4 multicast IP-type. */
 	PPE_DRV_IP_TYPE_MC_V6	/**< IPv6 multicast IP-type. */
+};
+
+/*
+ * ppe_drv_fse_tuple
+ *	fse tuple
+ */
+struct ppe_drv_fse_tuple {
+	uint32_t src_ip[4];		/**< Flow IP address. */
+	uint32_t src_port;		/**< Flow identifier (e.g., TCP or UDP port). */
+	uint32_t dest_ip[4];		/**< Return IP address. */
+	uint32_t dest_port;		/**< Return identifier (e.g., TCP or UDP port). */
+	uint8_t protocol;		/**< Protocol number. */
+};
+
+/*
+ * ppe_drv_fse_rule_info
+ *	Information to pass from PPE to FSE module
+ */
+struct ppe_drv_fse_rule_info {
+	struct ppe_drv_fse_tuple tuple;		/**< 5 tuple information. */
+	struct net_device *dev;			/**< VAP netdevice. */
+	uint32_t flags;				/**< Info flag */
+	uint8_t vp_num;			/**< Virtual port number. */
+};
+
+/*
+ * ppe_drv_fse_ops
+ *	FSE operations
+ */
+struct ppe_drv_fse_ops {
+	bool (*create_fse_rule)(struct ppe_drv_fse_rule_info *finfo);	/**< Function pointer to create FSE rules. */
+	bool (*destroy_fse_rule)(struct ppe_drv_fse_rule_info *finfo);	/**< Function pointer to destroy FSE rules. */
 };
 
 /**
@@ -102,6 +141,53 @@ struct ppe_drv_qos_rule {
 struct ppe_drv_top_if_rule {
 	ppe_drv_iface_t rx_if;		/**< Top PPE interface for from direction */
 	ppe_drv_iface_t tx_if;		/**< Top PPE interface for return direction */
+};
+
+/**
+ * ppe_drv_service_class_rule
+ *	Service class related information.
+ */
+struct ppe_drv_service_class_rule {
+	uint32_t flow_mark;		/**< Service class information in flow direction. */
+	uint32_t return_mark;		/**< Service class information in return direction. */
+};
+
+/*
+ * ppe_drv_nsm_queue_drop_stats
+ *	Per-queue stats to be send to NSM.
+ */
+struct ppe_drv_nsm_queue_drop_stats {
+	uint64_t drop_packets;		/**< Drop packets for given queue and item. */
+	uint64_t drop_bytes;		/**< Drop bytes for given queue and item. */
+};
+
+/*
+ * ppe_drv_nsm_flow_stats
+ *	Per-flow stats to be send to NSM.
+ */
+struct ppe_drv_nsm_flow_stats {
+	uint64_t rx_packets;		/**< Packets received on the ethernet port. */
+	uint64_t rx_bytes;		/**< Bytes received on the ethernet port */
+};
+
+/*
+ * ppe_drv_nsm_sc_stats
+ *	Per-service class stats to be send to NSM.
+ */
+struct ppe_drv_nsm_sc_stats {
+	uint64_t rx_packets;		/**< Packets recieved on the ethernet port. */
+	uint64_t rx_bytes;		/**< Bytes recieved on the ethernet port. */
+	uint16_t flow_count;		/**< Number of flows per service class. */
+};
+
+/*
+ * ppe_drv_nsm_stats
+ *	Information to be send to NSM.
+ */
+struct ppe_drv_nsm_stats {
+	struct ppe_drv_nsm_sc_stats sc_stats;			/**< Per-service class stats. */
+	struct ppe_drv_nsm_flow_stats flow_stats;		/**< Per-flow stats. */
+	struct ppe_drv_nsm_queue_drop_stats queue_stats;	/**< Per-queue stats. */
 };
 
 /*
@@ -170,6 +256,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_TUN_ADD_CE_NULL,			/**< Add connection entry callback is NULL */
 	PPE_DRV_RET_INVALID_EIP_SERVICE,		/**< Invalid inline EIP service */
 	PPE_DRV_RET_FAILURE_DUMMY_RULE,			/**< Failed to push rule to PPE for passive VP */
+	PPE_DRV_RET_INVALID_USER_TYPE,			/**< Failed to push rule to PPE for DS flow when user type is not DS */
 } ppe_drv_ret_t;
 
 /**
@@ -192,6 +279,57 @@ struct dentry *ppe_drv_get_dentry(void);
  * none.
  */
 void ppe_drv_core2queue_mapping(uint8_t core, uint8_t queue_id);
+
+/*
+ * ppe_drv_nsm_queue_stats_update()
+ *	Update stats in NSM for given queue id.
+ *
+ * @param[IN] nsm_stats		Pointer to stats structure in NSM.
+ * @param[IN] queue_id		Queue ID corresponding to which stats are needed.
+ * @param[IN] item_id		Drop Item ID for the Queue.
+ *
+ * @return
+ * Status of the API.
+ */
+extern bool ppe_drv_nsm_queue_stats_update(struct ppe_drv_nsm_stats *nsm_stats, uint32_t queue_id, uint8_t item_id);
+
+/**
+ * ppe_drv_fse_ops_unregister
+ *	Unregister fse ops with ppe driver.
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_fse_ops_unregister(void);
+
+/**
+ * ppe_drv_fse_ops_register
+ *	Register fse ops with ppe driver.
+ *
+ * @param[IN] ops Pointer to FSE operation structure in PPE.
+ *
+ * @return
+ * true or false.
+ */
+bool ppe_drv_fse_ops_register(struct ppe_drv_fse_ops *ops);
+
+/**
+ * ppe_drv_fse_feature_enable
+ *	Enable PPE-FSE feature.
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_fse_feature_enable(void);
+
+/**
+ * ppe_drv_fse_feature_disable
+ *	Disable PPE-FSE feature.
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_fse_feature_disable(void);
 
 /** @} */ /* end_addtogroup ppe_drv_subsystem */
 

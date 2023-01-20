@@ -41,6 +41,17 @@ bool ppe_tun_stats(struct net_device *dev, ppe_vp_hw_stats_t *stats)
 	tstats->tx_packets += stats->tx_pkt_cnt;
 	tstats->rx_bytes += stats->rx_byte_cnt;
 	tstats->rx_packets += stats->rx_pkt_cnt;
+
+	/*
+	 * For Map-t device we need to update the rx and tx stats separately.
+	 */
+	if (unlikely(dev->priv_flags_ext & IFF_EXT_MAPT)) {
+		tstats->rx_bytes += stats->tx_byte_cnt;
+		tstats->rx_packets += stats->tx_pkt_cnt;
+		tstats->tx_bytes += stats->rx_byte_cnt;
+		tstats->tx_packets += stats->rx_pkt_cnt;
+	}
+
 	u64_stats_update_end(&tstats->syncp);
 
 	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);
@@ -206,8 +217,6 @@ static bool ppe_tun_deactivate_with_conn_entry(uint8_t vp_num, void *vdestroy_ru
 		return false;
 	}
 
-	tun->phys_dev = NULL;
-
 	ppe_tun_deref(tun);
 
 	/*
@@ -311,6 +320,10 @@ static bool ppe_tun_exception_src_cb(struct net_device *dev, struct sk_buff *skb
 	 */
 	if (tun->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
 		dev = tun->phys_dev;
+		if (unlikely(!dev)) {
+			ppe_tun_deref(tun);
+			goto free_skb;
+		}
 	}
 
 	ppe_tun_deref(tun);
@@ -425,8 +438,6 @@ bool ppe_tun_deactivate(struct net_device *dev)
 		ppe_tun_warn("%p: failed to deactivate tunnel for dev %s", tun, dev->name);
 		return false;
 	}
-
-	tun->phys_dev = NULL;
 
 	ppe_tun_deref(tun);
 
@@ -742,6 +753,7 @@ bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type)
 	tun->type = type;
 	tun->vp_num = vp_num;
 	tun->idx = idx;
+
 	kref_init(&tun->ref);
 
 	ptp->tun[idx] = tun;

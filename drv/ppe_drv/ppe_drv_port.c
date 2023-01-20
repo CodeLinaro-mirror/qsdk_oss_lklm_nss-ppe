@@ -208,6 +208,7 @@ static inline struct ppe_drv_port *ppe_drv_port_get_free_port(enum ppe_drv_port_
 	 */
 	switch (type) {
 	case PPE_DRV_PORT_VIRTUAL:
+	case PPE_DRV_PORT_VIRTUAL_PO:
 		/*
 		 * Fetch the first available virtual port
 		 */
@@ -423,7 +424,7 @@ bool ppe_drv_port_l3_if_attach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 
 	ppe_drv_assert(kref_read(&pp->ref_cnt), "%p: attaching l3_if to unused port:%d", pp, pp->port);
 
-	if ((pl3->type == PPE_DRV_L3_IF_TYPE_PORT) && pp->port_l3_if_attached) {
+	if ((pl3->type == PPE_DRV_L3_IF_TYPE_PORT) && pp->active_l3_if_attached) {
 		ppe_drv_warn("%p: port(%d) is already attached to port type l3_if(%d): ", pp, pp->port, pl3->l3_if_index);
 		return false;
 	}
@@ -438,17 +439,20 @@ bool ppe_drv_port_l3_if_attach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 	/*
 	 * Update L3_VP_PORT_TBL.
 	 */
-	if ((pl3->type == PPE_DRV_L3_IF_TYPE_PORT) || (pl3->type == PPE_DRV_L3_IF_TYPE_LAG)) {
-		intf_ctrl.l3_if_valid = true;
-		intf_ctrl.l3_if_index = pl3->l3_if_index;
-		err = fal_ip_port_intf_set(PPE_DRV_SWITCH_ID, pp->port, &intf_ctrl);
-		if (err != SW_OK) {
-			ppe_drv_warn("%p port l3_if configuration failed: %p port_num: %u l3_if_num: %u",
-					pp, pl3, pp->port, pl3->l3_if_index);
-			return false;
-		}
+	if (pl3->type == PPE_DRV_L3_IF_TYPE_PORT) {
+		if (!pp->br_vsi) {
+			intf_ctrl.l3_if_valid = true;
+			intf_ctrl.l3_if_index = pl3->l3_if_index;
+			err = fal_ip_port_intf_set(PPE_DRV_SWITCH_ID, pp->port, &intf_ctrl);
+			if (err != SW_OK) {
+				ppe_drv_warn("%p port l3_if configuration failed: %p port_num: %u l3_if_num: %u",
+						pp, pl3, pp->port, pl3->l3_if_index);
+				return false;
+			}
 
-		pp->port_l3_if_attached = true;
+			pp->active_l3_if_attached = true;
+			pp->active_l3_if = pl3;
+		}
 	}
 
 	/*
@@ -470,12 +474,11 @@ void ppe_drv_port_l3_if_detach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 {
 	sw_error_t err;
 	struct ppe_drv_l3_if *walk = NULL;
-	struct ppe_drv_l3_if *port_l3_if = NULL;
 	fal_intf_id_t intf_ctrl = {0};
 
 	ppe_drv_assert(kref_read(&pp->ref_cnt), "%p: attaching l3_if to unused port:%u", pp, pp->port);
 
-	if ((pl3->type == PPE_DRV_L3_IF_TYPE_PORT) && !pp->port_l3_if_attached) {
+	if ((pl3->type == PPE_DRV_L3_IF_TYPE_PORT) && !pp->active_l3_if_attached) {
 		ppe_drv_warn("%p: port(%d) is already detached from port type l3_if(%d): ", pp, pp->port, pl3->l3_if_index);
 		return;
 	}
@@ -507,20 +510,7 @@ void ppe_drv_port_l3_if_detach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 	/*
 	 * Update L3_VP_PORT_TBL.
 	 */
-	if (pl3->type == PPE_DRV_L3_IF_TYPE_LAG) {
-		port_l3_if = ppe_drv_port_find_port_l3_if(pp);
-		if (port_l3_if) {
-			ppe_drv_info("%p: restoring port l3_if:%p", pp, pl3);
-			intf_ctrl.l3_if_valid = true;
-			intf_ctrl.l3_if_index = port_l3_if->l3_if_index;
-			err = fal_ip_port_intf_set(PPE_DRV_SWITCH_ID, pp->port, &intf_ctrl);
-			if (err != SW_OK) {
-				ppe_drv_warn("%p port l3_if configuration failed: %p port_num: %u l3_if_num: %u",
-						pp, port_l3_if, pp->port, port_l3_if->l3_if_index);
-				return;
-			}
-		}
-	} else if (pl3->type == PPE_DRV_L3_IF_TYPE_PORT) {
+	if (pl3->type == PPE_DRV_L3_IF_TYPE_PORT) {
 		intf_ctrl.l3_if_valid = false;
 		intf_ctrl.l3_if_index = pl3->l3_if_index;
 		err = fal_ip_port_intf_set(PPE_DRV_SWITCH_ID, pp->port, &intf_ctrl);
@@ -530,7 +520,7 @@ void ppe_drv_port_l3_if_detach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 			return;
 		}
 
-		pp->port_l3_if_attached = false;
+		pp->active_l3_if_attached = false;
 	}
 
 	ppe_drv_trace("%p: detaching l3_if %u from port %u", pp, pl3->l3_if_index, pp->port);
@@ -580,8 +570,8 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		/*
 		 * Detach port_vsi while attaching a new bridge-vsi.
 		 */
-		if (!pp->port_vsi && pp->port_l3_if && pp->port_l3_if_attached) {
-			ppe_drv_port_l3_if_detach(pp, pp->port_l3_if);
+		if (!pp->port_vsi && pp->active_l3_if && pp->active_l3_if_attached) {
+			ppe_drv_port_l3_if_detach(pp, pp->active_l3_if);
 		}
 
 		pp->br_vsi = ppe_drv_vsi_ref(vsi);
@@ -594,8 +584,8 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		 * Detach port L3_IF if this is the first VLAN interface on this port,
 		 * so that PPE can use l3 if associated with vlan interface.
 		 */
-		if (pp->port_l3_if && !pp->active_vlan && pp->port_l3_if_attached) {
-			ppe_drv_port_l3_if_detach(pp, pp->port_l3_if);
+		if (pp->active_l3_if && !pp->active_vlan && pp->active_l3_if_attached) {
+			ppe_drv_port_l3_if_detach(pp, pp->active_l3_if);
 		}
 
 		/*
@@ -697,8 +687,8 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		/*
 		 * Attach port_vsi if br_vsi is going away
 		 */
-		if (!pp->port_vsi && pp->port_l3_if && !pp->port_l3_if_attached) {
-			ppe_drv_port_l3_if_attach(pp, pp->port_l3_if);
+		if (!pp->port_vsi && pp->active_l3_if && !pp->active_l3_if_attached) {
+			ppe_drv_port_l3_if_attach(pp, pp->active_l3_if);
 		}
 
 		break;
@@ -717,8 +707,8 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		 * Attach port L3_IF if this is the last VLAN interface on this port,
 		 * so that PPE can use l3 if associated with port.
 		 */
-		if (!pp->br_vsi && pp->port_l3_if && !pp->active_vlan && !pp->port_l3_if_attached) {
-			ppe_drv_port_l3_if_attach(pp, pp->port_l3_if);
+		if (!pp->br_vsi && pp->active_l3_if && !pp->active_vlan && !pp->active_l3_if_attached) {
+			ppe_drv_port_l3_if_attach(pp, pp->active_l3_if);
 		}
 
 		return;
@@ -745,8 +735,8 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
  */
 struct ppe_drv_l3_if *ppe_drv_port_find_port_l3_if(struct ppe_drv_port *pp)
 {
-	if (pp->port_l3_if_attached) {
-		return pp->port_l3_if;
+	if (pp->active_l3_if_attached) {
+		return pp->active_l3_if;
 	}
 
 	return NULL;
@@ -1002,25 +992,42 @@ EXPORT_SYMBOL(ppe_drv_port_num_from_dev);
  * ppe_drv_port_rfs_enabled()
  *	RFS enabled on a Port
  */
-bool ppe_drv_port_rfs_enabled(uint16_t pp_num)
+static bool ppe_drv_port_rfs_enabled(struct ppe_drv_port *pp)
 {
+	return !!(pp->flags & PPE_DRV_PORT_RFS_ENABLED);
+}
+
+/*
+ * ppe_drv_port_check_rfs_support()
+ *	check rfs support
+ */
+bool ppe_drv_port_check_rfs_support(struct net_device *dev)
+{
+	struct ppe_drv_port *pp = NULL;
 	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_port *pp;
-	uint32_t flags;
 
 	spin_lock_bh(&p->lock);
-	pp = ppe_drv_port_from_port_num(pp_num);
+	pp = ppe_drv_port_from_dev(dev);
 	if (!pp) {
 		spin_unlock_bh(&p->lock);
 		return false;
 	}
 
-	flags = pp->flags;
-	spin_unlock_bh(&p->lock);
+	if (pp->user_type != PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
 
-	return !!(flags & PPE_DRV_PORT_RFS_ENABLED);
+	if (!ppe_drv_port_rfs_enabled(pp)) {
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	spin_unlock_bh(&p->lock);
+	return true;
 }
-EXPORT_SYMBOL(ppe_drv_port_rfs_enabled);
+EXPORT_SYMBOL(ppe_drv_port_check_rfs_support);
+
 
 /*
  * ppe_drv_port_is_physical()
@@ -1141,6 +1148,7 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 {
 	sw_error_t err;
 	fal_ucast_queue_dest_t q_dst = {0};
+	uint8_t profile = 0;
 
 	/*
 	 * Set unicast queue base for port
@@ -1148,11 +1156,27 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 	ppe_drv_assert(kref_read(&pp->ref_cnt), "%p: setting queue ID for an unused port:%u", pp, pp->port);
 
 	/*
+	 * Select point offload profile ID for virtual point offload ports.
+	 */
+	if (pp->type == PPE_DRV_PORT_VIRTUAL_PO) {
+		profile = FAL_QM_PROFILE_PO_ID;
+	}
+
+	/*
+	 * Select PPE-DS profile ID for PPE-DS user ports.
+	 */
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		profile = PPE_DRV_REDIR_PROFILE_ID;
+	}
+
+	ppe_drv_info("user type: %d, profile: %d\n", pp->user_type, profile);
+
+	/*
 	 * TODO confirm with SSDK team if using profile-ID 0 for CPU port
 	 */
 	q_dst.src_profile = 0;
 	q_dst.dst_port = pp->port;
-	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, 0);
+	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, profile);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p unable to change port queue base ID: %u", pp, queue_id);
 		return false;
@@ -1560,11 +1584,11 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	if (type == PPE_DRV_PORT_PHYSICAL) {
 		ppe_drv_warn("%p: physical port dynamic allocation not supported dev: %p", p, dev);
 		return NULL;
-	} else if (type == PPE_DRV_PORT_VIRTUAL) {
+	} else if (type == PPE_DRV_PORT_VIRTUAL || type == PPE_DRV_PORT_VIRTUAL_PO) {
 		/*
 		 * Get a free virtual port entry
 		 */
-		pp = ppe_drv_port_get_free_port(PPE_DRV_PORT_VIRTUAL);
+		pp = ppe_drv_port_get_free_port(type);
 		if (!pp) {
 			ppe_drv_warn("%p: unable to find a free port", p);
 			return NULL;
@@ -1710,6 +1734,7 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	pp->br_vsi = NULL;
 	pp->port_vsi = NULL;
 	pp->port_l3_if = NULL;
+	pp->active_l3_if = NULL;
 	pp->dev = dev;
 	pp->type = type;
 	pp->active_vlan = 0;
@@ -1839,6 +1864,7 @@ struct ppe_drv_port *ppe_drv_port_phy_alloc(uint8_t port_num, struct net_device 
 	pp->br_vsi = NULL;
 	pp->port_vsi = NULL;
 	pp->port_l3_if = NULL;
+	pp->active_l3_if = NULL;
 	pp->dev = dev;
 	pp->active_vlan = 0;
 	pp->is_fdb_learn_enabled = true;

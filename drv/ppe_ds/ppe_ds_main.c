@@ -17,7 +17,19 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
+#include "ppe_ds_stats.h"
 #include "ppe_ds.h"
+
+/*
+ * PPE-DS ring processing mode selection parameter.
+ * The default mode PPE_DS_INTR_MODE (0) will use interrupt mode
+ * and PPE_DS_POLL_MODE (1) will use polling mode.
+ *
+ */
+unsigned int polling_for_idx_update = PPE_DS_INTR_MODE;
+module_param(polling_for_idx_update,
+		uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(polling_for_idx_update, "Enable/Disable PPE DS poll mode");
 
 /*
  * PPE-DS timer frequency for polling function.
@@ -62,6 +74,7 @@ static int __init ppe_ds_module_init(void)
 		rwlock_init(&ppe_ds_node_cfg[i].lock);
 		ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
 	}
+	ppe_ds_node_stats_debugfs_init();
 	ppe_ds_info("PPE-DS module loaded successfully %d", idx_mgmt_freq);
 	return 0;
 }
@@ -75,6 +88,7 @@ static void __exit ppe_ds_module_exit(void)
 {
 	uint32_t i;
 
+	ppe_ds_node_stats_debugfs_exit();
 	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
 		ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
 	}

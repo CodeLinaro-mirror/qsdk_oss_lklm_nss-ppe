@@ -57,7 +57,7 @@
 #endif
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
-#define NSS_PPE_LAG_MAX_BOND_DEVICES 4
+#define NSS_PPE_LAG_MAX_BOND_DEVICES 16
 #define NSS_PPE_LAG_MAX_SLAVES_PER_BOND_ID 16
 
 /*
@@ -65,6 +65,8 @@
  */
 struct nss_ppe_lag_bond_entry {
 	int32_t bond_id;		/* Bond ID */
+	struct net_device *bond_dev;
+	bool in_use;
 	struct net_device *slaves[NSS_PPE_LAG_MAX_SLAVES_PER_BOND_ID];
 	struct ppe_drv_iface *iface;	/* PPE LAG iface */
 	uint16_t mtu;			/* MTU for LAG */
@@ -72,6 +74,32 @@ struct nss_ppe_lag_bond_entry {
 } bond_entry[NSS_PPE_LAG_MAX_BOND_DEVICES];
 
 DEFINE_SPINLOCK(nss_ppe_lag_spinlock);
+
+/*
+ * nss_ppe_bond_dev_get_id()
+ *	Get bond_id from a bond interface
+ */
+int32_t nss_ppe_bond_dev_get_id(struct net_device *bond_dev)
+{
+	int i;
+	int index = -1;
+
+	spin_lock(&nss_ppe_lag_spinlock);
+
+	for (i = 0; i < NSS_PPE_LAG_MAX_BOND_DEVICES; i++) {
+		if (!bond_entry[i].in_use)
+			continue;
+
+		if (bond_entry[i].bond_dev == bond_dev) {
+			index = i;
+			break;
+		}
+	}
+
+	spin_unlock(&nss_ppe_lag_spinlock);
+
+	return index;
+}
 
 /*
  * nss_ppe_lag_update_slave()
@@ -103,7 +131,7 @@ static int nss_ppe_lag_update_slave(struct netdev_notifier_info *info)
 		/*
 		 * Figure out the aggregation id of this slave
 		 */
-		bond_id = bond_get_id(bond_dev);
+		bond_id = nss_ppe_bond_dev_get_id(bond_dev);
 		if ((bond_id < 0) || (bond_id >= NSS_PPE_LAG_MAX_BOND_DEVICES)) {
 			nss_ppe_lag_warn("Invalid LAG group id 0x%x\n", bond_id);
 			return NOTIFY_DONE;
@@ -230,7 +258,7 @@ static int nss_ppe_lag_unregister_event(struct netdev_notifier_info *info)
 	/*
 	 * Figure out the aggregation id of this slave
 	 */
-	bond_id = bond_get_id(bond_dev);
+	bond_id = nss_ppe_bond_dev_get_id(bond_dev);
 	if ((bond_id < 0) || (bond_id >= NSS_PPE_LAG_MAX_BOND_DEVICES)) {
 		nss_ppe_lag_warn("%px: Invalid LAG group id 0x%x\n", bond_dev, bond_id);
 		return NOTIFY_DONE;
@@ -260,6 +288,8 @@ static int nss_ppe_lag_unregister_event(struct netdev_notifier_info *info)
 	}
 
 	ppe_drv_iface_deref(entry->iface);
+	bond_entry[bond_id].bond_dev = NULL;
+	bond_entry[bond_id].in_use = 0;
 	entry->iface = NULL;
 	entry->bond_id = -1;
 	spin_unlock(&nss_ppe_lag_spinlock);
@@ -272,6 +302,42 @@ static int nss_ppe_lag_unregister_event(struct netdev_notifier_info *info)
 }
 
 /*
+ * nss_ppe_bond_dev_allocate_id()
+ *	Allocate bond_id for a bond interface
+ */
+static int32_t nss_ppe_bond_dev_allocate_id(struct net_device *bond_dev)
+{
+	int i, index = -1;
+
+	spin_lock(&nss_ppe_lag_spinlock);
+
+	for (i = 0; i < NSS_PPE_LAG_MAX_BOND_DEVICES; i++) {
+		if (bond_entry[i].in_use) {
+			if (bond_entry[i].bond_dev == bond_dev) {
+				nss_ppe_lag_warn("%px: Bond interface (%s) is already registered(id = %d)\n", bond_dev, bond_dev->name, i);
+				spin_unlock(&nss_ppe_lag_spinlock);
+				return -1;
+			}
+			continue;
+		}
+
+		if (index == -1)
+			index = i;
+	}
+
+	if (index == -1) {
+		nss_ppe_lag_warn("%px: No more bond id's remaining\n", bond_dev);
+		spin_unlock(&nss_ppe_lag_spinlock);
+		return index;
+	}
+
+	bond_entry[index].bond_dev = bond_dev;
+	bond_entry[index].in_use = true;
+	spin_unlock(&nss_ppe_lag_spinlock);
+	return index;
+}
+
+/*
  * nss_ppe_lag_register_event()
  *	Register LAG interface
  */
@@ -281,18 +347,17 @@ static int nss_ppe_lag_register_event(struct netdev_notifier_info *info)
 	ppe_drv_ret_t ret;
 	int32_t bond_id;
 	struct net_device *bond_dev = netdev_notifier_info_to_dev(info);
+
 	if (!netif_is_bond_master(bond_dev)) {
 		return NOTIFY_DONE;
 	}
 
 	/*
-	 * Figure out the aggregation id of this slave
+	 * Assign bond_id to the lag interface
 	 */
-	bond_id = bond_get_id(bond_dev);
-	if ((bond_id < 0) || (bond_id >= NSS_PPE_LAG_MAX_BOND_DEVICES)) {
-		nss_ppe_lag_warn("%px: Invalid LAG group id 0x%x\n", bond_dev, bond_id);
+	bond_id = nss_ppe_bond_dev_allocate_id(bond_dev);
+	if (bond_id < 0)
 		return NOTIFY_DONE;
-	}
 
 	spin_lock(&nss_ppe_lag_spinlock);
 	entry = &bond_entry[bond_id];
@@ -362,7 +427,7 @@ static int nss_ppe_lag_changemtu_event(struct netdev_notifier_info *info)
 	/*
 	 * Figure out the aggregation id of this slave
 	 */
-	bond_id = bond_get_id(bond_dev);
+	bond_id = nss_ppe_bond_dev_get_id(bond_dev);
 	if ((bond_id < 0) || (bond_id >= NSS_PPE_LAG_MAX_BOND_DEVICES)) {
 		nss_ppe_lag_warn("%px: Invalid LAG group id 0x%x\n", bond_dev, bond_id);
 		return NOTIFY_DONE;
@@ -415,7 +480,7 @@ static int nss_ppe_lag_changeaddr_event(struct netdev_notifier_info *info)
 	/*
 	 * Figure out the aggregation id of this slave
 	 */
-	bond_id = bond_get_id(bond_dev);
+	bond_id = nss_ppe_bond_dev_get_id(bond_dev);
 	if ((bond_id < 0) || (bond_id >= NSS_PPE_LAG_MAX_BOND_DEVICES)) {
 		nss_ppe_lag_warn("%px: Invalid LAG group id 0x%x\n", bond_dev, bond_id);
 		return NOTIFY_DONE;

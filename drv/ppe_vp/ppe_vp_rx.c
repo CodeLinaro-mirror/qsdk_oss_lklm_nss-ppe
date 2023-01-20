@@ -133,6 +133,10 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 			/*
 			 * No registered callback with vp, forward through kernel.
 			 */
+			struct ethhdr *ethh;
+			ethh = (struct ethhdr *)skb->data;
+			skb->protocol = ethh->h_proto;
+			skb_set_network_header(skb, rxi->l3offset);
 			dev_queue_xmit(skb);
 		}
 

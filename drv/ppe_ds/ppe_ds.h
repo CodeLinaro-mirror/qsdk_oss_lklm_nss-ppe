@@ -21,6 +21,9 @@
 #include "nss_dp_ppeds.h"
 #include "ppe_ds_wlan.h"
 
+#define PPE_DS_POLL_MODE	1
+#define PPE_DS_INTR_MODE	0
+
 #if defined(CONFIG_DYNAMIC_DEBUG)
 /*
  * If dynamic debug is enabled, use pr_debug.
@@ -65,6 +68,13 @@
 #define PPE_DS_TXCMPL_BUDGET	256	/* PPE-DS node's Tx complete budget */
 #define PPE_DS_RXFILL_LOW_THRES_DIVISOR	3	/* PPE-DS node's Rxfill low threshold divisor */
 
+extern unsigned int polling_for_idx_update;
+extern unsigned int idx_mgmt_freq;
+extern unsigned int max_move;
+extern unsigned int cpu_mask_2g;
+extern unsigned int cpu_mask_5g;
+extern unsigned int cpu_mask_6g;
+
 /*
  * ppe_ds_node_state_t
  *	PPE-DS node states
@@ -100,6 +110,7 @@ struct ppe_ds {
 	struct hrtimer timer;			/* HR timer */
 	struct net_device napi_ndev;		/* Dummy NAPI device */
 	bool timer_enabled;			/* Timer enabled flag */
+	bool en_process_irq;			/* Safe to handle irq */
 	struct ppe_ds_wlan_ops *wlan_ops;	/* PPE-DS WLAN operations */
 	struct nss_dp_ppeds_ops *dp_ops;	/* PPE-DS EDMA operations */
 	uint32_t node_cfg_idx;			/* Index of PPE-DS node configuration */
@@ -110,4 +121,5 @@ struct ppe_ds {
 	ppe_ds_wlan_handle_t wlan_handle;	/* WLAN handle */
 };
 
+extern struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
 #endif	/* __PPE_DS__ */

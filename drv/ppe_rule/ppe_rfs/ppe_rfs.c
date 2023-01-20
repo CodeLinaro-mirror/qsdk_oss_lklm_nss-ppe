@@ -33,24 +33,6 @@
 struct ppe_rfs gbl_ppe_rfs;
 
 /*
- * ppe_rfs_check_rfs_support()
- *	Check if RFS is enabled on given interface
- */
-static bool ppe_rfs_check_rfs_support(struct net_device *dev)
-{
-	int32_t pp_num = ppe_drv_port_num_from_dev(dev);
-	if (pp_num < 0) {
-		return false;
-	}
-
-	if (((PPE_DRV_VIRTUAL_START <= pp_num) && (pp_num < PPE_DRV_PORTS_MAX)) && ppe_drv_port_rfs_enabled(pp_num)) {
-		return true;
-	}
-
-	return false;
-}
-
-/*
  * ppe_rfs_ipv6_rule_destroy()
  * 	Destroy IPv6 PPE RFS rule
  */
@@ -61,13 +43,13 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_destroy(struct ppe_rfs_ipv6_rule_destroy_msg 
 
 	ppe_rfs_stats_inc(&p->stats.v6_destroy_ppe_rule_rfs);
 
-	if (ppe_rfs_check_rfs_support(destroy_ipv6->reply_dev)) {
+	if (ppe_drv_port_check_rfs_support(destroy_ipv6->reply_dev)) {
 		memcpy(pd6rd.tuple.flow_ip, destroy_ipv6->tuple.flow_ip, sizeof(destroy_ipv6->tuple.flow_ip));
 		pd6rd.tuple.flow_ident = destroy_ipv6->tuple.flow_ident;
 		memcpy(pd6rd.tuple.return_ip, destroy_ipv6->tuple.return_ip, sizeof(destroy_ipv6->tuple.return_ip));
 		pd6rd.tuple.return_ident = destroy_ipv6->tuple.return_ident;
 		pd6rd.tuple.protocol = destroy_ipv6->tuple.protocol;
-	} else if (ppe_rfs_check_rfs_support(destroy_ipv6->original_dev)) {
+	} else if (ppe_drv_port_check_rfs_support(destroy_ipv6->original_dev)) {
 		memcpy(pd6rd.tuple.flow_ip, destroy_ipv6->tuple.return_ip, sizeof(destroy_ipv6->tuple.return_ip));
 		pd6rd.tuple.flow_ident = destroy_ipv6->tuple.return_ident;
 		memcpy(pd6rd.tuple.return_ip, destroy_ipv6->tuple.flow_ip, sizeof(destroy_ipv6->tuple.flow_ip));
@@ -112,7 +94,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 	};
 
 	pd6rc.conn_rule.rx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
-	rx_rfs_enabled = ppe_rfs_check_rfs_support(ppe_dev);
+	rx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
 
 	ppe_dev = dev_get_by_index(&init_net, create_ipv6->conn_rule.return_interface_num);
@@ -123,7 +105,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 	};
 
 	pd6rc.conn_rule.tx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
-	tx_rfs_enabled = ppe_rfs_check_rfs_support(ppe_dev);
+	tx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
 
 	if (tx_rfs_enabled && rx_rfs_enabled) {
@@ -182,13 +164,13 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_destroy(struct ppe_rfs_ipv4_rule_destroy_msg 
 
 	ppe_rfs_stats_inc(&p->stats.v4_destroy_ppe_rule_rfs);
 
-	if (ppe_rfs_check_rfs_support(destroy_ipv4->reply_dev)) {
+	if (ppe_drv_port_check_rfs_support(destroy_ipv4->reply_dev)) {
 		pd4rd.tuple.flow_ip = destroy_ipv4->tuple.flow_ip;
 		pd4rd.tuple.flow_ident = destroy_ipv4->tuple.flow_ident;
 		pd4rd.tuple.return_ip = destroy_ipv4->tuple.return_ip;
 		pd4rd.tuple.return_ident = destroy_ipv4->tuple.return_ident;
 		pd4rd.tuple.protocol = destroy_ipv4->tuple.protocol;
-	} else if (ppe_rfs_check_rfs_support(destroy_ipv4->original_dev)) {
+	} else if (ppe_drv_port_check_rfs_support(destroy_ipv4->original_dev)) {
 		/*
 		 * TODO: Fix this with proper xlate ip's later when we support NAT with RFS
 		 */
@@ -236,7 +218,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 	};
 
 	pd4rc.conn_rule.rx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
-	rx_rfs_enabled = ppe_rfs_check_rfs_support(ppe_dev);
+	rx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
 
 	ppe_dev = dev_get_by_index(&init_net, create_ipv4->conn_rule.return_interface_num);
@@ -247,7 +229,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 	};
 
 	pd4rc.conn_rule.tx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
-	tx_rfs_enabled = ppe_rfs_check_rfs_support(ppe_dev);
+	tx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
 
 	if (tx_rfs_enabled && rx_rfs_enabled) {

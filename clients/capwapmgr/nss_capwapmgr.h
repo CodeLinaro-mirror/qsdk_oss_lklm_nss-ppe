@@ -70,6 +70,7 @@
  * Default CAPWAP re-assembly timeout 10 milli-seconds.
  */
 #define NSS_CAPWAPMGR_REASSEMBLY_TIMEOUT 10
+
 /*
  * Ethernet types.
  */
@@ -85,12 +86,100 @@
 #define NSS_CAPWAPMGR_VLAN_TAG_NOT_CONFIGURED	0xFFF
 
 /*
+ * ACL specific parameters.
+ */
+#define NSS_CAPWAPMGR_ETH_TYPE_SIZE 2
+#define NSS_CAPWAPMGR_ETH_HDR_OFFSET 6
+#define NSS_CAPWAPMGR_IPV4_OFFSET 8
+#define NSS_CAPWAPMGR_DSCP_MASK_IPV4_SHIFT 2
+#define NSS_CAPWAPMGR_DSCP_MASK_IPV6_SHIFT 6
+#define NSS_CAPWAPMGR_DEV_ID 0
+#define NSS_CAPWAPMGR_GROUP_ID 0
+#define NSS_CAPWAPMGR_RULE_NR 1
+
+/*
+ * ACL rule bind bitmap for all physical ports (1 through 6)
+ */
+#define NSS_CAPWAPMGR_BIND_BITMAP 0x7E
+
+/*
+ * We need 4 ACL rules - 2 rules for each v4 and v6 classification
+ * of dhcp, dscp + trustsec.
+ */
+#define NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST 4
+
+/*
+ * list-id 1022 and 1023 reserved for this purpose.
+ * TODO: Find a better approach to reserve list-id.
+ */
+#define NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID 1022
+#define NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_PRIO 0
+#define NSS_CAPWAPMGR_ACL_TRUSTSEC_RULE_ID 0
+
+/*
+ * DSCP ACL list id and priority.
+ */
+#define NSS_CAPWAPMGR_ACL_DSCP_LIST_ID 1023
+#define NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT 1
+#define NSS_CAPWAPMGR_ACL_DSCP_LIST_PRIO 1
+
+/*
+ * Trustsec tx l2 tunnel edit parameters.
+ */
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_INNER_PAYLOAD_TYPE_IP 0
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_SVLAN_ENABLED 1
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_CVLAN_ENABLED 1
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_OFFSET 12
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_MASK 0xFFFF0000
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SHIFT 16
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SIZE 2
+
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_MASK 0xFFFF
+#define NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_SIZE 2
+
+/*
+ * Number of ports to which the acl rule can be attached.
+ */
+#define NSS_CAPWAPMGR_ACL_TRUSTSEC_PORT_MAX 6
+
+/*
+ * nss_capwapmgr_acl
+ *	Object containing rule related info.
+ */
+struct nss_capwapmgr_acl {
+	bool in_use;			/* Set when rule is in use. */
+	uint8_t uid;			/* Unique ID for this rule object. */
+	uint8_t list_id;		/* List on which this rule resides. */
+	uint8_t rule_id;		/* Rule-id of this rule. */
+	uint8_t dscp_value;		/* DSCP value */
+	uint8_t dscp_mask;		/* DSCP mask */
+};
+
+/*
+ * nss_capwapmgr_acl_list
+ */
+struct nss_capwapmgr_acl_list {
+	struct nss_capwapmgr_acl rule[NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST];
+					/* Rules on this ACL list. */
+};
+
+/*
  * nss_capwapmgr_global
  *	Global structure for capwapmgr.
  */
 struct nss_capwapmgr_global {
 	uint32_t count;				/* Counter for driver queue selection. */
+	struct nss_capwapmgr_acl_list acl_list[NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT];
+						/* Set when ACL rule is in use. */
 	struct nss_capwap_tunnel_stats tunneld_stats;	/* Stats from deleted capwap tunnels. */
+	atomic_t trustsec_tunnel_count[NSS_CAPWAPMGR_ACL_TRUSTSEC_PORT_MAX];
+						/* Number of trustsec tunnels for every physical interface */
+	ppe_vp_num_t trustsec_rx_vp_num;	/* VP for handling trustsec_rx */
+	struct net_device *trustsec_rx_internal_ndev;	/* Internal netdev for trustsec_rx */
+	atomic_t trustsec_acl_rule_create_req;	/* Number of trustsec_rx acl create requests */
+	atomic_t dscp_acl_rule_create_req;	/* Number of dscp acl rule create requests */
+	bool trustsec_rx_vp_configured;		/* Flag to check if trustsec_rx vp is configured */
+	bool trustsec_rx_vp_config_in_progress;	/* Flag to check if trustsec_rx vp config is in progress */
 };
 
 #endif /* __NSS_CAPWAPMGR_H */

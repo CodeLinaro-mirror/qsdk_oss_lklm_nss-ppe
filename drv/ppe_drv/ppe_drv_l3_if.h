@@ -26,7 +26,6 @@ enum ppe_drv_l3_if_type {
 	PPE_DRV_L3_IF_TYPE_NONE,    /* L3_IF NONE */
 	PPE_DRV_L3_IF_TYPE_PORT,    /* L3_IF for a port */
 	PPE_DRV_L3_IF_TYPE_PPPOE,   /* L3_IF for pppoe interface */
-	PPE_DRV_L3_IF_TYPE_LAG,		/* L3_IF for LAG interface */
 	PPE_DRV_L3_IF_TYPE_VLAN,	/* L3_IF for VLAN interface */
 	PPE_DRV_L3_IF_TYPE_MAX,     /* Max L3_IF types */
 };

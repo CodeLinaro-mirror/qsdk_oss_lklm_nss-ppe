@@ -36,12 +36,14 @@
 #include <nss_api_if.h>
 #include <linux/in.h>
 #include <fal/fal_qos.h>
+#include <fal/fal_acl.h>
 #include <ppe_drv.h>
 #include <ppe_drv_v4.h>
 #include <ppe_drv_v6.h>
 #include <nss_dp_api_if.h>
 #include <ppe_vp_public.h>
 #include <ppe_drv_iface.h>
+#include <nss_dtlsmgr.h>
 #include <nss_capwapmgr_public.h>
 #include <nss_capwapmgr_user.h>
 #include "nss_capwapmgr.h"
@@ -65,6 +67,11 @@
  * Global Structure to hold tunnel statistics and driver queue selection.
  */
 static struct nss_capwapmgr_global global;
+
+/*
+ * Lock to handle acl configuration.
+ */
+DEFINE_SPINLOCK(nss_capwapmgr_acl_spinlock);
 
 #if defined(NSS_CAPWAPMGR_ONE_NETDEV)
 /*
@@ -774,6 +781,25 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv4_rule(struct nss_capw
 	}
 
 	/*
+	 * Copy over the qos rules and set the QOS_VALID flag.
+	 */
+        if (v4->flags & NSS_IPV4_CREATE_FLAG_QOS_VALID) {
+		pd4rc->qos_rule.flow_qos_tag = v4->flow_qos_tag;
+		pd4rc->qos_rule.return_qos_tag = v4->return_qos_tag;
+		pd4rc->valid_flags |= PPE_DRV_V4_VALID_FLAG_QOS;
+	}
+
+	/*
+	 * Copy over the DSCP rule parameters.
+	 */
+	if (v4->flags & NSS_IPV4_CREATE_FLAG_DSCP_MARKING) {
+                pd4rc->dscp_rule.flow_dscp = v4->flow_dscp;
+		pd4rc->dscp_rule.return_dscp = v4->return_dscp;
+		pd4rc->rule_flags |= PPE_DRV_V4_RULE_FLAG_DSCP_MARKING;
+		pd4rc->valid_flags |= PPE_DRV_V4_VALID_FLAG_DSCP_MARKING;
+	}
+
+	/*
 	 * If Ingress VLAN tag or pppoe rule is present, set the top interface.
 	 */
 	if (use_top_interface) {
@@ -916,6 +942,25 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv6_rule(struct nss_capw
 	}
 
 	/*
+	 * Copy over the qos rules and set the QOS_VALID flag.
+	 */
+        if (v6->flags & NSS_IPV6_CREATE_FLAG_QOS_VALID) {
+		pd6rc->qos_rule.flow_qos_tag = v6->flow_qos_tag;
+		pd6rc->qos_rule.return_qos_tag = v6->return_qos_tag;
+		pd6rc->valid_flags |= PPE_DRV_V6_VALID_FLAG_QOS;
+	}
+
+	/*
+	 * Copy over the DSCP rule parameters.
+	 */
+	if (v6->flags & NSS_IPV6_CREATE_FLAG_DSCP_MARKING) {
+                pd6rc->dscp_rule.flow_dscp = v6->flow_dscp;
+		pd6rc->dscp_rule.return_dscp = v6->return_dscp;
+		pd6rc->rule_flags |= PPE_DRV_V6_RULE_FLAG_DSCP_MARKING;
+		pd6rc->valid_flags |= PPE_DRV_V6_VALID_FLAG_DSCP_MARKING;
+	}
+
+	/*
 	 * If Ingress VLAN tag or pppoe rule is present, set the top interface.
 	 */
 	if (use_top_interface) {
@@ -1031,20 +1076,1083 @@ static nss_tx_status_t nss_capwapmgr_tx_msg_update_vp_num(struct net_device *dev
 }
 
 /*
+ * nss_capwapmgr_trustsec_rx_vp_unconfig
+ *	Unconfigre trustsec rx vp.
+ */
+static bool nss_capwapmgr_trustsec_rx_vp_unconfig(void)
+{
+	struct nss_ctx_instance *ctx = nss_trustsec_rx_get_ctx();
+	struct nss_trustsec_rx_msg rx_msg = {0};
+	struct net_device *int_ndev = NULL;
+	ppe_vp_num_t vp_num;
+	ppe_vp_status_t vp_status;
+	nss_tx_status_t nss_status;
+
+	/*
+	 * Get the vp num and internel netdev from the global structure.
+	 */
+	int_ndev = global.trustsec_rx_internal_ndev;
+	vp_num = global.trustsec_rx_vp_num;
+
+	/*
+	 * Free the VP interface associated with the tunnel.
+	 */
+	if (vp_num) {
+		vp_status = ppe_vp_free(vp_num);
+		if (vp_status != PPE_VP_STATUS_SUCCESS) {
+			nss_capwapmgr_warn("VP Number %d: Failed to free trustsec_rx vp\n",
+				vp_num);
+			return false;
+		}
+
+		global.trustsec_rx_vp_num = 0;
+
+		/*
+		 * Send vp unconfig message to trustsec rx node in nss fw.
+		 */
+		rx_msg.msg.uncfg.num = vp_num;
+
+		nss_trustsec_rx_msg_init(&rx_msg,
+				NSS_TRUSTSEC_RX_INTERFACE,
+				NSS_TRUSTSEC_RX_MSG_UNCONFIG_VP,
+				sizeof(struct nss_trustsec_rx_vp_msg),
+				NULL,
+				NULL);
+
+		nss_status = nss_trustsec_rx_msg_sync(ctx, &rx_msg);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("Failed to send unconfig trustsec rx VP %d  message to nss fw", vp_num);
+			return false;
+		}
+	}
+
+	/*
+	 * Free the internal netdevice assocaited to trustsec rx vp.
+	 */
+	if (int_ndev) {
+		free_netdev(int_ndev);
+		global.trustsec_rx_internal_ndev = NULL;
+	}
+
+	return true;
+}
+
+/*
+ * nss_capwapmgr_trustsec_rx_acl_unconfig
+ *	Unconfigure trustec related rules and objects.
+ */
+static void nss_capwapmgr_trustsec_rx_acl_unconfig(void)
+{
+	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint32_t list_id = NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID;
+	uint32_t rule_id = NSS_CAPWAPMGR_ACL_TRUSTSEC_RULE_ID;
+	uint8_t rule_nr = NSS_CAPWAPMGR_RULE_NR;
+
+	/*
+	 * Delete the acl rule.
+	 */
+	fal_acl_rule_delete(dev_id, list_id, rule_id, rule_nr);
+
+	/*
+	 * Delete the trustsec rx acl list.
+	 */
+	fal_acl_list_destroy(dev_id, list_id);
+}
+
+/*
+ * nss_capwapmgr_trustsec_rx_vp_config
+ *	This API configures trustsec rx vp if not configured.
+ */
+static bool nss_capwapmgr_trustsec_rx_vp_config(void)
+{
+	struct ppe_vp_ai vpai = {0};
+	struct nss_ctx_instance *ctx = nss_trustsec_rx_get_ctx();
+	struct nss_trustsec_rx_msg rx_msg = {0};
+	struct net_device *int_ndev = NULL;
+	ppe_vp_num_t vp_num;
+	nss_tx_status_t nss_status;
+
+	spin_lock(&nss_capwapmgr_acl_spinlock);
+	if (global.trustsec_rx_vp_configured) {
+		spin_unlock(&nss_capwapmgr_acl_spinlock);
+		nss_capwapmgr_info("Trusec rx vp already configured\n");
+		return true;
+	}
+
+	if (global.trustsec_rx_vp_config_in_progress) {
+		spin_unlock(&nss_capwapmgr_acl_spinlock);
+		nss_capwapmgr_info("Trusec rx vp config in progress\n");
+		return false;
+	}
+
+	global.trustsec_rx_vp_config_in_progress = true;
+	spin_unlock(&nss_capwapmgr_acl_spinlock);
+
+	int_ndev = alloc_netdev(0, "trustsecint",
+				NET_NAME_ENUM, nss_capwapmgr_dummy_netdev_setup);
+	if (!int_ndev) {
+		nss_capwapmgr_warn("Error allocating internal netdev for trustsec_rx\n");
+		return false;
+	}
+
+	vpai.type = PPE_VP_TYPE_SW_PO;
+	vpai.queue_num = edma_cfg_rx_point_offload_ring_queue_get();
+	vp_num = ppe_vp_alloc(int_ndev, &vpai);
+	if (vp_num == -1) {
+		nss_capwapmgr_warn("Trustsec rx  VP alloc failed\n");
+		goto fail1;
+	}
+
+	rx_msg.msg.cfg.num = vp_num;
+
+	nss_trustsec_rx_msg_init(&rx_msg,
+			NSS_TRUSTSEC_RX_INTERFACE,
+			NSS_TRUSTSEC_RX_MSG_CONFIG_VP,
+			sizeof(struct nss_trustsec_rx_vp_msg),
+			NULL,
+			NULL);
+
+	nss_status = nss_trustsec_rx_msg_sync(ctx, &rx_msg);
+	if (nss_status != NSS_TX_SUCCESS) {
+		nss_capwapmgr_warn("Failed to send config vp message to fw\n");
+		goto fail2;
+	}
+
+	global.trustsec_rx_internal_ndev = int_ndev;
+	global.trustsec_rx_vp_num = vp_num;
+
+	spin_lock(&nss_capwapmgr_acl_spinlock);
+	global.trustsec_rx_vp_configured = true;
+	global.trustsec_rx_vp_config_in_progress = false;
+	spin_unlock(&nss_capwapmgr_acl_spinlock);
+	return true;
+fail2:
+	ppe_vp_free(vp_num);
+fail1:
+	free_netdev(int_ndev);
+	spin_lock(&nss_capwapmgr_acl_spinlock);
+	global.trustsec_rx_vp_config_in_progress = false;
+	spin_unlock(&nss_capwapmgr_acl_spinlock);
+
+	return false;
+}
+
+/*
+ * nss_capwapmgr_trustsec_rx_acl_config
+ *	Configuration required to handle trustsec traffic.
+ */
+static bool nss_capwapmgr_trustsec_rx_acl_config(void)
+{
+	sw_error_t sw_err;
+	fal_acl_rule_t acl_rule = {0};
+	uint32_t v_port;
+	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint32_t list_id = NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID;
+	uint32_t rule_id = NSS_CAPWAPMGR_ACL_TRUSTSEC_RULE_ID;
+	uint8_t rule_nr = NSS_CAPWAPMGR_RULE_NR;
+	uint32_t vp_num;
+
+	if (!nss_capwapmgr_trustsec_rx_vp_config()) {
+		nss_capwapmgr_warn("Failed to configure trustsec_rx vp");
+		return false;
+	}
+
+	vp_num = global.trustsec_rx_vp_num;
+	/*
+	 * Create the acl list to handle trustsec_traffic.
+	 */
+	sw_err = fal_acl_list_creat(NSS_CAPWAPMGR_DEV_ID, list_id, NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_PRIO);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to create ACL list err:%d\n", sw_err);
+		return false;
+	}
+
+	/*
+	 * Valid flag is set to specify that the acl rule will match a field
+	 * in the L2 header.
+	 */
+	FAL_FIELD_FLG_SET(acl_rule.field_flg, FAL_ACL_FIELD_MAC_ETHTYPE);
+
+	/*
+	 * Update the ethertype to match trustsec ether type(0x8909).
+	 */
+	acl_rule.ethtype_val = NSS_CAPWAPMGR_ETH_TYPE_TRUSTSEC;
+	acl_rule.ethtype_mask = NSS_CAPWAPMGR_ETH_TYPE_MASK;
+
+	/*
+	 * Set action flag to forward the matched packets to trustsec VP.
+	 */
+	FAL_ACTION_FLG_SET(acl_rule.action_flg, FAL_ACL_ACTION_PERMIT);
+	FAL_ACTION_FLG_SET(acl_rule.action_flg, FAL_ACL_ACTION_REDPT);
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, vp_num);
+	acl_rule.ports = v_port;
+
+	sw_err = fal_acl_rule_query(dev_id, list_id, rule_id, &acl_rule);
+	if (sw_err != SW_NOT_FOUND) {
+		nss_capwapmgr_warn("ACL trustsec rule already exist for list_id = %u, rule_id %u - code: %d\n",
+				list_id, rule_id, sw_err);
+		goto fail;
+	}
+
+	sw_err = fal_acl_rule_add(dev_id, list_id, rule_id, rule_nr, &acl_rule);
+	if (sw_err) {
+		nss_capwapmgr_warn("Failed to add ACL trustsec rule: %d - code: %d\n", rule_id, sw_err);
+		goto fail;
+	}
+
+	return true;
+
+fail:
+	fal_acl_list_destroy(dev_id, list_id);
+	return false;
+}
+
+/*
+ * nss_capwapmgr_dscp_acl_deinit.
+ *	Delete ACL realted tables and objects.
+ */
+static void nss_capwapmgr_dscp_acl_deinit(void)
+{
+	int i;
+
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT; i++) {
+		int list_id = NSS_CAPWAPMGR_ACL_DSCP_LIST_ID + i;
+		fal_acl_list_destroy(NSS_CAPWAPMGR_DEV_ID, list_id);
+	}
+}
+
+/*
+ * nss_capwapmgr_dscp_acl_init()
+ *	Initializes ACL related tables and objects.
+ */
+static bool nss_capwapmgr_dscp_acl_init(void)
+{
+	sw_error_t rv;
+	int i, j, uid = 0;
+
+	if (!nss_capwapmgr_trustsec_rx_vp_config()) {
+		nss_capwapmgr_warn("Failed to configure trustsec_rx vp");
+		return false;
+	}
+
+	/*
+	 * Create the ACL list we will be using for dscp prioritization.
+	 */
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT; i++) {
+		int list_id = NSS_CAPWAPMGR_ACL_DSCP_LIST_ID + i;
+		rv = fal_acl_list_creat(NSS_CAPWAPMGR_DEV_ID, list_id, NSS_CAPWAPMGR_ACL_DSCP_LIST_PRIO);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to create ACL list err:%d\n", rv);
+			return false;
+		}
+	}
+
+	/*
+	 * Initialize the global ACL table.
+	 */
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT; i++) {
+		for (j = 0; j < NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST; j++) {
+			global.acl_list[i].rule[j].uid = uid++;
+			global.acl_list[i].rule[j].rule_id = j;
+			global.acl_list[i].rule[j].list_id = i;
+		}
+	}
+
+	return true;
+}
+
+/*
+ * nss_capwapmgr_tx_trustsec_config_msg_v6
+ *	Send configure message to trustsec rx node in FW.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_tx_trustsec_config_msg_v6(struct nss_ipv6_create *v6, uint32_t if_num)
+{
+	struct nss_ctx_instance *ctx = nss_trustsec_rx_get_ctx();
+	struct nss_trustsec_rx_msg trustsec_rx_msg = {0};
+	struct nss_trustsec_rx_configure_msg *trustsec_cfg_msg;
+	nss_tx_status_t nss_status;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+
+	trustsec_cfg_msg = &trustsec_rx_msg.msg.configure;
+
+	/*
+	 * Extract the 5 tuple information.
+	 */
+	trustsec_cfg_msg->ip_version = NSS_TRUSTSEC_RX_FLAG_IPV6;
+
+	/*
+	 * Copy the source ipv6 address and port.
+	 */
+	memcpy(trustsec_cfg_msg->src_ip.ip.ipv6, v6->src_ip, sizeof(uint32_t) * 4);
+	trustsec_cfg_msg->src_port = v6->src_port;
+
+	/*
+	 * Copy the source ipv6 address and port.
+	 */
+	memcpy(trustsec_cfg_msg->dest_ip.ip.ipv6, v6->dest_ip, sizeof(uint32_t) * 4);
+	trustsec_cfg_msg->dest_port = v6->dest_port;
+
+	/*
+	 * Destination interface will be the capwap_outer node.
+	 */
+	trustsec_cfg_msg->dest = if_num;
+
+	nss_trustsec_rx_msg_init(&trustsec_rx_msg, NSS_TRUSTSEC_RX_INTERFACE, NSS_TRUSTSEC_RX_MSG_CONFIGURE,
+		sizeof( struct nss_trustsec_rx_configure_msg), NULL, NULL);
+
+	nss_status = nss_trustsec_rx_msg_sync(ctx, &trustsec_rx_msg);
+	if (nss_status != NSS_TX_SUCCESS) {
+		status = NSS_CAPWAPMGR_FAILURE_CONFIG_TRUSTSEC_RX;
+	}
+
+	return status;
+}
+
+/*
+ * nss_capwapmgr_tx_trustsec_config_msg_v4
+ *	Send configure message to trustsec rx node in FW.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_tx_trustsec_config_msg_v4(struct nss_ipv4_create *v4, uint32_t if_num)
+{
+	struct nss_ctx_instance *ctx = nss_trustsec_rx_get_ctx();
+	struct nss_trustsec_rx_msg trustsec_rx_msg = {0};
+	struct nss_trustsec_rx_configure_msg *trustsec_cfg_msg;
+	nss_tx_status_t nss_status;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+
+	trustsec_cfg_msg = &trustsec_rx_msg.msg.configure;
+	/*
+	 * Extract the 5 tuple information.
+	 */
+	trustsec_cfg_msg->src_ip.ip.ipv4 = v4->src_ip;
+	trustsec_cfg_msg->src_port = v4->src_port;
+	trustsec_cfg_msg->dest_ip.ip.ipv4 = v4->dest_ip;
+	trustsec_cfg_msg->dest_port = v4->dest_port;
+	trustsec_cfg_msg->ip_version = NSS_TRUSTSEC_RX_FLAG_IPV4;
+
+	/*
+	 * Destination interface will be the capwap_outer node.
+	 */
+	trustsec_cfg_msg->dest = if_num;
+
+	nss_trustsec_rx_msg_init(&trustsec_rx_msg, NSS_TRUSTSEC_RX_INTERFACE, NSS_TRUSTSEC_RX_MSG_CONFIGURE,
+		sizeof( struct nss_trustsec_rx_configure_msg), NULL, NULL);
+
+	nss_status = nss_trustsec_rx_msg_sync(ctx, &trustsec_rx_msg);
+	if (nss_status != NSS_TX_SUCCESS) {
+		status = NSS_CAPWAPMGR_FAILURE_CONFIG_TRUSTSEC_RX;
+	}
+
+	return status;
+}
+
+/*
+ * nss_capwapmgr_tx_trustsec_unconfig_msg_v6
+ *	Send unconfigure message to trustsec_rx node in FW.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_tx_trustsec_unconfig_msg_v6(struct nss_ipv6_create *v6, uint32_t if_num)
+{
+	struct nss_ctx_instance *ctx = nss_trustsec_rx_get_ctx();
+	struct nss_trustsec_rx_msg trustsec_rx_msg = {0};
+	struct nss_trustsec_rx_unconfigure_msg *trustsec_uncfg_msg;
+	nss_tx_status_t nss_status;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+
+	trustsec_uncfg_msg = &trustsec_rx_msg.msg.unconfigure;
+	trustsec_uncfg_msg->ip_version = NSS_TRUSTSEC_RX_FLAG_IPV6;
+
+	/*
+	 * Copy the source ipv6 address and port.
+	 */
+	memcpy(trustsec_uncfg_msg->src_ip.ip.ipv6, v6->src_ip, sizeof(uint32_t) * 4);
+	trustsec_uncfg_msg->src_port = v6->src_port;
+
+	/*
+	 * Copy the source ipv6 address and port.
+	 */
+	memcpy(trustsec_uncfg_msg->dest_ip.ip.ipv6, v6->dest_ip, sizeof(uint32_t) * 4);
+	trustsec_uncfg_msg->dest_port = v6->dest_port;
+
+	/*
+	 * Destination interface will be the capwap_outer node.
+	 */
+	trustsec_uncfg_msg->dest = if_num;
+
+	nss_trustsec_rx_msg_init(&trustsec_rx_msg, NSS_TRUSTSEC_RX_INTERFACE, NSS_TRUSTSEC_RX_MSG_UNCONFIGURE,
+		sizeof( struct nss_trustsec_rx_unconfigure_msg), NULL, NULL);
+
+	nss_status = nss_trustsec_rx_msg_sync(ctx, &trustsec_rx_msg);
+	if (nss_status != NSS_TX_SUCCESS) {
+		status = NSS_CAPWAPMGR_FAILURE_CONFIG_TRUSTSEC_RX;
+	}
+
+	return status;
+}
+/*
+ * nss_capwapmgr_tx_trustsec_unconfig_msg_v4
+ *	Send unconfigure message to trustsec_rx node in FW.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_tx_trustsec_unconfig_msg_v4(struct nss_ipv4_create *v4, uint32_t if_num)
+{
+	struct nss_ctx_instance *ctx = nss_trustsec_rx_get_ctx();
+	struct nss_trustsec_rx_msg trustsec_rx_msg = {0};
+	struct nss_trustsec_rx_unconfigure_msg *trustsec_uncfg_msg;
+	nss_tx_status_t nss_status;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+
+	trustsec_uncfg_msg = &trustsec_rx_msg.msg.unconfigure;
+
+	/*
+	 * Extract the 5 tuple information.
+	 */
+	trustsec_uncfg_msg->src_ip.ip.ipv4 = v4->src_ip;
+	trustsec_uncfg_msg->src_port = v4->src_port;
+	trustsec_uncfg_msg->dest_ip.ip.ipv4 = v4->dest_ip;
+	trustsec_uncfg_msg->dest_port = v4->dest_port;
+	trustsec_uncfg_msg->ip_version = NSS_TRUSTSEC_RX_FLAG_IPV4;
+
+	/*
+	 * Destination interface will be the capwap_outer node.
+	 */
+	trustsec_uncfg_msg->dest = if_num;
+
+	nss_trustsec_rx_msg_init(&trustsec_rx_msg, NSS_TRUSTSEC_RX_INTERFACE, NSS_TRUSTSEC_RX_MSG_UNCONFIGURE,
+		sizeof( struct nss_trustsec_rx_unconfigure_msg), NULL, NULL);
+
+	nss_status = nss_trustsec_rx_msg_sync(ctx, &trustsec_rx_msg);
+	if (nss_status != NSS_TX_SUCCESS) {
+		status = NSS_CAPWAPMGR_FAILURE_CONFIG_TRUSTSEC_RX;
+	}
+
+	return status;
+}
+
+/*
+ * nss_capwapmgr_trustsec_rx_acl_rule_unbind
+ *	Function to unbid the ACL rule handling Ingress traffic (AC->AP)
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_rx_acl_rule_unbind(int32_t port_num)
+{
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+	sw_error_t sw_err;
+	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint32_t list_id = NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID;
+	atomic_t *tunnel_count = &global.trustsec_tunnel_count[port_num - 1];
+	atomic_t *acl_req_count = &global.trustsec_acl_rule_create_req;
+
+	/*
+	 * Unbind the acl rule if its the last tunnel to be assocaited to the specific port.
+	 */
+	if (atomic_dec_and_test(tunnel_count)) {
+		sw_err = fal_acl_list_unbind(dev_id, list_id, FAL_ACL_DIREC_IN, FAL_ACL_BIND_PORT, port_num);
+		if (sw_err != SW_OK) {
+			nss_capwapmgr_warn("Failed to unbind trustsec ACL list:%d to port %d - code: %d\n", list_id,
+					port_num, sw_err);
+			atomic_inc(tunnel_count);
+			status = NSS_CAPWAPMGR_FAILURE_UNBIND_ACL_LIST;
+		}
+	}
+
+	/*
+	 * Unconfigure the trustsec acl objects if this is the last tunnel using it.
+	 */
+	if (atomic_dec_and_test(acl_req_count)) {
+		nss_capwapmgr_trustsec_rx_acl_unconfig();
+	}
+
+	return status;
+}
+
+/*
+ * nss_capwapmgr_trustsec_rx_acl_rule_bind
+ *	Function to bind the ACL rule to handle Ingress traffic (AC->AP)
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_rx_acl_rule_bind(int32_t port_num)
+{
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+	sw_error_t sw_err;
+	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint32_t list_id = NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID;
+	atomic_t *tunnel_count = &global.trustsec_tunnel_count[port_num - 1];
+	atomic_t *acl_req_count = &global.trustsec_acl_rule_create_req;
+
+	/*
+	 * Configure the trustsec rx vp and acl related objects when this api
+	 * is called for the first time.
+	 */
+	if (atomic_inc_return(acl_req_count) == 1) {
+		nss_capwapmgr_trustsec_rx_acl_config();
+	}
+
+	/*
+	 * Bind the acl rule for the first tunnel created on a specific port.
+	 */
+	if (atomic_inc_return(tunnel_count) == 1) {
+		sw_err = fal_acl_list_bind(dev_id, list_id, FAL_ACL_DIREC_IN, FAL_ACL_BIND_PORT, port_num);
+		if (sw_err != SW_OK) {
+			nss_capwapmgr_warn("Failed to bind trustsec ACL rule:%d to port %d - code: %d\n", list_id,
+					port_num, sw_err);
+			atomic_dec(tunnel_count);
+			status = NSS_CAPWAPMGR_FAILURE_BIND_ACL_LIST;
+
+			/*
+			 * Unconfigure trustsec rx acl objects if
+			 * this is the last tunnel using it.
+			 */
+			if (atomic_dec_and_test(acl_req_count)) {
+				nss_capwapmgr_trustsec_rx_acl_unconfig();
+			}
+		}
+	}
+
+	return status;
+}
+
+/*
+ * nss_capwapmgr_trustsec_tx_rule_destroy
+ *	Function to Unconfigure the PPE tunnel encapsulation rule.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_tx_rule_destroy(struct nss_capwapmgr_tunnel *t)
+{
+	fal_tunnel_id_t tunnel_id_bckup = {0};
+	fal_tunnel_id_t tunnel_id = {0};
+	fal_tunnel_encap_cfg_t cfg = {0};
+	sw_error_t sw_err = SW_OK;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+	uint32_t v_port;
+	int32_t port;
+	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+
+	/*
+	 * Get the tunnel associated to the VP.
+	 */
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, t->vp_num);
+	sw_err = fal_tunnel_encap_port_tunnelid_get(dev_id, v_port, &tunnel_id_bckup);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to get tunnelid for trustsec tx %d\n",t->vp_num);
+		status = NSS_CAPWAPMGR_FAILURE_TRUSTSEC_TUNNEL_ID_GET;
+		goto done;
+	}
+
+	/*
+	 * Get the tunnel encap entry associated with the tunnel.
+	 */
+	sw_err = fal_tunnel_encap_entry_get(dev_id, tunnel_id_bckup.tunnel_id, &cfg);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to add tunnel encap entry \n");
+		status = NSS_CAPWAPMGR_FAILURE_TUNNEL_ENCAP_ENTRY_GET;
+		goto done;
+	}
+
+	/*
+	 * Get the physical port associated with the VP.
+	 */
+	sw_err = fal_vport_physical_port_id_get(dev_id, v_port, &port);
+	if(sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to get the physical port for VP %d\n",
+				t->vp_num);
+		status  = NSS_CAPWAPMGR_FAILURE_TRUSTSEC_PORT_GET;
+		goto fail;
+	}
+
+	/*
+	 * Delete the encap entry associatd with the tunnel.
+	 */
+	sw_err = fal_tunnel_encap_entry_del(dev_id, tunnel_id_bckup.tunnel_id);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to add tunnel encap entry \n");
+		status = NSS_CAPWAPMGR_FAILURE_TUNNEL_ENCAP_ENTRY_DELETE;
+		goto done;
+	}
+
+	/*
+	 * Unbind the VP.
+	 */
+	sw_err = fal_vport_physical_port_id_set(dev_id, v_port, 0);
+	if(sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to unbind trustsec VP %d\n",
+				t->vp_num);
+		status  = NSS_CAPWAPMGR_FAILURE_TRUSTSEC_UNBIND_VPORT;
+		goto fail;
+	}
+
+	/*
+	 * Unbind the tunnel associated to the VP
+	 */
+	sw_err = fal_tunnel_encap_port_tunnelid_set(dev_id, v_port, &tunnel_id);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to remove tunnelid for trustsec tx %d\n",t->vp_num);
+		status = NSS_CAPWAPMGR_FAILURE_TRUSTSEC_TUNNEL_ID_SET;
+		goto fail1;
+	}
+
+	t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_TRUSTSEC_TX_CONFIGURED;
+	goto done;
+
+fail1:
+	fal_vport_physical_port_id_set(dev_id, v_port, port);
+fail:
+	fal_tunnel_encap_entry_add(dev_id, tunnel_id_bckup.tunnel_id, &cfg);
+done:
+	return status;
+}
+
+/*
+ * nss_capwapmgr_trustsec_tx_rule_create_v6
+ *	Function to configure PPE tunnel encapsulation to handle
+ *	Egress(AP->AC) trustsec traffic.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_tx_rule_create_v6(struct nss_capwapmgr_tunnel *t, struct nss_ipv6_create *v6)
+{
+	fal_tunnel_id_t tunnel_id = {0};
+	fal_tunnel_encap_cfg_t cfg = {0};
+	sw_error_t sw_err = SW_OK;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+	struct ppe_drv_iface *iface;
+	int32_t port_num;
+	uint32_t v_port;
+	uint8_t *data;
+	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint16_t ether_type = htons(NSS_CAPWAPMGR_ETH_TYPE_TRUSTSEC);
+	uint16_t vlan_tpid;
+	uint16_t vlan_tci;
+
+	/*
+	 * Get the port number assocaited with the interface.
+	 */
+	iface = ppe_drv_iface_get_by_idx(v6->src_interface_num);
+	port_num = ppe_drv_iface_port_idx_get(iface);
+
+	/*
+	 * Update the tunnel id to be used for trustsec_tx.
+	 */
+	tunnel_id.tunnel_id_valid = true;
+	tunnel_id.tunnel_id = t->tunnel_id;
+
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, t->vp_num);
+	sw_err = fal_tunnel_encap_port_tunnelid_set(dev_id, v_port, &tunnel_id);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to set tunnelid for trustsec tx %d\n",t->vp_num);
+		status = NSS_CAPWAPMGR_FAILURE_TRUSTSEC_TUNNEL_ID_SET;
+		goto done;
+	}
+
+	/*
+	 * Bind the VP to the phyical port.
+	 */
+	sw_err = fal_vport_physical_port_id_set(dev_id, v_port, port_num);
+	if(sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to bind trustsec VP %d to the underlying physical port %d\n",
+				t->vp_num, port_num);
+		status  = NSS_CAPWAPMGR_FAILURE_TRUSTSEC_BIND_VPORT;
+		goto fail;
+	}
+
+	/*
+	 * Inner payload type is IP.
+	 */
+	cfg.payload_inner_type = NSS_CAPWAPMGR_TRUSTSEC_TX_INNER_PAYLOAD_TYPE_IP;
+
+	/*
+	 * Update destination mac address for egress traffic.
+	 * v4 rule is for AC->AP direction and hence for egress traffic the destination mac will be
+	 * the src mac in the rule.
+	 */
+	data = cfg.pkt_header.pkt_header_data;
+	memcpy(data, v6->src_mac, ETH_ALEN);
+	data+=ETH_ALEN;
+
+	/*
+	 * Update source mac address for egress traffic.
+	 */
+	memcpy(data, v6->dest_mac, ETH_ALEN);
+	data+=ETH_ALEN;
+
+	cfg.tunnel_len += 2 * ETH_ALEN;
+
+	/*
+	 * Update cvlan tag if present in the rule.
+	 */
+	if ((v6->in_vlan_tag[0] & 0xFFF) != 0xFFF) {
+		cfg.cvlan_fmt = NSS_CAPWAPMGR_TRUSTSEC_TX_CVLAN_ENABLED;
+		cfg.vlan_offset = NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_OFFSET;
+
+		/*
+		 * write the tpid
+		 */
+		vlan_tpid = htons((v6->in_vlan_tag[0] & NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_MASK) >> NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SHIFT);
+		memcpy(data, &vlan_tpid, NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SIZE);
+		data+=NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SIZE;
+
+		/*
+		 * Write the tci
+		 */
+		vlan_tci = htons(v6->in_vlan_tag[0] & NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_MASK);
+		memcpy(data, &vlan_tci, NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_SIZE);
+		data+=NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_SIZE;
+
+		cfg.tunnel_len += NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_SIZE + NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SIZE;
+	}
+
+	/*
+	 * Update the ether_type.
+	 */
+	memcpy(data, &ether_type, NSS_CAPWAPMGR_ETH_TYPE_SIZE);
+	cfg.tunnel_len += NSS_CAPWAPMGR_ETH_TYPE_SIZE;
+
+	sw_err = fal_tunnel_encap_entry_add(dev_id, tunnel_id.tunnel_id, &cfg);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to add tunnel encap entry \n");
+		status = NSS_CAPWAPMGR_FAILURE_TUNNEL_ENCAP_ENTRY_ADD;
+		goto fail1;
+	}
+
+	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_TRUSTSEC_TX_CONFIGURED;
+	goto done;
+
+fail1:
+	fal_vport_physical_port_id_set(dev_id, v_port, 0);
+fail:
+	tunnel_id.tunnel_id_valid = false;
+	fal_tunnel_encap_port_tunnelid_set(dev_id, v_port, &tunnel_id);
+done:
+	return status;
+}
+
+/*
+ * nss_capwapmgr_trustsec_tx_rule_create_v4
+ *	Function to configure PPE tunnel encapsulation to handle
+ *	Egress(AP->AC) trustsec traffic.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_tx_rule_create_v4(struct nss_capwapmgr_tunnel *t, struct nss_ipv4_create *v4)
+{
+	fal_tunnel_id_t tunnel_id = {0};
+	fal_tunnel_encap_cfg_t cfg = {0};
+	sw_error_t sw_err = SW_OK;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+	struct ppe_drv_iface *iface;
+	uint32_t v_port;
+	int32_t port_num;
+	uint8_t *data;
+	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint16_t ether_type = htons(NSS_CAPWAPMGR_ETH_TYPE_TRUSTSEC);
+	uint16_t vlan_tpid;
+	uint16_t vlan_tci;
+
+	/*
+	 * Get the port associated to the source interface
+	 */
+	iface = ppe_drv_iface_get_by_idx(v4->src_interface_num);
+	port_num = ppe_drv_iface_port_idx_get(iface);
+
+	/*
+	 * Update the tunnel id to be used for trustsec_tx.
+	 */
+	tunnel_id.tunnel_id_valid = true;
+	tunnel_id.tunnel_id = t->tunnel_id;
+
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, t->vp_num);
+	sw_err = fal_tunnel_encap_port_tunnelid_set(dev_id, v_port, &tunnel_id);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to set tunnelid for trustsec tx %d\n",t->vp_num);
+		status = NSS_CAPWAPMGR_FAILURE_TRUSTSEC_TUNNEL_ID_SET;
+		goto done;
+	}
+
+	/*
+	 * Bind the VP to the phyical port.
+	 */
+	sw_err = fal_vport_physical_port_id_set(dev_id, v_port, port_num);
+	if(sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to bind trustsec VP %d to the underlying physical port %d\n",
+				t->vp_num, port_num);
+		status  = NSS_CAPWAPMGR_FAILURE_TRUSTSEC_BIND_VPORT;
+		goto fail;
+	}
+
+	/*
+	 * Inner payload type is IP.
+	 */
+	cfg.payload_inner_type = NSS_CAPWAPMGR_TRUSTSEC_TX_INNER_PAYLOAD_TYPE_IP;
+
+	cfg.tunnel_len = 0;
+
+	/*
+	 * Update destination mac address for egress traffic.
+	 * v4 rule is for AC->AP direction and hence for egress traffic the destination mac will be
+	 * the src mac in the rule.
+	 */
+	data = cfg.pkt_header.pkt_header_data;
+	memcpy(data, v4->src_mac, ETH_ALEN);
+	data+=ETH_ALEN;
+
+	/*
+	 * Update source mac address for egress traffic.
+	 */
+	memcpy(data, v4->dest_mac, ETH_ALEN);
+	data+=ETH_ALEN;
+
+	cfg.tunnel_len += 2 * ETH_ALEN;
+
+	/*
+	 * Update cvlan tag if present in the rule.
+	 */
+	if ((v4->in_vlan_tag[0] & 0xFFF) != 0xFFF) {
+		cfg.cvlan_fmt = NSS_CAPWAPMGR_TRUSTSEC_TX_CVLAN_ENABLED;
+		cfg.vlan_offset = NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_OFFSET;
+
+		/*
+		 * write the tpid
+		 */
+		vlan_tpid = htons((v4->in_vlan_tag[0] & NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_MASK) >> NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SHIFT);
+		memcpy(data, &vlan_tpid, NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SIZE);
+		data+=NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SIZE;
+
+		/*
+		 * Write the tci
+		 */
+		vlan_tci = htons(v4->in_vlan_tag[0] & NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_MASK);
+		memcpy(data, &vlan_tci, NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_SIZE);
+		data+=NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_SIZE;
+
+		cfg.tunnel_len += NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TCI_SIZE + NSS_CAPWAPMGR_TRUSTSEC_TX_VLAN_TPID_SIZE;
+	}
+
+	/*
+	 * Update the ether_type.
+	 */
+	memcpy(data, &ether_type, NSS_CAPWAPMGR_ETH_TYPE_SIZE);
+	cfg.tunnel_len += NSS_CAPWAPMGR_ETH_TYPE_SIZE;
+
+	sw_err = fal_tunnel_encap_entry_add(dev_id, tunnel_id.tunnel_id, &cfg);
+	if (sw_err != SW_OK) {
+		nss_capwapmgr_warn("Failed to add tunnel encap entry \n");
+		status = NSS_CAPWAPMGR_FAILURE_TUNNEL_ENCAP_ENTRY_ADD;
+		goto fail1;
+	}
+
+	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_TRUSTSEC_TX_CONFIGURED;
+	goto done;
+
+fail1:
+	fal_vport_physical_port_id_set(dev_id, v_port, 0);
+fail:
+	tunnel_id.tunnel_id_valid = false;
+	fal_tunnel_encap_port_tunnelid_set(dev_id, v_port, &tunnel_id);
+done:
+	return status;
+}
+
+/*
+ * nss_capwapmgr_trustsec_rule_destroy_v6
+ *	Function to destroy FW and PPE rules for ipv6 trustsec tunnels.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_rule_destroy_v6(struct nss_capwapmgr_tunnel *t)
+{
+	struct ppe_drv_iface *iface;
+	int32_t port_num;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+	struct nss_ipv6_create *v6 = &t->ip_rule.v6;
+	uint32_t if_num = t->if_num_outer;
+
+	/*
+	 * Unconfig trustsec_rx node in NSS-FW.
+	 */
+	status = nss_capwapmgr_tx_trustsec_unconfig_msg_v6(v6, if_num);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec unconfigure error %d\n", v6, status);
+		goto done;
+	}
+
+	/*
+	 * Unbind the acl rule.
+	 */
+	iface = ppe_drv_iface_get_by_idx(v6->src_interface_num);
+	port_num = ppe_drv_iface_port_idx_get(iface);
+	status = nss_capwapmgr_trustsec_rx_acl_rule_unbind(port_num);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec acl rule error %d\n", v6, status);
+		goto done;
+	}
+
+	/*
+	 * Delete PPE tunnel rule.
+	 */
+	status = nss_capwapmgr_trustsec_tx_rule_destroy(t);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec tunnel rule error %d\n", v6, status);
+		goto done;
+	}
+
+	t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+done:
+	return status;
+}
+
+/*
+ * nss_capwapmgr_trustsec_rule_create_v6
+ *	Function to create FW and PPE rules to handle ipv6 trustsec tunnels.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_rule_create_v6(struct nss_capwapmgr_tunnel *t, struct nss_ipv6_create *v6, uint32_t if_num)
+{
+	struct ppe_drv_iface *iface;
+	int32_t port_num;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+
+	/*
+	 * Send 5 tuple info to trustsec_rx node in NSS-FW.
+	 */
+	status = nss_capwapmgr_tx_trustsec_config_msg_v6(v6, if_num);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec configure error %d\n", v6, status);
+		goto done;
+	}
+
+	/*
+	 * Create PPE ACL rule to handle ingress trustsec packets.
+	 */
+	iface = ppe_drv_iface_get_by_idx(v6->src_interface_num);
+	port_num = ppe_drv_iface_port_idx_get(iface);
+	status = nss_capwapmgr_trustsec_rx_acl_rule_bind(port_num);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec acl rule error %d\n", v6, status);
+		goto fail;
+	}
+
+	/*
+	 * Create PPE tunnel rule to handle egress trustsec packets.
+	 */
+	status = nss_capwapmgr_trustsec_tx_rule_create_v6(t, v6);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec tunnel rule error %d\n", v6, status);
+		goto fail1;
+	}
+
+	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+	goto done;
+fail1:
+	nss_capwapmgr_trustsec_rx_acl_rule_unbind(port_num);
+fail:
+	nss_capwapmgr_tx_trustsec_unconfig_msg_v6(v6, if_num);
+done:
+	return status;
+
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+
+/*
+ * nss_capwapmgr_trustsec_rule_destroy_v4
+ *	Function to destroy FW and PPE rules for ipv4 trustsec tunnels.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_rule_destroy_v4(struct nss_capwapmgr_tunnel *t)
+{
+	struct ppe_drv_iface *iface;
+	int32_t port_num;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+	struct nss_ipv4_create *v4 = &t->ip_rule.v4;
+	uint32_t if_num = t->if_num_outer;
+
+	/*
+	 * Unconfig trustsec_rx node in NSS-FW.
+	 */
+	status = nss_capwapmgr_tx_trustsec_unconfig_msg_v4(v4, if_num);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec unconfigure error %d\n", v4, status);
+		goto done;
+	}
+
+	/*
+	 * Unbind the acl rule.
+	 */
+	iface = ppe_drv_iface_get_by_idx(v4->src_interface_num);
+	port_num = ppe_drv_iface_port_idx_get(iface);
+	status = nss_capwapmgr_trustsec_rx_acl_rule_unbind(port_num);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec acl rule error %d\n", v4, status);
+		goto done;
+	}
+
+	/*
+	 * Delete PPE tunnel rule.
+	 */
+	status = nss_capwapmgr_trustsec_tx_rule_destroy(t);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec tunnel rule error %d\n", v4, status);
+		goto done;
+	}
+
+	t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+done:
+	return status;
+}
+
+/*
+ * nss_capwapmgr_trustsec_rule_create_v4
+ *	Function to create FW and PPE rules to handle ipv4 trustsec tunnels.
+ */
+static nss_capwapmgr_status_t nss_capwapmgr_trustsec_rule_create_v4(struct nss_capwapmgr_tunnel *t, struct nss_ipv4_create *v4, uint32_t if_num)
+{
+	struct ppe_drv_iface *iface;
+	int32_t port_num;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+
+	/*
+	 * Send 5 tuple info to trustsec_rx node in NSS-FW.
+	 */
+	status = nss_capwapmgr_tx_trustsec_config_msg_v4(v4, if_num);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec configure error %d\n", v4, status);
+		goto done;
+	}
+
+	/*
+	 * Create PPE ACL rule to handle ingress trustsec packets.
+	 */
+	iface = ppe_drv_iface_get_by_idx(v4->src_interface_num);
+	port_num = ppe_drv_iface_port_idx_get(iface);
+	status = nss_capwapmgr_trustsec_rx_acl_rule_bind(port_num);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec acl rule error %d\n", v4, status);
+		goto fail;
+	}
+
+	/*
+	 * Create PPE tunnel rule to handle egress trustsec packets.
+	 */
+	status = nss_capwapmgr_trustsec_tx_rule_create_v4(t, v4);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: trustsec tunnel rule error %d\n", v4, status);
+		goto fail1;
+	}
+
+	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+	goto done;
+fail1:
+	nss_capwapmgr_trustsec_rx_acl_rule_unbind(port_num);
+fail:
+	nss_capwapmgr_tx_trustsec_unconfig_msg_v4(v4, if_num);
+done:
+	return status;
+}
+
+/*
  * nss_capwapmgr_tunnel_create_common()
  *	Common handling for creating IPv4 or IPv6 tunnel
  */
 static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_device *dev, uint8_t tunnel_id,
-	struct nss_ipv4_create *v4, struct nss_ipv6_create *v6, struct nss_capwap_rule_msg *capwap_rule)
+	struct nss_ipv4_create *v4, struct nss_ipv6_create *v6, struct nss_capwap_rule_msg *capwap_rule, struct nss_dtlsmgr_config *dtls_data)
 {
-	struct nss_capwapmgr_priv *priv;
-	struct nss_capwapmgr_tunnel *t = NULL;
+	bool dtls_enabled = !!(capwap_rule->enabled_features & NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED);
+	int32_t capwap_if_num_inner, capwap_if_num_outer, forwarding_ifnum;
 	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
-	int32_t capwap_if_num_inner, capwap_if_num_outer;
+	nss_tx_status_t nss_status = NSS_TX_SUCCESS;
+	struct net_device *internal_dev = NULL;
+	struct nss_capwapmgr_tunnel *t = NULL;
+	struct nss_capwapmgr_priv *priv;
 	uint16_t type_flags = 0;
 	struct ppe_vp_ai vpai;
-	struct net_device *internal_dev = NULL;
 	ppe_vp_num_t vp_num;
+	uint32_t outer_trustsec_enabled = capwap_rule->enabled_features & NSS_CAPWAPMGR_FEATURE_OUTER_TRUSTSEC_ENABLED;
 
 	if (!v4 && !v6) {
 		nss_capwapmgr_warn("%px: invalid ip create rule for tunnel: %d\n", dev, tunnel_id);
@@ -1061,6 +2169,11 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 		capwap_rule->which_udp == NSS_CAPWAP_TUNNEL_UDPLite)) {
 		nss_capwapmgr_warn("%px: tunnel %d: wrong argument for which_udp\n", dev, tunnel_id);
 		return NSS_CAPWAPMGR_FAILURE_INVALID_UDP_PROTO;
+	}
+
+	if (dtls_enabled && !dtls_data) {
+		nss_capwapmgr_warn("%px: need to supply dtls_data if DTLS is enabled\n", dev);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
 	}
 
 	/*
@@ -1083,8 +2196,11 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 	} else {
 		internal_dev->mtu = v6->to_mtu;
 	}
-	vpai.type = PPE_VP_TYPE_SW_L3;
-	vpai.queue_num = edma_cfg_rx_point_offload_ring_queue_get();
+	vpai.type = PPE_VP_TYPE_SW_PO;
+
+	if (!outer_trustsec_enabled) {
+		vpai.queue_num = edma_cfg_rx_point_offload_ring_queue_get();
+	}
 
 	/*
 	 * Allocate a PPE VP
@@ -1135,16 +2251,51 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 		goto fail3;
 	}
 
-	if (nss_capwapmgr_tx_msg_update_vp_num(dev, capwap_if_num_outer, vp_num) != NSS_TX_SUCCESS) {
-		nss_capwapmgr_warn("%px: %d VP number update failed %d", dev, vp_num, status);
-		status = NSS_CAPWAPMGR_FAILURE_UPDATE_VP_NUM;
-		goto fail4;
+	if (!outer_trustsec_enabled) {
+		if (nss_capwapmgr_tx_msg_update_vp_num(dev, capwap_if_num_outer, vp_num) != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%px: %d VP number update failed %d", dev, vp_num, status);
+			status = NSS_CAPWAPMGR_FAILURE_UPDATE_VP_NUM;
+			goto fail4;
+		}
+
+		if (nss_capwapmgr_tx_msg_update_vp_num(dev, capwap_if_num_inner, vp_num) != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%px: %d VP number update failed %d", dev, vp_num, status);
+			status = NSS_CAPWAPMGR_FAILURE_UPDATE_VP_NUM;
+			goto fail4;
+		}
+	} else {
+		nss_capwapmgr_info("%px: configure TrustsecTx with sgt value: %x\n", dev, capwap_rule->outer_sgt_value);
+		nss_status = nss_trustsec_tx_configure_sgt(capwap_if_num_outer, vp_num, capwap_rule->outer_sgt_value);
+		if (nss_status != NSS_TX_SUCCESS) {
+			nss_capwapmgr_warn("%px: configure trustsectx node failed\n", dev);
+			status = NSS_CAPWAPMGR_FAILURE_CONFIGURE_TRUSTSEC_TX;
+			goto fail4;
+		}
 	}
 
-	if (nss_capwapmgr_tx_msg_update_vp_num(dev, capwap_if_num_inner, vp_num) != NSS_TX_SUCCESS) {
-		nss_capwapmgr_warn("%px: %d VP number update failed %d", dev, vp_num, status);
-		status = NSS_CAPWAPMGR_FAILURE_UPDATE_VP_NUM;
-		goto fail4;
+	capwap_rule->mtu_adjust = 0;
+	capwap_rule->dtls_inner_if_num = 0;
+	forwarding_ifnum = ppe_drv_iface_idx_get_by_dev(internal_dev);
+
+	if (dtls_enabled) {
+		/*
+		 * We only support the METADATA mode for pure DTLS tunnels; in CAPWAP-DTLS
+		 * the offload will not send the packets starting with Metadata. We need to
+		 * ensure that the user does not configure this mode accidentally.
+		 */
+		dtls_data->flags &= ~NSS_DTLSMGR_ENCAP_METADATA;
+		dtls_data->decap.nexthop_ifnum = nss_capwap_ifnum_with_core_id(capwap_if_num_outer);
+
+		t->dtls_dev = nss_dtlsmgr_session_create(dtls_data);
+		if (!t->dtls_dev) {
+			nss_capwapmgr_warn("%px: NSS DTLS node alloc failed\n", dev);
+			status = NSS_CAPWAPMGR_FAILURE_DI_ALLOC_FAILED;
+			goto fail4;
+		}
+
+		capwap_rule->dtls_inner_if_num = nss_dtlsmgr_get_interface(t->dtls_dev, NSS_DTLSMGR_INTERFACE_TYPE_INNER);
+		forwarding_ifnum = ppe_drv_iface_idx_get_by_dev(t->dtls_dev);
+		capwap_rule->mtu_adjust = nss_dtlsmgr_encap_overhead(t->dtls_dev);
 	}
 
 	/*
@@ -1217,18 +2368,34 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 
 	priv = netdev_priv(dev);
 	t = &priv->tunnel[tunnel_id];
-	if (v4) {
-		v4->dest_interface_num = ppe_drv_iface_idx_get_by_dev(internal_dev);
-		status = nss_capwapmgr_ppe_create_ipv4_rule(t, v4);
+	t->tunnel_id = tunnel_id;
+	t->vp_num = vp_num;
+
+	/*
+	 * For non trustsec tunnels, PPE handles 5 tuple lookup.
+	 * For trustsec tunnels we use acl rule to route the trustsec traffic
+	 * to nss-fw and trustsec_rx node handles 5 tuple lookup.
+	 */
+	if (!outer_trustsec_enabled) {
+		if (v4) {
+			v4->dest_interface_num = forwarding_ifnum;
+			status = nss_capwapmgr_ppe_create_ipv4_rule(t, v4);
+		} else {
+			v6->dest_interface_num = forwarding_ifnum;
+			status = nss_capwapmgr_ppe_create_ipv6_rule(t, v6);
+		}
 	} else {
-		v6->dest_interface_num = ppe_drv_iface_idx_get_by_dev(internal_dev);
-		status = nss_capwapmgr_ppe_create_ipv6_rule(t, v6);
+		if (v4) {
+			status = nss_capwapmgr_trustsec_rule_create_v4(t, v4, capwap_if_num_outer);
+		} else {
+			status = nss_capwapmgr_trustsec_rule_create_v6(t, v6, capwap_if_num_outer);
+		}
 	}
 
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
-		nss_capwapmgr_warn("%px: IPv4/IPv6 rule create failed with status: %d", dev, status);
-		goto fail6;
-	}
+			nss_capwapmgr_warn("%px: IPv4/IPv6 rule create failed with status: %d", dev, status);
+			goto fail6;
+		}
 
 	nss_capwapmgr_info("%px: %d: %d: CAPWAP TUNNEL CREATE DONE tunnel_id:%d (%px)\n", dev, capwap_if_num_inner, capwap_if_num_outer, tunnel_id, t);
 
@@ -1253,13 +2420,15 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 	priv->if_num_to_tunnel_id[capwap_if_num_outer] = tunnel_id;
 	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED;
 	t->type_flags = type_flags;
-	t->vp_num = vp_num;
 
 	goto done;
 
 fail6:
 	nss_capwapmgr_tunnel_action(priv->nss_ctx, dev, capwap_if_num_outer, NSS_CAPWAP_MSG_TYPE_UNCFG_RULE);
 fail5:
+	if (outer_trustsec_enabled) {
+		nss_trustsec_tx_unconfigure_sgt(capwap_if_num_outer, capwap_rule->outer_sgt_value);
+	}
 	nss_capwapmgr_tunnel_action(priv->nss_ctx, dev, capwap_if_num_inner, NSS_CAPWAP_MSG_TYPE_UNCFG_RULE);
 fail4:
 	nss_capwapmgr_unregister_with_nss(capwap_if_num_outer);
@@ -1532,6 +2701,35 @@ nss_capwapmgr_status_t nss_capwapmgr_netdev_destroy(struct net_device *dev)
 EXPORT_SYMBOL(nss_capwapmgr_netdev_destroy);
 
 /*
+ * nss_capwapmgr_get_dtls_netdev()
+ *	API for getting the dtls netdev associated to the capwap tunnel
+ *
+ * The caller is expected to do a dev_put() to release the reference.
+ */
+struct net_device *nss_capwapmgr_get_dtls_netdev(struct net_device *capwap_dev, uint8_t tunnel_id)
+{
+	struct nss_capwapmgr_tunnel *t;
+	nss_capwapmgr_status_t status;
+	struct net_device *dtls_dev;
+
+	dev_hold(capwap_dev);
+	status = nss_capwapmgr_get_tunnel(capwap_dev, tunnel_id, &t);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: can't find tunnel: %d\n", capwap_dev, tunnel_id);
+		dev_put(capwap_dev);
+		return NULL;
+	}
+
+	dtls_dev = t->dtls_dev;
+	dev_hold(dtls_dev);
+
+	dev_put(capwap_dev);
+
+	return dtls_dev;
+}
+EXPORT_SYMBOL(nss_capwapmgr_get_dtls_netdev);
+
+/*
  * nss_capwapmgr_update_path_mtu()
  *	API for updating Path MTU
  */
@@ -1544,6 +2742,7 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 	ppe_vp_status_t ppe_vp_status;
 	struct nss_ipv4_create *v4;
 	struct nss_ipv6_create *v6;
+	uint32_t outer_trustsec_enabled;
 
 	if (mtu > NSS_CAPWAP_MAX_MTU) {
 		nss_capwapmgr_warn("%px: invalid path_mtu: %d, max: %d\n", dev, mtu, NSS_CAPWAP_MAX_MTU);
@@ -1557,6 +2756,7 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 		goto done;
 	}
 
+	outer_trustsec_enabled = t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_OUTER_TRUSTSEC_ENABLED;
 	priv = netdev_priv(dev);
 	nss_capwapmgr_info("%px: %d: tunnel update MTU is being called\n", dev, t->if_num_inner);
 
@@ -1586,6 +2786,13 @@ nss_capwapmgr_status_t nss_capwapmgr_update_path_mtu(struct net_device *dev, uin
 		nss_capwapmgr_warn("%px: PPE_VP mtu set failed %d\n", dev, ppe_vp_status);
 		status = NSS_CAPWAPMGR_FAILURE_VP_MTU_SET;
 		goto fail;
+	}
+
+	/*
+	 * Fon trustsec tunnels we do not update the PPE rule.
+	 */
+	if (outer_trustsec_enabled) {
+		goto done;
 	}
 
 	/*
@@ -1659,6 +2866,7 @@ nss_capwapmgr_status_t nss_capwapmgr_update_dest_mac_addr(struct net_device *dev
 	struct nss_ipv4_create *v4;
 	struct nss_ipv6_create *v6;
 	uint8_t mac_addr_old[ETH_ALEN];
+	uint32_t outer_trustsec_enabled;
 
 	dev_hold(dev);
 	status = nss_capwapmgr_get_tunnel(dev, tunnel_id, &t);
@@ -1667,32 +2875,40 @@ nss_capwapmgr_status_t nss_capwapmgr_update_dest_mac_addr(struct net_device *dev
 		goto done;
 	}
 
+	outer_trustsec_enabled = t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_OUTER_TRUSTSEC_ENABLED;
 	priv = netdev_priv(dev);
 	nss_capwapmgr_info("%px: %d: tunnel update mac Addr is being called\n", dev, tunnel_id);
 
 	/*
-	 * Delete and re-create the IPv4/IPv6 rule with the new destination mac address for flow and return.
-	 * Since the encap direction is handled by the return rule, we are updating the src_mac.
+	 * For trustsec enabled tunnels delete and update the trustsec tx rule with new destination mac address.
+	 *
+	 * For non trustsec tunnels delete and re-create the IPv4/IPv6 rule with the new destination mac address
+	 * for flow and return. Since the encap direction is handled by the return rule, we are updating the src_mac.
 	 */
-	if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+	if (outer_trustsec_enabled && (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_TRUSTSEC_TX_CONFIGURED)) {
+		status = nss_capwapmgr_trustsec_tx_rule_destroy(t);
+	} else if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
 		if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
 			status = nss_capwapmgr_ppe_destroy_ipv4_rule(t);
-			if (status != NSS_CAPWAPMGR_SUCCESS) {
-				goto done;
-			}
 		} else {
 			status = nss_capwapmgr_ppe_destroy_ipv6_rule(t);
-			if (status != NSS_CAPWAPMGR_SUCCESS) {
-				goto done;
-			}
 		}
+	}
+
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: Update Destination Mac for tunnel error: %d\n", dev, status);
+		goto done;
 	}
 
 	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
 		v4 = &t->ip_rule.v4;
 		memcpy(mac_addr_old, v4->src_mac, ETH_ALEN);
 		memcpy(v4->src_mac, mac_addr, ETH_ALEN);
-		status = nss_capwapmgr_ppe_create_ipv4_rule(t, v4);
+		if (outer_trustsec_enabled) {
+			status = nss_capwapmgr_trustsec_tx_rule_create_v4(t, v4);
+		} else {
+			status = nss_capwapmgr_ppe_create_ipv4_rule(t, v4);
+		}
 		if (status != NSS_CAPWAPMGR_SUCCESS) {
 			nss_capwapmgr_warn("%px: Update Destination Mac for tunnel error : %d \n", dev, status);
 			memcpy(t->ip_rule.v4.src_mac, mac_addr_old, ETH_ALEN);
@@ -1702,7 +2918,11 @@ nss_capwapmgr_status_t nss_capwapmgr_update_dest_mac_addr(struct net_device *dev
 		v6 = &t->ip_rule.v6;
 		memcpy(mac_addr_old, v6->src_mac, ETH_ALEN);
 		memcpy(v6->src_mac, mac_addr, ETH_ALEN);
-		status = nss_capwapmgr_ppe_create_ipv6_rule(t, &t->ip_rule.v6);
+		if (outer_trustsec_enabled) {
+			status = nss_capwapmgr_trustsec_tx_rule_create_v6(t, v6);
+		} else {
+			status = nss_capwapmgr_ppe_create_ipv6_rule(t, &t->ip_rule.v6);
+		}
 		if (status != NSS_CAPWAPMGR_SUCCESS) {
 			nss_capwapmgr_warn("%px: Update Destination Mac for tunnel error : %d \n", dev, status);
 			memcpy(t->ip_rule.v6.src_mac, mac_addr_old, ETH_ALEN);
@@ -1725,6 +2945,7 @@ nss_capwapmgr_status_t nss_capwapmgr_update_src_interface(struct net_device *dev
 	struct nss_capwapmgr_tunnel *t = NULL;
 	nss_capwapmgr_status_t status;
 	int32_t src_interface_num_temp;
+	uint32_t outer_trustsec_enabled;
 
 	dev_hold(dev);
 	status = nss_capwapmgr_get_tunnel(dev, tunnel_id, &t);
@@ -1733,39 +2954,54 @@ nss_capwapmgr_status_t nss_capwapmgr_update_src_interface(struct net_device *dev
 		goto done;
 	}
 
+	outer_trustsec_enabled = t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_OUTER_TRUSTSEC_ENABLED;
 	priv = netdev_priv(dev);
 	nss_capwapmgr_info("%px: %d: tunnel update source interface is being called\n", dev, tunnel_id);
 
 	/*
-	 * Destroy/Re-Create the IPv4/IPv6 rule with the new Interface number for flow and return
+	 * For trustsec enabled tunnels, delete and recreate trustsec tx rule with the new source interface.
+	 *
+	 * For non trustsec tunnels destroy/re-create the IPv4/IPv6 rule with the new Interface number for
+	 * flow and return
 	 */
-	if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+	if (outer_trustsec_enabled && (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_TRUSTSEC_TX_CONFIGURED)) {
+		status = nss_capwapmgr_trustsec_tx_rule_destroy(t);
+	} else if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
 		if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
 			status = nss_capwapmgr_ppe_destroy_ipv4_rule(t);
-			if (status != NSS_CAPWAPMGR_SUCCESS) {
-				goto done;
-			}
 		} else {
 			status = nss_capwapmgr_ppe_destroy_ipv6_rule(t);
-			if (status != NSS_CAPWAPMGR_SUCCESS) {
-				goto done;
-			}
 		}
+	}
+
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: Update source interface failed with error: %d\n", dev, status);
+		goto done;
 	}
 
 	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
 		src_interface_num_temp = t->ip_rule.v4.src_interface_num;
 		t->ip_rule.v4.src_interface_num = src_interface_num;
-		status = nss_capwapmgr_ppe_create_ipv4_rule(t, &t->ip_rule.v4);
+		if (outer_trustsec_enabled) {
+			status = nss_capwapmgr_trustsec_tx_rule_create_v4(t, &t->ip_rule.v4);
+		} else {
+			status = nss_capwapmgr_ppe_create_ipv4_rule(t, &t->ip_rule.v4);
+		}
+
 		if (status != NSS_CAPWAPMGR_SUCCESS) {
-			nss_capwapmgr_warn("%px: unconfigure ipv4 rule failed : %d\n", dev, status);
+			nss_capwapmgr_warn("%px: configure ipv4 rule failed : %d\n", dev, status);
 			t->ip_rule.v4.src_interface_num = src_interface_num_temp;
 			goto done;
 		}
 	} else {
 		src_interface_num_temp = t->ip_rule.v6.src_interface_num;
 		t->ip_rule.v6.src_interface_num = src_interface_num;
-		status = nss_capwapmgr_ppe_create_ipv6_rule(t, &t->ip_rule.v6);
+		if (outer_trustsec_enabled) {
+			status = nss_capwapmgr_trustsec_tx_rule_create_v6(t, &t->ip_rule.v6);
+		} else {
+			status = nss_capwapmgr_ppe_create_ipv6_rule(t, &t->ip_rule.v6);
+		}
+
 		if (status != NSS_CAPWAPMGR_SUCCESS) {
 			nss_capwapmgr_warn("%px: configure ipv6 rule failed : %d\n", dev, status);
 			t->ip_rule.v6.src_interface_num = src_interface_num_temp;
@@ -1777,6 +3013,365 @@ done:
 	return status;
 }
 EXPORT_SYMBOL(nss_capwapmgr_update_src_interface);
+
+/*
+ * nss_capwapmgr_configure_dtls
+ *	Enable or disable DTLS of a capwap tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_configure_dtls(struct net_device *capwap_dev, uint8_t tunnel_id, uint8_t enable, struct nss_dtlsmgr_config *data)
+{
+	struct nss_capwap_msg capwapmsg_inner, capwapmsg_outer;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+	struct nss_capwapmgr_priv *priv;
+	struct nss_capwapmgr_tunnel *t;
+	uint32_t ip_if_num;
+	bool configured;
+
+	dev_hold(capwap_dev);
+	status = nss_capwapmgr_get_tunnel(capwap_dev, tunnel_id, &t);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: can't find tunnel: %d\n", capwap_dev, tunnel_id);
+		dev_put(capwap_dev);
+		return status;
+	}
+
+	configured = !!(t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED);
+
+	/*
+	 * Fail if capwap tunnel already has dtls enabled.
+	 */
+	if (enable && configured) {
+		nss_capwapmgr_warn("%px: nothing changed for tunnel: %d\n", capwap_dev, tunnel_id);
+		dev_put(capwap_dev);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	/*
+	 * Fail if capwap tunnel has dtls disabled and we try to disable it again.
+	 */
+	if (!enable && !configured) {
+		nss_capwapmgr_warn("%px: nothing changed for tunnel: %d\n", capwap_dev, tunnel_id);
+		dev_put(capwap_dev);
+		return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+	}
+
+	/*
+	 * Check if the capwap tunnel is enabled. We operate on disabled tunnel only.
+	 */
+	if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_ENABLED) {
+		nss_capwapmgr_warn("%px: tunnel %d is already enabled\n", capwap_dev, tunnel_id);
+		dev_put(capwap_dev);
+		return NSS_CAPWAPMGR_FAILURE_TUNNEL_ENABLED;
+	}
+
+	/*
+	 * Prepare DTLS configure message
+	 */
+	memset(&capwapmsg_inner, 0, sizeof(struct nss_capwap_msg));
+	nss_capwap_msg_init(&capwapmsg_inner, t->if_num_inner, NSS_CAPWAP_MSG_TYPE_DTLS,
+		sizeof(struct nss_capwap_dtls_msg), nss_capwapmgr_msg_event_receive, capwap_dev);
+
+	memset(&capwapmsg_outer, 0, sizeof(struct nss_capwap_msg));
+	nss_capwap_msg_init(&capwapmsg_outer, t->if_num_outer, NSS_CAPWAP_MSG_TYPE_DTLS,
+		sizeof(struct nss_capwap_dtls_msg), nss_capwapmgr_msg_event_receive, capwap_dev);
+
+	if (!enable) {
+		nss_capwapmgr_info("%px disabling DTLS for tunnel: %d\n", capwap_dev, tunnel_id);
+
+		ip_if_num = ppe_drv_iface_idx_get_by_dev(t->internal_dev);
+		capwapmsg_inner.msg.dtls.enable = 0;
+		capwapmsg_inner.msg.dtls.dtls_inner_if_num = t->capwap_rule.dtls_inner_if_num;
+		capwapmsg_inner.msg.dtls.mtu_adjust = 0;
+
+		capwapmsg_outer.msg.dtls.enable = 0;
+	} else {
+		nss_capwapmgr_info("%px enabling DTLS for tunnel: %d\n", capwap_dev, tunnel_id);
+
+		if (!t->capwap_rule.dtls_inner_if_num) {
+			/*
+			 * Create a DTLS node, we only validate caller is providing a DTLS
+			 * configuration structure, the correctness of these settings are
+			 * validated by dtlsmgr
+			 */
+			if (!data) {
+				nss_capwapmgr_info("%px: dtls data required to create dtls tunnel\n", capwap_dev);
+				dev_put(capwap_dev);
+				return NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+			}
+
+			/*
+			 * We only support the METADATA mode for pure DTLS tunnels; in CAPWAP-DTLS
+			 * the offload will not send the packets starting with Metadata. We need to
+			 * ensure that the user does not configure this mode accidentally.
+			 */
+			data->flags &= ~NSS_DTLSMGR_ENCAP_METADATA;
+			data->decap.nexthop_ifnum = nss_capwap_ifnum_with_core_id(t->if_num_outer);
+
+			t->dtls_dev = nss_dtlsmgr_session_create(data);
+			if (!t->dtls_dev) {
+				nss_capwapmgr_warn("%px: cannot create DTLS session\n", capwap_dev);
+				dev_put(capwap_dev);
+				return NSS_CAPWAPMGR_FAILURE_DI_ALLOC_FAILED;
+			}
+
+			/* Store the DTLS encap and decap interface numbers */
+			t->capwap_rule.dtls_inner_if_num = nss_dtlsmgr_get_interface(t->dtls_dev,
+										     NSS_DTLSMGR_INTERFACE_TYPE_INNER);
+			t->capwap_rule.mtu_adjust = nss_dtlsmgr_encap_overhead(t->dtls_dev);
+			nss_capwapmgr_info("%px: created dtls node for tunnel: %d if_num: %d mtu_adjust: %d\n",
+					   capwap_dev, tunnel_id, t->capwap_rule.dtls_inner_if_num, t->capwap_rule.mtu_adjust);
+		}
+
+		ip_if_num = ppe_drv_iface_idx_get_by_dev(t->dtls_dev);
+
+		capwapmsg_inner.msg.dtls.enable = 1;
+		capwapmsg_outer.msg.dtls.enable = 1;
+		capwapmsg_inner.msg.dtls.mtu_adjust = t->capwap_rule.mtu_adjust;
+		capwapmsg_inner.msg.dtls.dtls_inner_if_num = t->capwap_rule.dtls_inner_if_num;
+	}
+
+	priv = netdev_priv(capwap_dev);
+
+	/*
+	 * Now configure capwap dtls
+	 */
+	t->tunnel_state |= NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, capwap_dev, &capwapmsg_inner);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: configure DTLS failed for inner node: %d\n", capwap_dev, status);
+		dev_put(capwap_dev);
+		return status;
+	}
+
+	status = nss_capwapmgr_tx_msg_sync(priv->nss_ctx, capwap_dev, &capwapmsg_outer);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: configure DTLS failed for outer node: %d\n", capwap_dev, status);
+		dev_put(capwap_dev);
+		return status;
+	}
+
+	/*
+	 * Recreate ipv4/v6 rules with the new interface number
+	 */
+	if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
+		if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+			status = nss_capwapmgr_ppe_destroy_ipv4_rule(t);
+			if (status != NSS_CAPWAPMGR_SUCCESS) {
+				nss_capwapmgr_warn("%px: unconfigure ipv4 rule failed : %d\n", capwap_dev, status);
+				dev_put(capwap_dev);
+				return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+			}
+
+			t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+		}
+
+		t->ip_rule.v4.dest_interface_num = ip_if_num;
+
+		/*
+		 * The 5 tuple are same as configured by capwap.
+		 */
+		status = nss_capwapmgr_ppe_create_ipv4_rule(t, &t->ip_rule.v4);
+	} else {
+		if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
+			status = nss_capwapmgr_ppe_destroy_ipv6_rule(t);
+			if (status != NSS_CAPWAPMGR_SUCCESS) {
+				nss_capwapmgr_warn("%px: unconfigure ipv6 rule failed : %d\n", capwap_dev, status);
+				dev_put(capwap_dev);
+				return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
+			}
+
+			t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED;
+		}
+
+		t->ip_rule.v6.dest_interface_num = ip_if_num;
+
+		/*
+		 * The 5 tuple are same as configured by capwap.
+		 */
+		status = nss_capwapmgr_ppe_create_ipv6_rule(t, &t->ip_rule.v6);
+	}
+
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: configure ip rule failed : %d\n", capwap_dev, status);
+		dev_put(capwap_dev);
+		return NSS_CAPWAPMGR_FAILURE_IP_RULE;
+	}
+
+	if (enable) {
+		t->capwap_rule.enabled_features |= NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED;
+	} else {
+		t->capwap_rule.enabled_features &= ~NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED;
+	}
+	dev_put(capwap_dev);
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_configure_dtls);
+
+/*
+ * nss_capwapmgr_verify_dtls_rekey_param()
+ *	Validate the rekey param for a DTLS tunnel and return the DTLS netdevice
+ *
+ *  The caller should hold the reference on the net device before calling.
+ */
+static inline struct net_device *nss_capwapmgr_verify_dtls_rekey_param(struct net_device *dev, uint8_t tunnel_id,
+								 struct nss_dtlsmgr_config_update *udata)
+{
+	struct nss_capwapmgr_tunnel *t;
+	nss_capwapmgr_status_t status;
+
+	if (!udata) {
+		nss_capwapmgr_info("%px: dtls session update data required\n", dev);
+		return NULL;
+	}
+
+	status = nss_capwapmgr_get_tunnel(dev, tunnel_id, &t);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: can't find tunnel: %d\n", dev, tunnel_id);
+		return NULL;
+	}
+
+
+	if (!(t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED)) {
+		nss_capwapmgr_warn("%px: tunnel does not enable DTLS: %d\n", dev, tunnel_id);
+		return NULL;
+	}
+
+	return t->dtls_dev;
+}
+
+/*
+ * nss_capwapmgr_dtls_rekey_rx_cipher_update()
+ *	Update the rx cipher key for an DTLS tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_rx_cipher_update(struct net_device *dev, uint8_t tunnel_id,
+								 struct nss_dtlsmgr_config_update *udata)
+{
+	struct net_device *dtls_ndev;
+
+	dev_hold(dev);
+	dtls_ndev = nss_capwapmgr_verify_dtls_rekey_param(dev, tunnel_id, udata);
+	dev_put(dev);
+
+	if (!dtls_ndev) {
+		goto fail;
+	}
+
+	/*
+	 * Calling dtlsmgr for rekey
+	 */
+	if (nss_dtlsmgr_session_update_decap(dtls_ndev, udata) != NSS_DTLSMGR_OK) {
+		goto fail;
+	}
+	return NSS_CAPWAPMGR_SUCCESS;
+
+fail:
+	nss_capwapmgr_warn("%px: tunnel: %d rekey rx cipher update failed\n", dtls_ndev, tunnel_id);
+	return NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dtls_rekey_rx_cipher_update);
+
+/*
+ * nss_capwapmgr_dtls_rekey_tx_cipher_update()
+ *	Update the tx cipher key for an DTLS tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_tx_cipher_update(struct net_device *dev, uint8_t tunnel_id,
+								 struct nss_dtlsmgr_config_update *udata)
+{
+	struct net_device *dtls_ndev;
+
+	dev_hold(dev);
+	dtls_ndev = nss_capwapmgr_verify_dtls_rekey_param(dev, tunnel_id, udata);
+	dev_put(dev);
+
+	if (!dtls_ndev) {
+		goto fail;
+	}
+
+	/*
+	 * Calling dtlsmgr for rekey
+	 */
+	if (nss_dtlsmgr_session_update_encap(dtls_ndev, udata) != NSS_DTLSMGR_OK) {
+		goto fail;
+	}
+	return NSS_CAPWAPMGR_SUCCESS;
+
+fail:
+	nss_capwapmgr_warn("%px: tunnel: %d rekey rx cipher update failed\n", dtls_ndev, tunnel_id);
+	return NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dtls_rekey_tx_cipher_update);
+
+/*
+ * nss_capwapmgr_dtls_rekey_rx_cipher_switch()
+ *	Switch the rx cipher key for an DTLS tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_rx_cipher_switch(struct net_device *dev, uint8_t tunnel_id)
+{
+	struct nss_capwapmgr_tunnel *t;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+
+	dev_hold(dev);
+	status = nss_capwapmgr_get_tunnel(dev, tunnel_id, &t);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: can't find tunnel: %d\n", dev, tunnel_id);
+		goto done;
+	}
+
+	if (!(t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED)) {
+		nss_capwapmgr_warn("%px: tunnel does not enable DTLS: %d\n", dev, tunnel_id);
+		status = NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+		goto done;
+	}
+
+	/*
+	 * Calling dtlsmgr for rekey switch
+	 */
+	if (!nss_dtlsmgr_session_switch_decap(t->dtls_dev)) {
+		nss_capwapmgr_warn("%px: tunnel: %d rekey rx cipher switch failed\n", t->dtls_dev, tunnel_id);
+		status = NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+	}
+
+done:
+	dev_put(dev);
+	return status;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dtls_rekey_rx_cipher_switch);
+
+/*
+ * nss_capwapmgr_dtls_rekey_tx_cipher_switch()
+ *	Switch the tx cipher key for an DTLS tunnel
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dtls_rekey_tx_cipher_switch(struct net_device *dev, uint8_t tunnel_id)
+{
+	struct nss_capwapmgr_tunnel *t;
+	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
+
+	dev_hold(dev);
+	status = nss_capwapmgr_get_tunnel(dev, tunnel_id, &t);
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: can't find tunnel: %d\n", dev, tunnel_id);
+		goto done;
+	}
+
+	if (!(t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED)) {
+		nss_capwapmgr_warn("%px: tunnel does not enable DTLS: %d\n", dev, tunnel_id);
+		status = NSS_CAPWAPMGR_FAILURE_BAD_PARAM;
+		goto done;
+	}
+
+	/*
+	 * Calling dtlsmgr for rekey switch
+	 */
+	if (!nss_dtlsmgr_session_switch_encap(t->dtls_dev)) {
+		nss_capwapmgr_warn("%px: tunnel: %d rekey tx cipher switch failed\n", t->dtls_dev, tunnel_id);
+		status = NSS_CAPWAPMGR_FAILURE_INVALID_DTLS_CFG;
+	}
+
+done:
+	dev_put(dev);
+	return status;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dtls_rekey_tx_cipher_switch);
 
 /*
  * nss_capwapmgr_change_version()
@@ -1924,9 +3519,9 @@ EXPORT_SYMBOL(nss_capwapmgr_disable_tunnel);
  *	API for creating IPv4 and CAPWAP rule.
  */
 nss_capwapmgr_status_t nss_capwapmgr_ipv4_tunnel_create(struct net_device *dev, uint8_t tunnel_id,
-			struct nss_ipv4_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule)
+			struct nss_ipv4_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule, struct nss_dtlsmgr_config *dtls_data)
 {
-	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, ip_rule, NULL, capwap_rule);
+	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, ip_rule, NULL, capwap_rule, dtls_data);
 }
 EXPORT_SYMBOL(nss_capwapmgr_ipv4_tunnel_create);
 
@@ -1935,9 +3530,9 @@ EXPORT_SYMBOL(nss_capwapmgr_ipv4_tunnel_create);
  *	API for creating IPv6 and CAPWAP rule.
  */
 nss_capwapmgr_status_t nss_capwapmgr_ipv6_tunnel_create(struct net_device *dev, uint8_t tunnel_id,
-			struct nss_ipv6_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule)
+			struct nss_ipv6_create *ip_rule, struct nss_capwap_rule_msg *capwap_rule, struct nss_dtlsmgr_config *dtls_data)
 {
-	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, NULL, ip_rule, capwap_rule);
+	return nss_capwapmgr_tunnel_create_common(dev, tunnel_id, NULL, ip_rule, capwap_rule, dtls_data);
 }
 EXPORT_SYMBOL(nss_capwapmgr_ipv6_tunnel_create);
 
@@ -1954,6 +3549,7 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	uint32_t if_num_inner, if_num_outer;
 	nss_capwapmgr_status_t status = NSS_CAPWAPMGR_SUCCESS;
 	ppe_vp_status_t vp_status;
+	uint32_t outer_trustsec_enabled;
 
 	dev_hold(dev);
 	status = nss_capwapmgr_get_tunnel(dev, tunnel_id, &t);
@@ -1991,6 +3587,7 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 		goto done;
 	}
 
+	outer_trustsec_enabled = t->capwap_rule.enabled_features & NSS_CAPWAPMGR_FEATURE_OUTER_TRUSTSEC_ENABLED;
 	priv = netdev_priv(dev);
 	nss_capwapmgr_info("%px: %d: tunnel destroy is being called\n", dev, tunnel_id);
 
@@ -2024,16 +3621,23 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	 */
 	if (t->tunnel_state & NSS_CAPWAPMGR_TUNNEL_STATE_IPRULE_CONFIGURED) {
 		if (t->capwap_rule.l3_proto == NSS_CAPWAP_TUNNEL_IPV4) {
-			status = nss_capwapmgr_ppe_destroy_ipv4_rule(t);
-			if (status != NSS_CAPWAPMGR_SUCCESS) {
-				goto done;
+			if (outer_trustsec_enabled) {
+				status = nss_capwapmgr_trustsec_rule_destroy_v4(t);
+			} else {
+				status = nss_capwapmgr_ppe_destroy_ipv4_rule(t);
 			}
 		} else {
-			status = nss_capwapmgr_ppe_destroy_ipv6_rule(t);
-			if (status != NSS_CAPWAPMGR_SUCCESS) {
-				goto done;
+			if (outer_trustsec_enabled) {
+				status = nss_capwapmgr_trustsec_rule_destroy_v6(t);
+			} else {
+				status = nss_capwapmgr_ppe_destroy_ipv6_rule(t);
 			}
 		}
+	}
+
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
+		nss_capwapmgr_warn("%px: Unconfigure IP rule failed for tunnel: %d\n", dev, tunnel_id);
+		goto done;
 	}
 
 	/*
@@ -2049,6 +3653,13 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%px: %d: Unconfigure Outer CAPWAP rule failed for tunnel : %d\n",
 			dev, if_num_inner, tunnel_id);
+	}
+
+	/*
+	 * If trustsec is enabled, unconfigure the trustsec tx rule in NSS-FW.
+	 */
+	if (outer_trustsec_enabled) {
+		nss_trustsec_tx_unconfigure_sgt(if_num_outer, t->capwap_rule.outer_sgt_value);
 	}
 
 	nss_capwapmgr_unregister_with_nss(if_num_outer);
@@ -2081,7 +3692,7 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	 * Free the VP interface associated with the tunnel.
 	 */
 	vp_status = ppe_vp_free(t->vp_num);
-	if (vp_status!= PPE_VP_STATUS_SUCCESS) {
+	if (vp_status != PPE_VP_STATUS_SUCCESS) {
 		nss_capwapmgr_warn("%px: VP Number %d: Failed to free the associated VP for tunnel : %d\n",
 			dev, t->vp_num, tunnel_id);
 		status = NSS_CAPWAPMGR_FAILURE_VP_FREE;
@@ -2105,7 +3716,6 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 
 	t->if_num_inner = -1;
 	t->if_num_outer = -1;
-
 	nss_capwapmgr_info("%px: Tunnel %d is destroyed\n", dev , tunnel_id);
 	status = NSS_CAPWAPMGR_SUCCESS;
 
@@ -2230,6 +3840,364 @@ done:
 }
 EXPORT_SYMBOL(nss_capwapmgr_tunnel_stats);
 
+/*
+ * nss_capwapmgr_dscp_rule_destroy()
+ *	API to destroy previously created DSCP rule.
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_destroy(uint8_t id)
+{
+	sw_error_t rv;
+	fal_qos_cosmap_t cosmap;
+	struct nss_capwapmgr_acl *acl_rule;
+	uint8_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint8_t rule_nr = NSS_CAPWAPMGR_RULE_NR;
+	uint8_t group_id = NSS_CAPWAPMGR_GROUP_ID;
+	uint8_t i, j, list_id, v4_rule_id, v6_rule_id, dscp_value, dscp_mask;
+	atomic_t *acl_req_count = &global.dscp_acl_rule_create_req;
+
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT; i++) {
+		for (j = 0; j < NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST; j++) {
+			if (global.acl_list[i].rule[j].uid == id) {
+				acl_rule = &global.acl_list[i].rule[j];
+				goto found;
+			}
+		}
+	}
+
+	nss_capwapmgr_warn("Invalid id: %u\n", id);
+	return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_ID_INVALID;
+
+found:
+	if (!acl_rule->in_use) {
+		nss_capwapmgr_warn("Rule matching id: %d not in use\n", id);
+		return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_ID_NOT_IN_USE;
+	}
+
+	dscp_value = acl_rule->dscp_value;
+	dscp_mask = acl_rule->dscp_mask;
+
+	/*
+	 * Reset all classification fields on cosmap table.
+	 */
+	cosmap.internal_pcp = 0;
+	cosmap.internal_dei = 0;
+	cosmap.internal_pri = 0;
+	cosmap.internal_dscp = 0;
+	cosmap.internal_dp = 0;
+
+	for (i = 0; i < NSS_CAPWAPMGR_DSCP_MAX; i++) {
+		if ((i & dscp_mask) != dscp_value) {
+			continue;
+		}
+
+		nss_capwapmgr_trace("dscpmap: resetting for dscp %u\n", i);
+		rv = fal_qos_cosmap_dscp_set(dev_id, group_id, i, &cosmap);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to reset cosmap for dscp %d - code: %d\n", i, rv);
+			return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_DELETE_FAILED;
+		}
+	}
+
+	/*
+	 * Since we use 2 ACL entries per rule (i.e. v4/v6) we multiply by
+	 * two to get rule_ids.
+	 */
+	v4_rule_id = acl_rule->rule_id * 2;
+	v6_rule_id = v4_rule_id + 1;
+	list_id = NSS_CAPWAPMGR_ACL_DSCP_LIST_ID + acl_rule->list_id;
+
+	rv = fal_acl_rule_delete(dev_id, list_id, v6_rule_id, rule_nr);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to del ACL v6_rule %d from list %d - code: %d\n", v6_rule_id, list_id, rv);
+		return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_DELETE_FAILED;
+	}
+
+	rv = fal_acl_rule_delete(dev_id, list_id, v4_rule_id, rule_nr);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to del ACL v4_rule %d from list %d - code: %d\n", v4_rule_id, list_id, rv);
+		return NSS_CAPWAPMGR_FAILURE_DSCP_RULE_DELETE_FAILED;
+	}
+
+	acl_rule->in_use = false;
+
+	if (atomic_dec_and_test(acl_req_count)) {
+		nss_capwapmgr_dscp_acl_deinit();
+	}
+
+	return NSS_CAPWAPMGR_SUCCESS;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dscp_rule_destroy);
+
+/*
+ * nss_capwapmgr_dscp_rule_create()
+ *	API to prioritize packets based on DSCP.
+ */
+nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_create(uint8_t dscp_value, uint8_t dscp_mask, uint8_t pri, uint8_t *id)
+{
+	sw_error_t rv;
+	fal_qos_cosmap_t cosmap;
+	fal_qos_cosmap_t *orig_cosmap;
+	fal_acl_rule_t *acl_rule;
+	uint8_t dev_id = NSS_CAPWAPMGR_DEV_ID;
+	uint8_t group_id = NSS_CAPWAPMGR_GROUP_ID;
+	uint8_t rule_nr = NSS_CAPWAPMGR_RULE_NR;
+	uint8_t list_id, v4_rule_id, v6_rule_id;
+	uint8_t lid, rid, i, j;
+	int8_t err, fail_dscp;
+	int8_t uid = -1;
+	uint32_t v_port;
+	atomic_t *acl_req_count = &global.dscp_acl_rule_create_req;
+
+	if (atomic_inc_return(acl_req_count) == 1) {
+		if(!nss_capwapmgr_dscp_acl_init()) {
+			return NSS_CAPWAPMGR_FAILURE_DSCP_ACL_INIT;
+		}
+	}
+
+	nss_capwapmgr_info("Setting priority %u for dscp %u mask %u\n", pri, dscp_value, dscp_mask);
+
+	orig_cosmap = kzalloc(NSS_CAPWAPMGR_DSCP_MAX * sizeof(*orig_cosmap), GFP_KERNEL);
+	if (!orig_cosmap) {
+		nss_capwapmgr_warn("Failed to alloc memory for orig_cosmap\n");
+		err = NSS_CAPWAPMGR_FAILURE_MEM_UNAVAILABLE;
+		goto fail;
+	}
+
+	acl_rule = kzalloc(sizeof(*acl_rule), GFP_KERNEL);
+	if (!acl_rule) {
+		nss_capwapmgr_warn("Failed to alloc memory for acl_rule\n");
+		kfree(orig_cosmap);
+		err = NSS_CAPWAPMGR_FAILURE_MEM_UNAVAILABLE;
+		goto fail;
+	}
+
+	/*
+	 * Get an empty acl rule.
+	 */
+	for (i = 0; i < NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT; i++) {
+		for (j = 0; j < NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST; j++) {
+			if (global.acl_list[i].rule[j].in_use) {
+				continue;
+			}
+
+			uid = global.acl_list[i].rule[j].uid;
+			rid = global.acl_list[i].rule[j].rule_id;
+			lid = global.acl_list[i].rule[j].list_id;
+			goto found;
+		}
+	}
+
+found:
+	if (uid < 0) {
+		nss_capwapmgr_warn("No free ACL rules available\n");
+		err = NSS_CAPWAPMGR_FAILURE_ACL_UNAVAILABLE;
+		goto fail1;
+	};
+
+	/*
+	 * Since we use 2 ACL entries per rule (i.e. v4/v6) we multiply rid by
+	 * two to get rule_id.
+	 */
+	v4_rule_id = rid * 2;
+	v6_rule_id = v4_rule_id + 1;
+	list_id = NSS_CAPWAPMGR_ACL_DSCP_LIST_ID + lid;
+
+	nss_capwapmgr_info("Using ACL rules: %d & %d from list: %d\n", v4_rule_id, v6_rule_id, list_id);
+
+	/*
+	 * Prioritize packets with the dscp value. For trustsec packets, we need to specify
+	 * the location of the dscp value with ACL configuration.
+	 * ACL rule always start from the L2 header. It will be trustsec header for our case.
+	 * We need two user defined profile to set beginning of the
+	 * Profile 0 is for start of the ethernet type.
+	 * Profile 1 is for the start of the ip header.
+	 */
+	rv = fal_acl_udf_profile_set(dev_id, FAL_ACL_UDF_NON_IP, 0, FAL_ACL_UDF_TYPE_L3, NSS_CAPWAPMGR_ETH_HDR_OFFSET);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to create UDF 0 Map - code: %d\n", rv);
+		err = NSS_CAPWAPMGR_FAILURE_CREATE_UDF_PROFILE;
+		goto fail1;
+	}
+
+	rv = fal_acl_udf_profile_set(dev_id, FAL_ACL_UDF_NON_IP, 1, FAL_ACL_UDF_TYPE_L3, NSS_CAPWAPMGR_IPV4_OFFSET);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to create UDF 1 Map - code: %d\n", rv);
+		err = NSS_CAPWAPMGR_FAILURE_CREATE_UDF_PROFILE;
+		goto fail1;
+	}
+
+	acl_rule->rule_type = FAL_ACL_RULE_MAC;
+
+	/*
+	 * Sets valid flags for the acl rule.
+	 * Following rules are valid:
+	 * - Ethernet type
+	 * - User defined field 0. Correspond to ethernet type (ipv4/ipv6)
+	 * - User defined field 1. Correspond to DSCP value (dscp_value)
+	 */
+	FAL_FIELD_FLG_SET(acl_rule->field_flg, FAL_ACL_FIELD_MAC_ETHTYPE);
+	FAL_FIELD_FLG_SET(acl_rule->field_flg, FAL_ACL_FIELD_UDF0);
+	FAL_FIELD_FLG_SET(acl_rule->field_flg, FAL_ACL_FIELD_UDF1);
+	FAL_ACTION_FLG_SET(acl_rule->action_flg, FAL_ACL_ACTION_PERMIT);
+	FAL_ACTION_FLG_SET(acl_rule->action_flg, FAL_ACL_ACTION_ENQUEUE_PRI);
+
+	/*
+	 * Redirect trustsec + dscp packets to the trustsec VP
+	 */
+	FAL_ACTION_FLG_SET(acl_rule->action_flg, FAL_ACL_ACTION_REDPT);
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, global.trustsec_rx_vp_num);
+	acl_rule->ports = v_port;
+
+	/*
+	 * Set common parameters for ipv4/ipv6
+	 *
+	 * TODO: Once the host dp trustsec patch is merged,
+	 * get the trustsec ethertype from there.
+	 */
+	acl_rule->ethtype_val = NSS_CAPWAPMGR_ETH_TYPE_TRUSTSEC;
+	acl_rule->ethtype_mask = NSS_CAPWAPMGR_ETH_TYPE_MASK;
+	acl_rule->udf0_op = FAL_ACL_FIELD_MASK;
+	acl_rule->udf1_op = FAL_ACL_FIELD_MASK;
+	acl_rule->enqueue_pri = pri;
+
+	/*
+	 * Create ACL rule for IPv4
+	 */
+	acl_rule->udf0_val = NSS_CAPWAPMGR_ETH_TYPE_IPV4;
+	acl_rule->udf0_mask = NSS_CAPWAPMGR_ETH_TYPE_MASK;
+	acl_rule->udf1_val = dscp_value << NSS_CAPWAPMGR_DSCP_MASK_IPV4_SHIFT;
+	acl_rule->udf1_mask = dscp_mask << NSS_CAPWAPMGR_DSCP_MASK_IPV4_SHIFT;
+
+	rv = fal_acl_rule_query(dev_id, list_id, v4_rule_id, acl_rule);
+	if (rv != SW_NOT_FOUND) {
+		nss_capwapmgr_warn("ACL rule already exist for list_id: %u, rule_id: %u - code: %d\n", list_id, v4_rule_id, rv);
+		err = NSS_CAPWAPMGR_FAILURE_ACL_RULE_ALREADY_EXIST;
+		goto fail1;
+	}
+
+	rv = fal_acl_list_unbind(dev_id, list_id, FAL_ACL_DIREC_IN, FAL_ACL_BIND_PORTBITMAP, NSS_CAPWAPMGR_BIND_BITMAP);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to unbind list: %d - code: %d\n", list_id, rv);
+		err = NSS_CAPWAPMGR_FAILURE_ADD_ACL_RULE;
+		goto fail1;
+	}
+
+	rv = fal_acl_rule_add(dev_id, list_id, v4_rule_id, rule_nr, acl_rule);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to add ACL v4_rule: %d - code: %d\n", rv, v4_rule_id);
+		err = NSS_CAPWAPMGR_FAILURE_ADD_ACL_RULE;
+		goto fail1;
+	}
+
+	/*
+	 * Create ACL rule for IPv6
+	 */
+	acl_rule->udf0_val = NSS_CAPWAPMGR_ETH_TYPE_IPV6;
+	acl_rule->udf0_mask = NSS_CAPWAPMGR_ETH_TYPE_MASK;
+	acl_rule->udf1_val = dscp_value << NSS_CAPWAPMGR_DSCP_MASK_IPV6_SHIFT;
+	acl_rule->udf1_mask = dscp_mask << NSS_CAPWAPMGR_DSCP_MASK_IPV6_SHIFT;
+
+	rv = fal_acl_rule_add(dev_id, list_id, v6_rule_id, rule_nr, acl_rule);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to add ACL v6_rule: %d - code: %d\n", rv, v6_rule_id);
+		err = NSS_CAPWAPMGR_FAILURE_ADD_ACL_RULE;
+		goto fail2;
+	}
+
+	/*
+	 * Bind list to all ethernet ports
+	 */
+	rv = fal_acl_list_bind(dev_id, list_id, FAL_ACL_DIREC_IN, FAL_ACL_BIND_PORTBITMAP, NSS_CAPWAPMGR_BIND_BITMAP);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to bind ACL list: %d - code: %d\n", list_id, rv);
+		err = NSS_CAPWAPMGR_FAILURE_BIND_ACL_LIST;
+		goto fail3;
+	}
+
+	/*
+	 * Set ACL as in_use and save dscp value and mask.
+	 */
+	global.acl_list[lid].rule[rid].in_use = true;
+	global.acl_list[lid].rule[rid].dscp_value = dscp_value;
+	global.acl_list[lid].rule[rid].dscp_mask = dscp_mask;
+
+	/*
+	 * Prioritize packets with the dscp value is dscp_value for non trustsec packets.
+	 * These packets do not require any ACL Rule.
+	 */
+	cosmap.internal_pcp = 0;
+	cosmap.internal_dei = 0;
+	cosmap.internal_pri = pri;
+	cosmap.internal_dscp = 0;
+	cosmap.internal_dp = 0;
+	for (i = 0; i < NSS_CAPWAPMGR_DSCP_MAX; i++) {
+		if ((i & dscp_mask) != dscp_value) {
+			continue;
+		}
+
+		rv = fal_qos_cosmap_dscp_get(dev_id, group_id, i, &orig_cosmap[i]);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("dscpmap: failed to get cosmap for dscp %d\n", i);
+			err = NSS_CAPWAPMGR_FAILURE_CONFIGURE_DSCP_MAP;
+			goto fail4;
+		}
+
+		nss_capwapmgr_trace("dscpmap: setting priority %u for dscp %u\n", pri, i);
+		rv = fal_qos_cosmap_dscp_set(dev_id, group_id, i, &cosmap);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to configure cosmap for dscp %d - code: %d\n", i, rv);
+			err = NSS_CAPWAPMGR_FAILURE_CONFIGURE_DSCP_MAP;
+			goto fail4;
+		}
+	}
+
+	kfree(acl_rule);
+	kfree(orig_cosmap);
+
+	*id = uid;
+
+	return NSS_CAPWAPMGR_SUCCESS;
+
+fail4:
+	fail_dscp = i;
+	for (i = 0; i < fail_dscp; i++) {
+		if ((i & dscp_mask) != dscp_value) {
+			continue;
+		}
+
+		nss_capwapmgr_trace("dscpmap: resetting to priority %u for dscp %u\n", orig_cosmap[i].internal_pri, i);
+		rv = fal_qos_cosmap_dscp_set(dev_id, group_id, i, &orig_cosmap[i]);
+		if (rv != SW_OK) {
+			nss_capwapmgr_warn("Failed to reset cosmap for dscp %d - code: %d\n", i, rv);
+		}
+	}
+
+fail3:
+	rv = fal_acl_rule_delete(dev_id, list_id, v6_rule_id, rule_nr);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to del ACL v6_rule %d from list %d - code: %d\n", v6_rule_id, list_id, rv);
+	}
+
+fail2:
+	rv = fal_acl_rule_delete(dev_id, list_id, v4_rule_id, rule_nr);
+	if (rv != SW_OK) {
+		nss_capwapmgr_warn("Failed to del ACL v4_rule %d from list %d - code: %d\n", v4_rule_id, list_id, rv);
+	}
+
+fail1:
+	kfree(orig_cosmap);
+	kfree(acl_rule);
+
+fail:
+	if (atomic_dec_and_test(acl_req_count)) {
+		nss_capwapmgr_dscp_acl_deinit();
+	}
+
+	return err;
+}
+EXPORT_SYMBOL(nss_capwapmgr_dscp_rule_create);
+
+
 #if defined(NSS_CAPWAPMGR_ONE_NETDEV)
 /*
  * nss_capwapmgr_get_netdev()
@@ -2313,6 +4281,7 @@ void __exit nss_capwapmgr_exit_module(void)
 #endif
 	unregister_netdevice_notifier(&nss_capwapmgr_netdev_notifier);
 
+	nss_capwapmgr_trustsec_rx_vp_unconfig();
 	nss_capwapmgr_info("module unloaded\n");
 }
 

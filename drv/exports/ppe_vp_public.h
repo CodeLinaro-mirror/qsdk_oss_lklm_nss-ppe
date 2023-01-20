@@ -30,6 +30,11 @@
  * @{
  */
 
+/*
+ * VP netdev flags.
+ */
+#define PPE_VP_NET_DEV_TYPE_WIFI	0x1	/**< VP net dev type WiFi */
+
 /**
  * ppe_vp_hw_stats_t
  *	 PPE VP port statistics.
@@ -84,6 +89,7 @@ typedef bool(*ppe_vp_callback_t)(struct net_device *, struct sk_buff *, void *cb
 typedef enum ppe_vp_type {
 	PPE_VP_TYPE_SW_L2,		/**< VP type for L2 SW interfaces */
 	PPE_VP_TYPE_SW_L3,		/**< VP type for L3 SW interfaces */
+	PPE_VP_TYPE_SW_PO,		/**< VP type for point offload tunnels */
 	PPE_VP_TYPE_HW_L2TUN,		/**< VP type for L2 HW tunnels */
 	PPE_VP_TYPE_HW_L3TUN,		/**< VP type for L3 HW tunnels */
 	PPE_VP_TYPE_MAX,		/**< Maximum VP types */
@@ -106,9 +112,10 @@ typedef bool(*ppe_vp_stats_callback_t)(struct net_device *, ppe_vp_hw_stats_t *)
  *	Types of VPs user
  */
 enum ppe_vp_user_type {
-	PPE_VP_USER_TYPE_PASSIVE = 1,	/**< VP for Passive use-case */
-	PPE_VP_USER_TYPE_ACTIVE,	/**< VP for Active use-case */
-	PPE_VP_USER_TYPE_DS,		/**< VP for Direct-Switch use-case */
+	PPE_VP_USER_TYPE_NONE = 0,	/**< Non VP use case >*/
+	PPE_VP_USER_TYPE_PASSIVE,	/**< VP for Passive use case */
+	PPE_VP_USER_TYPE_ACTIVE,	/**< VP for Active use case */
+	PPE_VP_USER_TYPE_DS,		/**< VP for Direct-Switch use case */
 	PPE_VP_USER_TYPE_MAX,		/**< Maximum VP User types */
 };
 
@@ -124,6 +131,7 @@ struct ppe_vp_ai {
 	void *src_cb_data;		/**< VP src callback data */
 	ppe_vp_stats_callback_t stats_cb;
 					/**< VP src callback */
+	uint8_t net_dev_type;		/**< VP netdev type flags */
 	uint8_t queue_num;		/**< Queue number */
 	ppe_vp_status_t status;		/**< VP return status */
 	enum ppe_vp_user_type usr_type;	/**< VP user type */

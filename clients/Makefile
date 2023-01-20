@@ -11,5 +11,6 @@ obj-$(gretap-mgr)+= gretap/
 obj-$(vxlanmgr)+= vxlanmgr/
 obj-$(mapt-mgr)+= mapt/
 obj-$(capwap-mgr)+= capwapmgr/
+obj-$(dtls-mgr)+= dtlsmgr/
 
 obj ?= .

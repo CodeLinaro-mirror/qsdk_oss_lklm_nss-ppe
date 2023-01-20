@@ -131,14 +131,6 @@ enum ppe_drv_tun_decap_entry_type {
 	PPE_DRV_TUN_DECAP_REMOTE_ENTRY	/**< MAP-T remote IPV6 address decap entry >*/
 };
 
-/* ppe_drv_tun_mapt
- *	PPE driver tunnel mapt specific data
- */
-struct ppe_drv_tun_mapt {
-	struct ppe_drv_v4_conn_flow *mapt_pcf_v4;		/**< MAPT V4 PCF > */
-	struct ppe_drv_v4_conn_flow *mapt_pcr_v4;		/**< MAPT V4 PCR > */
-};
-
 /* ppe_drv_tun
  *	PPE driver tunnel context
  */
@@ -158,7 +150,6 @@ struct ppe_drv_tun {
 	uint8_t vp_num;						/**< Tunnel VP number >*/
 	uint8_t tun_idx;					/**< Tunnel context ID >*/
 	uint8_t xmit_port;					/**< Egress I/O port for tunnel> */
-	struct ppe_drv_tun_mapt mapt;				/**< MAPT specific Tunnel structure > */
 	atomic_t flow_count;					/**< Number of active flows >*/
 };
 
@@ -170,5 +161,4 @@ void ppe_drv_tun_v6_port_stats_update(struct ppe_drv_v6_conn *cn);
 bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *cn);
 bool ppe_drv_tun_attach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn);
 bool ppe_drv_tun_detach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn);
-bool ppe_drv_tun_detach_mapt_v6_to_v4(struct ppe_drv_tun *ptun);
 struct ppe_drv_tun *ppe_drv_tun_mapt_port_tun_get(struct ppe_drv_port *tx_port, struct ppe_drv_port *rx_port);

@@ -114,6 +114,34 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 }
 
 /*
+ * ppe_drv_nsm_queue_stats_update()
+ *	Get queue stats from fal to nsm.
+ */
+bool ppe_drv_nsm_queue_stats_update(struct ppe_drv_nsm_stats *nsm_stats, uint32_t queue_id, uint8_t item_id)
+{
+	fal_queue_stats_t queue_info;
+	sw_error_t err;
+
+	if (item_id >= FAL_QM_DROP_ITEMS) {
+		ppe_drv_warn("invalid drop item id: %u", item_id);
+		return false;
+	}
+
+	err = fal_queue_counter_get(PPE_DRV_SWITCH_ID, queue_id, &queue_info);
+	if (err != SW_OK) {
+		ppe_drv_warn("failed to get stats for queue id: %u", queue_id);
+		return false;
+	}
+
+	nsm_stats->queue_stats.drop_packets = queue_info.drop_packets[item_id];
+	nsm_stats->queue_stats.drop_bytes = queue_info.drop_bytes[item_id];
+	ppe_drv_trace("queue id: %u, item id: %u, drop_packet = %llu, drop_bytes = %llu", queue_id, item_id, nsm_stats->queue_stats.drop_packets, nsm_stats->queue_stats.drop_bytes);
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_nsm_queue_stats_update);
+
+/*
  * ppe_drv_hash_init()
  *	Initialize the PPE hash registers
  */
@@ -195,6 +223,34 @@ static bool ppe_drv_phy_port_base_queue_init(struct ppe_drv *p)
 }
 
 /*
+ * ppe_drv_fse_feature_enable()
+ *	Enable PPE FSE feature
+ */
+void ppe_drv_fse_feature_enable()
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	p->fse_enable = true;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_fse_feature_enable);
+
+/*
+ * ppe_drv_fse_feature_disable()
+ *	Disable PPE FSE feature
+ */
+void ppe_drv_fse_feature_disable()
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	p->fse_enable = false;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_fse_feature_disable);
+
+/*
  * ppe_drv_core2queue_mapping()
  *	Core to queue mapping
  *
@@ -265,6 +321,87 @@ static bool ppe_drv_l3_route_ctrl_init(struct ppe_drv *p)
 
 	return true;
 }
+
+/*
+ * ppe_drv_fse_ops_free()
+ *	Function to release fse_ops related memory
+ *
+ * Should be called under ppe lock
+ */
+void ppe_drv_fse_ops_free(struct kref *kref)
+{
+	struct ppe_drv *p = container_of(kref, struct ppe_drv, fse_ops_ref);
+	struct ppe_drv_fse_ops *ops_internal;
+
+	if (!p->fse_ops) {
+		ppe_drv_warn("%p: No FSE ops registered\n", p);
+		return;
+	}
+
+	ops_internal = p->fse_ops;
+	p->fse_ops = NULL;
+	kfree(ops_internal);
+}
+
+/*
+ * ppe_drv_fse_ops_unregister()
+ *	Un-register FSE rule add/delete callbacks. This function will be called from Wi-Fi driver
+ */
+void ppe_drv_fse_ops_unregister(void)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	if (!p->fse_ops || !p->is_wifi_fse_up) {
+		spin_unlock_bh(&p->lock);
+		return;
+	}
+
+	p->is_wifi_fse_up = false;
+	kref_put(&p->fse_ops_ref, ppe_drv_fse_ops_free);
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_fse_ops_unregister);
+
+/**
+ * ppe_drv_fse_ops_register()
+ *	Register FSE rule add/delete callbacks. This function will be called from Wi-Fi driver
+ */
+bool ppe_drv_fse_ops_register(struct ppe_drv_fse_ops *ops)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_fse_ops *ops_internal;
+
+	if (!ops->create_fse_rule || !ops->destroy_fse_rule) {
+		ppe_drv_warn("%p: Invalid FSE ops passed from Wi-FI driver\n", p);
+		return false;
+	}
+
+	ops_internal = (struct ppe_drv_fse_ops *)kzalloc(sizeof(struct ppe_drv_fse_ops), GFP_ATOMIC);
+	if (!ops_internal) {
+		ppe_drv_warn("%p: FSE ops registration failed\n", p);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+	if (p->fse_ops) {
+		ppe_drv_warn("%p: FSE ops registration already done\n", p);
+		spin_unlock_bh(&p->lock);
+		kfree(ops_internal);
+		return false;
+	}
+
+	ops_internal->create_fse_rule = ops->create_fse_rule;
+	ops_internal->destroy_fse_rule = ops->destroy_fse_rule;
+	p->fse_ops = ops_internal;
+	p->is_wifi_fse_up = true;
+	kref_init(&p->fse_ops_ref);
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("%p: FSE ops registration done successfully\n", p);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_fse_ops_register);
 
 /*
  * ppe_drv_get_dentry()
@@ -421,6 +558,9 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->toggled_v6 = false;
 	p->tun_toggled_v4 = false;
 	p->tun_toggled_v6 = false;
+	p->fse_ops = NULL;
+	p->fse_enable = false;
+        p->is_wifi_fse_up = false;
 
 	/*
 	 * Allocate tunnel specific entries
@@ -664,6 +804,10 @@ static int ppe_drv_remove(struct platform_device *pdev)
 	}
 
 	ppe_drv_tun_vxlan_deconfigure(p);
+
+	if (p->fse_ops) {
+		ppe_drv_warn("FSE ops still registered while ppe module getting removed\n");
+	}
 
 	return 0;
 }

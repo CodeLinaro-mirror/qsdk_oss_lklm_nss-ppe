@@ -42,6 +42,8 @@ enum ppe_drv_conn_type {
 struct ppe_drv_gen_stats {
 	atomic64_t v4_l3_flows;			/* No of v4 routed flows */
 	atomic64_t v4_l2_flows;			/* No of v4 bridge flows */
+	atomic64_t v4_vp_wifi_flows;		/* No of v4 VP Wi-Fi flows */
+	atomic64_t v4_ds_flows;			/* No of v4 Direct Switch flows */
 	atomic64_t v4_host_add_fail;			/* v4 host table add failed */
 
 	atomic64_t v4_flush_req;			/* No of v4 flush requests */
@@ -51,6 +53,8 @@ struct ppe_drv_gen_stats {
 
 	atomic64_t v6_l3_flows;			/* No of v6 routed flows */
 	atomic64_t v6_l2_flows;			/* No of v6 bridge flows */
+	atomic64_t v6_vp_wifi_flows;		/* No of v6 VP Wi-Fi flows */
+	atomic64_t v6_ds_flows;			/* No of v6 Direct Switch flows */
 	atomic64_t v6_host_add_fail;		/* v6 host table add failed */
 	atomic64_t v6_create_fail_bridge_nat;		/* No of v6 create failure due to NAT with bridge flow */
 
@@ -160,6 +164,9 @@ struct ppe_drv_stats_sc {
 	atomic64_t sc_cb_unregister;	/* Per service-code counter for callback not registered */
 	atomic64_t sc_cb_success;	/* Per service-code coutner for successful callback */
 	atomic64_t sc_cb_failure;	/* Per service-code counter for failure callback */
+	atomic64_t sc_rx_packets;	/* Per service-class counter for packets recieved on ethernet port */
+	atomic64_t sc_rx_bytes;		/* Per service-class counter for bytes recieved on ethernet port */
+	atomic64_t sc_flow_count;	/* Per service-class counter for total number of flows present */
 };
 
 /*

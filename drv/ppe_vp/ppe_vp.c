@@ -353,6 +353,10 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 			ppe_type = PPE_DRV_IFACE_TYPE_VIRTUAL;
 			break;
 
+		case PPE_VP_TYPE_SW_PO:
+			ppe_type = PPE_DRV_IFACE_TYPE_VIRTUAL_PO;
+			break;
+
 		case PPE_VP_TYPE_HW_L2TUN:
 			ppe_type = PPE_DRV_IFACE_TYPE_VP_L2_TUN;
 			break;
@@ -380,7 +384,7 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	/*
 	 * Initialize the virtual port in PPE.
 	 */
-	ret = ppe_drv_vp_init(ppe_iface, vpai->core_mask, vpai->usr_type);
+	ret = ppe_drv_vp_init(ppe_iface, vpai->core_mask, vpai->usr_type, vpai->net_dev_type);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_vp_warn("%px: netdev: %px, ppe iface %px PPE VP initialization failed, Err code %d", pvb, netdev, ppe_iface, ret);
 		vpai->status = PPE_VP_STATUS_VP_INIT_FAIL;
@@ -408,18 +412,10 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 		goto mtu_set_failed;
 	}
 
-	/*
-	 * If core_mask is set then it indicates that user of this VP wants to do RFS for the flows
-	 * destined to this VP. In that case, queue configurations are done during PPE driver initialization
-	 * based on different service codes. Hence below queue configuration will only be done when VP user
-	 * dont want to enable RFS feature on the flows.
-	 */
-	if (!vpai->core_mask) {
-		ret = ppe_drv_iface_ucast_queue_set(ppe_iface, vpai->queue_num);
-		if (ret != PPE_DRV_RET_SUCCESS) {
-			ppe_vp_warn("%px: netdev: %px, ppe vp ucast queue %d set failed", pvb, netdev, vpai->queue_num);
-			goto alloc_fail;
-		}
+	ret = ppe_drv_iface_ucast_queue_set(ppe_iface, vpai->queue_num);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_vp_warn("%px: netdev: %px, ppe vp ucast queue %d set failed", pvb, netdev, vpai->queue_num);
+		goto alloc_fail;
 	}
 
 	/*

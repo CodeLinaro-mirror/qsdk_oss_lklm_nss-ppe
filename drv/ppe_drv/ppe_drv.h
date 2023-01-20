@@ -128,6 +128,23 @@
 #define PPE_DRV_VLAN_PRIORITY_SHIFT	13
 
 /*
+ * SAWF macros
+ */
+#define PPE_DRV_SAWF_TAG_SHIFT				24
+#define PPE_DRV_SAWF_VALID_TAG				0xAA
+#define PPE_DRV_SAWF_SERVICE_CLASS_SHIFT		16
+#define PPE_DRV_SAWF_SERVICE_CLASS_MASK			0xFF
+#define PPE_DRV_SAWF_PEER_ID_SHIFT			6
+#define PPE_DRV_SAWF_PEER_ID_MASK			0x3ff
+#define PPE_DRV_SAWF_MSDUQ_MASK				0x3f
+#define PPE_DRV_SAWF_TAG_GET(x)				(x >> PPE_DRV_SAWF_TAG_SHIFT)
+#define PPE_DRV_SAWF_SERVICE_CLASS_GET(x)		((x >> PPE_DRV_SAWF_SERVICE_CLASS_SHIFT) & \
+							PPE_DRV_SAWF_SERVICE_CLASS_MASK)
+#define PPE_DRV_SAWF_PEER_ID_GET(x)			((x >> PPE_DRV_SAWF_PEER_ID_SHIFT) & \
+							PPE_DRV_SAWF_PEER_ID_MASK)
+#define PPE_DRV_SAWF_MSDUQ_GET(x)			(x & PPE_DRV_SAWF_MSDUQ_MASK)
+
+/*
  * HW flow stats sync timer frequency in milliseconds
  */
 #define PPE_DRV_HW_FLOW_STATS_MS	1000
@@ -213,10 +230,17 @@ struct ppe_drv {
 	struct list_head conn_v6;			/* List of v6 connection in PPE */
 	struct list_head conn_tun_v4;		/* List of v4 tunnel connection in PPE */
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
+
+	struct ppe_drv_fse_ops *fse_ops;        /* Wi-Fi FSE block operations */
+	struct kref fse_ops_ref;		/* FSE Reference count */
+	bool fse_enable;			/* FSE enabled */
+	bool is_wifi_fse_up;			/* Wi-FI FSE ops registered with PPE */
+
 	bool toggled_v4;			/* Toggled bit for v4 sync during a particular iteration */
 	bool toggled_v6;			/* Toggled bit for v6 sync during a particular iteration */
 	bool tun_toggled_v4;		        /* Tunnel specific Toggled bit for v4 sync during a particular iteration*/
 	bool tun_toggled_v6;		        /* Tunnel specific Toggled bit for v6 sync during a particular iteration*/
 };
 
+void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv ppe_drv_gbl;

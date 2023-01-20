@@ -60,16 +60,21 @@ EXPORT_SYMBOL(ppe_drv_vp_deinit);
  * ppe_drv_vp_init()
  *	Initialize API exposed to VP driver
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type)
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 	uint8_t tunnel_vp_cfg = 0;
+	enum ppe_drv_port_type port_type = PPE_DRV_PORT_VIRTUAL;
 
 	switch (iface->type) {
 	case PPE_DRV_IFACE_TYPE_VIRTUAL:
 		tunnel_vp_cfg = 0x0;
+		break;
+	case PPE_DRV_IFACE_TYPE_VIRTUAL_PO:
+		tunnel_vp_cfg = 0x0;
+		port_type = PPE_DRV_PORT_VIRTUAL_PO;
 		break;
 	case PPE_DRV_IFACE_TYPE_VP_L2_TUN:
 		tunnel_vp_cfg = PPE_DRV_PORT_VIRTUAL_L2_TUN;
@@ -83,7 +88,7 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, ui
 	}
 
 	spin_lock_bh(&p->lock);
-	port = ppe_drv_port_alloc(PPE_DRV_PORT_VIRTUAL, iface->dev, tunnel_vp_cfg);
+	port = ppe_drv_port_alloc(port_type, iface->dev, tunnel_vp_cfg);
 	if (!port) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: unable to get a valid virtual port of iface type(%d)", iface, iface->type);
@@ -115,6 +120,10 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, ui
 
 	if (core_mask) {
 		port->flags |= PPE_DRV_PORT_RFS_ENABLED;
+	}
+
+	if (net_dev_type == PPE_DRV_PORT_NETDEV_TYPE_WIFI) {
+		port->flags |= PPE_DRV_PORT_FLAG_WIFI_DEV;
 	}
 
 	ppe_drv_iface_port_set(iface, port);

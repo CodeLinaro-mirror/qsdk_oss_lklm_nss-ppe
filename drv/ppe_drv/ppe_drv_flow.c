@@ -134,6 +134,8 @@ void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 	sw_error_t err;
 	uint32_t delta_pkts;
 	uint32_t delta_bytes;
+	uint8_t service_code;
+	uint32_t sawf_tag;
 	struct ppe_drv_v6_conn_flow *pcr;
 	struct ppe_drv_flow *pf = pcf->pf;
 	fal_entry_counter_t flow_cntrs = {0};
@@ -173,6 +175,15 @@ void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 	pf->pkts = flow_cntrs.matched_pkts;
 	pf->bytes = flow_cntrs.matched_bytes;
 
+	/*
+	 * Update the stats only if sawf tag is valid.
+	 */
+	sawf_tag = PPE_DRV_SAWF_TAG_GET(pcf->sawf_mark);
+	if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
+		service_code = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
+		ppe_drv_sc_stats_add(service_code, delta_pkts, delta_bytes);
+	}
+
 	ppe_drv_trace("%p: updating stats for flow [index:%u] - curr pkt:%u byte:%llu", pf, pf->index, pf->pkts, pf->bytes);
 }
 
@@ -185,6 +196,8 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	sw_error_t err;
 	uint32_t delta_pkts;
 	uint32_t delta_bytes;
+	uint32_t sawf_tag;
+	uint8_t service_code;
 	struct ppe_drv_v4_conn_flow *pcr;
 	struct ppe_drv_flow *pf = pcf->pf;
 	fal_entry_counter_t flow_cntrs = {0};
@@ -223,7 +236,7 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 		ppe_drv_v4_conn_flow_tx_stats_add(pcf, delta_pkts, delta_bytes);
 	}
 
-	if ((pf->flags & PPE_DRV_FLOW_MAPT) && pf->mapt_info.mapt_v6) {
+	if (pf->flags & PPE_DRV_FLOW_MAPT) {
 		mapt_pcf_v6 = pf->mapt_info.mapt_v6;
 		mapt_cn_v6 = mapt_pcf_v6->conn;
 
@@ -239,6 +252,15 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	pf->pkts = flow_cntrs.matched_pkts;
 	pf->bytes = flow_cntrs.matched_bytes;
 
+	/*
+	 * Update the stats only if sawf tag is valid.
+	 */
+	sawf_tag = PPE_DRV_SAWF_TAG_GET(pcf->sawf_mark);
+	if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
+		service_code = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
+		ppe_drv_sc_stats_add(service_code, delta_pkts, delta_bytes);
+	}
+
 	ppe_drv_trace("%p: updating stats for flow [index:%u] - curr pkt:%u byte:%llu", pf, pf->index, pf->pkts, pf->bytes);
 }
 
@@ -250,6 +272,14 @@ bool ppe_drv_flow_v6_qos_set(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_fl
 {
 	sw_error_t err;
 	fal_qos_cosmap_t qos_cfg = {0};
+
+	/*
+	 * Check if flow needs qos update, set priority profile in QoS config
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID)) {
+		qos_cfg.internal_pri = ppe_drv_v6_conn_flow_int_pri_get(pcf);
+		qos_cfg.pri_en = true;
+	}
 
 	/*
 	 * Check if flow needs DSCP marking, set DSCP fields in QoS config
@@ -309,9 +339,13 @@ bool ppe_drv_flow_v6_qos_clear(struct ppe_drv_flow *pf)
 static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *tree_id)
 {
 	/*
-	 * TODO: to be added later.
+	 * Check if flow needs SAWF marking, if valid then set peer id
+	 * from SAWF metadata into tree id (bits 0-9).
 	 */
-	*tree_id = 0;
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING)) {
+		*tree_id = PPE_DRV_SAWF_PEER_ID_GET(pcf->sawf_mark);
+	}
+
 	return true;
 }
 
@@ -335,10 +369,13 @@ static bool ppe_drv_flow_v6_vpn_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_
 static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *wifi_qos, bool *wifi_qos_en)
 {
 	/*
-	 * TODO: to be added later.
+	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
-	*wifi_qos = 0;
-	*wifi_qos_en = false;
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING)) {
+		*wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(pcf->sawf_mark);
+		*wifi_qos_en = true;
+	}
+
 	return true;
 }
 
@@ -355,32 +392,50 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (pp->core_mask) {
-		if (pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
-			}
-		} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			sc = PPE_DRV_CORE2SC_EDIT(next_core);
-			pp->shadow_core_mask &= ~(1 << next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID)) {
+			if (pp->core_mask) {
+				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+				pp->shadow_core_mask &= ~(1 << next_core);
+				sc = PPE_DRV_CORE2SC_EDIT(next_core);
+				if (!pp->shadow_core_mask) {
+					pp->shadow_core_mask = pp->core_mask;
+				}
+			} else {
+				sc = PPE_DRV_SC_VP_RPS;
 			}
 		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_EDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	}
 
+	if (sc != PPE_DRV_SC_NONE) {
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
-	} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+	}
+
+	/*
+	 * SC required when SAWF marking is set.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING)) {
+		sc = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: SAWF marked flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
@@ -391,8 +446,20 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	 */
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC)) {
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP);
+			return false;
+		}
+	}
+
+	/*
+	 * SC required when its a bridge flow.
+	 */
+	if ((sc == PPE_DRV_SC_NONE) && ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
@@ -500,6 +567,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 					struct ppe_drv_host *host, bool entry_valid)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_stats_sc *sc_stats;
 	fal_flow_entry_t flow_cfg = {0};
 	uint32_t match_dest_ip[4];
 	uint32_t match_protocol = ppe_drv_v6_conn_flow_match_protocol_get(pcf);
@@ -511,6 +579,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	bool wifi_qos_en;
 	uint16_t xmit_mtu;
 	sw_error_t err;
+
+	if (!port_if) {
+		ppe_drv_warn("%p: Invalid egress port_if", pcf);
+		return NULL;
+	}
 
 	ppe_drv_v6_conn_flow_match_dest_ip_get(pcf, &match_dest_ip[0]);
 	pp = ppe_drv_iface_port_get(port_if);
@@ -699,6 +772,15 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 			pcf, flow_cfg.entry_id);
 
 	/*
+	 * Increment flow count if SAWF service code corresponds to a service class.
+	 */
+	if ((flow_cfg.sevice_code >= PPE_DRV_SC_SAWF_START) && (flow_cfg.sevice_code <= PPE_DRV_SC_SAWF_END)) {
+		sc_stats = &p->stats.sc_stats[flow_cfg.sevice_code];
+		ppe_drv_stats_inc(&sc_stats->sc_flow_count);
+		ppe_drv_trace("Stats Updated: service code %u : flow  %llu\n", flow_cfg.sevice_code, atomic64_read(&sc_stats->sc_flow_count));
+	}
+
+	/*
 	 * Update the shadow copy
 	 */
 	flow->host = host;
@@ -719,6 +801,14 @@ bool ppe_drv_flow_v4_qos_set(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_fl
 {
 	sw_error_t err;
 	fal_qos_cosmap_t qos_cfg = {0};
+
+	/*
+	 * Check if flow needs qos update, set priority profile in QoS config
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_QOS_VALID)) {
+		qos_cfg.internal_pri = ppe_drv_v4_conn_flow_int_pri_get(pcf);
+		qos_cfg.pri_en = true;
+	}
 
 	/*
 	 * Check if flow needs DSCP marking, set DSCP fields in QoS config
@@ -778,9 +868,13 @@ bool ppe_drv_flow_v4_qos_clear(struct ppe_drv_flow *pf)
 static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *tree_id)
 {
 	/*
-	 * TODO: to be added later.
+	 * Check if flow needs SAWF marking, if valid set peer id from
+	 * SAWF metadata into tree id (bits 0-9).
 	 */
-	*tree_id = 0;
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING)) {
+		*tree_id = PPE_DRV_SAWF_PEER_ID_GET(pcf->sawf_mark);
+	}
+
 	return true;
 }
 
@@ -804,10 +898,13 @@ static bool ppe_drv_flow_v4_vpn_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_
 static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *wifi_qos, bool *wifi_qos_en)
 {
 	/*
-	 * TODO: to be added later.
+	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
-	*wifi_qos = 0;
-	*wifi_qos_en = false;
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING)) {
+		*wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(pcf->sawf_mark);
+		*wifi_qos_en = true;
+	}
+
 	return true;
 }
 
@@ -824,32 +921,50 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (pp->core_mask) {
-		if (pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
-			}
-		} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_EDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID)) {
+			if (pp->core_mask) {
+				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+				pp->shadow_core_mask &= ~(1 << next_core);
+				sc = PPE_DRV_CORE2SC_EDIT(next_core);
+				if (!pp->shadow_core_mask) {
+					pp->shadow_core_mask = pp->core_mask;
+				}
+			} else {
+				sc = PPE_DRV_SC_VP_RPS;
 			}
 		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_EDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	}
 
+	if (sc != PPE_DRV_SC_NONE) {
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
-	} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+	}
+
+	/*
+	 * SC required when SAWF marking is set.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING)) {
+		sc = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: SAWF marked flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
@@ -860,8 +975,20 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	 */
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_IPSEC)) {
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP);
+			return false;
+		}
+	}
+
+	/*
+	 * SC required when its a bridge flow.
+	 */
+	if ((sc == PPE_DRV_SC_NONE) && ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
@@ -998,6 +1125,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 					struct ppe_drv_host *host, bool entry_valid)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_stats_sc *sc_stats;
 	fal_flow_entry_t flow_cfg = {0};
 	uint32_t match_src_ip = ppe_drv_v4_conn_flow_match_src_ip_get(pcf);
 	uint32_t match_dest_ip = ppe_drv_v4_conn_flow_match_dest_ip_get(pcf);
@@ -1006,12 +1134,17 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	uint32_t match_protocol = ppe_drv_v4_conn_flow_match_protocol_get(pcf);
 	uint8_t vlan_hdr_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
 	struct ppe_drv_iface *port_if = ppe_drv_v4_conn_flow_eg_port_if_get(pcf);
-	struct ppe_drv_port *pp = ppe_drv_iface_port_get(port_if);
+	struct ppe_drv_port *pp;
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
 	bool wifi_qos_en;
 	uint16_t xmit_mtu;
 	sw_error_t err;
+
+	if (!port_if) {
+		ppe_drv_warn("%p: Invalid egress port_if", pcf);
+		return NULL;
+	}
 
 	pp = ppe_drv_iface_port_get(port_if);
 	if (!pp) {
@@ -1222,6 +1355,15 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	flow = &p->flow[flow_cfg.entry_id];
 	ppe_drv_assert(!(flow->flags & PPE_DRV_FLOW_VALID), "%p: flow entry is already accelerated to PPE at index: %d",
 			pcf, flow_cfg.entry_id);
+
+	/*
+	 * Increment flow count if SAWF service code corresponds to a service class.
+	 */
+	if ((flow_cfg.sevice_code >= PPE_DRV_SC_SAWF_START) && (flow_cfg.sevice_code <= PPE_DRV_SC_SAWF_END)) {
+		sc_stats = &p->stats.sc_stats[flow_cfg.sevice_code];
+		ppe_drv_stats_inc(&sc_stats->sc_flow_count);
+		ppe_drv_trace("Stats Updated: service code %u : flow  %llu\n", flow_cfg.sevice_code, atomic64_read(&sc_stats->sc_flow_count));
+	}
 
 	/*
 	 * Update the shadow copy

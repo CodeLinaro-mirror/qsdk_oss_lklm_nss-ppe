@@ -7,7 +7,7 @@ qca-nss-ppe-vlan-objs := nss_ppe_vlan_mgr.o
 ccflags-y += -DNSS_PPE_VLAN_MGR_DEBUG_LEVEL=0
 ccflags-y += -Wall -Werror
 
-ifeq ($(SoC),$(filter $(SoC),ipq95xx))
+ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx))
 ccflags-y += -DNSS_VLAN_MGR_PPE_VP_TUN_SUPPORT
 endif
 
