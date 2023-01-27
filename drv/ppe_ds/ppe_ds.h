@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -67,6 +67,12 @@
 #define PPE_DS_MAX_NODE		3	/* Max DS node supported */
 #define PPE_DS_TXCMPL_BUDGET	256	/* PPE-DS node's Tx complete budget */
 #define PPE_DS_RXFILL_LOW_THRES_DIVISOR	3	/* PPE-DS node's Rxfill low threshold divisor */
+#define PPE_DS_RXFILL_NUM_DESC_MAX	65535	/* PPE-DS node's Rxfill maximum descriptor count */
+#define PPE_DS_RXFILL_NUM_DESC_MIN	1024	/* PPE-DS node's Rxfill minimum descriptor count */
+#define PPE_DS_RXFILL_NUM_DESC_DEF	2048	/* PPE-DS node's Rxfill default descriptor count */
+#define PPE_DS_TXCMPL_NUM_DESC_MAX	65535	/* PPE-DS node's Txcmpl maximum descriptor count */
+#define PPE_DS_TXCMPL_NUM_DESC_MIN	1024	/* PPE-DS node's Txcmpl minimum descriptor count */
+#define PPE_DS_TXCMPL_NUM_DESC_DEF	8192	/* PPE-DS node's Txcmpl default descriptor count */
 
 extern unsigned int polling_for_idx_update;
 extern unsigned int idx_mgmt_freq;
@@ -74,6 +80,8 @@ extern unsigned int max_move;
 extern unsigned int cpu_mask_2g;
 extern unsigned int cpu_mask_5g;
 extern unsigned int cpu_mask_6g;
+extern unsigned int ppe2tcl_rxfill_num_desc;
+extern unsigned int reo2ppe_txcmpl_num_desc;
 
 /*
  * ppe_ds_node_state_t

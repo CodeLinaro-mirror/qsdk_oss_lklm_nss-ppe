@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -59,6 +59,14 @@ MODULE_PARM_DESC(cpu_mask_5g, "CPU mask for the 5G radio VAP");
 unsigned int cpu_mask_6g = 0x1;
 module_param(cpu_mask_6g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(cpu_mask_6g, "CPU mask for the 6G radio VAP");
+
+unsigned int ppe2tcl_rxfill_num_desc = 2048;
+module_param(ppe2tcl_rxfill_num_desc, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(ppe2tcl_rxfill_num_desc, "PPE2TCL Rxfill ring descriptor count");
+
+unsigned int reo2ppe_txcmpl_num_desc = 8192;
+module_param(reo2ppe_txcmpl_num_desc, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(reo2ppe_txcmpl_num_desc, "REO2PPE Tx complete ring descriptor count");
 
 struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
 

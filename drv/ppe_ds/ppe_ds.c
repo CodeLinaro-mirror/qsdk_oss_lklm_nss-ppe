@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -459,6 +459,20 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 	edma_handle->eth_txcomp_budget = PPE_DS_TXCMPL_BUDGET;
 	edma_handle->eth_rxfill_low_thr = reg_info->ppe2tcl_num_desc >> PPE_DS_RXFILL_LOW_THRES_DIVISOR;
 	edma_handle->polling_for_idx_update = polling_for_idx_update;
+
+	if ((ppe2tcl_rxfill_num_desc < PPE_DS_RXFILL_NUM_DESC_MIN) ||
+			(ppe2tcl_rxfill_num_desc > PPE_DS_RXFILL_NUM_DESC_MAX)) {
+		edma_handle->ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
+	} else {
+		edma_handle->ppe2tcl_rxfill_num_desc = ppe2tcl_rxfill_num_desc;
+	}
+
+	if ((reo2ppe_txcmpl_num_desc < PPE_DS_TXCMPL_NUM_DESC_MIN) ||
+			(reo2ppe_txcmpl_num_desc > PPE_DS_TXCMPL_NUM_DESC_MAX)) {
+		edma_handle->reo2ppe_txcmpl_num_desc = PPE_DS_TXCMPL_NUM_DESC_DEF;
+	} else {
+		edma_handle->reo2ppe_txcmpl_num_desc = reo2ppe_txcmpl_num_desc;
+	}
 
 	ppe_ds_info(" ppe2tcl num desc: %d, reo2ppe num desc: %d, txcmpl budget: %d"
 			" rxfill low threshold value: %d\n", edma_handle->ppe2tcl_num_desc,
