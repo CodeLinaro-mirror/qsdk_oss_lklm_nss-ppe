@@ -51,6 +51,7 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_EDIT_REDIR_CORE1,	/* Service code to re-direct packets to core 1 with editing required for regular forwarding */
 	PPE_DRV_SC_EDIT_REDIR_CORE2,	/* Service code to re-direct packets to core 2 with editing required for regular forwarding */
 	PPE_DRV_SC_EDIT_REDIR_CORE3,	/* Service code to re-direct packets to core 3 with editing required for regular forwarding */
+	PPE_DRV_SC_VP_RPS,		/* Service code to allow RPS for special VP flows when user type is DS and core_mask is 0 */
 	PPE_DRV_SC_SAWF_START = 128,	/* First SAWF telemetry based service code */
 	PPE_DRV_SC_SAWF_END = 255,	/* Last SAWF telemetry based service code */
 	PPE_DRV_SC_MAX,			/* Max service code */

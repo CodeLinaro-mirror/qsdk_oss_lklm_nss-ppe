@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -522,7 +522,7 @@ ppe_drv_ret_t ppe_drv_v6_tun_add_ce_validate(void *vcreate_rule, struct ppe_drv_
 	 */
 	top_if.rx_if = create->top_rule.rx_if;
 	top_if.tx_if = create->top_rule.tx_if;
-	if (!ppe_drv_v6_if_walk(&cn->pcf, &top_if, create->conn_rule.tx_if)) {
+	if (!ppe_drv_v6_if_walk(&cn->pcf, &top_if, create->conn_rule.tx_if, create->conn_rule.rx_if)) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_fail_if_hierarchy);
 		ppe_drv_warn("%p: create failed invalid interface hierarchy: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_INVALID_HIERARCHY;
@@ -536,7 +536,7 @@ ppe_drv_ret_t ppe_drv_v6_tun_add_ce_validate(void *vcreate_rule, struct ppe_drv_
 	 */
 	top_if.rx_if = create->top_rule.tx_if;
 	top_if.tx_if = create->top_rule.rx_if;
-	if (!ppe_drv_v6_if_walk(&cn->pcr, &top_if, create->conn_rule.rx_if)) {
+	if (!ppe_drv_v6_if_walk(&cn->pcr, &top_if, create->conn_rule.rx_if, create->conn_rule.tx_if)) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_fail_if_hierarchy);
 		ppe_drv_warn("%p: create failed invalid interface hierarchy: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_INVALID_HIERARCHY;

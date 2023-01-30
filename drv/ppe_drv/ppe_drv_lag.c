@@ -62,9 +62,19 @@ ppe_drv_ret_t ppe_drv_lag_leave(struct ppe_drv_iface *lag_iface, struct net_devi
 	}
 
 	/*
-	 * Detach l3_if from port
+	 * Detach lag's l3_if from port
 	 */
-	ppe_drv_port_l3_if_detach(pp, l3_if);
+	if (pp->active_l3_if_attached)  {
+		ppe_drv_port_l3_if_detach(pp, l3_if);
+	}
+
+	/*
+	 * Attach port's l3_if after detaching lag's l3_if
+	 */
+	if (!pp->active_l3_if_attached) {
+		ppe_drv_port_l3_if_attach(pp, pp->port_l3_if);
+	}
+
 	ppe_drv_iface_deref_internal(member_iface);
 
 	spin_unlock_bh(&p->lock);
@@ -118,7 +128,14 @@ ppe_drv_ret_t ppe_drv_lag_join(struct ppe_drv_iface *lag_iface, struct net_devic
 	}
 
 	/*
-	 * Attach l3_if to port
+	 * Detach port's l3_if before attaching lag's l3_if
+	 */
+	if (pp->active_l3_if_attached) {
+		ppe_drv_port_l3_if_detach(pp, pp->active_l3_if);
+	}
+
+	/*
+	 * Atttach lag's l3_if
 	 */
 	ppe_drv_port_l3_if_attach(pp, l3_if);
 	ppe_drv_iface_ref(member_iface);
@@ -174,7 +191,7 @@ ppe_drv_ret_t ppe_drv_lag_init(struct ppe_drv_iface *lag_iface)
 			"%p: lag_iface should be LAG but: %u", lag_iface, lag_iface->type);
 
 	spin_lock_bh(&p->lock);
-	l3_if = ppe_drv_l3_if_alloc(PPE_DRV_L3_IF_TYPE_LAG);
+	l3_if = ppe_drv_l3_if_alloc(PPE_DRV_L3_IF_TYPE_PORT);
 	if (!l3_if) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: l3_if allocation failed for LAG iface: %p", p, lag_iface);

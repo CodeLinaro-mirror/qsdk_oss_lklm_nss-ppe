@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -44,6 +44,10 @@ struct ppe_drv_nexthop {
 
 void ppe_drv_nexthop_dump(struct ppe_drv_nexthop *nh);
 bool ppe_drv_nexthop_deref(struct ppe_drv_nexthop *nh);
+#ifdef NSS_PPE_IPQ53XX
+struct ppe_drv_nexthop *ppe_drv_nexthop_v4_bridge_flow_get_and_ref(struct ppe_drv_v4_conn_flow *pcf);
+struct ppe_drv_nexthop *ppe_drv_nexthop_v6_bridge_flow_get_and_ref(struct ppe_drv_v6_conn_flow *pcf);
+#endif
 struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_flow *pcf);
 struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_flow *pcf);
 

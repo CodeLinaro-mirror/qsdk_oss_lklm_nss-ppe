@@ -256,6 +256,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_TUN_ADD_CE_NULL,			/**< Add connection entry callback is NULL */
 	PPE_DRV_RET_INVALID_EIP_SERVICE,		/**< Invalid inline EIP service */
 	PPE_DRV_RET_FAILURE_DUMMY_RULE,			/**< Failed to push rule to PPE for passive VP */
+	PPE_DRV_RET_INVALID_USER_TYPE,			/**< Failed to push rule to PPE for DS flow when user type is not DS */
 } ppe_drv_ret_t;
 
 /**

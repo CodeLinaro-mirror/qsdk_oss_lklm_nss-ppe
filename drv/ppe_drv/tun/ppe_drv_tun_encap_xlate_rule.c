@@ -125,11 +125,13 @@ uint8_t ppe_drv_tun_encap_xlate_rule_get_index(struct ppe_drv_tun_encap_xlate_ru
  *	Configure encap_xlate_rule_RULE table entry
  */
 bool ppe_drv_tun_encap_xlate_rule_configure(struct ppe_drv_tun_encap_xlate_rule *ptecxr,
-				struct ppe_drv_tun_cmn_ctx_xlate_rule *rule, int8_t tun_len, bool dmr)
+				struct ppe_drv_tun_cmn_ctx_xlate_rule *rule, int8_t tun_len, uint32_t l2_flags, bool dmr)
 {
-	uint8_t src1;
-	sw_error_t err;
 	fal_tunnel_encap_rule_t mapt_edit_rule = {0};
+	uint8_t daddr_offset;
+	uint8_t l2_offset;
+	sw_error_t err;
+	uint8_t src1;
 
 	ppe_drv_assert(kref_read(&ptecxr->ref), "%p: encap_xlate_rule api called without reference", ptecxr);
 
@@ -160,7 +162,16 @@ bool ppe_drv_tun_encap_xlate_rule_configure(struct ppe_drv_tun_encap_xlate_rule 
 	 * Position is configured in 16-bits + 1, as per HW requirement.
 	 */
 	src1 = (tun_len - 16) / 2 + 1;
-	mapt_edit_rule.src1_start = 38;
+
+	l2_offset = sizeof(struct ethhdr);
+
+	if (l2_flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
+		l2_offset += PPPOE_SES_HLEN;
+	}
+
+	daddr_offset = offsetof(struct ipv6hdr, daddr);
+
+	mapt_edit_rule.src1_start = l2_offset + daddr_offset;
 	mapt_edit_rule.src1_sel = FAL_TUNNEL_RULE_SRC1_FROM_HEADER_DATA;
 	mapt_edit_rule.src2_sel = FAL_TUNNEL_RULE_SRC2_PKT_DATA0;
 	mapt_edit_rule.src2_entry[0].enable = true;

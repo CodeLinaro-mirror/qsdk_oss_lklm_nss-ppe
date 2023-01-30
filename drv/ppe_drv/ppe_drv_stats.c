@@ -43,6 +43,7 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_EDIT_REDIR_CORE1",	  /* PPE RFS service code for core1 for Active VP */
 	"PPE_DRV_SC_EDIT_REDIR_CORE2",	  /* PPE RFS service code for core2 for Active VP */
 	"PPE_DRV_SC_EDIT_REDIR_CORE3",	  /* PPE RFS service code for core3 for Active VP */
+	"PPE_DRV_SC_VP_RPS",			/* PPE RPS service code for VP flow */
 	"PPE_DRV_SC_SAWF",			/* Service code for SAWF telemetry */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
@@ -275,7 +276,7 @@ static int ppe_drv_conn_stats_sc_show(struct seq_file *m, void __attribute__((un
 
 	seq_puts(m, "\nPPE_sc_stats:\n\n");
 	stats_shadow = (uint64_t *)sc_stats;
-	for (i = 0; i <= PPE_DRV_SC_EDIT_REDIR_CORE3; i++) {
+	for (i = 0; i <= PPE_DRV_SC_VP_RPS; i++) {
 		uint64_t stats1 = *stats_shadow++;
 		uint64_t stats2 = *stats_shadow++;
 		uint64_t stats3 = *stats_shadow++;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -535,6 +535,201 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 
 	return nh;
 }
+
+#ifdef NSS_PPE_IPQ53XX
+/*
+ * ppe_drv_nexthop_v6_bridge_flow_get_and_ref()
+ *	Allocate nexthop entry for bridge flow if it does not exist and returns
+ *	nexthop instance pointer.
+ */
+struct ppe_drv_nexthop *ppe_drv_nexthop_v6_bridge_flow_get_and_ref(struct ppe_drv_v6_conn_flow *pcf)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint32_t in_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
+	uint32_t out_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
+	uint8_t vlan_cnt = ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf);
+	fal_ip_nexthop_t fal_nh = {0};
+	struct ppe_drv_nexthop *nh;
+	sw_error_t err;
+
+	/*
+	 * Both single and double VLANs are handled by EG_VLAN_XLT_* tables, we just need to
+	 * provide a unique VSI per vlan combination for handling VLAN on egress frame.
+	 */
+	switch (vlan_cnt) {
+	case 2:
+		out_vlan = ppe_drv_v6_conn_flow_egress_vlan_get(pcf, 0)->tci & PPE_DRV_VLAN_ID_MASK;
+		in_vlan = ppe_drv_v6_conn_flow_egress_vlan_get(pcf, 1)->tci & PPE_DRV_VLAN_ID_MASK;
+		break;
+	case 1:
+		in_vlan = ppe_drv_v6_conn_flow_egress_vlan_get(pcf, 0)->tci & PPE_DRV_VLAN_ID_MASK;
+		break;
+	default:
+		ppe_drv_warn("%p: PPE doesn't support more than 2 VLANs: %u", pcf, vlan_cnt);
+		return NULL;
+	}
+
+	/*
+	 * find matching nexthop entry
+	 */
+	list_for_each_entry(nh, &p->nh_active, list) {
+		/*
+		 * VLAN tags
+		 */
+		if (ppe_drv_nexthop_vlan_match(nh, in_vlan, out_vlan)) {
+			/*
+			 * Matching nexthop, take ref and return
+			 */
+			ppe_drv_trace("%p: matching nexthop entry found with index(%x)", nh, nh->index);
+			ppe_drv_nexthop_ref(nh);
+			return nh;
+		}
+	}
+
+	/*
+	 * Allocate new entry and program vlan-ID directly in NEXTHOP_TBL.
+	 */
+	nh = list_first_entry_or_null(&p->nh_free, struct ppe_drv_nexthop, list);
+	if (!nh) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_nh_full);
+		ppe_drv_warn("%p: nexthop table full - cannot accelerate flow", pcf);
+		return NULL;
+	}
+
+	/*
+	 * Delete the entry from free list and add it to the active list.
+	 * Take a reference on the nexthop entry.
+	 */
+	list_del(&nh->list);
+	kref_init(&nh->ref);
+	list_add(&nh->list, &p->nh_active);
+
+	if (out_vlan != PPE_DRV_VLAN_NOT_CONFIGURED) {
+		ppe_drv_trace("%p: configuring STAG:%u in nexthop table", pcf, out_vlan);
+		fal_nh.stag_fmt = 1;
+		fal_nh.svid = out_vlan;
+	}
+
+	if (in_vlan != PPE_DRV_VLAN_NOT_CONFIGURED) {
+		ppe_drv_trace("%p: configuring CTAG:%u in nexthop table", pcf, in_vlan);
+		fal_nh.ctag_fmt = 1;
+		fal_nh.cvid = in_vlan;
+	}
+
+	err = fal_ip_nexthop_set(PPE_DRV_SWITCH_ID, nh->index, &fal_nh);
+	if (err != SW_OK) {
+		ppe_drv_nexthop_deref(nh);
+		ppe_drv_warn("nexthop configuration failed for flow: %p", pcf);
+		return NULL;
+	}
+
+	/*
+	 * Save vlan info in nexthop
+	 */
+	nh->inner_vlan = in_vlan;
+	nh->outer_vlan = out_vlan;
+
+	ppe_drv_nexthop_dump(nh);
+
+	return nh;
+}
+
+/*
+ * ppe_drv_nexthop_v4_bridge_flow_get_and_ref()
+ *	Allocate nexthop entry for bridge flow if it does not exist and returns
+ *	nexthop instance pointer.
+ */
+struct ppe_drv_nexthop *ppe_drv_nexthop_v4_bridge_flow_get_and_ref(struct ppe_drv_v4_conn_flow *pcf)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint32_t in_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
+	uint32_t out_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
+	uint8_t vlan_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
+	fal_ip_nexthop_t fal_nh = {0};
+	struct ppe_drv_nexthop *nh;
+	sw_error_t err;
+
+	/*
+	 * Outer and Inner VLAN identifiers are obtained based on single or double VLAN.
+	 */
+	switch (vlan_cnt) {
+	case 2:
+		out_vlan = ppe_drv_v4_conn_flow_egress_vlan_get(pcf, 0)->tci & PPE_DRV_VLAN_ID_MASK;
+		in_vlan = ppe_drv_v4_conn_flow_egress_vlan_get(pcf, 1)->tci & PPE_DRV_VLAN_ID_MASK;
+		break;
+	case 1:
+		in_vlan = ppe_drv_v4_conn_flow_egress_vlan_get(pcf, 0)->tci & PPE_DRV_VLAN_ID_MASK;
+		break;
+	default:
+		ppe_drv_warn("%p: PPE doesn't support more than 2 VLANs: %u", pcf, vlan_cnt);
+		return NULL;
+	}
+
+	/*
+	 * find matching nexthop entry
+	 */
+	list_for_each_entry(nh, &p->nh_active, list) {
+		/*
+		 * VLAN tags
+		 */
+		if (ppe_drv_nexthop_vlan_match(nh, in_vlan, out_vlan)) {
+			/*
+			 * Matching nexthop, take ref and return
+			 */
+			ppe_drv_trace("%p: matching nexthop entry found with index(%x)", nh, nh->index);
+			ppe_drv_nexthop_ref(nh);
+			return nh;
+		}
+	}
+
+	/*
+	 * Allocate new entry and program vlan-ID directly in NEXTHOP_TBL.
+	 */
+	nh = list_first_entry_or_null(&p->nh_free, struct ppe_drv_nexthop, list);
+	if (!nh) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_nh_full);
+		ppe_drv_warn("%p: nexthop table full - cannot accelerate flow", pcf);
+		return NULL;
+	}
+
+	/*
+	 * Delete the entry from free list and add it to the active list.
+	 * Take a reference on the nexthop entry.
+	 */
+	list_del(&nh->list);
+	kref_init(&nh->ref);
+	list_add(&nh->list, &p->nh_active);
+
+	if (out_vlan != PPE_DRV_VLAN_NOT_CONFIGURED) {
+		ppe_drv_trace("%p: configuring STAG:%u in nexthop table", pcf, out_vlan);
+		fal_nh.stag_fmt = 1;
+		fal_nh.svid = out_vlan;
+	}
+
+	if (in_vlan != PPE_DRV_VLAN_NOT_CONFIGURED) {
+		ppe_drv_trace("%p: configuring CTAG:%u in nexthop table", pcf, in_vlan);
+		fal_nh.ctag_fmt = 1;
+		fal_nh.cvid = in_vlan;
+	}
+
+	err = fal_ip_nexthop_set(PPE_DRV_SWITCH_ID, nh->index, &fal_nh);
+	if (err != SW_OK) {
+		ppe_drv_nexthop_deref(nh);
+		ppe_drv_warn("nexthop configuration failed for flow: %p", pcf);
+		return NULL;
+	}
+
+	/*
+	 * Save vlan info in nexthop
+	 */
+	nh->inner_vlan = in_vlan;
+	nh->outer_vlan = out_vlan;
+
+	ppe_drv_nexthop_dump(nh);
+
+	return nh;
+}
+#endif
 
 /*
  * ppe_drv_nexthop_v4_get_and_ref()

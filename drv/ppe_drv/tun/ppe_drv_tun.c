@@ -1449,7 +1449,7 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 		/*
 	 	* Program EG_EDIT RULE table
 	 	*/
-		status = ppe_drv_tun_encap_xlate_rule_configure(ptun->ptecxr, &pth->tun.mapt.remote, ppe_drv_tun_encap_get_len(ptun->ptec), true);
+		status = ppe_drv_tun_encap_xlate_rule_configure(ptun->ptecxr, &pth->tun.mapt.remote, ppe_drv_tun_encap_get_len(ptun->ptec), l2_hdr->flags, true);
 		if (!status) {
 			ppe_drv_warn("%p: Failed to configure encap xlate map table", ptun);
 			goto err_fail;

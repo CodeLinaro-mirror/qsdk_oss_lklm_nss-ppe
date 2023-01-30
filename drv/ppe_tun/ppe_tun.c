@@ -41,6 +41,17 @@ bool ppe_tun_stats(struct net_device *dev, ppe_vp_hw_stats_t *stats)
 	tstats->tx_packets += stats->tx_pkt_cnt;
 	tstats->rx_bytes += stats->rx_byte_cnt;
 	tstats->rx_packets += stats->rx_pkt_cnt;
+
+	/*
+	 * For Map-t device we need to update the rx and tx stats separately.
+	 */
+	if (unlikely(dev->priv_flags_ext & IFF_EXT_MAPT)) {
+		tstats->rx_bytes += stats->tx_byte_cnt;
+		tstats->rx_packets += stats->tx_pkt_cnt;
+		tstats->tx_bytes += stats->rx_byte_cnt;
+		tstats->tx_packets += stats->rx_pkt_cnt;
+	}
+
 	u64_stats_update_end(&tstats->syncp);
 
 	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);

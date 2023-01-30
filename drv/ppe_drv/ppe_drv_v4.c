@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -329,6 +329,16 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 	}
 
 	/*
+	 * For DS flow if user type is not DS return invalid user type.
+	 */
+	if (rule_flags & PPE_DRV_V4_RULE_FLAG_DS_FLOW) {
+		if ((pp_tx->user_type != PPE_DRV_PORT_USER_TYPE_DS) && (pp_rx->user_type != PPE_DRV_PORT_USER_TYPE_DS)) {
+			ppe_drv_warn("%p: Invalid user type: %d", create, pp_tx->user_type);
+			return PPE_DRV_RET_INVALID_USER_TYPE;
+		}
+	}
+
+	/*
 	 * Bridge flow
 	 */
 	if (rule_flags & PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW) {
@@ -347,7 +357,6 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW);
 		ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW);
 	}
-
 
 	/*
 	 * Note: PPE can't support both SNAT and DNAT simultaneously.
@@ -402,6 +411,13 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_DSCP_MARKING) {
 			ppe_drv_v4_conn_flow_egress_dscp_set(pcf, dscp_rule->flow_dscp);
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_DSCP_MARKING);
+		}
+
+		/*
+		 * For VP flow if user type is DS, set conn rule VP valid.
+		 */
+		if ((rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW) && (pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID);
 		}
 
 		/*
@@ -460,6 +476,15 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		if (ppe_drv_port_flags_check(ppe_drv_v4_conn_flow_tx_port_get(pcf), PPE_DRV_PORT_FLAG_IIPSEC)) {
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_IPSEC);
 		}
+
+#ifdef NSS_PPE_IPQ53XX
+		/*
+		 * Check source interface based on rule flags.
+		 */
+		if (rule_flags & PPE_DRV_V4_RULE_FLAG_SRC_INTERFACE_CHECK) {
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK);
+		}
+#endif
 	}
 
 	/*
@@ -506,6 +531,13 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_DSCP_MARKING) {
 			ppe_drv_v4_conn_flow_egress_dscp_set(pcr, dscp_rule->return_dscp);
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_DSCP_MARKING);
+		}
+
+		/*
+		 * For VP flow if user type is DS, set conn rule VP valid.
+		 */
+		if ((rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW) && (pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID);
 		}
 
 		/*
@@ -565,6 +597,14 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_IPSEC);
 		}
 
+#ifdef NSS_PPE_IPQ53XX
+		/*
+		 * Check source interface based on rule flags.
+		 */
+		if (rule_flags & PPE_DRV_V4_RULE_FLAG_SRC_INTERFACE_CHECK) {
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK);
+		}
+#endif
 		ppe_drv_v4_conn_flags_set(cn, PPE_DRV_V4_CONN_FLAG_RETURN_VALID);
 	}
 
@@ -597,13 +637,14 @@ void ppe_drv_v4_if_walk_release(struct ppe_drv_v4_conn_flow *pcf)
  * ppe_drv_v4_if_walk()
  *	Walk iface heirarchy to obtain egress L3_IF and VSI
  */
-bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_rule *top_if, ppe_drv_iface_t tx_if)
+bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_rule *top_if, ppe_drv_iface_t tx_if, ppe_drv_iface_t rx_if)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_iface *eg_vsi_if = NULL;
 	struct ppe_drv_iface *eg_l3_if = NULL;
-	struct ppe_drv_iface *iface, *top_iface = NULL;
-	struct ppe_drv_iface *tx_port_if = NULL;
+	struct ppe_drv_iface *iface, *top_iface = NULL, *top_rx_iface = NULL;
+	struct ppe_drv_iface *tx_port_if = NULL, *rx_port_if = NULL;
+	struct ppe_drv_iface *top_iface_parent = NULL;
 	struct ppe_drv_vsi *vlan_vsi;
 	struct ppe_drv_l3_if *pppoe_l3_if;
 	uint32_t egress_vlan_inner = PPE_DRV_VLAN_NOT_CONFIGURED, egress_vlan_outer = PPE_DRV_VLAN_NOT_CONFIGURED;
@@ -624,7 +665,7 @@ bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_
 	}
 
 	/*
-	 * Should have a valid top interface.
+	 * Should have a valid bottom Tx interface.
 	 */
 	tx_port_if = ppe_drv_iface_get_by_idx(tx_if);
 	if (!tx_port_if) {
@@ -633,25 +674,51 @@ bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_
 	}
 
 	/*
-	 * if it's a bridge flow, hierarchy walk not needed.
+	 * Should have a valid bottom Rx interface.
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		ppe_drv_v4_conn_flow_eg_port_if_set(pcf, ppe_drv_iface_ref(tx_port_if));
-		ppe_drv_info("%p: No PPE interface corresponding\n", p);
-		return true;
-	}
-
-	/*
-	 * Should have a valid top interface.
-	 */
-	iface = top_iface = ppe_drv_iface_get_by_idx(top_if->tx_if);
-	if (!iface) {
-		ppe_drv_warn("%p: No PPE interface corresponding\n", p);
+	rx_port_if = ppe_drv_iface_get_by_idx(rx_if);
+	if (!rx_port_if) {
+		ppe_drv_warn("%p: No PPE interface corresponding to rx_if: %d", p, rx_if);
 		return false;
 	}
 
 	/*
-	 * Walk through if hierarchy.
+	 * Should have a valid top tx interface.
+	 */
+	iface = top_iface = ppe_drv_iface_get_by_idx(top_if->tx_if);
+	if (!iface) {
+		ppe_drv_warn("%p: No PPE interface corresponding to top tx interface\n", p);
+		return false;
+	}
+
+	/*
+	 * Should have a valid top rx interface.
+	 */
+	top_rx_iface = ppe_drv_iface_get_by_idx(top_if->rx_if);
+	if (!top_rx_iface) {
+		ppe_drv_warn("%p: No PPE interface corresponding to top rx interface\n", p);
+		return false;
+	}
+
+	/*
+	 * If it's a bridge flow, hierarchy walk not needed.
+	 * Set ingress and egress port information in pcf.
+	 * Set egress top VSI interface in pcf.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		ppe_drv_v4_conn_flow_eg_port_if_set(pcf, ppe_drv_iface_ref(tx_port_if));
+		ppe_drv_v4_conn_flow_in_port_if_set(pcf, ppe_drv_iface_ref(rx_port_if));
+
+		top_iface_parent = ppe_drv_iface_parent_get(top_iface);
+		if (top_iface_parent)
+			ppe_drv_v4_conn_flow_eg_top_vsi_set(pcf, ppe_drv_iface_vsi_get(top_iface_parent));
+
+		ppe_drv_info("%p: Return for v4 bridge flow\n", p);
+		return true;
+	}
+
+	/*
+	 * Walk through Tx if hierarchy.
 	 */
 	while (iface) {
 		/*
@@ -717,6 +784,29 @@ bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_
 	pcf->eg_vsi_if = eg_vsi_if ? ppe_drv_iface_ref(eg_vsi_if) : NULL;
 	pcf->eg_l3_if = eg_l3_if ? ppe_drv_iface_ref(eg_l3_if) : NULL;
 	pcf->eg_port_if = ppe_drv_iface_ref(tx_port_if);
+
+#ifdef NSS_PPE_IPQ53XX
+	/*
+	 * If source interface check is requested, get the l3_if interface.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK)) {
+
+		/*
+		 * If valid top rx interface, use l3 if of that iface.
+		 */
+		if ((top_rx_iface) && (ppe_drv_iface_l3_if_get(top_rx_iface))) {
+			ppe_drv_trace("Using top rx iface's l3 if");
+			ppe_drv_v4_conn_flow_in_l3_if_set(pcf, top_rx_iface);
+			return true;
+		}
+
+		/*
+		 * Use port's l3 if.
+		 */
+		ppe_drv_trace("Using port's l3 if");
+		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, rx_port_if);
+	}
+#endif
 	return true;
 }
 
@@ -877,6 +967,12 @@ static struct ppe_drv_flow *ppe_drv_v4_flow_add(struct ppe_drv_v4_conn_flow *pcf
 	struct ppe_drv_host *host = NULL;
 	struct ppe_drv_port *tx_port = NULL;
 	struct ppe_drv_port *rx_port = NULL;
+#ifdef NSS_PPE_IPQ53XX
+	uint8_t vlan_cnt = 0;
+	struct ppe_drv_vsi *eg_top_vsi = NULL;
+	struct ppe_drv_port *pp_tx = NULL;
+	struct ppe_drv_port *pp_rx = NULL;
+#endif
 
 	/*
 	 * Fetch a new nexthop entry.
@@ -889,6 +985,45 @@ static struct ppe_drv_flow *ppe_drv_v4_flow_add(struct ppe_drv_v4_conn_flow *pcf
 			return NULL;
 		}
 	}
+
+#if defined(NSS_PPE_IPQ53XX)
+	/*
+	 * Fetch a new nexthop entry for bridged flows.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+
+		vlan_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
+		if (vlan_cnt) {
+			pp_tx = ppe_drv_v4_conn_flow_tx_port_get(pcf);
+			if (!pp_tx) {
+				ppe_drv_warn("%p: egress port invalid", pcf);
+				return NULL;
+			}
+
+			pp_rx = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+			if (!pp_rx) {
+				ppe_drv_warn("%p: ingress port invalid", pcf);
+				return NULL;
+			}
+
+			eg_top_vsi = ppe_drv_v4_conn_flow_eg_top_vsi_get(pcf);
+			if (!eg_top_vsi) {
+				ppe_drv_warn("%p: no vsi configured on top iface", pcf);
+				return NULL;
+			}
+
+			ppe_drv_info("%p: ppe tx port: %d, rx port: %d", pcf, pp_tx->port, pp_rx->port);
+
+			if (!(eg_top_vsi->is_fdb_learn_enabled && pp_tx->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled)) {
+				nh = ppe_drv_nexthop_v4_bridge_flow_get_and_ref(pcf);
+				if (!nh) {
+					ppe_drv_warn("%p: unable to allocate nexthop for bridge flow", pcf);
+					return NULL;
+				}
+			}
+		}
+	}
+#endif
 
 	/*
 	 * Add host table entry.
@@ -1597,6 +1732,7 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_collision);
 		ppe_drv_warn("%p: create collision detected: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
+		ppe_drv_iface_deref_internal(pcf->eg_port_if);
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
 		return ret;
@@ -1612,12 +1748,13 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail);
 		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
 		ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
+		ppe_drv_iface_deref_internal(pcf->eg_port_if);
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
 		return ret;
 	}
 
-	cn->flags |= PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST;
+	ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST);
 	pcf->conn = cn;
 
 	cn->pcr.pf = NULL;
@@ -1648,14 +1785,21 @@ static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create,
 	 * Check if Connection manager is setting DS flag in the rule; if yes then decision
 	 * space to choose pcf or pcr needs to be done only for DS VP else flow could also
 	 * be for active VP so decision logic need to be executed for both active and DS VP.
-	 * TODO: Enable support for per-flow flag for VP datapath.
 	 */
-	if ((create->valid_flags & PPE_DRV_V4_VALID_FLAG_DS)  == PPE_DRV_V4_VALID_FLAG_DS) {
+	if ((create->rule_flags & PPE_DRV_V4_RULE_FLAG_DS_FLOW)  == PPE_DRV_V4_RULE_FLAG_DS_FLOW) {
 		if (is_rx_ds && !is_tx_ds) {
 			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, true);
 			fse_cn = pcf;
 		} else if (is_tx_ds && !is_rx_ds) {
 			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info, true);
+			fse_cn = pcr;
+		}
+	} else if ((create->rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW)  == PPE_DRV_V4_RULE_FLAG_VP_FLOW) {
+		if ((is_rx_ds && !is_tx_ds) || (is_rx_active_vp && !is_tx_active_vp)) {
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
+			fse_cn = pcf;
+		} else if ((is_tx_ds && !is_rx_ds) || (is_tx_active_vp && !is_rx_active_vp)) {
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info, false);
 			fse_cn = pcr;
 		}
 	} else {
@@ -1773,7 +1917,7 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	 */
 	top_if.rx_if = create->top_rule.rx_if;
 	top_if.tx_if = create->top_rule.tx_if;
-	if (!ppe_drv_v4_if_walk(&cn->pcf, &top_if, create->conn_rule.tx_if)) {
+	if (!ppe_drv_v4_if_walk(&cn->pcf, &top_if, create->conn_rule.tx_if, create->conn_rule.rx_if)) {
 		ppe_drv_stats_inc(&comm_stats->v4_create_fail_if_hierarchy);
 		ppe_drv_warn("%p: create failed invalid interface hierarchy: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_INVALID_HIERARCHY;
@@ -1787,7 +1931,7 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	 */
 	top_if.rx_if = create->top_rule.tx_if;
 	top_if.tx_if = create->top_rule.rx_if;
-	if (!ppe_drv_v4_if_walk(&cn->pcr, &top_if, create->conn_rule.rx_if)) {
+	if (!ppe_drv_v4_if_walk(&cn->pcr, &top_if, create->conn_rule.rx_if, create->conn_rule.tx_if)) {
 		ppe_drv_stats_inc(&comm_stats->v4_create_fail_if_hierarchy);
 		ppe_drv_warn("%p: create failed invalid interface hierarchy: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_INVALID_HIERARCHY;

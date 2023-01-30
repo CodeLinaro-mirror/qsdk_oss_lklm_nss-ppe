@@ -53,6 +53,7 @@ typedef enum ppe_drv_port_flag {
 struct ppe_drv_port {
 	struct list_head l3_list;		/* List head of associated L3 interface */
 	struct ppe_drv_l3_if *port_l3_if;	/* Port L3_IF */
+	struct ppe_drv_l3_if *active_l3_if;	/* Active L3_IF */
 	struct ppe_drv_vsi *port_vsi;		/* Pointer to Port's VSI */
 	struct ppe_drv_vsi *br_vsi;		/* Pointer to Bridge's VSI TODO: To be added to the vsi_list*/
 	struct ppe_l2_vp *l2_vp;		/* Pointer to L2 VP instance. */
@@ -62,7 +63,7 @@ struct ppe_drv_port {
 	struct ppe_drv_tun_l3_if *tl_l3_if;	/* Tunnel L3 interface corresponding to this port entry */
 	enum ppe_drv_port_type type;		/* Port type */
 	uint32_t flags;				/* Port flags */
-	bool port_l3_if_attached;               /* Port L3_IF attached? */
+	bool active_l3_if_attached;               /* Port L3_IF attached? */
 	bool is_fdb_learn_enabled;		/* Port FDB learning enabled */
 	uint16_t mtu;				/* MTU value of port */
 	uint16_t mru;				/* MRU value of port */

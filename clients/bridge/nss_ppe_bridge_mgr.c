@@ -43,6 +43,17 @@
  */
 static bool ovs_enabled = false;
 
+/*
+ * Module parameter to enable/disable FDB learning.
+ * by default disable for open profile and enable
+ * for all other profile
+ */
+#if defined(NSS_PPE_BRIDGE_MGR_FDB_DISABLE)
+static bool fdb_disabled = true;
+#else
+static bool fdb_disabled = false;
+#endif
+
 static struct nss_ppe_bridge_mgr_context br_mgr_ctx;
 
 /*
@@ -155,7 +166,8 @@ static bool nss_ppe_bridge_mgr_ppe_register_br(struct nss_ppe_bridge_mgr_pvt *b_
 	 * Disable FDB learning if OVS is enabled.
 	 * TODO: This is incorrect. We need disable individual bridges that are with OVS.
 	 */
-	if (ovs_enabled) {
+	b_pvt->fdb_lrn_enabled = true;
+	if (ovs_enabled || fdb_disabled) {
 		if (ppe_drv_br_fdb_lrn_ctrl(b_pvt->iface, false) != PPE_DRV_RET_SUCCESS) {
 			nss_ppe_bridge_mgr_warn("%px: Failed to disable FDB learning\n", b_pvt);
 		} else {
@@ -437,7 +449,7 @@ static int nss_ppe_bridge_mgr_bond_master_leave(struct net_device *bond_master,
 		return NOTIFY_DONE;
 	}
 
-	if (ovs_enabled) {
+	if (ovs_enabled || fdb_disabled) {
 		spin_unlock(&br_mgr_ctx.lock);
 		return NOTIFY_DONE;
 	}
@@ -1256,7 +1268,6 @@ int nss_ppe_bridge_mgr_register_br(struct net_device *dev)
 	 */
 	b_pvt->wan_netdev = NULL;
 	b_pvt->wan_if_enabled = false;
-	b_pvt->fdb_lrn_enabled = true;
 	b_pvt->bond_slave_num = 0;
 
 	spin_lock(&br_mgr_ctx.lock);
@@ -1322,3 +1333,6 @@ MODULE_DESCRIPTION("NSS PPE bridge manager");
 
 module_param(ovs_enabled, bool, 0644);
 MODULE_PARM_DESC(ovs_enabled, "OVS bridge is enabled");
+
+module_param(fdb_disabled, bool, 0644);
+MODULE_PARM_DESC(fdb_disabled, "fdb learning is disabled");

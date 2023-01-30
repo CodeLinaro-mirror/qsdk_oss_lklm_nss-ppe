@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -392,39 +392,50 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING)) {
-		sc = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark);
-		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_SAWF_START + sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
-				pcf, service_code, PPE_DRV_SC_SAWF_START + sc);
-			return false;
-		}
-	} else if (pp->core_mask) {
-		if (pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
-			}
-		} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			sc = PPE_DRV_CORE2SC_EDIT(next_core);
-			pp->shadow_core_mask &= ~(1 << next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID)) {
+			if (pp->core_mask) {
+				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+				pp->shadow_core_mask &= ~(1 << next_core);
+				sc = PPE_DRV_CORE2SC_EDIT(next_core);
+				if (!pp->shadow_core_mask) {
+					pp->shadow_core_mask = pp->core_mask;
+				}
+			} else {
+				sc = PPE_DRV_SC_VP_RPS;
 			}
 		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_EDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	}
 
+	if (sc != PPE_DRV_SC_NONE) {
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
-	} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+	}
+
+	/*
+	 * SC required when SAWF marking is set.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING)) {
+		sc = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: SAWF marked flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
@@ -435,8 +446,20 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	 */
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC)) {
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP);
+			return false;
+		}
+	}
+
+	/*
+	 * SC required when its a bridge flow.
+	 */
+	if ((sc == PPE_DRV_SC_NONE) && ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
@@ -557,6 +580,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	uint16_t xmit_mtu;
 	sw_error_t err;
 
+	if (!port_if) {
+		ppe_drv_warn("%p: Invalid egress port_if", pcf);
+		return NULL;
+	}
+
 	ppe_drv_v6_conn_flow_match_dest_ip_get(pcf, &match_dest_ip[0]);
 	pp = ppe_drv_iface_port_get(port_if);
 	if (!pp) {
@@ -602,6 +630,36 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 
 	flow_cfg.flow_qos.wifi_qos_en = wifi_qos_en;
 
+#ifdef NSS_PPE_IPQ53XX
+	/*
+	 * Get the Source interface index.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK)) {
+		/*
+		 * Get the source interface index corresponding to flow.
+		 * For bridge flow = Rx port no.
+		 * For routed flow = ingress l3 if index.
+		 */
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+			struct ppe_drv_iface *in_port_if = ppe_drv_v6_conn_flow_in_port_if_get(pcf);
+			struct ppe_drv_port *port = ppe_drv_iface_port_get(in_port_if);
+			if (port) {
+				flow_cfg.src_intf_index = port->port;
+				flow_cfg.src_intf_valid = true;
+				ppe_drv_trace("%p: Bridged flow, src_intf_index: %u", pcf, flow_cfg.src_intf_index);
+			}
+		} else {
+			struct ppe_drv_iface *in_l3_if = ppe_drv_v6_conn_flow_in_l3_if_get(pcf);
+			struct ppe_drv_l3_if *l3_if = ppe_drv_iface_l3_if_get(in_l3_if);
+			if (l3_if) {
+				flow_cfg.src_intf_index = l3_if->l3_if_index;
+				flow_cfg.src_intf_valid = true;
+				ppe_drv_trace("%p: Routed flow, src_intf_index: %u", pcf, flow_cfg.src_intf_index);
+			}
+		}
+	}
+#endif
+
 	/*
 	 * Set forwarding type
 	 */
@@ -618,6 +676,19 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 		flow_cfg.fwd_type = FAL_FLOW_BRIDGE;
 		ppe_drv_trace("%p: flow_tbl[fwd_type]: L2: %u", pcf, FAL_FLOW_BRIDGE);
 
+#ifdef NSS_PPE_IPQ53XX
+		/*
+		 * VLAN tag addition from NEXTHOP_TBL for flow based bridging.
+		 * With VLAN tagging capability from flow table for bridge flows,
+		 * we can avoid EG_VLAN_XLT_RULE based VLAN tagging. This would help
+		 * doing VLANs between different ingress and egress VSI.
+		 */
+		if (nh) {
+			flow_cfg.bridge_nexthop_valid = true;
+			flow_cfg.bridge_nexthop = nh->index;
+			ppe_drv_trace("%p:nexthop index: %u", pcf, nh->index);
+		}
+#endif
 		flow_cfg.port_valid = true;
 		flow_cfg.bridge_port = pp->port;
 		ppe_drv_trace("%p: xmit interface port: %d", pcf, pp->port);
@@ -893,39 +964,50 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING)) {
-		sc = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark);
-		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_SAWF_START + sc)) {
-                        ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
-                                        pcf, service_code, PPE_DRV_SC_SAWF_START + sc);
-                        return false;
-                }
-	} else if (pp->core_mask) {
-		if (pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
-			}
-		} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_EDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID)) {
+			if (pp->core_mask) {
+				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+				pp->shadow_core_mask &= ~(1 << next_core);
+				sc = PPE_DRV_CORE2SC_EDIT(next_core);
+				if (!pp->shadow_core_mask) {
+					pp->shadow_core_mask = pp->core_mask;
+				}
+			} else {
+				sc = PPE_DRV_SC_VP_RPS;
 			}
 		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_EDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	}
 
+	if (sc != PPE_DRV_SC_NONE) {
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
-	} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+	}
+
+	/*
+	 * SC required when SAWF marking is set.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING)) {
+		sc = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: SAWF marked flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
@@ -936,8 +1018,20 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	 */
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_IPSEC)) {
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP);
+			return false;
+		}
+	}
+
+	/*
+	 * SC required when its a bridge flow.
+	 */
+	if ((sc == PPE_DRV_SC_NONE) && ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
@@ -1083,12 +1177,17 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	uint32_t match_protocol = ppe_drv_v4_conn_flow_match_protocol_get(pcf);
 	uint8_t vlan_hdr_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
 	struct ppe_drv_iface *port_if = ppe_drv_v4_conn_flow_eg_port_if_get(pcf);
-	struct ppe_drv_port *pp = ppe_drv_iface_port_get(port_if);
+	struct ppe_drv_port *pp;
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
 	bool wifi_qos_en;
 	uint16_t xmit_mtu;
 	sw_error_t err;
+
+	if (!port_if) {
+		ppe_drv_warn("%p: Invalid egress port_if", pcf);
+		return NULL;
+	}
 
 	pp = ppe_drv_iface_port_get(port_if);
 	if (!pp) {
@@ -1143,6 +1242,36 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 
 	flow_cfg.flow_qos.wifi_qos_en = wifi_qos_en;
 
+#ifdef NSS_PPE_IPQ53XX
+	/*
+	 * Get the Source interface index.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK)) {
+		/*
+		 * Get the source interface index corresponding to flow.
+		 * For bridge flow = Rx port no.
+		 * For routed flow = ingress l3 if index.
+		 */
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+			struct ppe_drv_iface *in_port_if = ppe_drv_v4_conn_flow_in_port_if_get(pcf);
+			struct ppe_drv_port *port = ppe_drv_iface_port_get(in_port_if);
+			if (port) {
+				flow_cfg.src_intf_index = port->port;
+				flow_cfg.src_intf_valid = true;
+				ppe_drv_trace("%p: Bridged flow, src_intf_index: %u", pcf, flow_cfg.src_intf_index);
+			}
+		} else {
+			struct ppe_drv_iface *in_l3_if = ppe_drv_v4_conn_flow_in_l3_if_get(pcf);
+			struct ppe_drv_l3_if *l3_if = ppe_drv_iface_l3_if_get(in_l3_if);
+			if (l3_if) {
+				flow_cfg.src_intf_index = l3_if->l3_if_index;
+				flow_cfg.src_intf_valid = true;
+				ppe_drv_trace("%p: Routed flow, src_intf_index: %u", pcf, flow_cfg.src_intf_index);
+			}
+		}
+	}
+#endif
+
 	/*
 	 * Set forwarding type
 	 */
@@ -1175,6 +1304,19 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		flow_cfg.fwd_type = FAL_FLOW_BRIDGE;
 		ppe_drv_trace("%p: flow_tbl[fwd_type]: L2: %u", pcf, FAL_FLOW_BRIDGE);
 
+#ifdef NSS_PPE_IPQ53XX
+		/*
+		 * VLAN tag addition from NEXTHOP_TBL for flow based bridging.
+		 * With VLAN tagging capability from flow table for bridge flows,
+		 * we can avoid EG_VLAN_XLT_RULE based VLAN tagging. This would help
+		 * doing VLANs between different ingress and egress VSI.
+		 */
+		if (nh) {
+			flow_cfg.bridge_nexthop_valid = true;
+			flow_cfg.bridge_nexthop = nh->index;
+			ppe_drv_trace("%p:nexthop index: %u", pcf, nh->index);
+		}
+#endif
 		flow_cfg.port_valid = true;
 		flow_cfg.bridge_port = pp->port;
 		ppe_drv_trace("%p: xmit interface port: %d", pcf, pp->port);
