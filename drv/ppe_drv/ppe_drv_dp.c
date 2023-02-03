@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,6 +15,148 @@
  */
 
 #include "ppe_drv.h"
+#include <fal/fal_fdb.h>
+#include <fal/fal_mirror.h>
+
+/*
+ * ppe_drv_dp_set_mirror_if()
+ *	set ingress/egress mirror interface
+ */
+ppe_drv_ret_t ppe_drv_dp_set_mirror_if(struct ppe_drv_iface *iface,
+		ppe_drv_dp_mirror_direction_t direction, bool enable)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *port;
+	sw_error_t err;
+
+	spin_lock_bh(&p->lock);
+	port = ppe_drv_iface_port_get(iface);
+	if (!port) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: unable to get port from iface\n", iface);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+
+	switch (direction) {
+	case PPE_DRV_DP_MIRR_DI_IN:
+		err = fal_mirr_port_in_set(PPE_DRV_SWITCH_ID, port->port, enable);
+		if (err != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("Failed to %s ingress mirror for port %u\n",
+					(enable ? "enable" : "disable"), port->port);
+			return PPE_DRV_RET_SET_MIRROR_IN_FAIL;
+		}
+
+		break;
+
+	case PPE_DRV_DP_MIRR_DI_EG:
+		err = fal_mirr_port_eg_set(PPE_DRV_SWITCH_ID, port->port, enable);
+		if (err != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("Failed to set %s egress mirror for port %u\n",
+					(enable ? "enable" : "disable"), port->port);
+			return PPE_DRV_RET_SET_MIRROR_EG_FAIL;
+		}
+
+		break;
+
+	default:
+		ppe_drv_warn("Failed to set Mirror direction: %u direction \
+				is not supported\n", direction);
+		return PPE_DRV_RET_SET_MIRROR_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	ppe_drv_info("Set %s %s mirror for port %u\n",
+			(enable ? "enable" : "disable"),
+			(direction == PPE_DRV_DP_MIRR_DI_IN ? "ingress" : "egress"),
+			port->port);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_dp_set_mirror_if);
+
+/*
+ * ppe_drv_dp_set_mirr_analysis_port()
+ *	set ingress/egress mirror analysis interface
+ */
+ppe_drv_ret_t ppe_drv_dp_set_mirr_analysis_port(struct ppe_drv_iface *iface,
+		ppe_drv_dp_mirror_direction_t direction, bool enable, uint8_t priority)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *port;
+	sw_error_t err;
+	fal_mirr_analysis_config_t analysis_cfg = {0};
+
+	spin_lock_bh(&p->lock);
+	port = ppe_drv_iface_port_get(iface);
+	if (!port) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: unable to get port from iface\n", iface);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+
+	/* if api called for disable port then set default/invalid port */
+	if (enable) {
+		analysis_cfg.port_id = port->port;
+	} else {
+		analysis_cfg.port_id = PPE_DRV_MIRR_INVAL_PORT;
+	}
+
+	analysis_cfg.priority = priority;
+	err = fal_mirr_analysis_config_set(PPE_DRV_SWITCH_ID, direction,
+			&analysis_cfg);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to set %s mirror analysis port for port num %u\n",
+				(direction == PPE_DRV_DP_MIRR_DI_IN ? "ingress" : "egress"),
+				port->port);
+		return PPE_DRV_RET_SET_MIRROR_ANALYSIS_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	ppe_drv_info("%s mirror analysis port is set for port num %u\n",
+			(direction == PPE_DRV_DP_MIRR_DI_IN ? "Ingress" : "Egress"),
+			port->port);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_dp_set_mirr_analysis_port);
+
+/*
+ * ppe_drv_dp_get_mirr_analysis_port()
+ *	get ingress/egress mirror analysis interface
+ */
+ppe_drv_ret_t ppe_drv_dp_get_mirr_analysis_port(
+		ppe_drv_dp_mirror_direction_t direction, uint8_t *port_num)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	sw_error_t err;
+	fal_mirr_analysis_config_t analysis_cfg = {0};
+
+	spin_lock_bh(&p->lock);
+	err = fal_mirr_analysis_config_get(PPE_DRV_SWITCH_ID, direction,
+			&analysis_cfg);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to get %s mirror analysis port for port num\n",
+				(direction == PPE_DRV_DP_MIRR_DI_IN ? "ingress" : "egress"));
+		return PPE_DRV_RET_GET_MIRROR_ANALYSIS_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	/* if port number is PPE_DRV_MIRR_INVAL_PORT then return mo port set */
+	if (analysis_cfg.port_id == PPE_DRV_MIRR_INVAL_PORT) {
+		ppe_drv_info("No %s mirror analysis port is set\n",
+				(direction == PPE_DRV_DP_MIRR_DI_IN ? "Ingress" : "Egress"));
+		return PPE_DRV_RET_GET_MIRROR_ANALYSIS_NO_PORT;
+	}
+
+	*port_num = (uint8_t)analysis_cfg.port_id;
+	return PPE_DRV_RET_SUCCESS;
+
+}
+EXPORT_SYMBOL(ppe_drv_dp_get_mirr_analysis_port);
 
 /*
  * ppe_drv_dp_deinit()

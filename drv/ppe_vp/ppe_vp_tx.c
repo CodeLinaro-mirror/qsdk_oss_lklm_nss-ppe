@@ -37,6 +37,7 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 	struct ppe_vp *svp;
 	struct nss_dp_vp_tx_info dptxi = {};
 	struct ppe_vp_tx_stats *tx_stats;
+	unsigned int len = 0;
 
 	/*
 	 * Check if VP exists and forward to PPE
@@ -73,6 +74,8 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 		skb->fast_xmit = 1;
 	}
 
+	len = skb->len;
+
 	/*
 	 * If enqueue to PPE fails, better drop else
 	 * this could cause out of order packets. Hence returning
@@ -90,7 +93,7 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 
 	u64_stats_update_begin(&tx_stats->syncp);
 	tx_stats->tx_pkts++;
-	tx_stats->tx_bytes += skb->len;
+	tx_stats->tx_bytes += len;
 	u64_stats_update_end(&tx_stats->syncp);
 
 	return true;

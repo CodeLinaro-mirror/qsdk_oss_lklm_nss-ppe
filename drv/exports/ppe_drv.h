@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -257,6 +257,16 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_INVALID_EIP_SERVICE,		/**< Invalid inline EIP service */
 	PPE_DRV_RET_FAILURE_DUMMY_RULE,			/**< Failed to push rule to PPE for passive VP */
 	PPE_DRV_RET_INVALID_USER_TYPE,			/**< Failed to push rule to PPE for DS flow when user type is not DS */
+	PPE_DRV_RET_ADD_FDB_FAIL,			/**< Failed to add new fdb entry */
+	PPE_DRV_RET_SET_FDB_AGEING_TIME_FAIL,		/**< Failed to set Ageing time */
+	PPE_DRV_RET_SET_MIRROR_FAIL,			/**<Failed to set Mirror interface */
+	PPE_DRV_RET_SET_MIRROR_IN_FAIL,		/**< Failed to set Mirror ingress */
+	PPE_DRV_RET_SET_MIRROR_EG_FAIL,		/**< Failed to set Mirror egress */
+	PPE_DRV_RET_FLUSH_FDB_BY_PORT_FAIL,	/**< Failed to flush FDB by port */
+	PPE_DRV_RET_FLUSH_FDB_FAIL,			/**< Failed to flush all FDB */
+	PPE_DRV_RET_SET_MIRROR_ANALYSIS_FAIL,	/**< Failed to set Mirror analysis port */
+	PPE_DRV_RET_GET_MIRROR_ANALYSIS_FAIL,	/**< Failed to get Mirror analysis port */
+	PPE_DRV_RET_GET_MIRROR_ANALYSIS_NO_PORT	/**< No port is set for mirror analysis */
 } ppe_drv_ret_t;
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,6 +26,20 @@
  * @addtogroup ppe_drv_dp_subsystem
  * @{
  */
+
+/**
+ * enum ppe_drv_dp_mirror_direction
+ *	PPE mirror directions
+ */
+typedef enum ppe_drv_dp_mirror_direction {
+	PPE_DRV_DP_MIRR_DI_IN = 0,	/**< PPE mirror direction ingress */
+	PPE_DRV_DP_MIRR_DI_EG,		/**< PPE mirror direction egress */
+} ppe_drv_dp_mirror_direction_t;
+
+/*
+ * Default mirror analysis port priority
+ */
+#define PPE_DRV_MIRR_ANALYSIS_PRI 0
 
 /**
  * ppe_drv_dp_deinit
@@ -55,6 +69,61 @@ ppe_drv_ret_t ppe_drv_dp_deinit(struct ppe_drv_iface *iface);
  * Status of the operation.
  */
 ppe_drv_ret_t ppe_drv_dp_init(struct ppe_drv_iface *iface, uint32_t macid);
+
+/**
+ * ppe_drv_dp_set_mirror_if
+ *	Set enable/disable ingress/egress port mirroring
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * ppe_drv_dp_mirror_direction_t mirror direction
+ * bool
+ *
+ * @param[in] iface       Pointer to the PPE interface.
+ * @param[in] direction   Mirror direction (ingress/egress).
+ * @param[in] enable      Enable/Disable mirroring.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_dp_set_mirror_if(struct ppe_drv_iface *iface,
+		ppe_drv_dp_mirror_direction_t direction, bool enable);
+
+/**
+ * ppe_drv_dp_set_mirr_analysis_port
+ *	Set mirror analysis port
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * ppe_drv_dp_mirror_direction_t mirror direction
+ * bool
+ *
+ * @param[in] iface         Pointer to the PPE interface.
+ * @param[in] direction     Mirror analysis port direction
+ * @param[in] enable        True for enable and false for disable analysis port
+ * @param[in] priority      Analysis port priority
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_dp_set_mirr_analysis_port(struct ppe_drv_iface *iface,
+		ppe_drv_dp_mirror_direction_t direction, bool enable, uint8_t priority);
+
+/**
+ * ppe_drv_dp_get_mirr_analysis_port
+ *	Get mirror analysis port number
+ *
+ * @datatypes
+ * ppe_drv_dp_mirror_direction_t mirror direction
+ *
+ * @param[in] direction     Mirror analysis port direction
+ * @param[out] port_num     Mirror analysis port number
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_dp_get_mirr_analysis_port(
+		ppe_drv_dp_mirror_direction_t direction, uint8_t *port_num);
 
 /** @} */ /* end_addtogroup ppe_drv_dp_subsystem */
 

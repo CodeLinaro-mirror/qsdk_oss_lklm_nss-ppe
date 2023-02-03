@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -34,7 +34,7 @@ ppe_drv_ret_t ppe_drv_br_fdb_del_bymac(struct ppe_drv_iface *br_iface, uint8_t *
 	vsi = ppe_drv_iface_vsi_get(br_iface);
 	if (!vsi) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: VSI not assinged to bridge", br_iface);
+		ppe_drv_warn("%p: VSI not assinged to bridge\n", br_iface);
 		return PPE_DRV_RET_VSI_NOT_FOUND;
 	}
 
@@ -43,15 +43,181 @@ ppe_drv_ret_t ppe_drv_br_fdb_del_bymac(struct ppe_drv_iface *br_iface, uint8_t *
 	err = fal_fdb_entry_del_bymac(PPE_DRV_SWITCH_ID, &entry);
 	if (err != SW_OK) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: failed to delete fdb entry for mac: %pM", br_iface, mac_addr);
+		ppe_drv_warn("%p: failed to delete fdb entry for mac: %pM\n", br_iface, mac_addr);
 		return PPE_DRV_RET_DEL_MAC_FDB_FAIL;
 	}
 
 	spin_unlock_bh(&p->lock);
-	ppe_drv_info("%p: fdb entry delete for mac: %pM", br_iface, mac_addr);
+	ppe_drv_info("%p: fdb entry delete for mac: %pM\n", br_iface, mac_addr);
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_br_fdb_del_bymac);
+
+/*
+ * ppe_drv_br_fdb_add
+ *	Add fdb entry
+ */
+ppe_drv_ret_t ppe_drv_br_fdb_add(struct ppe_drv_iface *br_iface,
+		uint8_t *mac_addr, bool is_static, uint32_t port_id)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	fal_fdb_entry_t entry = {0};
+	struct ppe_drv_vsi *vsi;
+	sw_error_t err;
+
+	spin_lock_bh(&p->lock);
+	vsi = ppe_drv_iface_vsi_get(br_iface);
+	if (!vsi) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: VSI not assinged to bridge\n", br_iface);
+		return PPE_DRV_RET_VSI_NOT_FOUND;
+	}
+
+	memcpy(&entry.addr, mac_addr, ETH_ALEN);
+	entry.fid = vsi->index;
+	entry.port.id = port_id;
+	entry.static_en = is_static;
+
+	err = fal_fdb_entry_add(PPE_DRV_SWITCH_ID, &entry);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: failed to add fdb entry for mac: %pM\n", br_iface,
+				mac_addr);
+		return PPE_DRV_RET_ADD_FDB_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	ppe_drv_info("%p: fdb entry added for mac: %pM\n", br_iface, mac_addr);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_br_fdb_add);
+
+/*
+ * ppe_drv_br_flush_fdb()
+ *	Flush all dynamic or dynamic and static per port
+ *	Flush all dynamic or dynamic and static(for all port)
+ */
+ppe_drv_ret_t ppe_drv_br_flush_fdb(struct ppe_drv_iface *port_iface,
+		bool only_dynamic, bool del_by_port)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *port;
+	sw_error_t err;
+	uint32_t del_fdb_flag;
+
+	if (only_dynamic) {
+		del_fdb_flag = 0;
+	} else {
+		del_fdb_flag = FAL_FDB_DEL_STATIC;
+	}
+
+	spin_lock_bh(&p->lock);
+	if (del_by_port) {
+		port = ppe_drv_iface_port_get(port_iface);
+		if (!port) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: unable to get port from iface\n", port_iface);
+			return PPE_DRV_RET_PORT_NOT_FOUND;
+		}
+
+		err = fal_fdb_entry_del_byport(PPE_DRV_SWITCH_ID, port->port,
+				del_fdb_flag);
+		if (err != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("Failed to flush all %s fdb for port %u\n",
+					(only_dynamic ? "dynamic" : ""), port->port);
+
+			return PPE_DRV_RET_FLUSH_FDB_BY_PORT_FAIL;
+		}
+
+		spin_unlock_bh(&p->lock);
+		ppe_drv_info("ALL %s FDBs are deleted for port %u\n",
+					(only_dynamic ? "dynamic" : ""), port->port);
+
+	} else {
+		err = fal_fdb_entry_flush(PPE_DRV_SWITCH_ID,
+				del_fdb_flag);
+		if (err != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("Failed to flush all %s fdb \n",
+					(only_dynamic ? "dynamic" : ""));
+
+			return PPE_DRV_RET_FLUSH_FDB_FAIL;
+		}
+
+		spin_unlock_bh(&p->lock);
+		ppe_drv_info("ALL %s FDBs are deleted\n",
+					(only_dynamic ? "dynamic" : ""));
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_br_flush_fdb);
+
+/*
+ * ppe_drv_br_set_ageing_time()
+ *	set fdb ageing time
+ */
+ppe_drv_ret_t ppe_drv_br_set_ageing_time(uint32_t ageing_time)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	sw_error_t err;
+
+	/* Check Ageing time max which is 20 bit value */
+	if (ageing_time > 0xFFFFF) {
+		ageing_time = 0xFFFFF;
+	}
+
+	spin_lock_bh(&p->lock);
+	err = fal_fdb_aging_time_set(PPE_DRV_SWITCH_ID, &ageing_time);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to set ageing time\n");
+		return PPE_DRV_RET_SET_FDB_AGEING_TIME_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	ppe_drv_info("Bridge Ageing time set to %u\n", ageing_time);
+	pr_warn("Set globle Ageing time set to %u which is same for all bridge\n",
+			ageing_time);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_br_set_ageing_time);
+
+/*
+ * ppe_drv_br_port_set_learning()
+ *	set learning based on port
+ */
+ppe_drv_ret_t ppe_drv_br_port_set_learning(struct ppe_drv_iface *port_iface,
+		bool lrn_enable)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *port;
+	sw_error_t err;
+
+	spin_lock_bh(&p->lock);
+	port = ppe_drv_iface_port_get(port_iface);
+	if (!port) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: unable to get port from port_iface\n", port_iface);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+
+	err = fal_fdb_port_learn_set(PPE_DRV_SWITCH_ID, port->port, lrn_enable);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("port %u: fail to set learning\n", port->port);
+		return PPE_DRV_RET_NEW_ADDR_LRN_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	ppe_drv_info("Learning is %s for port %u\n",
+			(lrn_enable ? "enable" : "disable"), port->port);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_br_port_set_learning);
 
 /**
  * ppe_drv_br_fdb_lrn_ctrl

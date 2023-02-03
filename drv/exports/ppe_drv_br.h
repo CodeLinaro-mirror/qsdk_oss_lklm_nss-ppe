@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -40,6 +40,80 @@
  * Status of the operation.
  */
 ppe_drv_ret_t ppe_drv_br_fdb_del_bymac(struct ppe_drv_iface *br_iface, uint8_t *mac_addr);
+
+/**
+ * ppe_drv_br_fdb_add
+ *	Add FDB entry by MAC address.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * uint8_t
+ * bool
+ * uint32_t
+ *
+ * @param[in] br_iface    Pointer to the PPE interface for bridge.
+ * @param[in] mac_addr    MAC address for which FDB entry should be added.
+ * @param[in] is_static   True if FDB entry is static else false
+ * @param[in] port_id     Port id for which FDB entry should be added
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_br_fdb_add(struct ppe_drv_iface *br_iface,
+		uint8_t *mac_addr, bool is_static, uint32_t port_id);
+
+/**
+ * ppe_drv_br_flush_fdb
+ *	ppe_drv_dp_flush_fdb api will flush FDB entries based on arguments api can
+ *	flush only dynamic or both (dynamic and static) FDBs.
+ *	ppe_drv_dp_flush_fdb api can flush per port FDB entries or entire switch's
+ *	FDB entries
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * bool
+ *
+ * @param[in] port_iface         Pointer to the PPE interface.
+ * @param[in] only_dynamic  True for flush only dynamic FDB entries
+ *                          or false for flush dynamic and static.
+ * @param[in] del_by_port   True for flush FDB entries by port
+ *                          or false for flush FDB entries from all port.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_br_flush_fdb(struct ppe_drv_iface *port_iface,
+		bool only_dynamic, bool del_by_port);
+
+/**
+ * ppe_drv_br_port_set_learning
+ *	Set enable/disable port learning
+ *
+ * @datatypes
+ * ppe_drv_iface
+ *
+ * @param[in] port_iface   Pointer to the PPE interface.
+ * @param[in] lrn_enable   Enable/Disable learning.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_br_port_set_learning(struct ppe_drv_iface *port_iface,
+		bool lrn_enable);
+
+/**
+ * ppe_drv_br_set_ageing_time
+ *	Set ageing time
+ *
+ * @datatypes
+ * uint32_t
+ *
+ * @param[in] ageing_time   Ageing time in seconds.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_br_set_ageing_time(uint32_t ageing_time);
 
 /**
  * ppe_drv_br_fdb_lrn_ctrl

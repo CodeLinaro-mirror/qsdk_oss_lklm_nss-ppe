@@ -156,6 +156,12 @@
 #define PPE_DRV_REDIR_PROFILE_ID 9
 
 /*
+ * Default port number return from ssdk is 0xF
+ * Which indicates no port is set for mirror analysis
+ */
+#define PPE_DRV_MIRR_INVAL_PORT 0xF
+
+/*
  * ppe_drv_entry_valid
  *	PPE entry validity
  */
