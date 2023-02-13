@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -167,6 +167,12 @@ bool ppe_drv_tun_encap_xlate_rule_configure(struct ppe_drv_tun_encap_xlate_rule 
 
 	if (l2_flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
 		l2_offset += PPPOE_SES_HLEN;
+	}
+
+	if (l2_flags & PPE_DRV_TUN_CMN_CTX_L2_SVLAN_VALID) {
+		l2_offset += sizeof(struct vlan_hdr) * 2;
+	} else if (l2_flags & PPE_DRV_TUN_CMN_CTX_L2_CVLAN_VALID) {
+		l2_offset += sizeof(struct vlan_hdr);
 	}
 
 	daddr_offset = offsetof(struct ipv6hdr, daddr);

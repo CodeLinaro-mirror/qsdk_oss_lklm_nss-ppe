@@ -1732,7 +1732,7 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_collision);
 		ppe_drv_warn("%p: create collision detected: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
-		ppe_drv_iface_deref_internal(pcf->eg_port_if);
+		ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
 		return ret;

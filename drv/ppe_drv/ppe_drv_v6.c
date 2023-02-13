@@ -1629,7 +1629,7 @@ ppe_drv_ret_t ppe_drv_v6_rfs_create(struct ppe_drv_v6_rule_create *create)
 	if (ppe_drv_v6_flow_check(&cn->pcf)) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_rfs_fail_collision);
 		ppe_drv_warn("%p: create collision detected: %p", p, create);
-		ppe_drv_iface_deref_internal(pcf->eg_port_if);
+		ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
 		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
 		goto fail;
 	}
