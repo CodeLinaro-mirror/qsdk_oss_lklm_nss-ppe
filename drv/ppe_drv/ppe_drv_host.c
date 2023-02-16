@@ -59,6 +59,17 @@ static void ppe_drv_host_delete(struct kref *kref)
 	sw_error_t err;
 
 	host_cfg.entry_id = host->index;
+
+	if (host->type == PPE_DRV_IP_TYPE_V4) {
+		host_cfg.flags |= FAL_IP_IP4_ADDR;
+	} else if (host->type == PPE_DRV_IP_TYPE_V6) {
+		host_cfg.flags |= FAL_IP_IP6_ADDR;
+	} else if (host->type == PPE_DRV_IP_TYPE_MC_V4) {
+		host_cfg.flags |= FAL_IP_IP4_ADDR_MCAST;
+	} else {
+		host_cfg.flags |= FAL_IP_IP6_ADDR_MCAST;
+	}
+
 	err = fal_ip_host_del(PPE_DRV_SWITCH_ID, FAL_IP_ENTRY_ID_EN, &host_cfg);
 	if (err != SW_OK) {
 		/*
