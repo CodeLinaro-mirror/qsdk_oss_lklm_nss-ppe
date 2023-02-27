@@ -60,6 +60,10 @@ unsigned int reo2ppe_txcmpl_num_desc = 8192;
 module_param(reo2ppe_txcmpl_num_desc, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(reo2ppe_txcmpl_num_desc, "REO2PPE Tx complete ring descriptor count");
 
+unsigned int rxfill_low_threshold = 256;
+module_param(rxfill_low_threshold, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(rxfill_low_threshold, "RxFill low threshold value");
+
 struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
 
 /*

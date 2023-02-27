@@ -561,6 +561,11 @@ void ppe_drv_v6_if_walk_release(struct ppe_drv_v6_conn_flow *pcf)
 		ppe_drv_iface_deref_internal(pcf->eg_port_if);
 		pcf->eg_port_if = NULL;
 	}
+
+	if (pcf->in_port_if) {
+		ppe_drv_iface_deref_internal(pcf->in_port_if);
+		pcf->in_port_if = NULL;
+	}
 }
 
 /*

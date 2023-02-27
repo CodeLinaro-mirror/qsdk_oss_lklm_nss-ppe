@@ -81,6 +81,7 @@ extern unsigned int cpu_mask_5g;
 extern unsigned int cpu_mask_6g;
 extern unsigned int ppe2tcl_rxfill_num_desc;
 extern unsigned int reo2ppe_txcmpl_num_desc;
+extern unsigned int rxfill_low_threshold;
 
 /*
  * ppe_ds_node_state_t

@@ -256,6 +256,8 @@ static void ppe_ds_get_cur_prod_cons_ring_idx(ppe_ds_wlan_handle_t *wlan_handle,
 	reg_info->ppe2tcl_start_idx = dp_ops->get_rx_prod_idx(edma_handle);
 	dp_ops->set_rx_cons_idx(edma_handle, reg_info->ppe2tcl_start_idx);
 
+	dp_ops->set_rxfill_prod_idx(edma_handle, dp_ops->get_rxfill_cons_idx(edma_handle));
+
 	reg_info->ppe_ds_int_mode_enabled = !polling_for_idx_update;
 
 	ppe_ds_info("%px: PPE-DS get current EDMA ring indices API call successful", node);
@@ -440,7 +442,6 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 	edma_handle->ppe2tcl_num_desc = reg_info->ppe2tcl_num_desc;
 	edma_handle->reo2ppe_num_desc = reg_info->reo2ppe_num_desc;
 	edma_handle->eth_txcomp_budget = PPE_DS_TXCMPL_BUDGET;
-	edma_handle->eth_rxfill_low_thr = reg_info->ppe2tcl_num_desc >> PPE_DS_RXFILL_LOW_THRES_DIVISOR;
 	edma_handle->polling_for_idx_update = polling_for_idx_update;
 
 	if ((ppe2tcl_rxfill_num_desc < PPE_DS_RXFILL_NUM_DESC_MIN) ||
@@ -455,6 +456,13 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 		edma_handle->reo2ppe_txcmpl_num_desc = PPE_DS_TXCMPL_NUM_DESC_DEF;
 	} else {
 		edma_handle->reo2ppe_txcmpl_num_desc = reo2ppe_txcmpl_num_desc;
+	}
+
+	if (rxfill_low_threshold >= reg_info->ppe2tcl_num_desc) {
+		edma_handle->eth_rxfill_low_thr =
+			reg_info->ppe2tcl_num_desc >> PPE_DS_RXFILL_LOW_THRES_DIVISOR;
+	} else {
+		edma_handle->eth_rxfill_low_thr = rxfill_low_threshold;
 	}
 
 	ppe_ds_info(" ppe2tcl num desc: %d, reo2ppe num desc: %d, txcmpl budget: %d"
