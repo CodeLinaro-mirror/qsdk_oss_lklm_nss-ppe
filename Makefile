@@ -16,4 +16,5 @@ obj-y += clients/
 endif
 endif
 endif
+obj-$(netlink) += netlink/
 obj ?= .
