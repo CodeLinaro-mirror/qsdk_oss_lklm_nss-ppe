@@ -404,7 +404,8 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 		 * Currently assuming the below PPE-DS node to SoC mapping:
 		 * 1st PPE-DS node is used by 2G SoC
 		 * 2nd PPE-DS node is used by 6g SoC
-		 * 3rd PPE-DS node is used by 5g SoC
+		 * 3rd PPE-DS node is used by 5g high SoC
+		 * 4th PPE-DS node is used by 5g low SoC
 		 */
 		ppeds_node_iter_cnt++;
 		if (ppeds_node_iter_cnt > PPE_DS_MAX_NODE) {
@@ -416,7 +417,9 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 		} else if (ppeds_node_iter_cnt == 2) {
 			cpu = cpu_mask_6g;
 		} else if (ppeds_node_iter_cnt == 3) {
-			cpu = cpu_mask_5g;
+			cpu = cpu_mask_5g_hi;
+		} else if (ppeds_node_iter_cnt == 4) {
+			cpu = cpu_mask_5g_lo;
 		} else {
 			ppe_ds_err("Invalid PPE-DS iteration count: %d\n",
 						ppeds_node_iter_cnt);

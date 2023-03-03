@@ -44,9 +44,13 @@ unsigned int cpu_mask_2g = 0x2;
 module_param(cpu_mask_2g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(cpu_mask_2g, "CPU mask for the 2G radio VAP");
 
-unsigned int cpu_mask_5g = 0x2;
-module_param(cpu_mask_5g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(cpu_mask_5g, "CPU mask for the 5G radio VAP");
+unsigned int cpu_mask_5g_lo = 0x1;
+module_param(cpu_mask_5g_lo, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cpu_mask_5g_lo, "CPU mask for the 5G low radio VAP");
+
+unsigned int cpu_mask_5g_hi = 0x2;
+module_param(cpu_mask_5g_hi, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cpu_mask_5g_hi, "CPU mask for the 5G high radio VAP");
 
 unsigned int cpu_mask_6g = 0x1;
 module_param(cpu_mask_6g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
