@@ -20,6 +20,7 @@
 #include <fal/fal_tunnel.h>
 #include <fal/fal_port_ctrl.h>
 #include "ppe_drv_tun.h"
+#include <net/vxlan.h>
 
 /*
  * ppe_drv_tun_v4_port_stats_update()
@@ -124,6 +125,64 @@ struct ppe_drv_v4_conn *ppe_drv_v4_conn_tun_conn_get(struct ppe_drv_v4_5tuple *t
 static ppe_drv_ret_t ppe_drv_v4_tun_conn_fill(struct ppe_drv_v4_rule_create *create, struct ppe_drv_v4_conn *cn)
 {
 	return ppe_drv_v4_conn_fill(create, cn, PPE_DRV_CONN_TYPE_TUNNEL);
+}
+
+/*
+ * ppe_drv_v4_vxlan_tunnel()
+ *	Check if create request for Vxlan tunnel.
+ */
+static bool ppe_drv_v4_vxlan_tunnel(struct ppe_drv_v4_rule_create *create)
+{
+	if ((create->tuple.protocol == IPPROTO_UDP) &&
+		((create->tuple.flow_ident == IANA_VXLAN_UDP_PORT) ||
+		(create->tuple.return_ident == IANA_VXLAN_UDP_PORT))) {
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * ppe_drv_v4_tun_allow_tunnel_create()
+ *	Check if the create rule is received for tunnel activation
+ *
+ * Requires caller to hold lock on ppe_drv_gbl.
+ */
+bool ppe_drv_v4_tun_allow_tunnel_create(struct ppe_drv_v4_rule_create *create)
+{
+	struct ppe_drv_iface *if_rx, *if_tx;
+
+	if_tx = ppe_drv_iface_get_by_idx(create->conn_rule.tx_if);
+	if_rx = ppe_drv_iface_get_by_idx(create->conn_rule.rx_if);
+
+	if(!(if_tx && if_rx)) {
+		ppe_drv_warn("No PPE interface corresponding to if_tx or if_rx interface\n");
+		return false;
+	}
+
+	/*
+	 * Not a hardware accelerated tunnel, if neither of the ingress or egress interface if of HW tunnel type.
+	 */
+	if (!((if_tx->type == PPE_DRV_IFACE_TYPE_VP_L2_TUN) || (if_tx->type == PPE_DRV_IFACE_TYPE_VP_L3_TUN)
+				|| (if_rx->type == PPE_DRV_IFACE_TYPE_VP_L2_TUN) || (if_rx->type == PPE_DRV_IFACE_TYPE_VP_L3_TUN))) {
+		return false;
+	}
+
+	/*
+	 * Check if the rule is for GRE or IPIP6
+	 */
+	if (ppe_drv_tun_check_support(create->tuple.protocol)) {
+		return true;
+	}
+
+	/*
+	 * Vxlan PPE accelearation is only supported for default port currently.
+	 */
+	if (ppe_drv_v4_vxlan_tunnel(create)) {
+		return true;
+	}
+
+	return false;
 }
 
 /*
