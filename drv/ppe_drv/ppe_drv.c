@@ -30,6 +30,13 @@
 #include "tun/ppe_drv_tun.h"
 
 /*
+ * Module parameter to enable/disable 2-tuple RSS hash for IP fragments.
+ */
+static bool ipfrag_2tuple_hash = true;
+module_param(ipfrag_2tuple_hash, bool, 0644);
+MODULE_PARM_DESC(ipfrag_2tuple_hash, "RSS hash for IP fragments based on SIP & DIP");
+
+/*
  * Define the filename to be used for assertions.
  */
 struct ppe_drv ppe_drv_gbl;
@@ -182,7 +189,7 @@ static bool ppe_drv_hash_init(void)
 
 	mode = FAL_RSS_HASH_IPV4ONLY;
 	config.hash_mask = PPE_DRV_HASH_MASK;
-	config.hash_fragment_mode = false;
+	config.hash_fragment_mode = ipfrag_2tuple_hash;
 	config.hash_seed = PPE_DRV_HASH_SEED_DEFAULT;
 	config.hash_sip_mix[0] = PPE_DRV_HASH_MIX_V4_SIP;
 	config.hash_dip_mix[0] = PPE_DRV_HASH_MIX_V4_DIP;
