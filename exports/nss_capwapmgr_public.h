@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -38,9 +38,13 @@
 					/**< Bit is set if the outer node is allocated. */
 #define NSS_CAPWAPMGR_TUNNEL_STATE_TRUSTSEC_TX_CONFIGURED		0x11
 					/**< Bit is set if trustsec_tx tunnel rules are configured. */
-#define NSS_CAPWAPMGR_FEATURE_OUTER_TRUSTSEC_ENABLED	0x00000004	/**< Tunnel enabled outer trustsec. */
 
-#define NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED              0x00000001      /* Tunnel enabled DTLS. */
+#define NSS_CAPWAPMGR_FEATURE_DTLS_ENABLED              0x00000001      /**< Tunnel enabled DTLS. */
+#define NSS_CAPWAPMGR_FEATURE_INNER_TRUSTSEC_ENABLED	0x00000002	/**< Tunnel enabled inner trustsec. */
+#define NSS_CAPWAPMGR_FEATURE_OUTER_TRUSTSEC_ENABLED	0x00000004	/**< Tunnel enabled outer trustsec. */
+#define NSS_CAPWAPMGR_FEATURE_WIRELESS_QOS_ENABLED	0x00000008	/**< Tunnel enabled wireless QoS. */
+#define NSS_CAPWAPMGR_FEATURE_PPE_TO_HOST_ENABLED	0x00000010	/**< Tunnel enable PPE to host. */
+
 /**
  * nss_capwapmgr_response
  *	NSS FW response table to wakeup sync message caller.

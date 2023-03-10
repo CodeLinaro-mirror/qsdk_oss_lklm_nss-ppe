@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -140,6 +140,36 @@ bool ppe_drv_nsm_queue_stats_update(struct ppe_drv_nsm_stats *nsm_stats, uint32_
 	return true;
 }
 EXPORT_SYMBOL(ppe_drv_nsm_queue_stats_update);
+
+/*
+ * ppe_drv_nsm_sawf_sc_stats_read()
+ *	Export service-class stats to nsm.
+ */
+bool ppe_drv_nsm_sawf_sc_stats_read(struct ppe_drv_nsm_stats *nsm_stats, uint8_t service_class)
+{
+	struct ppe_drv_stats_sawf_sc *sawf_sc_stats;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	if (!PPE_DRV_SERVICE_CLASS_IS_VALID(service_class)) {
+		ppe_drv_warn("%u Invalid SAWF service class", service_class);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+
+	sawf_sc_stats = &ppe_drv_gbl.stats.sawf_sc_stats[service_class];
+
+	nsm_stats->sawf_sc_stats.rx_packets = atomic64_read(&sawf_sc_stats->rx_packets);
+	nsm_stats->sawf_sc_stats.rx_bytes = atomic64_read(&sawf_sc_stats->rx_bytes);
+	nsm_stats->sawf_sc_stats.flow_count = atomic64_read(&sawf_sc_stats->flow_count);
+
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("Stats Updated: service class %u : packets %llu : bytes %llu : flows %u\n",
+			service_class, nsm_stats->sawf_sc_stats.rx_packets, nsm_stats->sawf_sc_stats.rx_bytes, nsm_stats->sawf_sc_stats.flow_count);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_nsm_sawf_sc_stats_read);
 
 /*
  * ppe_drv_hash_init()
@@ -448,6 +478,14 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->sc_num = cap.service_code_caps;
 	p->iface_num = p->l3_if_num + p->port_num + p->pppoe_session_max;
 
+	/*
+	 * Initialize locks
+	 * Initialize locks before its first usage in "ppe_drv_tun_global_init".
+	 */
+	spin_lock_init(&p->lock);
+	spin_lock_init(&p->stats_lock);
+
+
 	if (!ppe_drv_hash_init()) {
 		return -1;
 	}
@@ -533,12 +571,6 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		ppe_drv_warn("%p: failed to initialize physical port base queue\n", p);
 		goto fail;
 	}
-
-	/*
-	 * Initialize locks
-	 */
-	spin_lock_init(&p->lock);
-	spin_lock_init(&p->stats_lock);
 
 	/*
 	 *

@@ -55,6 +55,11 @@ static bool nss_ppe_gretap_src_exception(struct net_device *dev, struct sk_buff 
 
 	skb->protocol = eth_type_trans(skb, dev);
 	skb->dev = dev;
+	/*
+	 * Packet type is updated to PACKET_OTHERHOST in eth_type_trans. Since the packet
+	 * is already decapsulated set it to PACKET_HOST for futher processing
+	 */
+	skb->pkt_type = PACKET_HOST;
 	skb->skb_iif = dev->ifindex;
 	skb_reset_network_header(skb);
 	ret = netif_receive_skb(skb);

@@ -38,7 +38,7 @@
 					/* Inline IPSec flow */
 #define PPE_DRV_V6_CONN_FLAG_FLOW_PPE_ASSIST 0x00000040
 					/* Flow needs PPE assistance for RFS */
-#define PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING 0x00000080
+#define PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_SAWF 0x00000080
 					/* SAWF marking is valid for the flow */
 #define PPE_DRV_V6_CONN_FLOW_FLAG_FSE 0x00000100
 					/* Flow is also pushed to FSE HW in Wifi */
@@ -100,9 +100,9 @@ struct ppe_drv_v6_conn_flow {
 	struct ppe_drv_vsi *eg_top_vsi;
 
 	/*
-	 * SAWF information
+	 * Flow metadata information
 	 */
-	uint32_t sawf_mark;			/* SAWF related parameters */
+	struct ppe_drv_flow_metadata flow_metadata;	/* Information about the flow metadata */
 
 	/*
 	 * Igress information
@@ -387,15 +387,6 @@ static inline uint32_t ppe_drv_v6_conn_flow_int_pri_get(struct ppe_drv_v6_conn_f
 }
 
 /*
- * ppe_drv_v6_conn_flow_sawf_get()
- *	Get sawf metadata associated with flow.
- */
-static inline uint32_t ppe_drv_v6_conn_flow_sawf_get(struct ppe_drv_v6_conn_flow *pcf)
-{
-	return pcf->sawf_mark;
-}
-
-/*
  * ppe_drv_v6_conn_flow_egress_dscp_get()
  *	Returns DSCP value associated with flow.
  */
@@ -598,15 +589,6 @@ static inline void ppe_drv_v6_conn_flow_int_pri_set(struct ppe_drv_v6_conn_flow 
 static inline void ppe_drv_v6_conn_flow_egress_dscp_set(struct ppe_drv_v6_conn_flow *pcf, uint8_t egress_dscp)
 {
         pcf->egress_dscp = egress_dscp;
-}
-
-/*
- * ppe_drv_v6_conn_flow_sawf_set()
- *	Set sawf metadata associated with flow.
- */
-static inline void ppe_drv_v6_conn_flow_sawf_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t sawf_mark)
-{
-	pcf->sawf_mark = sawf_mark;
 }
 
 /*

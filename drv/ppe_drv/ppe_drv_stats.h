@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -161,12 +161,22 @@ struct ppe_drv_comm_stats {
  *	Message structure for per service code stats.
  */
 struct ppe_drv_stats_sc {
-	atomic64_t sc_cb_unregister;	/* Per service-code counter for callback not registered */
-	atomic64_t sc_cb_success;	/* Per service-code coutner for successful callback */
-	atomic64_t sc_cb_failure;	/* Per service-code counter for failure callback */
-	atomic64_t sc_rx_packets;	/* Per service-class counter for packets recieved on ethernet port */
-	atomic64_t sc_rx_bytes;		/* Per service-class counter for bytes recieved on ethernet port */
-	atomic64_t sc_flow_count;	/* Per service-class counter for total number of flows present */
+	atomic64_t sc_cb_unregister;		/* Per service-code counter for callback not registered */
+	atomic64_t sc_cb_packet_consumed;	/* Per service-code coutner for successful packet consumption in callback */
+	atomic64_t sc_cb_packet_processed;	/* Per service-code counter for packet processed in callback */
+	atomic64_t sc_vp_cb_unregister;		/* Per service-code counter for vp callback not registered */
+	atomic64_t sc_vp_cb_packet_consumed;	/* Per service-code coutner for vp successful packet consumption in callback */
+	atomic64_t sc_vp_cb_packet_processed;	/* Per service-code counter for vp packet processed in callback */
+};
+
+/*
+ * ppe_drv_stats_sawf_sc
+ *	Message structure for per service class stats.
+ */
+struct ppe_drv_stats_sawf_sc {
+	atomic64_t rx_packets;		/* Per service-class counter for packets recieved on ethernet port */
+	atomic64_t rx_bytes;		/* Per service-class counter for bytes recieved on ethernet port */
+	atomic64_t flow_count;		/* Per service-class counter for total number of flows present */
 };
 
 /*
@@ -177,6 +187,7 @@ struct ppe_drv_stats {
 	struct ppe_drv_gen_stats gen_stats;				/* General connection stats */
 	struct ppe_drv_comm_stats comm_stats[PPE_DRV_CONN_TYPE_MAX];	/* common stats for flow and tunnel */
 	struct ppe_drv_stats_sc	sc_stats[PPE_DRV_SC_CNT_MAX];		/* Per service-code stats */
+	struct ppe_drv_stats_sawf_sc sawf_sc_stats[PPE_DRV_SAWF_SC_MAX];	/* Per service-class stats */
 };
 
 /*

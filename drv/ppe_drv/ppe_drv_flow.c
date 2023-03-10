@@ -126,6 +126,21 @@ void ppe_drv_flow_stats_clear(struct ppe_drv_flow *pf)
 }
 
 /*
+ * ppe_drv_flow_sawf_sc_stats_add()
+ *	Update stats for given service class.
+ */
+void ppe_drv_flow_sawf_sc_stats_add(uint8_t service_class, uint32_t delta_pkts, uint32_t delta_bytes)
+{
+	struct ppe_drv_stats_sawf_sc *sawf_sc_stats = &ppe_drv_gbl.stats.sawf_sc_stats[service_class];
+
+	atomic64_add(delta_pkts, &sawf_sc_stats->rx_packets);
+	atomic64_add(delta_bytes, &sawf_sc_stats->rx_bytes);
+
+	ppe_drv_trace("Stats Updated: service class %u : packets %llu : bytes %llu\n",
+			service_class, atomic64_read(&sawf_sc_stats->rx_packets), atomic64_read(&sawf_sc_stats->rx_bytes));
+}
+
+/*
  * ppe_drv_flow_v6_stats_update()
  *	Updates flow instance's stats counter from PPE flow hit counter.
  */
@@ -134,10 +149,9 @@ void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 	sw_error_t err;
 	uint32_t delta_pkts;
 	uint32_t delta_bytes;
-	uint8_t service_code;
-	uint32_t sawf_tag;
 	struct ppe_drv_v6_conn_flow *pcr;
 	struct ppe_drv_flow *pf = pcf->pf;
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 	fal_entry_counter_t flow_cntrs = {0};
 	struct ppe_drv_v6_conn *cn = pcf->conn;
 
@@ -176,12 +190,10 @@ void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 	pf->bytes = flow_cntrs.matched_bytes;
 
 	/*
-	 * Update the stats only if sawf tag is valid.
+	 * Update the stats only if tree_id is configured with SAWF.
 	 */
-	sawf_tag = PPE_DRV_SAWF_TAG_GET(pcf->sawf_mark);
-	if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
-		service_code = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
-		ppe_drv_sc_stats_add(service_code, delta_pkts, delta_bytes);
+	if (ppe_drv_tree_id_type_get(&pcf->flow_metadata) == PPE_DRV_TREE_ID_TYPE_SAWF) {
+		ppe_drv_flow_sawf_sc_stats_add(tree_id_data->info.sawf_metadata.service_class, delta_pkts, delta_bytes);
 	}
 
 	ppe_drv_trace("%p: updating stats for flow [index:%u] - curr pkt:%u byte:%llu", pf, pf->index, pf->pkts, pf->bytes);
@@ -196,10 +208,9 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	sw_error_t err;
 	uint32_t delta_pkts;
 	uint32_t delta_bytes;
-	uint32_t sawf_tag;
-	uint8_t service_code;
 	struct ppe_drv_v4_conn_flow *pcr;
 	struct ppe_drv_flow *pf = pcf->pf;
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 	fal_entry_counter_t flow_cntrs = {0};
 	struct ppe_drv_v4_conn *cn = pcf->conn;
 	struct ppe_drv_v6_conn_flow *mapt_pcf_v6, *mapt_pcr_v6;
@@ -253,12 +264,10 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	pf->bytes = flow_cntrs.matched_bytes;
 
 	/*
-	 * Update the stats only if sawf tag is valid.
+	 * Update the stats only if tree_id has SAWF metadata.
 	 */
-	sawf_tag = PPE_DRV_SAWF_TAG_GET(pcf->sawf_mark);
-	if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
-		service_code = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
-		ppe_drv_sc_stats_add(service_code, delta_pkts, delta_bytes);
+	if (ppe_drv_tree_id_type_get(&pcf->flow_metadata) == PPE_DRV_TREE_ID_TYPE_SAWF) {
+		ppe_drv_flow_sawf_sc_stats_add(tree_id_data->info.sawf_metadata.service_class, delta_pkts, delta_bytes);
 	}
 
 	ppe_drv_trace("%p: updating stats for flow [index:%u] - curr pkt:%u byte:%llu", pf, pf->index, pf->pkts, pf->bytes);
@@ -338,15 +347,23 @@ bool ppe_drv_flow_v6_qos_clear(struct ppe_drv_flow *pf)
  */
 static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *tree_id)
 {
-	/*
-	 * Check if flow needs SAWF marking, if valid then set peer id
-	 * from SAWF metadata into tree id (bits 0-9).
-	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING)) {
-		*tree_id = PPE_DRV_SAWF_PEER_ID_GET(pcf->sawf_mark);
-	}
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 
-	return true;
+	switch (tree_id_data->type) {
+	case PPE_DRV_TREE_ID_TYPE_NONE:
+		*tree_id = tree_id_data->info.value;
+		return true;
+
+	case PPE_DRV_TREE_ID_TYPE_SAWF:
+		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
+		PPE_DRV_TREE_ID_SERVICE_CLASS_SET(tree_id, tree_id_data->info.sawf_metadata.service_class);
+		PPE_DRV_TREE_ID_PEER_ID_SET(tree_id, tree_id_data->info.sawf_metadata.peer_id);
+		return true;
+
+	default:
+		ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
+		return false;
+	}
 }
 
 /*
@@ -371,8 +388,8 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 	/*
 	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING)) {
-		*wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(pcf->sawf_mark);
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_SAWF)) {
+		*wifi_qos = pcf->flow_metadata.wifi_qos;
 		*wifi_qos_en = true;
 	}
 
@@ -424,18 +441,6 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	if (sc != PPE_DRV_SC_NONE) {
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
-					pcf, service_code, sc);
-			return false;
-		}
-	}
-
-	/*
-	 * SC required when SAWF marking is set.
-	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SAWF_MARKING)) {
-		sc = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
-		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: SAWF marked flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
@@ -567,11 +572,13 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 					struct ppe_drv_host *host, bool entry_valid)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_stats_sc *sc_stats;
+	struct ppe_drv_stats_sawf_sc *sawf_sc_stats;
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 	fal_flow_entry_t flow_cfg = {0};
 	uint32_t match_dest_ip[4];
 	uint32_t match_protocol = ppe_drv_v6_conn_flow_match_protocol_get(pcf);
 	uint8_t vlan_hdr_cnt = ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf);
+	uint8_t service_class;
 	struct ppe_drv_iface *port_if = ppe_drv_v6_conn_flow_eg_port_if_get(pcf);
 	struct ppe_drv_port *pp;
 	struct ppe_drv_flow *flow;
@@ -815,12 +822,15 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 			pcf, flow_cfg.entry_id);
 
 	/*
-	 * Increment flow count if SAWF service code corresponds to a service class.
+	 * Increment flow count if SAWF service class is configured in tree_id.
 	 */
-	if ((flow_cfg.sevice_code >= PPE_DRV_SC_SAWF_START) && (flow_cfg.sevice_code <= PPE_DRV_SC_SAWF_END)) {
-		sc_stats = &p->stats.sc_stats[flow_cfg.sevice_code];
-		ppe_drv_stats_inc(&sc_stats->sc_flow_count);
-		ppe_drv_trace("Stats Updated: service code %u : flow  %llu\n", flow_cfg.sevice_code, atomic64_read(&sc_stats->sc_flow_count));
+	if (ppe_drv_tree_id_type_get(&pcf->flow_metadata) == PPE_DRV_TREE_ID_TYPE_SAWF) {
+		service_class = tree_id_data->info.sawf_metadata.service_class;
+		if (PPE_DRV_SERVICE_CLASS_IS_VALID(service_class)) {
+			sawf_sc_stats = &p->stats.sawf_sc_stats[service_class];
+			ppe_drv_stats_inc(&sawf_sc_stats->flow_count);
+			ppe_drv_trace("Stats Updated: service class %u : flow  %llu\n", service_class, atomic64_read(&sawf_sc_stats->flow_count));
+		}
 	}
 
 	/*
@@ -910,15 +920,24 @@ bool ppe_drv_flow_v4_qos_clear(struct ppe_drv_flow *pf)
  */
 static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *tree_id)
 {
-	/*
-	 * Check if flow needs SAWF marking, if valid set peer id from
-	 * SAWF metadata into tree id (bits 0-9).
-	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING)) {
-		*tree_id = PPE_DRV_SAWF_PEER_ID_GET(pcf->sawf_mark);
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
+
+	switch (tree_id_data->type) {
+	case PPE_DRV_TREE_ID_TYPE_NONE:
+		*tree_id = tree_id_data->info.value;
+		return true;
+
+	case PPE_DRV_TREE_ID_TYPE_SAWF:
+		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
+		PPE_DRV_TREE_ID_SERVICE_CLASS_SET(tree_id, tree_id_data->info.sawf_metadata.service_class);
+		PPE_DRV_TREE_ID_PEER_ID_SET(tree_id, tree_id_data->info.sawf_metadata.peer_id);
+		return true;
+
+	default:
+		ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
+		return false;
 	}
 
-	return true;
 }
 
 /*
@@ -943,8 +962,8 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
 	/*
 	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING)) {
-		*wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(pcf->sawf_mark);
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_SAWF)) {
+		*wifi_qos = pcf->flow_metadata.wifi_qos;
 		*wifi_qos_en = true;
 	}
 
@@ -996,18 +1015,6 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	if (sc != PPE_DRV_SC_NONE) {
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
-					pcf, service_code, sc);
-			return false;
-		}
-	}
-
-	/*
-	 * SC required when SAWF marking is set.
-	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_SAWF_MARKING)) {
-		sc = PPE_DRV_SAWF_SERVICE_CLASS_GET(pcf->sawf_mark) + PPE_DRV_SC_SAWF_START;
-		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: SAWF marked flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
@@ -1168,7 +1175,8 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 					struct ppe_drv_host *host, bool entry_valid)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_stats_sc *sc_stats;
+	struct ppe_drv_stats_sawf_sc *sawf_sc_stats;
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 	fal_flow_entry_t flow_cfg = {0};
 	uint32_t match_src_ip = ppe_drv_v4_conn_flow_match_src_ip_get(pcf);
 	uint32_t match_dest_ip = ppe_drv_v4_conn_flow_match_dest_ip_get(pcf);
@@ -1176,6 +1184,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	uint32_t xlate_dest_ip = ppe_drv_v4_conn_flow_xlate_dest_ip_get(pcf);
 	uint32_t match_protocol = ppe_drv_v4_conn_flow_match_protocol_get(pcf);
 	uint8_t vlan_hdr_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
+	uint8_t service_class;
 	struct ppe_drv_iface *port_if = ppe_drv_v4_conn_flow_eg_port_if_get(pcf);
 	struct ppe_drv_port *pp;
 	struct ppe_drv_flow *flow;
@@ -1443,12 +1452,15 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 			pcf, flow_cfg.entry_id);
 
 	/*
-	 * Increment flow count if SAWF service code corresponds to a service class.
+	 * Increment flow count if SAWF service is configured in tree_id.
 	 */
-	if ((flow_cfg.sevice_code >= PPE_DRV_SC_SAWF_START) && (flow_cfg.sevice_code <= PPE_DRV_SC_SAWF_END)) {
-		sc_stats = &p->stats.sc_stats[flow_cfg.sevice_code];
-		ppe_drv_stats_inc(&sc_stats->sc_flow_count);
-		ppe_drv_trace("Stats Updated: service code %u : flow  %llu\n", flow_cfg.sevice_code, atomic64_read(&sc_stats->sc_flow_count));
+	if (ppe_drv_tree_id_type_get(&pcf->flow_metadata) == PPE_DRV_TREE_ID_TYPE_SAWF) {
+		service_class = tree_id_data->info.sawf_metadata.service_class;
+		if (PPE_DRV_SERVICE_CLASS_IS_VALID(service_class)) {
+			sawf_sc_stats = &p->stats.sawf_sc_stats[service_class];
+			ppe_drv_stats_inc(&sawf_sc_stats->flow_count);
+			ppe_drv_trace("Stats Updated: service class %u : flow  %llu\n", service_class, atomic64_read(&sawf_sc_stats->flow_count));
+		}
 	}
 
 	/*

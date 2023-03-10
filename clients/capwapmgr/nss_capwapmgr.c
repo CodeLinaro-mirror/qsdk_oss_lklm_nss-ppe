@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -27,6 +27,7 @@
 #include <linux/tcp.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
+#include <linux/stat.h>
 #include <net/ipv6.h>
 #include <linux/version.h>
 #include <net/ip_tunnels.h>
@@ -35,6 +36,7 @@
 #include <linux/if_pppox.h>
 #include <nss_api_if.h>
 #include <linux/in.h>
+#include <linux/debugfs.h>
 #include <fal/fal_qos.h>
 #include <fal/fal_acl.h>
 #include <ppe_drv.h>
@@ -442,6 +444,18 @@ static void nss_capwapmgr_receive_pkt(struct net_device *dev, struct sk_buff *sk
 	 * SKB NETIF END
 	 */
 	dev_put(dev);
+}
+
+/*
+ * nss_capwapmgr_receive_pkt_ppe_vp()
+ *	Receives a pkt from ppe.
+ */
+static bool nss_capwapmgr_receive_pkt_ppe_vp(struct net_device *dev, struct sk_buff *skb, void *cb_data)
+{
+	struct net_device *parent_netdev = (struct net_device *)cb_data;
+	nss_capwapmgr_assert(parent_dev, "Parent netdev is NULL for internal dev %p", dev);
+	nss_capwapmgr_receive_pkt(parent_netdev, skb, NULL);
+	return true;
 }
 
 /*
@@ -2200,6 +2214,16 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 
 	if (!outer_trustsec_enabled) {
 		vpai.queue_num = edma_cfg_rx_point_offload_ring_queue_get();
+
+		/*
+		 * Enable ppe to host mode.
+		 * This mode is not supported for trustsec enabled tunnels.
+		 */
+		if (global.ppe2host) {
+			vpai.src_cb = &nss_capwapmgr_receive_pkt_ppe_vp;
+			vpai.src_cb_data = (void*)dev;
+			capwap_rule->enabled_features |= NSS_CAPWAPMGR_FEATURE_PPE_TO_HOST_ENABLED;
+		}
 	}
 
 	/*
@@ -2597,6 +2621,96 @@ static int nss_capwapmgr_netdev_event(struct notifier_block *nb, unsigned long e
 	}
 
 	return NOTIFY_DONE;
+}
+
+/*
+ * nss_capwapmgr_ppe2host_read()
+ *	capwapmanager ppe2host read handler
+ */
+static ssize_t nss_capwapmgr_ppe2host_read(struct file *f, char *buf, size_t count, loff_t *offset)
+{
+	int len;
+	char lbuf[26];
+
+	len = snprintf(lbuf, sizeof(lbuf), "capwap ppe2host %s\n", (global.ppe2host) ? ("enabled") : ("disabled"));
+
+	return simple_read_from_buffer(buf, count, offset, lbuf, len);
+}
+
+/*
+ * nss_capwapmgr_ppe2host_write()
+ *	capwapmanager ppe2host write handler
+ */
+static ssize_t nss_capwapmgr_ppe2host_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
+{
+	ssize_t size;
+	char data[16];
+	bool res;
+	int status;
+
+	size = simple_write_to_buffer(data, sizeof(data), offset, buffer, len);
+	if (size < 0) {
+		nss_capwapmgr_warn("Error reading the input for capwap ppe2host configuration");
+		return size;
+	}
+
+	status = kstrtobool(data, &res);
+	if (status) {
+		nss_capwapmgr_warn("Error reading the input for capwap ppe2host configuration");
+		return status;
+	}
+
+	global.ppe2host = res;
+	return len;
+}
+
+/*
+ * nss_capwapmgr_ppe2host_file_fops
+ *	File handler for configuring ppe2host
+ */
+const struct file_operations nss_capwapmgr_ppe2host_file_fops = {
+	.owner = THIS_MODULE,
+	.write = nss_capwapmgr_ppe2host_write,
+	.read = nss_capwapmgr_ppe2host_read
+};
+
+/*
+ * nss_capwapmgr_dentry_init()
+ *	Create capwap accel_mode debugfs entry.
+ */
+static bool nss_capwapmgr_dentry_init(void)
+{
+	/*
+	 * Initialize debugfs directory.
+	 */
+	struct dentry *parent;
+	struct dentry *clients;
+
+	parent = debugfs_lookup("qca-nss-ppe", NULL);
+	if (!parent) {
+		nss_capwapmgr_warn("parent debugfs entry for qca-nss-ppe not present");
+		return false;
+	}
+
+	clients = debugfs_lookup("clients", parent);
+	if (!clients) {
+		nss_capwapmgr_warn("clients debugfs entry inside qca-nss-ppe not present");
+		return false;
+	}
+
+	global.capwap_dentry = debugfs_create_dir("capwap", clients);
+	if (!global.capwap_dentry) {
+		nss_capwapmgr_warn("Failed to create capwap debugfs under qca-nss-ppe/clients/");
+		return false;
+	}
+
+	if (!debugfs_create_file("ppe2host", (S_IRUGO | S_IWUSR), global.capwap_dentry, NULL, &nss_capwapmgr_ppe2host_file_fops)) {
+		nss_capwapmgr_warn("Failed to create debugfs entry for ppe2host");
+		debugfs_remove_recursive(global.capwap_dentry);
+		return false;
+	}
+
+	return true;
 }
 
 /*
@@ -4238,9 +4352,17 @@ int __init nss_capwapmgr_init_module(void)
 		return -1;
 	}
 #endif
+	if (!nss_capwapmgr_dentry_init()) {
+		nss_capwapmgr_warn("Failed to create dentry for capwap\n");
+	}
 
 	register_netdevice_notifier(&nss_capwapmgr_netdev_notifier);
 	memset(&global.tunneld_stats, 0, sizeof(struct nss_capwap_tunnel_stats));
+
+	/*
+	 * ppe2host is disabled by default.
+	 */
+	global.ppe2host = false;
 
 	return 0;
 }
@@ -4279,6 +4401,10 @@ void __exit nss_capwapmgr_exit_module(void)
 
 	nss_capwapmgr_ndev = NULL;
 #endif
+	if (global.capwap_dentry) {
+		debugfs_remove_recursive(global.capwap_dentry);
+	}
+
 	unregister_netdevice_notifier(&nss_capwapmgr_netdev_notifier);
 
 	nss_capwapmgr_trustsec_rx_vp_unconfig();

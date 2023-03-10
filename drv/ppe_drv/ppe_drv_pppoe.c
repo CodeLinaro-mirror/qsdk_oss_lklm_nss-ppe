@@ -121,7 +121,7 @@ struct ppe_drv_tun_l3_if *ppe_drv_pppoe_tl_l3_if_get(struct ppe_drv_pppoe *pppoe
 
 	ppe_drv_pppoe_ref(pppoe);
 
-	return pppoe->tl_l3_if;
+	return ppe_drv_tun_l3_if_ref(pppoe->tl_l3_if);
 }
 
 /*

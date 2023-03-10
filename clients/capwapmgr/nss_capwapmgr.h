@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -21,9 +21,9 @@
 #define __NSS_CAPWAPMGR_H
 
 #if (NSS_CAPWAPMGR_DEBUG_LEVEL < 1)
-#define nss_capwapmgr_assert(fmt, args...)
+#define nss_capwapmgr_assert(c, s, ...)
 #else
-#define nss_capwapmgr_assert(c) if (!(c)) { BUG_ON(!(c)); }
+#define nss_capwapmgr_assert(c, s, ...) if (!(c)) { printk(KERN_CRIT "%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__); BUG_ON(!(c)); }
 #endif /* NSS_CAPWAPMGR_DEBUG_LEVEL */
 
 /*
@@ -180,6 +180,8 @@ struct nss_capwapmgr_global {
 	atomic_t dscp_acl_rule_create_req;	/* Number of dscp acl rule create requests */
 	bool trustsec_rx_vp_configured;		/* Flag to check if trustsec_rx vp is configured */
 	bool trustsec_rx_vp_config_in_progress;	/* Flag to check if trustsec_rx vp config is in progress */
+	struct dentry *capwap_dentry;		/* Dentry to enable/disable ppe to host mode */
+	bool ppe2host;				/* ppe2host configuration */
 };
 
 #endif /* __NSS_CAPWAPMGR_H */
