@@ -1988,6 +1988,7 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 		 * Destroy the offloaded flow entry
 		 */
 		ppe_drv_v4_flow_del(pcf);
+		pcf->pf = NULL;
 
 		ppe_drv_stats_inc(&comm_stats->v4_create_fail);
 		ppe_drv_warn("%p: acceleration of return direction failed: %p", p, pcr);
