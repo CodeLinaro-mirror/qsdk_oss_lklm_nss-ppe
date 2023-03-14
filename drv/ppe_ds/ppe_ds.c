@@ -342,24 +342,34 @@ EXPORT_SYMBOL(ppe_ds_wlan_vp_free);
 ppe_vp_num_t ppe_ds_wlan_vp_alloc(ppe_ds_wlan_handle_t *wlan_handle, struct net_device *dev, struct ppe_vp_ai *vpai)
 {
 	uint32_t ppe_queue_start;
-	struct ppe_ds *node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
-	struct ppe_ds_node_config *node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
-	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
-	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
+	struct ppe_ds *node;
+	struct ppe_ds_node_config *node_cfg;
+	nss_dp_ppeds_handle_t *edma_handle;
+	struct nss_dp_ppeds_ops *dp_ops;
+
+	if (!wlan_handle) {
+		ppe_ds_err("wlan_handle is NULL\n");
+		return PPE_VP_STATUS_FAILURE;
+	}
+
+	node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
+	dp_ops = node->dp_ops;
+	if (!dp_ops || !dp_ops->get_queues) {
+		ppe_ds_err("NULL EDMA operation, in PPE-DS VP alloc API\n");
+		return PPE_VP_STATUS_FAILURE;
+	}
+
+	node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
+	edma_handle = node->edma_handle;
 
 	read_lock_bh(&node_cfg->lock);
 	if(node_cfg->node_state != PPE_DS_NODE_STATE_START_DONE) {
 		ppe_ds_err("Invalid node state: %d, PPE-DS vp alloc failed\n",
 				node_cfg->node_state);
 		read_unlock_bh(&node_cfg->lock);
-		return false;
-	}
-	read_unlock_bh(&node_cfg->lock);
-
-	if (!dp_ops || !dp_ops->get_queues) {
-		ppe_ds_err("NULL EDMA operation, in PPE-DS VP alloc API\n");
 		return PPE_VP_STATUS_FAILURE;
 	}
+	read_unlock_bh(&node_cfg->lock);
 
 	dp_ops->get_queues(edma_handle, &ppe_queue_start);
 	ppe_ds_info("%px: PPE-DS node mapped start queue-id: %d", node, ppe_queue_start);
@@ -380,14 +390,36 @@ EXPORT_SYMBOL(ppe_ds_wlan_vp_alloc);
  */
 bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_wlan_reg_info *reg_info)
 {
-	struct ppe_ds *node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
-	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
-	struct ppe_ds_node_config *node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
-	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
-	unsigned int cpu;
 	static unsigned int ppeds_node_iter_cnt;
-	bool ret;
 	ppe_ds_node_state_t priv_node_state;
+	struct ppe_ds_node_config *node_cfg;
+	nss_dp_ppeds_handle_t *edma_handle;
+	struct nss_dp_ppeds_ops *dp_ops;
+	struct ppe_ds *node;
+	unsigned int cpu;
+	bool ret;
+
+	if (!wlan_handle) {
+		ppe_ds_err("wlan_handle is NULL\n");
+		return false;
+	}
+
+	node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
+	dp_ops = node->dp_ops;
+
+	/*
+	 * Validate EDMA operations which are part of data path also before
+	 * enabling the HR timer callback
+	 */
+	if (!dp_ops || !dp_ops->reg || !dp_ops->set_rx_cons_idx ||
+			 !dp_ops->set_tx_prod_idx || !dp_ops->get_tx_cons_idx ||
+			 !dp_ops->get_rx_prod_idx) {
+		ppe_ds_err("NULL EDMA operation in PPE-DS registration API\n");
+		return false;
+	}
+
+	edma_handle = node->edma_handle;
+	node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
 
 	write_lock_bh(&node_cfg->lock);
 	priv_node_state = node_cfg->node_state;
@@ -400,17 +432,6 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
 	}
 	node_cfg->node_state = PPE_DS_NODE_STATE_REG_IN_PROG;
 	write_unlock_bh(&node_cfg->lock);
-
-	/*
-	 * Validate EDMA operations which are part of data path also before
-	 * enabling the HR timer callback
-	 */
-	if (!dp_ops || !dp_ops->reg || !dp_ops->set_rx_cons_idx ||
-			 !dp_ops->set_tx_prod_idx || !dp_ops->get_tx_cons_idx ||
-			 !dp_ops->get_rx_prod_idx) {
-		printk("NULL EDMA operation in PPE-DS registration API\n");
-		return false;
-	}
 
 	/*
 	 * During wifi up/down we could come here, get the current
@@ -537,12 +558,27 @@ EXPORT_SYMBOL(ppe_ds_wlan_inst_register);
 void ppe_ds_wlan_instance_stop(ppe_ds_wlan_handle_t *wlan_handle,
 			struct ppe_ds_wlan_ctx_info_handle *wlan_info_hdl)
 {
-	struct ppe_ds *node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
-	struct ppe_ds_node_config *node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
-	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
-	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
+	struct ppe_ds *node;
+	struct ppe_ds_node_config *node_cfg;
+	nss_dp_ppeds_handle_t *edma_handle;
+	struct nss_dp_ppeds_ops *dp_ops;
 	struct nss_ppe_ds_ctx_info_handle *info_hdl =
 		(struct nss_ppe_ds_ctx_info_handle *)wlan_info_hdl;
+
+	if (!wlan_handle) {
+		ppe_ds_err("wlan_handle is NULL\n");
+		return;
+	}
+
+	node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
+	dp_ops = node->dp_ops;
+	if (!dp_ops || !dp_ops->stop) {
+		ppe_ds_err("NULL EDMA operation in PPE-DS stop API\n");
+		return;
+	}
+
+	node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
+	edma_handle = node->edma_handle;
 
 	node->en_process_irq = false;
 
@@ -559,11 +595,6 @@ void ppe_ds_wlan_instance_stop(ppe_ds_wlan_handle_t *wlan_handle,
 	if (polling_for_idx_update) {
 		node->timer_enabled = false;
 		hrtimer_cancel(&node->timer);
-	}
-
-	if (!dp_ops || !dp_ops->stop) {
-		ppe_ds_err("NULL EDMA operation in PPE-DS stop API\n");
-		return;
 	}
 
 	/*
@@ -635,12 +666,27 @@ int ppe_ds_wlan_instance_start(ppe_ds_wlan_handle_t *wlan_handle,
 			struct ppe_ds_wlan_ctx_info_handle *wlan_info_hdl)
 {
 	int ret;
-	struct ppe_ds *node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
-	struct ppe_ds_node_config *node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
-	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
-	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
+	struct ppe_ds *node;
+	struct ppe_ds_node_config *node_cfg;
+	nss_dp_ppeds_handle_t *edma_handle;
+	struct nss_dp_ppeds_ops *dp_ops;
 	struct nss_ppe_ds_ctx_info_handle *info_hdl =
 		(struct nss_ppe_ds_ctx_info_handle *)wlan_info_hdl;
+
+	if (!wlan_handle) {
+		ppe_ds_err("wlan_handle is NULL\n");
+		return -1;
+	}
+
+	node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
+	dp_ops = node->dp_ops;
+	if (!dp_ops || !dp_ops->refill || !dp_ops->start) {
+		ppe_ds_err("NULL EDMA operation in PPE-DS start API\n");
+		return -1;
+	}
+
+	node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
+	edma_handle = node->edma_handle;
 
 	write_lock_bh(&node_cfg->lock);
 	if(node_cfg->node_state != PPE_DS_NODE_STATE_REG_DONE) {
@@ -651,11 +697,6 @@ int ppe_ds_wlan_instance_start(ppe_ds_wlan_handle_t *wlan_handle,
 	}
 	node_cfg->node_state = PPE_DS_NODE_STATE_START_IN_PROG;
 	write_unlock_bh(&node_cfg->lock);
-
-	if (!dp_ops || !dp_ops->refill || !dp_ops->start) {
-		ppe_ds_err("NULL EDMA operation in PPE-DS start API\n");
-		return -1;
-	}
 
 	dp_ops->refill(edma_handle, edma_handle->ppe2tcl_num_desc -1);
 
@@ -745,10 +786,25 @@ EXPORT_SYMBOL(ppe_ds_wlan_inst_start);
  */
 void ppe_ds_wlan_inst_free(ppe_ds_wlan_handle_t *wlan_handle)
 {
-	struct ppe_ds *node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
-	struct ppe_ds_node_config *node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
-	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
-	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
+	struct ppe_ds *node;
+	struct ppe_ds_node_config *node_cfg;
+	struct nss_dp_ppeds_ops *dp_ops;
+	nss_dp_ppeds_handle_t *edma_handle;
+
+	if (!wlan_handle) {
+		ppe_ds_err("wlan_handle is NULL\n");
+		return;
+	}
+
+	node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
+	dp_ops = node->dp_ops;
+	if (!dp_ops || !dp_ops->free) {
+		ppe_ds_err("NULL EDMA operation in PPE-DS free API\n");
+		return;
+	}
+
+	node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
+	edma_handle = node->edma_handle;
 
 	write_lock_bh(&node_cfg->lock);
 	if(node_cfg->node_state != PPE_DS_NODE_STATE_STOP_DONE) {
@@ -759,11 +815,6 @@ void ppe_ds_wlan_inst_free(ppe_ds_wlan_handle_t *wlan_handle)
 	}
 	node_cfg->node_state = PPE_DS_NODE_STATE_FREE_IN_PROG;
 	write_unlock_bh(&node_cfg->lock);
-
-	if (!dp_ops || !dp_ops->free) {
-		ppe_ds_err("NULL EDMA operation in PPE-DS free API\n");
-		return;
-	}
 
 	dp_ops->free(edma_handle);
 
@@ -800,6 +851,12 @@ ppe_ds_wlan_handle_t *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t
 	struct nss_dp_ppeds_ops *dp_ops = NULL;
 	uint32_t i;
 
+	dp_ops = nss_dp_ppeds_get_ops();
+	if (!dp_ops || !dp_ops->alloc) {
+		printk("NULL EDMA operation in PPE-DS alloc API\n");
+		return NULL;
+	}
+
 	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
 		write_lock_bh(&ppe_ds_node_cfg[i].lock);
 		if (ppe_ds_node_cfg[i].node_state != PPE_DS_NODE_STATE_AVAIL) {
@@ -817,14 +874,11 @@ ppe_ds_wlan_handle_t *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t
 	ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_NOT_AVAIL;
 	write_unlock_bh(&ppe_ds_node_cfg[i].lock);
 
-	dp_ops = nss_dp_ppeds_get_ops();
-	if (!dp_ops || !dp_ops->alloc) {
-		printk("NULL EDMA operation in PPE-DS alloc API\n");
-		return NULL;
-	}
-
 	edma_handle = dp_ops->alloc(&edma_ops, size);
 	if (!edma_handle) {
+		write_lock_bh(&ppe_ds_node_cfg[i].lock);
+		ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
+		write_unlock_bh(&ppe_ds_node_cfg[i].lock);
 		printk("Failed to get edma handle. alloc size requested: %d\n", size);
 		return NULL;
 	}
