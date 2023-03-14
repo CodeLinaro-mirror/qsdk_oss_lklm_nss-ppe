@@ -31,6 +31,13 @@ bool ppe_vp_rx_process_cb(struct net_device *rxdev, struct sk_buff *skb, void *c
 	skb->protocol = eth_type_trans(skb, rxdev);
 	skb->dev = rxdev;
 	skb->fast_xmit = 0;
+
+	/*
+	 * Reset the below flags in case any of DS flow is exceptioned.
+	 */
+	skb->fast_recycled = 0;
+	skb->recycled_for_ds = 0;
+
 	netif_receive_skb(skb);
 	return true;
 }
