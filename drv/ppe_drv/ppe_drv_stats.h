@@ -108,6 +108,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_create_fail_if_hierarchy;		/* No of v4 create failure due to interface hierarchy walk fail */
 
 	atomic64_t v4_create_fail_vlan_filter;		/* No of v4 create failure due to interface not in bridge */
+	atomic64_t v4_create_fail_bridge_noexist;	/* No of v4 create failure due to bridge interface not created */
 
 	atomic64_t v4_create_rfs_req;		/* No of v4 RFS create requests */
 	atomic64_t v4_create_rfs_fail;		/* No of v4 RFS create failure */
@@ -139,6 +140,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_fail_if_hierarchy;		/* No of v6 create failure due to interface hierarchy walk fail */
 
 	atomic64_t v6_create_fail_vlan_filter;		/* No of v6 create failure due to interface not in bridge */
+	atomic64_t v6_create_fail_bridge_noexist;	/* No of v6 create failure due to bridge interface not created */
 
 	atomic64_t v6_create_rfs_req;		/* No of v6 RFS create requests */
 	atomic64_t v6_create_rfs_fail;		/* No of v6 RFS create failure */

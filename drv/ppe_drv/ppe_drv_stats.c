@@ -120,6 +120,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_create_fail_if_hierarchy",		/* No of v4 create failure due to interface hierarchy walk fail */
 
 	"v4_create_fail_vlan_filter",		/* No of v4 create failure due to interface not in bridge */
+	"v4_create_fail_bridge_noexist",	/* No of v4 create failure due to bridge interface not created */
 
 	"v4_create_rfs_req",			/* No of v4 RFS create requests */
 	"v4_create_rfs_fail",			/* No of v4 RFS create failure */
@@ -151,6 +152,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_fail_if_hierarchy",		/* No of v6 create failure due to interface hierarchy walk fail */
 
 	"v6_create_fail_vlan_filter",		/* No of v6 create failure due to interface not in bridge */
+	"v6_create_fail_bridge_noexist",	/* No of v6 create failure due to bridge interface not created */
 
 	"v6_create_rfs_req",			/* No of v6 RFS create requests */
 	"v6_create_rfs_fail",			/* No of v6 RFS create failure */
@@ -191,6 +193,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_create_fail_if_hierarchy",	/* No of v4 create failure due to interface hierarchy walk fail */
 
 	"v4_tun_create_fail_vlan_filter",	/* No of v4 create failure due to interface not in bridge */
+	"v4_tun_create_fail_bridge_noexist",	/* No of v4 create failure due to bridge interface not created */
 	"v4_tun_create_rfs_noedit_rule",	/* No of v4 rfs non edit rule create */
 
 	"v4_tun_create_rfs_req",			/* No of v4 RFS create requests */
@@ -222,6 +225,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_fail_if_hierarchy",	/* No of v6 create failure due to interface hierarchy walk fail */
 
 	"v6_tun_create_fail_vlan_filter",	/* No of v6 create failure due to interface not in bridge */
+	"v6_tun_create_fail_bridge_noexist",	/* No of v6 create failure due to bridge interface not created */
 
 	"v6_tun_create_rfs_req",			/* No of v6 RFS create requests */
 	"v6_tun_create_rfs_fail",			/* No of v6 RFS create failure */
