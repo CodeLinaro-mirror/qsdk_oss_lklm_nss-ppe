@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -55,52 +55,6 @@ static void ppe_drv_sc_dump(ppe_drv_sc_t sc)
 {
 }
 #endif
-
-/*
- * ppe_drv_sc_stats_add()
- *	Update stats for given service class.
- */
-void ppe_drv_sc_stats_add(uint8_t service_code, uint32_t delta_pkts, uint32_t delta_bytes)
-{
-	struct ppe_drv_stats_sc *sc_stats = &ppe_drv_gbl.stats.sc_stats[service_code];
-
-	atomic64_add(delta_pkts, &sc_stats->sc_rx_packets);
-	atomic64_add(delta_bytes, &sc_stats->sc_rx_bytes);
-
-	ppe_drv_trace("Stats Updated: service code %u : packets %llu : bytes %llu\n",
-			service_code, atomic64_read(&sc_stats->sc_rx_packets), atomic64_read(&sc_stats->sc_rx_bytes));
-}
-
-/*
- * ppe_drv_sc_nsm_stats_update()
- *	Export service-class stats to nsm.
- */
-bool ppe_drv_sc_nsm_stats_update(struct ppe_drv_nsm_stats *nsm_stats, uint8_t service_class)
-{
-	uint8_t service_code = service_class + PPE_DRV_SC_SAWF_START;
-	struct ppe_drv_stats_sc *sc_stats;
-	struct ppe_drv *p = &ppe_drv_gbl;
-
-	if ((service_code < PPE_DRV_SC_SAWF_START) || (service_code > PPE_DRV_SC_SAWF_END)) {
-		ppe_drv_warn("%u Invalid SAWF service class", service_code);
-		return false;
-	}
-
-	spin_lock_bh(&p->lock);
-
-	sc_stats = &ppe_drv_gbl.stats.sc_stats[service_code];
-
-	nsm_stats->sc_stats.rx_packets = atomic64_read(&sc_stats->sc_rx_packets);
-	nsm_stats->sc_stats.rx_bytes = atomic64_read(&sc_stats->sc_rx_bytes);
-	nsm_stats->sc_stats.flow_count = atomic64_read(&sc_stats->sc_flow_count);
-
-	spin_unlock_bh(&p->lock);
-
-	ppe_drv_trace("Stats Updated: service class %u : packets %llu : bytes %llu : flows %u\n",
-			service_class, nsm_stats->sc_stats.rx_packets, nsm_stats->sc_stats.rx_bytes, nsm_stats->sc_stats.flow_count);
-	return true;
-}
-EXPORT_SYMBOL(ppe_drv_sc_nsm_stats_update);
 
 /*
  * ppe_drv_sc_ucast_queue_set()
@@ -264,18 +218,6 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 
 		break;
 
-	case PPE_DRV_SC_SAWF_START ... PPE_DRV_SC_SAWF_END:
-		/*
-		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
-		 * packets sent to PPE, with SPF bypass service code.
-		 */
-		sc_cfg.bypass_bitmap[1] = ((1 << SOURCE_FLTR_BYP)
-						| (1 << BRIDGING_FWD_BYP)
-						| (1 << L2_SOURCE_SEC_BYP));
-		sc_cfg.dest_port_valid = false;
-
-		break;
-
 	case PPE_DRV_SC_VP_RPS:
 		/*
 		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
@@ -311,35 +253,75 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
  * ppe_drv_sc_process_skbuff()
  *	Pass on skbuff to the registered callback.
  */
-bool ppe_drv_sc_process_skbuff(uint8_t sc, struct sk_buff *skb)
+bool ppe_drv_sc_process_skbuff(struct ppe_drv_sc_metadata *sc, struct sk_buff *skb)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_sc *psc;
 	ppe_drv_sc_callback_t cb;
+	struct ppe_drv_sc_vp_info *vp_info;
 	void *app_data;
 	bool ret;
+	uint16_t port_num;
+	uint16_t service_code;
 
-	ppe_drv_assert(sc < PPE_DRV_SC_CNT_MAX, "%p: invalid service code %u", p, sc);
+	/*
+	 * Handle VP callbacks for the service codes.
+	 */
+	service_code = sc->service_code;
+	if ((sc->vp_num >= PPE_DRV_VIRTUAL_START) && (sc->vp_num < PPE_DRV_VIRTUAL_END)) {
+		rcu_read_lock();
+		psc = &p->sc[service_code];
+		port_num = sc->vp_num - PPE_DRV_VIRTUAL_START;
+		vp_info = rcu_dereference(psc->vp_info[port_num]);
+		if (!vp_info){
+			rcu_read_unlock();
+			ppe_drv_trace("%p: No VP specific callback info in service code %u VP %u\n", p, service_code, sc->vp_num);
+			goto check_common_sc_cb;
+		}
 
+		cb = vp_info->cb;
+		app_data = vp_info->app_data;
+
+		ppe_drv_trace("%p: processing skb:%p skb->mark: 0x%x sc:%u vp:%u vp_cb:%p app:%p", p, skb, skb->mark, service_code, sc->vp_num, cb, app_data);
+
+		if (unlikely(!cb)) {
+			rcu_read_unlock();
+			ppe_drv_info("%p: callback not registered for SC:%u VP: %d", p, service_code, sc->vp_num);
+			ppe_drv_stats_inc(&p->stats.sc_stats[service_code].sc_vp_cb_unregister);
+			goto check_common_sc_cb;
+		}
+
+		ret = cb(app_data, skb, sc);
+		if (ret) {
+			ppe_drv_stats_inc(&p->stats.sc_stats[service_code].sc_vp_cb_packet_consumed);
+		} else {
+			ppe_drv_stats_inc(&p->stats.sc_stats[service_code].sc_vp_cb_packet_processed);
+		}
+
+		rcu_read_unlock();
+		return ret;
+	}
+
+check_common_sc_cb:
 	spin_lock_bh(&p->lock);
-	psc = &p->sc[sc];
+	psc = &p->sc[service_code];
 	cb = psc->cb;
 	app_data = psc->app_data;
 	spin_unlock_bh(&p->lock);
 
-	ppe_drv_trace("%p: processing skb:%p sc:%u cb:%p app:%p", p, skb, sc, cb, app_data);
+	ppe_drv_trace("%p: processing skb:%p sc:%u cb:%p app:%p", p, skb, service_code, cb, app_data);
 
 	if (!cb) {
-		ppe_drv_info("%p: callback not registered for SC:%u", p, sc);
-		ppe_drv_stats_inc(&p->stats.sc_stats[sc].sc_cb_unregister);
+		ppe_drv_info("%p: callback not registered for SC:%u", p, service_code);
+		ppe_drv_stats_inc(&p->stats.sc_stats[service_code].sc_cb_unregister);
 		return false;
 	}
 
-	ret = cb(app_data, skb);
+	ret = cb(app_data, skb, sc);
 	if (ret) {
-		ppe_drv_stats_inc(&p->stats.sc_stats[sc].sc_cb_success);
+		ppe_drv_stats_inc(&p->stats.sc_stats[service_code].sc_cb_packet_consumed);
 	} else {
-		ppe_drv_stats_inc(&p->stats.sc_stats[sc].sc_cb_failure);
+		ppe_drv_stats_inc(&p->stats.sc_stats[service_code].sc_cb_packet_processed);
 	}
 
 	return ret;
@@ -390,6 +372,93 @@ void ppe_drv_sc_register_cb(ppe_drv_sc_t sc, ppe_drv_sc_callback_t cb, void *app
 EXPORT_SYMBOL(ppe_drv_sc_register_cb);
 
 /*
+ * ppe_drv_sc_unregister_cb()
+ *	Unregister callback for a give service code
+ */
+void ppe_drv_sc_unregister_vp_cb(ppe_drv_sc_t sc, uint16_t vp_num)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_sc *psc;
+	struct ppe_drv_sc_vp_info *vp_info;
+
+	ppe_drv_assert(((vp_num >= PPE_DRV_VIRTUAL_START) && (vp_num < PPE_DRV_VIRTUAL_END)), "%px: Invalid port number: %d", p, vp_num);
+
+	if ((vp_num < PPE_DRV_VIRTUAL_START) || (vp_num >= PPE_DRV_VIRTUAL_END)) {
+		ppe_drv_warn("%px: invalid VP number %d", p, vp_num);
+		return;
+	}
+
+	ppe_drv_assert(cb, "%p: cannot register null cb for sc %u vp %u", p, sc, vp_num);
+	spin_lock_bh(&p->lock);
+	psc = &p->sc[sc];
+	vp_info = rcu_dereference_protected(psc->vp_info[vp_num - PPE_DRV_VIRTUAL_START], 1);
+	if (!vp_info) {
+		ppe_drv_warn("%p: no vp information for sc %u vp %u\n", p, sc, vp_num);
+		spin_unlock_bh(&p->lock);
+		return;
+	}
+
+	ppe_drv_assert(vp_info->cb, "%p: no cb registered for sc: %u vp: %u", p, sc, vp_num);
+	rcu_assign_pointer(psc->vp_info[vp_num - PPE_DRV_VIRTUAL_START], NULL);
+
+	spin_unlock_bh(&p->lock);
+	synchronize_rcu();
+	kfree(vp_info);
+
+	ppe_drv_info("%p: unregistered cb/app_data for sc:%u vp: %u", p, sc, vp_num);
+}
+EXPORT_SYMBOL(ppe_drv_sc_unregister_vp_cb);
+
+/*
+ * ppe_drv_sc_register_vp_cb()
+ *	Registers a vp pnode for a given service code for redirection.
+ */
+bool ppe_drv_sc_register_vp_cb(ppe_drv_sc_t sc, ppe_drv_sc_callback_t cb, void *app_data, uint16_t vp_num)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_sc *psc;
+	struct ppe_drv_sc_vp_info *vp_info;
+
+	ppe_drv_assert(((vp_num >= PPE_DRV_VIRTUAL_START) && (vp_num < PPE_DRV_VIRTUAL_END)), "%px: Invalid port number: %d", p, vp_num);
+
+	if ((vp_num < PPE_DRV_VIRTUAL_START) || (vp_num >= PPE_DRV_VIRTUAL_END)) {
+		ppe_drv_warn("%px: invalid VP number %d", p, vp_num);
+		return false;
+	}
+
+	ppe_drv_assert(cb, "%p: cannot register null cb for sc %u vp %u", p, sc, vp_num);
+
+	spin_lock_bh(&p->lock);
+	psc = &p->sc[sc];
+	vp_info = rcu_dereference_protected(psc->vp_info[vp_num - PPE_DRV_VIRTUAL_START], 1);
+	if (vp_info) {
+		ppe_drv_warn("%p: vp info is already present for service code %u vp %u\n", p, sc, vp_num);
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	vp_info = kzalloc(sizeof(struct ppe_drv_sc_vp_info), GFP_ATOMIC);
+	if (!vp_info) {
+		ppe_drv_warn("%p Failed to allocate VP info for a service code %u vp %u\n", p, sc, vp_num);
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	ppe_drv_assert(!vp_info->cb, "%p: multiple registration for sc:%u vp:%u - "
+				"prev cb:%p current cb:%p", p, sc, vp_num, vp_info->cb, cb);
+	vp_info->cb = cb;
+	vp_info->app_data = app_data;
+	rcu_assign_pointer(psc->vp_info[vp_num - PPE_DRV_VIRTUAL_START], vp_info);
+
+	spin_unlock_bh(&p->lock);
+	synchronize_rcu();
+
+	ppe_drv_info("%p: registered cb:%p app_data:%p for sc:%u vp:%u", p, cb, app_data, sc, vp_num);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_sc_register_vp_cb);
+
+/*
  * ppe_drv_sc_free()
  *	Free sc instance if it was allocated.
  */
@@ -406,7 +475,6 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_sc *sc;
-	int i = 0;
 
 	sc = vzalloc(sizeof(struct ppe_drv_sc) * p->sc_num);
 	if (!sc) {
@@ -435,10 +503,6 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE2, PPE_DRV_SC_EDIT_REDIR_CORE2, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_VP_RPS, PPE_DRV_SC_VP_RPS, PPE_DRV_PORT_CPU);
-
-	for (i = PPE_DRV_SC_SAWF_START; i <= PPE_DRV_SC_SAWF_END; i++) {
-		ppe_drv_sc_config(i, i, PPE_DRV_PORT_CPU);
-	}
 
 	return sc;
 }

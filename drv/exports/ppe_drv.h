@@ -43,6 +43,8 @@
 #define PPE_DRV_INT_PRI_MIN 0
 #define PPE_DRV_INT_PRI_MAX 15
 
+#define PPE_DRV_SERVICE_CLASS_IS_VALID(sc)	((sc >= PPE_DRV_SAWF_SC_START) && (sc <= PPE_DRV_SAWF_SC_END))
+
 /*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
@@ -53,6 +55,27 @@ enum ppe_drv_ip_type {
 	PPE_DRV_IP_TYPE_MC_V4,	/**< IPv4 multicast IP-type. */
 	PPE_DRV_IP_TYPE_MC_V6	/**< IPv6 multicast IP-type. */
 };
+
+/*
+ * ppe_drv_sawf_sc_type
+ *	Total types of service class
+ */
+typedef enum ppe_drv_sawf_sc_type {
+	PPE_DRV_SAWF_SC_NONE = 0,	/**< Invalid service class. */
+	PPE_DRV_SAWF_SC_START,		/**< SAWF service class start. */
+	PPE_DRV_SAWF_SC_END = 127,	/**< SAWF service class end. */
+	PPE_DRV_SAWF_SC_MAX,		/**< Maximum number of SAWF service classes */
+} ppe_drv_sawf_sc_t;
+
+/*
+ * ppe_drv_tree_id_type
+ *	Type for different Tree-ID configuration
+ */
+typedef enum ppe_drv_tree_id_type {
+	PPE_DRV_TREE_ID_TYPE_NONE = 0,	/**< Normal processing */
+	PPE_DRV_TREE_ID_TYPE_SAWF,	/**< SAWF usecase */
+	PPE_DRV_TREE_ID_TYPE_MAX = 16,	/**< Maximum number of supported types */
+} ppe_drv_tree_id_type_t;
 
 /*
  * ppe_drv_fse_tuple
@@ -177,10 +200,10 @@ struct ppe_drv_nsm_flow_stats {
 };
 
 /*
- * ppe_drv_nsm_sc_stats
+ * ppe_drv_nsm_sawf_sc_stats
  *	Per-service class stats to be send to NSM.
  */
-struct ppe_drv_nsm_sc_stats {
+struct ppe_drv_nsm_sawf_sc_stats {
 	uint64_t rx_packets;		/**< Packets recieved on the ethernet port. */
 	uint64_t rx_bytes;		/**< Bytes recieved on the ethernet port. */
 	uint16_t flow_count;		/**< Number of flows per service class. */
@@ -191,7 +214,7 @@ struct ppe_drv_nsm_sc_stats {
  *	Information to be send to NSM.
  */
 struct ppe_drv_nsm_stats {
-	struct ppe_drv_nsm_sc_stats sc_stats;			/**< Per-service class stats. */
+	struct ppe_drv_nsm_sawf_sc_stats sawf_sc_stats;		/**< Per-service class stats. */
 	struct ppe_drv_nsm_flow_stats flow_stats;		/**< Per-flow stats. */
 	struct ppe_drv_nsm_queue_drop_stats queue_stats;	/**< Per-queue stats. */
 };
@@ -346,6 +369,18 @@ void ppe_drv_fse_feature_enable(void);
  * none.
  */
 void ppe_drv_fse_feature_disable(void);
+
+/**
+ * ppe_drv_nsm_sawf_sc_stats_read()
+ *	Update stats in NSM for given service class
+ *
+ * @param[IN] nsm_stats		Pointer to stats structure in NSM.
+ * @param[IN] service_class	Service class corresponding to which stats are needed.
+ *
+ * @return
+ * Status of the API.
+ */
+extern bool ppe_drv_nsm_sawf_sc_stats_read(struct ppe_drv_nsm_stats *nsm_stats, uint8_t service_class);
 
 /** @} */ /* end_addtogroup ppe_drv_subsystem */
 

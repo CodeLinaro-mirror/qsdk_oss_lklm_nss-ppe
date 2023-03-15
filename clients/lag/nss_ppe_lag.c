@@ -57,7 +57,10 @@
 #endif
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
-#define NSS_PPE_LAG_MAX_BOND_DEVICES 16
+/*
+ * Support 24 bond MLO devices and bond0
+ */
+#define NSS_PPE_LAG_MAX_BOND_DEVICES 25
 #define NSS_PPE_LAG_MAX_SLAVES_PER_BOND_ID 16
 
 /*

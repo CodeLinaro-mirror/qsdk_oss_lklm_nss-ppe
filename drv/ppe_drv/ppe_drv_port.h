@@ -20,7 +20,6 @@
 #define PPE_DRV_PORT_VIRTUAL_L2_TUN		0x01	/* Port is L2 tunnel virtual port */
 #define PPE_DRV_PORT_VIRTUAL_L3_TUN		0x02	/* Port is L3 tunnel virtual port */
 #define PPE_DRV_PORT_SRC_PROFILE 0
-#define PPE_DRV_PORT_NETDEV_TYPE_WIFI		0x1	/* Port Netdev is WiFi */
 
 /**
  * ppe_port_user_type
@@ -31,6 +30,15 @@ enum ppe_port_user_type {
 	PPE_DRV_PORT_USER_TYPE_ACTIVE_VP,		/**< VP for Active use-case */
 	PPE_DRV_PORT_USER_TYPE_DS,			/**< VP for Direct-Switch use-case */
 	PPE_DRV_PORT_USER_TYPE_MAX,			/**< Maximum VP User types */
+};
+
+/**
+ * ppe_port_netdev_type
+ *	Port's netdev type
+ */
+enum ppe_port_netdev_type {
+	PPE_DRV_PORT_NETDEV_TYPE_WIFI = 1,		/**< Port netdev is Wi-Fi */
+	PPE_DRV_PORT_NETDEV_TYPE_MAX,			/**< Maximum port netdev types */
 };
 
 /*

@@ -109,17 +109,17 @@
 #define NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST 4
 
 /*
- * list-id 1022 and 1023 reserved for this purpose.
+ * list-id 55 and 60 reserved for this purpose.
  * TODO: Find a better approach to reserve list-id.
  */
-#define NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID 1022
+#define NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID 55
 #define NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_PRIO 0
 #define NSS_CAPWAPMGR_ACL_TRUSTSEC_RULE_ID 0
 
 /*
  * DSCP ACL list id and priority.
  */
-#define NSS_CAPWAPMGR_ACL_DSCP_LIST_ID 1023
+#define NSS_CAPWAPMGR_ACL_DSCP_LIST_ID 60
 #define NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT 1
 #define NSS_CAPWAPMGR_ACL_DSCP_LIST_PRIO 1
 

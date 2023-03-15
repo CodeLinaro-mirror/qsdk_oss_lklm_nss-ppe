@@ -144,6 +144,20 @@
 #define PPE_DRV_SAWF_MSDUQ_GET(x)			(x & PPE_DRV_SAWF_MSDUQ_MASK)
 
 /*
+ * Tree ID macros
+ */
+#define PPE_DRV_TREE_ID_TYPE_SHIFT			20
+#define PPE_DRV_TREE_ID_TYPE_MASK			0x00F00000
+#define PPE_DRV_TREE_ID_TYPE_SET(w, x)			((*w) |= (((x) << PPE_DRV_TREE_ID_TYPE_SHIFT) & PPE_DRV_TREE_ID_TYPE_MASK))
+
+#define PPE_DRV_TREE_ID_SERVICE_CLASS_SHIFT		10
+#define PPE_DRV_TREE_ID_SERVICE_CLASS_MASK		0x0003FC00
+#define PPE_DRV_TREE_ID_SERVICE_CLASS_SET(w, x)		((*w) |= (((x) << PPE_DRV_TREE_ID_SERVICE_CLASS_SHIFT) & PPE_DRV_TREE_ID_SERVICE_CLASS_MASK))
+
+#define PPE_DRV_TREE_ID_PEER_ID_MASK			0x000003FF
+#define PPE_DRV_TREE_ID_PEER_ID_SET(w, x)		((*w) |= ((x) & PPE_DRV_TREE_ID_PEER_ID_MASK))
+
+/*
  * HW flow stats sync timer frequency in milliseconds
  */
 #define PPE_DRV_HW_FLOW_STATS_MS	1000
@@ -246,6 +260,15 @@ struct ppe_drv {
 	bool tun_toggled_v4;		        /* Tunnel specific Toggled bit for v4 sync during a particular iteration*/
 	bool tun_toggled_v6;		        /* Tunnel specific Toggled bit for v6 sync during a particular iteration*/
 };
+
+/*
+ * ppe_drv_tree_id_type_get()
+ *	Returns the tree_id type.
+ */
+static inline ppe_drv_tree_id_type_t ppe_drv_tree_id_type_get(struct ppe_drv_flow_metadata *flow_metadata)
+{
+	return flow_metadata->tree_id_data.type;
+}
 
 void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv ppe_drv_gbl;
