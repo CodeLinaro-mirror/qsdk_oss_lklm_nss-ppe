@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -77,6 +77,14 @@ typedef struct ppe_ds_wlan_handle {
 } ppe_ds_wlan_handle_t;
 
 /**
+ * ppe_ds_wlan_ctx_info_handle
+ *	PPE-DS wlan umac reset handle
+ */
+struct ppe_ds_wlan_ctx_info_handle {
+	uint32_t umac_reset_inprogress;		/**< umac reset in progress information */
+};
+
+/**
  * ppe_ds_wlan_ops
  *	PPE-DS WLAN operations
  */
@@ -100,6 +108,8 @@ struct ppe_ds_wlan_ops {
 	void (*enable_tx_consume_intr)(ppe_ds_wlan_handle_t *ppeds_handle,
 					bool enable);
 				/**< Callback to toggle wlan interrupt */
+	void (*notify_napi_done)(ppe_ds_wlan_handle_t *ppeds_handle);
+				/**< Callback to trigger after ppeds ring process completes */
 };
 
 /**
@@ -179,6 +189,20 @@ ppe_vp_status_t ppe_ds_wlan_vp_free(ppe_ds_wlan_handle_t *wlan_handle, ppe_vp_nu
 bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_wlan_reg_info *ring_info);
 
 /**
+ * ppe_ds_wlan_instance_stop
+ *	PPE-DS WLAN instance stop API
+ *
+ * @datatypes
+ * ppe_ds_wlan_handle_t
+ * ppe_ds_wlan_ctx_info_handle
+ *
+ * @param[in] wlan_handle   PPE-DS WLAN handle
+ * @param[in] wlan_info_hdl    WLAN ctx information handle
+ */
+void ppe_ds_wlan_instance_stop(ppe_ds_wlan_handle_t *wlan_handle,
+			struct ppe_ds_wlan_ctx_info_handle *wlan_info_hdl);
+
+/**
  * ppe_ds_wlan_inst_stop
  *	PPE-DS WLAN instance stop API
  *
@@ -188,6 +212,23 @@ bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_
  * @param[in] wlan_handle   PPE-DS WLAN handle
  */
 void ppe_ds_wlan_inst_stop(ppe_ds_wlan_handle_t *wlan_handle);
+
+/**
+ * ppe_ds_wlan_instance_start
+ *	PPE-DS WLAN instance start API
+ *
+ * @datatypes
+ * ppe_ds_wlan_handle_t
+ * ppe_ds_wlan_ctx_info_handle
+ *
+ * @param[in] wlan_handle   PPE-DS WLAN handle
+ * @param[in] wlan_info_hdl    WLAN ctx information handle
+ *
+ * @return
+ * Status of the PPE-DS WLAN instance start
+ */
+int ppe_ds_wlan_instance_start(ppe_ds_wlan_handle_t *wlan_handle,
+			struct ppe_ds_wlan_ctx_info_handle *wlan_info_hdl);
 
 /**
  * ppe_ds_wlan_inst_start
@@ -258,4 +299,16 @@ int ppe_ds_reo2ppe_wlan_handle_intr(void *ctxt);
  * @param[in] wlan_handle   PPE-DS WLAN handle
  */
 void *ppe_ds_wlan_get_intr_ctxt(ppe_ds_wlan_handle_t *wlan_handle);
+
+/**
+ * ppe_ds_wlan_service_status_update
+ *	PPE-DS ring service update
+ *
+ * @datatypes
+ * ppeds_wlan_handle_t
+ *
+ * @param[in] wlan_handle   PPE-DS WLAN handle
+ * @param[in] enable        Enable/Disable service
+ */
+void ppe_ds_wlan_service_status_update(ppe_ds_wlan_handle_t *wlan_handle, bool enable);
 #endif	/* _PPE_DS_WLAN_H_ */
