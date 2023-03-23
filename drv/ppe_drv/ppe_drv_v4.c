@@ -1729,6 +1729,9 @@ static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create,
 			ppe_drv_trace("%p: FSE rule configuration failed\n", p);
 			return false;
 		}
+
+		ppe_drv_v4_conn_flow_flags_set(fse_cn, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
+		kref_get(&p->fse_ops_ref);
 	} else {
 		ppe_drv_trace("pushing intervap rules\n");
 		if (p->fse_ops->create_fse_rule(&fse_info)) {
@@ -1744,11 +1747,11 @@ static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create,
 
 		ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
 		ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
-		return true;
+		kref_get(&p->fse_ops_ref);
+		kref_get(&p->fse_ops_ref);
 	}
 
 	ppe_drv_trace("%p: FSE rule configuration successful\n", p);
-	ppe_drv_v4_conn_flow_flags_set(fse_cn, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
 	return true;
 }
 
@@ -1934,7 +1937,6 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 			goto fail;
 		}
 
-		kref_get(&p->fse_ops_ref);
 		ppe_drv_stats_inc(&comm_stats->v4_create_fse_success);
 	}
 

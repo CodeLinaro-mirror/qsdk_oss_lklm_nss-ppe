@@ -1633,6 +1633,9 @@ static bool ppe_drv_v6_fse_flow_configure(struct ppe_drv_v6_rule_create *create,
 			ppe_drv_trace("%p: FSE v6 rule configuration failed\n", p);
 			return false;
 		}
+
+		ppe_drv_v6_conn_flow_flags_set(fse_cn, PPE_DRV_V6_CONN_FLOW_FLAG_FSE);
+		kref_get(&p->fse_ops_ref);
 	} else {
 		if (p->fse_ops->create_fse_rule(&fse_info)) {
 			ppe_drv_trace("%p: Inter VAP v6 FSE rule configuration failed\n", p);
@@ -1644,10 +1647,14 @@ static bool ppe_drv_v6_fse_flow_configure(struct ppe_drv_v6_rule_create *create,
 			ppe_drv_trace("%p: Inter VAP v6 FSE rule configuration failed for return\n", p);
 			return false;
 		}
+
+		ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FSE);
+		ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_FSE);
+		kref_get(&p->fse_ops_ref);
+		kref_get(&p->fse_ops_ref);
 	}
 
 	ppe_drv_trace("%p: FSE v6 rule configuration successful\n", p);
-	ppe_drv_v6_conn_flow_flags_set(fse_cn, PPE_DRV_V6_CONN_FLOW_FLAG_FSE);
 	return true;
 }
 
@@ -1826,7 +1833,6 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 			goto fail;
 		}
 
-		kref_get(&p->fse_ops_ref);
 		ppe_drv_stats_inc(&comm_stats->v6_create_fse_success);
 	}
 
