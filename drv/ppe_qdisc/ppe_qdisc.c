@@ -411,6 +411,9 @@ fail:
 void ppe_qdisc_destroy(struct ppe_qdisc *pq)
 {
 	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_INITIALIZED)) {
+		if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
+			ppe_qdisc_stats_sync_many_exit(pq);
+		}
 		return;
 	}
 
@@ -492,6 +495,10 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 				qdisc_dev(sch), qdisc_dev(sch)->name, qdisc_dev(sch)->qdisc, qdisc_dev(sch)->qdisc->handle, pq->type);
 		ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_NODE_ROOT);
 		root = sch;
+
+		/*
+		 * Memory alloacated here is released in ppe_qdisc_destroy functions
+		 */
 		ppe_qdisc_stats_sync_many_init(pq);
 	} else {
 		ppe_qdisc_info("Qdisc %px (type %d) not root", pq->qdisc, pq->type);
