@@ -276,6 +276,23 @@ struct ppe_drv_stats_policer {
 };
 
 /*
+ * ppe_drv_stats_if_map
+ *	Message structure for if_map stats.
+ */
+struct ppe_drv_stats_if_map {
+	int iface_flag_cnt;	/* iface valid count */
+	int base_iface_number;	/* base iface_number */
+	int parent_iface_number;	/* parent iface_number */
+	int iface_number;	/* Iface_number */
+	int iface_type;		/* Type of the interface */
+	int port_number;	/* Port Number associated with interface */
+	int vsi_number;		/* Vsi number associated with interface */
+	int l3_if_number;	/* L3_if_number associated with interface */
+	int iface_valid_flags[PPE_DRV_IFACE_TYPE_MAX];
+	char netdev_name[32];	/* Name of the interface */
+};
+
+/*
  * ppe_drv_stats
  *	Message structure for ppe stats
  */

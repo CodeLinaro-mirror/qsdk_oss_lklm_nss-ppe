@@ -354,6 +354,25 @@ bool ppe_drv_iface_port_set(struct ppe_drv_iface *iface, struct ppe_drv_port *po
 }
 
 /*
+ * ppe_drv_iface_vsi_idx_get()
+ *	Get vsi index of a given PPE interface
+ */
+int32_t ppe_drv_iface_vsi_idx_get(struct ppe_drv_iface *iface)
+{
+	struct ppe_drv_vsi *vsi;
+	if ((iface->flags & PPE_DRV_IFACE_FLAG_VSI_VALID) != PPE_DRV_IFACE_FLAG_VSI_VALID) {
+		return -1;
+	}
+
+	vsi = ppe_drv_iface_vsi_get(iface);
+	if (!vsi) {
+		return -1;
+	}
+
+	return vsi->index;
+}
+
+/*
  * ppe_drv_iface_vsi_clear()
  *	Clear VSI of a given PPE interface
  */
@@ -392,6 +411,25 @@ bool ppe_drv_iface_vsi_set(struct ppe_drv_iface *iface, struct ppe_drv_vsi *vsi)
 	iface->vsi = vsi;
 	iface->flags |= PPE_DRV_IFACE_FLAG_VSI_VALID;
 	return true;
+}
+
+/*
+ * ppe_drv_iface_l3_if_idx_get()
+ *	Get l3_if index of a given PPE interface
+ */
+int32_t ppe_drv_iface_l3_if_idx_get(struct ppe_drv_iface *iface)
+{
+	struct ppe_drv_l3_if *l3_if;
+	if ((iface->flags & PPE_DRV_IFACE_FLAG_L3_IF_VALID) != PPE_DRV_IFACE_FLAG_L3_IF_VALID) {
+		return -1;
+	}
+
+	l3_if = ppe_drv_iface_l3_if_get(iface);
+	if (!l3_if) {
+		return -1;
+	}
+
+	return l3_if->l3_if_index;
 }
 
 /*

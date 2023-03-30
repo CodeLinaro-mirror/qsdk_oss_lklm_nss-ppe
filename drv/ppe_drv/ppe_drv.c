@@ -695,6 +695,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	ppe_drv_stats_debugfs_init();
 
 	ppe_drv_flow_dump_init(p->dentry);
+	ppe_drv_if_map_init(p->dentry);
 
 	return of_platform_populate(np, NULL, NULL, &pdev->dev);
 
@@ -810,6 +811,7 @@ fail:
 	}
 
 	ppe_drv_flow_dump_exit();
+	ppe_drv_if_map_exit();
 
 	return -1;
 }
@@ -941,6 +943,7 @@ static int ppe_drv_remove(struct platform_device *pdev)
 	}
 
 	ppe_drv_flow_dump_exit();
+	ppe_drv_if_map_exit();
 
 	return 0;
 }

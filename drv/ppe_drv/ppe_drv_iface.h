@@ -46,6 +46,8 @@ struct ppe_drv_iface *ppe_drv_iface_ref(struct ppe_drv_iface *iface);
 
 struct ppe_drv_iface *ppe_drv_iface_get_by_dev_internal(struct net_device *dev);
 struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx);
+int32_t ppe_drv_iface_vsi_idx_get(struct ppe_drv_iface *iface);
+int32_t ppe_drv_iface_l3_if_idx_get(struct ppe_drv_iface *iface);
 
 bool ppe_drv_iface_parent_set(struct ppe_drv_iface *iface, struct ppe_drv_iface *parent);
 struct ppe_drv_iface *ppe_drv_iface_parent_get(struct ppe_drv_iface *iface);
