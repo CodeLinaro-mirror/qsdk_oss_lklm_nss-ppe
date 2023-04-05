@@ -702,7 +702,7 @@ int ppe_ds_wlan_instance_start(ppe_ds_wlan_handle_t *wlan_handle,
 	node_cfg->node_state = PPE_DS_NODE_STATE_START_IN_PROG;
 	write_unlock_bh(&node_cfg->lock);
 
-	dp_ops->refill(edma_handle, edma_handle->ppe2tcl_num_desc -1);
+	dp_ops->refill(edma_handle, edma_handle->ppe2tcl_rxfill_num_desc - 1);
 
 	if (polling_for_idx_update) {
 		node->timer_enabled = true;
@@ -759,7 +759,7 @@ int ppe_ds_wlan_inst_start(ppe_ds_wlan_handle_t *wlan_handle)
 		return -1;
 	}
 
-	dp_ops->refill(edma_handle, edma_handle->ppe2tcl_num_desc -1);
+	dp_ops->refill(edma_handle, edma_handle->ppe2tcl_rxfill_num_desc - 1);
 
 	if (polling_for_idx_update) {
 		node->timer_enabled = true;
