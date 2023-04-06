@@ -618,7 +618,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	struct ppe_drv_port *pp;
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
-	bool wifi_qos_en;
+	bool wifi_qos_en = false;
 	uint16_t xmit_mtu;
 	sw_error_t err;
 
@@ -1238,7 +1238,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	struct ppe_drv_port *pp;
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
-	bool wifi_qos_en;
+	bool wifi_qos_en = false;
 	uint16_t xmit_mtu;
 	sw_error_t err;
 
