@@ -319,6 +319,7 @@ void ppe_drv_exception_init(void)
 		 */
 		if ((pe->flow_type & PPE_DRV_EXCEPTION_FLOW_TYPE_L2_FLOW_HIT)
 				== PPE_DRV_EXCEPTION_FLOW_TYPE_L2_FLOW_HIT) {
+			except_ctrl.l2flow_en = true;
 			except_ctrl.l2flow_type = FAL_FLOW_HIT;
 		}
 
@@ -327,6 +328,7 @@ void ppe_drv_exception_init(void)
 		 */
 		if ((pe->flow_type & PPE_DRV_EXCEPTION_FLOW_TYPE_L3_FLOW_HIT)
 				== PPE_DRV_EXCEPTION_FLOW_TYPE_L3_FLOW_HIT) {
+			except_ctrl.l3flow_en = true;
 			except_ctrl.l3flow_type = FAL_FLOW_HIT;
 		}
 
