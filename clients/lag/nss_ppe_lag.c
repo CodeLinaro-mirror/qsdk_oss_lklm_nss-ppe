@@ -137,8 +137,13 @@ static int nss_ppe_lag_update_slave(struct netdev_notifier_info *info)
 	 */
 	struct netdev_notifier_changeupper_info *cu_info = (struct netdev_notifier_changeupper_info *)info;
 
-	if (!cu_info->upper_dev || !netif_is_bond_master(cu_info->upper_dev)) {
-		nss_ppe_lag_warn("%px: Master not present for slave dev: %s\n", info, slave_dev->name);
+	if (!cu_info->upper_dev) {
+		nss_ppe_lag_warn("%px: Upper dev not present for dev: %s\n", info, slave_dev->name);
+		return NOTIFY_DONE;
+	}
+
+	if (!netif_is_bond_master(cu_info->upper_dev)) {
+		nss_ppe_lag_warn("%px: Upper dev is not LAG for dev: %s\n", info, slave_dev->name);
 		return NOTIFY_DONE;
 	}
 
@@ -571,12 +576,27 @@ static int nss_ppe_lag_netdevice_event(struct notifier_block *unused,
 		return nss_ppe_lag_register_event(info);
 	case NETDEV_UNREGISTER:
 		return nss_ppe_lag_unregister_event(info);
-	case NETDEV_CHANGEUPPER:
-		return nss_ppe_lag_update_slave(info);
 	case NETDEV_CHANGEADDR:
 		return nss_ppe_lag_changeaddr_event(info);
 	case NETDEV_CHANGEMTU:
 		return nss_ppe_lag_changemtu_event(info);
+	}
+
+	return NOTIFY_DONE;
+
+}
+
+/*
+ * nss_ppe_lag_event_notifier_drv()
+ *	LAG handles ppe drv operation notifications.
+ */
+static int nss_ppe_lag_event_notifier_drv(struct ppe_drv_notifier_ops *unused,
+				int event, struct netdev_notifier_info *info)
+{
+	switch (event) {
+	case PPE_DRV_EVENT_CHANGEUPPER:
+		nss_ppe_lag_update_slave(info);
+		break;
 	}
 
 	return NOTIFY_DONE;
@@ -587,6 +607,12 @@ static struct notifier_block nss_ppe_lag_netdevice __read_mostly = {
 	.notifier_call = nss_ppe_lag_netdevice_event,
 };
 
+/* register ppe drv netdev notifier callback */
+static struct ppe_drv_notifier_ops ppe_drv_notifier_ops_lag __read_mostly = {
+	.notifier_call = nss_ppe_lag_event_notifier_drv,
+	.priority = PPE_DRV_NOTIFIER_PRI_1,
+};
+
 /*
  * nss_ppe_lag_exit()
  *	Cleanup NSS LAG client and exit
@@ -594,6 +620,7 @@ static struct notifier_block nss_ppe_lag_netdevice __read_mostly = {
 void __exit nss_ppe_lag_exit(void)
 {
 	unregister_netdevice_notifier(&nss_ppe_lag_netdevice);
+	ppe_drv_notifier_ops_unregister(&ppe_drv_notifier_ops_lag);
 	nss_ppe_lag_info("LAG Manager Removed\n");
 }
 
@@ -608,6 +635,8 @@ int __init nss_ppe_lag_init(void)
 		nss_ppe_lag_warn("Failed to register NETDEV notifier, error=%d\n", ret);
 		return ret;
 	}
+
+	ppe_drv_notifier_ops_register(&ppe_drv_notifier_ops_lag);
 
 	nss_ppe_lag_info("LAG Manager Installed\n");
 	return ret;

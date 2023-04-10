@@ -657,8 +657,6 @@ static int nss_ppe_bridge_mgr_netdevice_event(struct notifier_block *unused,
 		return nss_ppe_bridge_mgr_changeaddr_event(info);
 	case NETDEV_CHANGEMTU:
 		return nss_ppe_bridge_mgr_changemtu_event(info);
-	case NETDEV_CHANGEUPPER:
-		return nss_ppe_bridge_mgr_changeupper_event(info);
 	case NETDEV_REGISTER:
 		return nss_ppe_bridge_mgr_register_event(info);
 	case NETDEV_UNREGISTER:
@@ -671,8 +669,33 @@ static int nss_ppe_bridge_mgr_netdevice_event(struct notifier_block *unused,
 	return NOTIFY_DONE;
 }
 
+/*
+ * nss_ppe_bridge_mgr_event_notifier_drv()
+ *	Bridge manager handles ppe drv operation notifications.
+ */
+static int nss_ppe_bridge_mgr_event_notifier_drv(struct ppe_drv_notifier_ops *unused,
+			int event, struct netdev_notifier_info *info)
+{
+	switch (event) {
+	case PPE_DRV_EVENT_CHANGEUPPER:
+		nss_ppe_bridge_mgr_changeupper_event(info);
+		break;
+	}
+
+	/*
+	 * Notify done for all the events we don't care
+	 */
+	return NOTIFY_DONE;
+}
+
 static struct notifier_block nss_ppe_bridge_mgr_netdevice_nb __read_mostly = {
 	.notifier_call = nss_ppe_bridge_mgr_netdevice_event,
+};
+
+/* register ppe drv netdev notifier callback */
+static struct ppe_drv_notifier_ops ppe_drv_notifier_ops_bridge_mgr = {
+	.notifier_call = nss_ppe_bridge_mgr_event_notifier_drv,
+	.priority = PPE_DRV_NOTIFIER_PRI_2,
 };
 
 /*
@@ -1283,6 +1306,7 @@ int nss_ppe_bridge_mgr_register_br(struct net_device *dev)
 static void __exit nss_ppe_bridge_mgr_exit_module(void)
 {
 	unregister_netdevice_notifier(&nss_ppe_bridge_mgr_netdevice_nb);
+	ppe_drv_notifier_ops_unregister(&ppe_drv_notifier_ops_bridge_mgr);
 	nss_ppe_bridge_mgr_info("Module unloaded\n");
 	br_fdb_update_unregister_notify(&nss_ppe_bridge_mgr_fdb_update_notifier);
 
@@ -1312,6 +1336,7 @@ static int __init nss_ppe_bridge_mgr_init_module(void)
 
 	INIT_LIST_HEAD(&br_mgr_ctx.list);
 	spin_lock_init(&br_mgr_ctx.lock);
+	ppe_drv_notifier_ops_register(&ppe_drv_notifier_ops_bridge_mgr);
 	register_netdevice_notifier(&nss_ppe_bridge_mgr_netdevice_nb);
 	nss_ppe_bridge_mgr_info("Module (Build %s) loaded\n", NSS_PPE_BUILD_ID);
 	br_mgr_ctx.wan_netdev = NULL;

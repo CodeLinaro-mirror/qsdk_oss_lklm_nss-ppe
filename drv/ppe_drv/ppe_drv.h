@@ -191,6 +191,7 @@ enum ppe_drv_entry_valid {
 struct ppe_drv {
 	spinlock_t lock;				/* PPE lock */
 	spinlock_t stats_lock;				/* PPE statistics lock */
+	spinlock_t notifier_lock;			/* PPE notifiers lock */
 
 	uint32_t iface_num;				/* Number of PPE interface */
 	uint32_t l3_if_num;				/* Number of entries in PPE L3_IF table */
@@ -259,6 +260,7 @@ struct ppe_drv {
 	bool toggled_v6;			/* Toggled bit for v6 sync during a particular iteration */
 	bool tun_toggled_v4;		        /* Tunnel specific Toggled bit for v4 sync during a particular iteration*/
 	bool tun_toggled_v6;		        /* Tunnel specific Toggled bit for v6 sync during a particular iteration*/
+	struct list_head notifier_list_head;	/* List of event notifier operations in PPE */
 };
 
 /*

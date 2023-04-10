@@ -29,6 +29,7 @@
 #include <linux/module.h>
 #include <linux/if_ether.h>
 #include "ppe_drv_iface.h"
+#include <linux/netdevice.h>
 
 /*
  * FSE flags
@@ -230,6 +231,45 @@ enum ppe_drv_stats_sync_reason {
 	PPE_DRV_STATS_SYNC_REASON_DESTROY,	/* Sync is to destroy a connection entry */
 };
 
+/*
+ * ppe_drv_notifier_ops_priority
+ *	Priority order for client manager
+ *	To-do: Introduce new file for ppe-drv notifier
+ */
+enum ppe_drv_notifier_ops_priority {
+	PPE_DRV_NOTIFIER_PRI_1 = 1,		/* Client manager notifier having priority one */
+	PPE_DRV_NOTIFIER_PRI_2 = 2,		/* Client manager notifier having priority two*/
+	PPE_DRV_NOTIFIER_MAX,		/* Notifier maximum priority */
+};
+
+/*
+ * ppe_drv_notifier_event
+ *	PPE drv notifier events.
+ */
+enum ppe_drv_notifier_event {
+	PPE_DRV_EVENT_INALID,		/* Invalid event */
+	PPE_DRV_EVENT_CHANGEUPPER,	/* Change upper event */
+	PPE_DRV_EVENT_MAX,		/* Maximum event */
+};
+
+struct ppe_drv_notifier_ops;
+
+/**
+ * ppe_drv_notifier_fn_t
+ *	Function pointer for notifier
+ */
+typedef int (*ppe_drv_notifier_fn_t)(struct ppe_drv_notifier_ops *nb,
+				int event, struct netdev_notifier_info *info);
+/**
+ * ppe_drv_notifier_ops
+ *	Notifier operations registered with different clients
+ */
+struct ppe_drv_notifier_ops {
+	ppe_drv_notifier_fn_t notifier_call;		/* Notifier callback registered with ppe drv */
+	int priority;					/* Priority of notifier callback */
+	struct list_head entry;				/* List head */
+};
+
 /**
  * enum ppe_drv_ret
  *	PPE return status
@@ -382,6 +422,25 @@ void ppe_drv_fse_feature_disable(void);
  */
 extern bool ppe_drv_nsm_sawf_sc_stats_read(struct ppe_drv_nsm_stats *nsm_stats, uint8_t service_class);
 
-/** @} */ /* end_addtogroup ppe_drv_subsystem */
+/**
+ * ppe_drv_notifier_register
+ *	Register notifier ops with ppe driver.
+ *
+ * @param[IN] ops pointer to notifier structure in PPE.
+ *
+ * @return
+ * none.
+ */
+extern void ppe_drv_notifier_ops_register(struct ppe_drv_notifier_ops *notifier_ops);
 
+/**
+ * ppe_drv_notifier_unregister
+ *	Register notfier ops with ppe driver.
+ *
+ * @param[IN] ops pointer to notifier structure in PPE.
+ *
+ * @return
+ * none.
+ */
+extern void ppe_drv_notifier_ops_unregister(struct ppe_drv_notifier_ops *notifier_ops);
 #endif /* _PPE_DRV_H_ */

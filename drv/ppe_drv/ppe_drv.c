@@ -491,6 +491,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	 */
 	spin_lock_init(&p->lock);
 	spin_lock_init(&p->stats_lock);
+	spin_lock_init(&p->notifier_lock);
 
 
 	if (!ppe_drv_hash_init()) {
@@ -592,6 +593,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&p->conn_v6);
 	INIT_LIST_HEAD(&p->conn_tun_v4);
 	INIT_LIST_HEAD(&p->conn_tun_v6);
+	INIT_LIST_HEAD(&p->notifier_list_head);
 
 	p->toggled_v4 = false;
 	p->toggled_v6 = false;
@@ -852,6 +854,67 @@ static int ppe_drv_remove(struct platform_device *pdev)
 }
 
 /*
+ * ppe_drv_notify_change_upper_handler()
+ *	Call registered notifiers with ppe drv
+ *	To-do: Introduce new file for ppe-drv notifier functions
+ */
+static void ppe_drv_notify_change_upper_handler(void *ptr, int event)
+{
+	struct ppe_drv_notifier_ops *iterator;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct netdev_notifier_info *info = (struct netdev_notifier_info *)ptr;
+	struct netdev_notifier_changeupper_info *cu_info = (struct netdev_notifier_changeupper_info *)info;
+
+	spin_lock_bh(&p->notifier_lock);
+	if (cu_info->linking) {
+		ppe_drv_trace("%px: Linking ppe drv event: %d\n", ptr, event);
+		list_for_each_entry(iterator, &p->notifier_list_head, entry) {
+			if (iterator->notifier_call) {
+				(iterator->notifier_call)(iterator, event, info);
+			}
+		}
+		spin_unlock_bh(&p->notifier_lock);
+		return;
+	}
+
+	/*
+	 * Call notifier in reverse order during unlinking
+	 * to clear the database in the correct order
+	 */
+	ppe_drv_trace("%px: Unlinking ppe drv event: %d\n", ptr, event);
+	list_for_each_entry_reverse(iterator, &p->notifier_list_head, entry) {
+		if (iterator->notifier_call) {
+			(iterator->notifier_call)(iterator, event, ptr);
+		}
+	}
+	spin_unlock_bh(&p->notifier_lock);
+}
+
+/*
+ * ppe_drv_handle_netdev_event()
+ *	Handle events received from network stack
+ */
+static int ppe_drv_handle_netdev_event(struct notifier_block *nb,
+		unsigned long event, void *ptr)
+{
+	switch (event) {
+	case NETDEV_CHANGEUPPER:
+		ppe_drv_notify_change_upper_handler(ptr, PPE_DRV_EVENT_CHANGEUPPER);
+		break;
+
+	default:
+		 ppe_drv_trace("Event not supported through ppe-drv: %ld\n", event);
+	}
+
+	return NOTIFY_DONE;
+}
+
+/* register netdev notifier callback */
+static struct notifier_block nss_ppe_netdevice __read_mostly = {
+	.notifier_call = ppe_drv_handle_netdev_event,
+};
+
+/*
  * ppe_drv_platform
  *	platform device instance
  */
@@ -866,11 +929,54 @@ static struct platform_driver ppe_drv_platform = {
 };
 
 /*
+ * ppe_drv_notifier_ops_register()
+ *	Register notifier operations
+ */
+void ppe_drv_notifier_ops_register(struct ppe_drv_notifier_ops *notifier_ops)
+{
+	struct list_head *ptr;
+	struct ppe_drv_notifier_ops *entry_pnb;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	ppe_drv_trace("%px: Add notifier callback with priority: %d\n", notifier_ops, notifier_ops->priority);
+
+	spin_lock_bh(&p->notifier_lock);
+	list_for_each(ptr, &p->notifier_list_head) {
+		entry_pnb = list_entry(ptr, struct ppe_drv_notifier_ops, entry);
+		if (entry_pnb->priority < notifier_ops->priority) {
+			list_add(&notifier_ops->entry, &entry_pnb->entry);
+			spin_unlock_bh(&p->notifier_lock);
+			return;
+		}
+	}
+
+	list_add(&notifier_ops->entry, &p->notifier_list_head);
+	spin_unlock_bh(&p->notifier_lock);
+}
+EXPORT_SYMBOL(ppe_drv_notifier_ops_register);
+
+/*
+ * ppe_drv_notifier_ops_unregister()
+ *	Unregister notifier operations
+ */
+void ppe_drv_notifier_ops_unregister(struct ppe_drv_notifier_ops *notifier_ops)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->notifier_lock);
+	list_del(&notifier_ops->entry);
+	spin_unlock_bh(&p->notifier_lock);
+}
+EXPORT_SYMBOL(ppe_drv_notifier_ops_unregister);
+
+/*
  * ppe_drv_module_init()
  *	module init for ppe driver
  */
 static int __init ppe_drv_module_init(void)
 {
+	int ret;
+
 	if (!of_find_compatible_node(NULL, NULL, "qcom,nss-ppe")) {
 		ppe_drv_info("PPE device tree node not found\n");
 		return -EINVAL;
@@ -879,6 +985,13 @@ static int __init ppe_drv_module_init(void)
 	if (platform_driver_register(&ppe_drv_platform)) {
 		ppe_drv_warn("unable to register the driver\n");
 		return -EIO;
+	}
+
+	ret = register_netdevice_notifier(&nss_ppe_netdevice);
+	if (ret) {
+		ppe_drv_warn("Failed to register NETDEV notifier, error=%d\n", ret);
+		platform_driver_unregister(&ppe_drv_platform);
+		return -EINVAL;
 	}
 
 	return 0;
@@ -891,6 +1004,7 @@ module_init(ppe_drv_module_init);
  */
 static void __exit ppe_drv_module_exit(void)
 {
+	unregister_netdevice_notifier(&nss_ppe_netdevice);
 	platform_driver_unregister(&ppe_drv_platform);
 }
 module_exit(ppe_drv_module_exit);
