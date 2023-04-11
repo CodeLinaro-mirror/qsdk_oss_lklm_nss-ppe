@@ -221,6 +221,7 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 
 			seq_printf(m, "\tVP Port: %u\n", vp_stats->misc_info.ppe_port_num);
 			seq_printf(m, "\t\tNetdev if num: %u\n", vp_stats->misc_info.netdev_if_num);
+			seq_printf(m, "\t\tNetdev name: %s\n", vp->netdev->name);
 
 			/*
 			 * Active VP: Accumulate stats from all CPUs.
