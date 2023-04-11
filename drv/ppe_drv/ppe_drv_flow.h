@@ -26,6 +26,14 @@
 #define PPE_DRV_FLOW_EIP	0x0040
 #define PPE_DRV_FLOW_MAPT	0x0080
 
+/*
+ * Macros for configuration of MSDUQ in WiFi-QoS.
+ */
+#define PPE_DRV_FLOW_FO_MASK	0x08
+#define PPE_DRV_FLOW_WC_MASK	0x30
+#define PPE_DRV_FLOW_TID_MASK	0x07
+#define PPE_DRV_FLOW_TID_SHIFT	1
+
 struct ppe_drv_v4_conn_flow;
 struct ppe_drv_v6_conn_flow;
 
