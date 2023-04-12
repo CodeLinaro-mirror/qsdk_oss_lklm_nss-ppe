@@ -166,6 +166,238 @@ ppe_drv_ret_t ppe_drv_vlan_port_role_set(struct ppe_drv_iface *iface, uint32_t p
 EXPORT_SYMBOL(ppe_drv_vlan_port_role_set);
 
 /*
+ * ppe_drv_vlan_ingress_rule_action_set_vp()
+ *	Set xlt_rule and xlt_action structure for ingress.
+ */
+void ppe_drv_vlan_ingress_rule_action_set_vp(fal_vlan_trans_adv_rule_t *xlt_rule,
+					fal_vlan_trans_adv_action_t *xlt_action, struct ppe_drv_vlan_xlate_info *info)
+{
+	/*
+         * Field for ingress match.
+	 * Accept tagged/untagged/priority tagged svlan and cvlan.
+         */
+	xlt_rule->s_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+			| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	xlt_rule->c_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+			| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	xlt_rule->c_vid = info->cvid;
+	xlt_rule->c_vid_enable = (info->cvid == 0xFFFF) ? false : true;
+
+	/*
+	 * field for ingress action.
+	 */
+	xlt_action->cvid_xlt_cmd = (info->cvid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+	xlt_action->cvid_xlt = (info->cvid == 0xFFFF) ? 0 : info->cvid;
+	xlt_action->svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+	xlt_action->svid_xlt = (info->svid == 0xFFFF) ? 0 : info->svid;
+	xlt_action->src_info_enable = true;
+	xlt_action->src_info = info->port_id;
+	xlt_action->src_info_type = FAL_CHG_SRC_TYPE_VP;
+}
+
+/*
+ * ppe_drv_vlan_egress_rule_action_set_vp()
+ *	Set xlt_rule and xlt_action structure for egress.
+ */
+void ppe_drv_vlan_egress_rule_action_set_vp(fal_vlan_trans_adv_rule_t *xlt_rule,
+					fal_vlan_trans_adv_action_t *xlt_action, struct ppe_drv_vlan_xlate_info *info)
+{
+	/*
+	 * Fields for egress match.
+	 * Accept tagged/untagged/priority tagged svlan and cvlan.
+	 */
+	xlt_rule->s_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+			| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	xlt_rule->c_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+			| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+
+	/*
+	 * Fields for egress action.
+	 */
+	xlt_action->cvid_xlt_cmd = (info->cvid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
+	xlt_action->cvid_xlt = (info->cvid == 0xFFFF) ? 0 : info->cvid;
+	xlt_action->svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
+	xlt_action->svid_xlt = (info->svid == 0xFFFF) ? 0 : info->svid;
+}
+
+/*
+ * ppe_drv_vlan_as_vp_del_xlate_rules()
+ *	Delete Ingress and Egress VLAN translation rules for VP.
+ */
+ppe_drv_ret_t ppe_drv_vlan_as_vp_del_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	fal_vlan_trans_adv_rule_t xlt_rule = {0};
+	fal_vlan_trans_adv_action_t xlt_action = {0};
+	fal_port_t fal_port, base_f_port;
+	sw_error_t rc;
+	struct net_device *base_dev;
+	struct ppe_drv_iface *base_if;
+	uint8_t b_port;
+
+	base_dev = vlan_dev_priv(iface->dev)->real_dev;
+	if (!base_dev) {
+		ppe_drv_warn("%s: failed to obtain base_dev", iface->dev->name);
+		return PPE_DRV_RET_BASE_IFACE_NOT_FOUND;
+	}
+
+	spin_lock_bh(&p->lock);
+	base_if = ppe_drv_iface_get_by_dev_internal(base_dev);
+	if (!base_if) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: NULL base interface for iface\n", base_dev);
+		return PPE_DRV_RET_BASE_IFACE_NOT_FOUND;
+	}
+
+	b_port = ppe_drv_iface_port_idx_get(base_if);
+	if (b_port == -1) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_info("%px: %s:%d is invalid port\n", base_dev, base_dev->name, b_port);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+
+	ppe_drv_iface_base_set(iface, base_if);
+
+	ppe_drv_vlan_ingress_rule_action_set_vp(&xlt_rule, &xlt_action, info);
+	base_f_port = PPE_DRV_VIRTUAL_PORT_CHK(b_port) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, b_port)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, b_port);
+
+	/*
+	 * Delete ingress vlan translation rule.
+	 */
+	rc = fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, base_f_port, FAL_PORT_VLAN_INGRESS,
+			&xlt_rule, &xlt_action);
+	if (rc != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to delete old ingress vlan translation of port %d, error: %d\n"
+				, base_f_port, rc);
+		return PPE_DRV_RET_VLAN_INGRESS_DEL_FAIL;
+	}
+
+	memset(&xlt_rule, 0, sizeof(xlt_rule));
+	memset(&xlt_action, 0, sizeof(xlt_action));
+
+	ppe_drv_vlan_egress_rule_action_set_vp(&xlt_rule, &xlt_action, info);
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(info->port_id) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, info->port_id)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, info->port_id);
+
+	/*
+	 * Delete egress vlan translation rule.
+	 */
+	rc = fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_EGRESS,
+			&xlt_rule, &xlt_action);
+	if (rc != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to delete old egress vlan translation of port %d, error: %d\n", fal_port, rc);
+		return PPE_DRV_RET_VLAN_EGRESS_DEL_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_as_vp_del_xlate_rules);
+
+/*
+ * ppe_drv_vlan_as_vp_add_xlate_rules()
+ *	Add Ingress and Egress VLAN translation rules for VLAN created as VP.
+ */
+ppe_drv_ret_t ppe_drv_vlan_as_vp_add_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info)
+{
+	fal_vlan_trans_adv_rule_t xlt_rule = {0};
+	fal_vlan_trans_adv_action_t xlt_action = {0};
+	struct ppe_drv *p = &ppe_drv_gbl;
+	fal_port_t fal_port, base_f_port;
+	struct ppe_drv_iface *base_if;
+	struct net_device *base_dev;
+	struct vlan_dev_priv *dev_priv;
+	uint8_t b_port;
+	int ret;
+
+	dev_priv = (iface->dev? vlan_dev_priv(iface->dev): NULL);
+	base_dev = dev_priv ? dev_priv->real_dev: NULL;
+	if (!base_dev) {
+		ppe_drv_warn("%s: failed to obtain base_dev", iface->dev->name);
+		return PPE_DRV_RET_BASE_DEV_NOT_FOUND;
+	}
+
+	spin_lock_bh(&p->lock);
+	base_if = ppe_drv_iface_get_by_dev_internal(base_dev);
+	if (!base_if) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: NULL base interface for iface\n", base_dev);
+		return PPE_DRV_RET_BASE_IFACE_NOT_FOUND;
+	}
+
+	b_port = ppe_drv_iface_port_idx_get(base_if);
+	if (b_port == -1) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_info("%px: %s:%d is invalid port\n", base_dev, base_dev->name, b_port);
+		return PPE_DRV_RET_BASE_PORT_NOT_FOUND;
+	}
+
+	ppe_drv_iface_base_set(iface, base_if);
+
+	ppe_drv_vlan_ingress_rule_action_set_vp(&xlt_rule, &xlt_action, info);
+	base_f_port = PPE_DRV_VIRTUAL_PORT_CHK(b_port) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, b_port)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, b_port);
+
+	/*
+	 * Add ingress vlan translation rule.
+	 * For adding ingress rule we are using base physical port number
+	 * becasue packet rx happen on gmac, so we need to add a ingress
+	 * rule/action to match tagged packet, which untag the packet and
+	 * give it to src_info port, which is VP.
+	 */
+	ret = fal_port_vlan_trans_adv_add(PPE_DRV_SWITCH_ID, base_f_port,
+			FAL_PORT_VLAN_INGRESS, &xlt_rule,
+			&xlt_action);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%px: Failed to update ingress translation rule for port: %d, error: %d\n"
+				, iface, base_f_port, ret);
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_ingress_vlan_add);
+		return PPE_DRV_RET_INGRESS_VLAN_FAIL;
+	}
+
+	memset(&xlt_rule, 0, sizeof(xlt_rule));
+	memset(&xlt_action, 0, sizeof(xlt_action));
+
+	ppe_drv_vlan_egress_rule_action_set_vp(&xlt_rule, &xlt_action, info);
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(info->port_id) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, info->port_id)
+			: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, info->port_id);
+
+	/*
+	 * Add egress vlan translation rule.
+	 */
+	ret = fal_port_vlan_trans_adv_add(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_EGRESS, &xlt_rule,
+				&xlt_action);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%px: Failed to update egress translation rule for port: %d, error: %d\n",
+				iface, fal_port, ret);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_egress_vlan_add);
+
+		/*
+		 * Delete ingress vlan translation rule.
+		 */
+		if (ret != SW_ALREADY_EXIST) {
+			memset(&xlt_rule, 0, sizeof(xlt_rule));
+			memset(&xlt_action, 0, sizeof(xlt_action));
+			ppe_drv_vlan_ingress_rule_action_set_vp(&xlt_rule, &xlt_action, info);
+			fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, base_f_port, FAL_PORT_VLAN_INGRESS,
+												&xlt_rule, &xlt_action);
+		}
+
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_EGRESS_VLAN_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_as_vp_add_xlate_rules);
+
+/*
  * ppe_drv_vlan_del_xlate_rule()
  *	Delete Ingress and Egress VLAN translation rules
  */
@@ -231,7 +463,7 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	xlt_action.cvid_xlt_cmd = (info->cvid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
 	xlt_action.cvid_xlt = (info->cvid == 0xFFFF) ? 0 : info->cvid;
 	xlt_action.svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	xlt_action.svid_xlt = (info->svid == 0xFFFF) ? 0 : info->svid;;
+	xlt_action.svid_xlt = (info->svid == 0xFFFF) ? 0 : info->svid;
 
 	/*
 	 * Delete old egress vlan translation rule
@@ -316,7 +548,7 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	xlt_action.cvid_xlt_cmd = (info->cvid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
 	xlt_action.cvid_xlt = (info->cvid == 0xFFFF) ? 0 : info->cvid;
 	xlt_action.svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
-	xlt_action.svid_xlt = (info->svid == 0xFFFF) ? 0 : info->svid;;
+	xlt_action.svid_xlt = (info->svid == 0xFFFF) ? 0 : info->svid;
 
 	ret = fal_port_vlan_trans_adv_add(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_EGRESS, &xlt_rule,
 				&xlt_action);

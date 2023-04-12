@@ -111,5 +111,6 @@ struct nss_vlan_pvt {
 	struct ppe_drv_vlan_xlate_info xlate_info;
 						/* XLATE info */
 	struct kref ref;			/* Reference count */
+	bool is_vlan_as_vp_iface;		/* is VP created for this VLAN */
 };
 #endif

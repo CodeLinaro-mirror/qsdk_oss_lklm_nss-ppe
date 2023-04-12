@@ -337,6 +337,8 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_GET_MIRROR_ANALYSIS_FAIL,	/**< Failed to get Mirror analysis port */
 	PPE_DRV_RET_GET_MIRROR_ANALYSIS_NO_PORT,	/**< No port is set for mirror analysis */
 	PPE_DRV_RET_PORT_NO_OFFLOAD,			/**< Offload is disabled on the PPE port */
+	PPE_DRV_RET_BASE_DEV_NOT_FOUND,			/**< Base Device not found */
+	PPE_DRV_RET_BASE_PORT_NOT_FOUND,		/**< Base Port not found */
 } ppe_drv_ret_t;
 
 /**

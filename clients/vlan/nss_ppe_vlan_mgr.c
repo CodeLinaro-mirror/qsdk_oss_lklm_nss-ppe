@@ -28,11 +28,21 @@
 #include <linux/module.h>
 #include <net/bonding.h>
 #include <ppe_drv_public.h>
+#include <ppe_vp_public.h>
 #include <nss_ppe_vlan_mgr.h>
 #include <ref/ref_vsi.h>
 #include "nss_ppe_vlan_mgr_priv.h"
 
+static char *vlan_as_vp_interface = "";
+module_param(vlan_as_vp_interface, charp, 0644);
+MODULE_PARM_DESC(vlan_as_vp_interface, "Port number to which switch is connected");
 
+/*
+ * vlan_as_vp_port_num points to a valid interface only when vlan_as_vp_interface
+ * have a valid interface(ie. eth0, eth1, eth2, eth3, eth4, eth5), then we assign
+ * vlan_as_vp_port_num with interface number of vlan_as_vp_interface.
+ */
+static int vlan_as_vp_port_num = NSS_PPE_VLAN_MGR_INVALID_PORT;
 static struct nss_ppe_vlan_mgr_context vlan_mgr_ctx;
 
 static bool nss_ppe_vlan_mgr_instance_deref(struct nss_vlan_pvt *v);
@@ -449,6 +459,163 @@ free_iface:
 }
 
 /*
+ * nss_ppe_vlan_mgr_untag_and_send()
+ *	Untag exception packet and send it to stack.
+ */
+bool nss_ppe_vlan_mgr_vp_src_exception(struct net_device *dev, struct sk_buff *skb, void *cb_data)
+{
+	struct net_device *real_dev;
+
+	real_dev = nss_ppe_vlan_mgr_get_real_dev(skb->dev);
+	skb->dev = real_dev;
+	skb->skb_iif = real_dev->ifindex;
+	skb->protocol = eth_type_trans(skb, skb->dev);
+	netif_receive_skb(skb);
+	return true;
+}
+
+/*
+ * nss_ppe_vlan_mgr_vp_dst_exception()
+ *	Free the exception packet received from destination VP callback.
+ */
+bool nss_ppe_vlan_mgr_vp_dst_exception(struct net_device *dev, struct sk_buff *skb, void *cb_data)
+{
+	nss_ppe_vlan_mgr_trace("VP dst exception handler: freeing the skb\n");
+	dev_kfree_skb_any(skb);
+	return false;
+}
+
+/*
+ * nss_ppe_vlan_mgr_deconfigure_vp()
+ *	Deconfigure vlan instance configured as VP.
+ */
+static void nss_ppe_vlan_mgr_deconfigure_vp(struct nss_vlan_pvt *v)
+{
+	ppe_drv_ret_t ret;
+
+	ret = ppe_drv_vlan_as_vp_del_xlate_rules(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("failed to delete vlan translation rule for vp, error = %d \n", ret);
+	}
+
+	ppe_drv_iface_mtu_set(v->iface, 0);
+	ppe_drv_iface_mac_addr_clear(v->iface);
+}
+
+/*
+ * nss_ppe_vlan_mgr_free_vp()
+ *	free the allocated vp for VLAN interface.
+ */
+static void nss_ppe_vlan_mgr_free_vp(int vp_num) {
+	ppe_vp_status_t status = PPE_VP_STATUS_SUCCESS;
+
+	status = ppe_vp_free(vp_num);
+	if (status != PPE_VP_STATUS_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("failed to free VP object= %d \n", vp_num);
+	}
+}
+
+/*
+ * nss_ppe_vlan_mgr_alloc_vp()
+ *	allocate vp for vlan interface.
+ */
+static ppe_vp_num_t nss_ppe_vlan_mgr_alloc_vp(struct net_device *dev)
+{
+	struct ppe_vp_ai vpai = {0};
+	ppe_vp_num_t vp_num = NSS_PPE_VLAN_MGR_INVALID_PORT;
+	int16_t queue_num;
+
+	queue_num = ppe_drv_port_ucast_queue_get_by_port(vlan_as_vp_port_num);
+	if (queue_num < 0) {
+		nss_ppe_vlan_mgr_warn("Invalid queue id for dev: %s\n", dev->name);
+		return NSS_PPE_VLAN_MGR_INVALID_PORT;
+	}
+
+	vpai.queue_num = queue_num;
+	vpai.type = PPE_VP_TYPE_SW_L2;
+	vpai.dst_cb = nss_ppe_vlan_mgr_vp_dst_exception;
+	vpai.src_cb = nss_ppe_vlan_mgr_vp_src_exception;
+	vpai.xmit_port = vlan_as_vp_port_num;
+
+	/*
+	 * Allocate VP for valid vlan interface.
+	 */
+	vp_num = ppe_vp_alloc(dev, &vpai);
+	if (vp_num < 0) {
+		nss_ppe_vlan_mgr_warn("vp alloc failed for dev %s status: %d", dev->name, vpai.status);
+		return NSS_PPE_VLAN_MGR_INVALID_PORT;
+	}
+
+	return vp_num;
+}
+
+/*
+ * nss_ppe_vlan_mgr_alloc_configure_ppe_vp()
+ *	Configure PPE VP for VLAN devices.
+ *
+ * It will allocate VP object and VP interface.
+ */
+static int nss_ppe_vlan_mgr_alloc_configure_ppe_vp(struct nss_vlan_pvt *v, struct net_device *dev)
+{
+	ppe_drv_ret_t ret;
+	ppe_vp_num_t vp_num;
+
+	/*
+	 * nss_ppe_vlan_mgr_alloc_configure_ppe_vp() get called only when vlan_as_vp is enabled and
+	 * vlan interface real physical interface number is same as vlan_as_vp_port_num.
+	 */
+	vp_num = nss_ppe_vlan_mgr_alloc_vp(dev);
+	if (vp_num == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		nss_ppe_vlan_mgr_warn("VP allocation failed for device: %s\n", dev->name);
+		return -1;
+	}
+
+	v->iface = ppe_drv_iface_get_by_dev(dev);
+	if (!v->iface) {
+		nss_ppe_vlan_mgr_warn("%s: failed to get IFACE for vlan device", dev->name);
+		return -1;
+	}
+
+	/*
+	 * Setting src interface for VLAN packets as VP interface.
+	 */
+	v->xlate_info.port_id = vp_num;
+	v->is_vlan_as_vp_iface = true;
+
+	/*
+	 * calculate the cvid and svid.
+	 */
+	if (NSS_PPE_VLAN_MGR_TAG_CNT(v) == NSS_PPE_VLAN_MGR_TYPE_DOUBLE) {
+		/*
+		 * TODO:QinQ is currenlty not supported.
+		 */
+		return -1;
+	}
+
+	if (((vlan_mgr_ctx.ctpid != vlan_mgr_ctx.stpid) && (v->tpid == vlan_mgr_ctx.ctpid)) ||
+	    ((vlan_mgr_ctx.ctpid == vlan_mgr_ctx.stpid) &&
+	     (vlan_mgr_ctx.port_role[v->port[0]] == FAL_QINQ_EDGE_PORT))) {
+		v->ppe_cvid = v->vid;
+		v->ppe_svid = FAL_VLAN_INVALID;
+	} else {
+		v->ppe_cvid = FAL_VLAN_INVALID;
+		v->ppe_svid = v->vid;
+	}
+
+	v->xlate_info.br = NULL;
+	v->xlate_info.svid = v->ppe_svid;
+	v->xlate_info.cvid = v->ppe_cvid;
+
+	ret = ppe_drv_vlan_as_vp_add_xlate_rules(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: failed to set vlan translation, error = %d \n", dev->name, ret);
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
  * nss_ppe_vlan_mgr_configure_ppe()
  *	Configure PPE for non-bond devices
  */
@@ -463,7 +630,6 @@ static int nss_ppe_vlan_mgr_configure_ppe(struct nss_vlan_pvt *v, struct net_dev
 		nss_ppe_vlan_mgr_warn("%s: failed to allocate IFACE for vlan device", dev->name);
 		return -1;
 	}
-
 	/*
 	 * PPE expects base_dev here. So, for eth0.10, base_dev will be eth0.
 	 * For eth0.10.20, base_dev will be eth0.10.
@@ -568,6 +734,21 @@ static void nss_ppe_vlan_mgr_instance_free(struct kref *kref)
 	}
 	spin_unlock(&vlan_mgr_ctx.lock);
 
+	/*
+	 * VP based vlan instance cleanup.
+	 * VP free will cleanup the iface associated with vp.
+	 */
+	if (v->is_vlan_as_vp_iface) {
+		nss_ppe_vlan_mgr_trace("Vlan as VP interface: %d\n", v->xlate_info.port_id);
+		nss_ppe_vlan_mgr_deconfigure_vp(v);
+		nss_ppe_vlan_mgr_free_vp(v->xlate_info.port_id);
+		kfree(v);
+		return;
+	}
+
+	/*
+	 * VSI based vlan instance cleanup.
+	 */
 	if (v->iface) {
 
 		v->xlate_info.port_id = 0;
@@ -658,10 +839,9 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_instance_find_and_ref(
  * nss_ppe_vlan_mgr_create_instance()
  *	Create vlan instance
  */
-static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
-						struct net_device *dev)
+static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(struct net_device *dev)
 {
-	struct nss_vlan_pvt *v;
+	struct nss_vlan_pvt *v, *real_v;
 	struct vlan_dev_priv *vlan;
 	struct net_device *real_dev;
 	struct net_device *slave_dev;
@@ -669,6 +849,20 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 
 	if (!is_vlan_dev(dev)) {
 		return NULL;
+	}
+
+	vlan = vlan_dev_priv(dev);
+	real_dev = vlan->real_dev;
+
+	real_v = nss_ppe_vlan_mgr_instance_find_and_ref(real_dev);
+	if (real_v) {
+		if (real_v->is_vlan_as_vp_iface) {
+			nss_ppe_vlan_mgr_warn("QinQ not supported for dev %s on VLAN as VP dev %s\n", dev->name, real_dev->name);
+			nss_ppe_vlan_mgr_instance_deref(real_v);
+			return NULL;
+		}
+
+		nss_ppe_vlan_mgr_instance_deref(real_v);
 	}
 
 	v = kzalloc(sizeof(*v), GFP_KERNEL);
@@ -679,9 +873,6 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 	}
 
 	INIT_LIST_HEAD(&v->list);
-
-	vlan = vlan_dev_priv(dev);
-	real_dev = vlan->real_dev;
 	v->vid = vlan->vlan_id;
 	v->tpid = ntohs(vlan->vlan_proto);
 	v->bond_id = -1;
@@ -889,12 +1080,14 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 	struct nss_vlan_pvt *v;
 	int res;
 	struct net_device *slave_dev, *real_dev;
-	int32_t port_id;
+	int32_t port_id, base_if_num;
 	struct vlan_dev_priv *vlan;
 	bool is_bond_master = false;
+	bool is_vlan_as_vp = false;
 
 	v = nss_ppe_vlan_mgr_create_instance(dev);
 	if (!v) {
+		nss_ppe_vlan_mgr_warn("Vlan instance creation failed for dev:%s\n", dev->name);
 		return NOTIFY_DONE;
 	}
 
@@ -905,9 +1098,21 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 		real_dev = vlan->real_dev;
 	}
 
+	/*
+	 * Check if VLAN as VP is enabled on selected VLAN interface real_dev.
+	 */
+	base_if_num = nss_ppe_vlan_mgr_get_port_id(real_dev);
+	if (base_if_num != NSS_PPE_VLAN_MGR_INVALID_PORT) {
+		is_vlan_as_vp = (base_if_num == vlan_as_vp_port_num);
+	}
+
 	is_bond_master = netif_is_bond_master(real_dev);
 	if (!is_bond_master) {
-		res = nss_ppe_vlan_mgr_configure_ppe(v, dev);
+		if (is_vlan_as_vp) {
+			res = nss_ppe_vlan_mgr_alloc_configure_ppe_vp(v, dev);
+		} else {
+			res = nss_ppe_vlan_mgr_configure_ppe(v, dev);
+		}
 	} else {
 		res = nss_ppe_vlan_mgr_bond_configure_ppe(v, real_dev, dev);
 	}
@@ -969,10 +1174,9 @@ static int nss_ppe_vlan_mgr_unregister_event(struct netdev_notifier_info *info)
 	nss_ppe_vlan_mgr_instance_deref(v);
 
 	/*
-	 * Free instance
+	 * Release reference got by "nss_ppe_vlan_mgr_create_instance"
 	 */
 	nss_ppe_vlan_mgr_instance_deref(v);
-
 	return NOTIFY_DONE;
 }
 
@@ -1246,6 +1450,18 @@ int nss_ppe_vlan_mgr_leave_bridge(struct net_device *dev, struct ppe_drv_iface *
 	 * real_dev is not bond but a PPE device
 	 */
 	spin_lock(&vlan_mgr_ctx.lock);
+
+	/*
+	 * If it is VLAN over VP then we don't need update rule
+	 * So just update bridge to NULL and return.
+	 */
+	if (v->is_vlan_as_vp_iface) {
+		v->xlate_info.br = NULL;
+		v->bridge_iface = NULL;
+		spin_unlock(&vlan_mgr_ctx.lock);
+		goto done;
+	}
+
 	v->xlate_info.br = v->bridge_iface;
 	v->xlate_info.port_id = port_id;
 	ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
@@ -1280,6 +1496,7 @@ int nss_ppe_vlan_mgr_leave_bridge(struct net_device *dev, struct ppe_drv_iface *
 		return -1;
 	}
 
+done:
 	/*
 	 * Release the reference taken in join
 	 */
@@ -1334,6 +1551,20 @@ int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, struct ppe_drv_iface *b
 	}
 
 	/*
+	 * If vlan_as_vp is enabled and port_id is vlan_as_vp_interface_num
+	 * then have created vp for vlan interface and ingress and egress rule
+	 * are added while configuring vlan port. here we just need to update
+	 * nss_vlan_pvt object with bridge information.
+	 */
+	if (v->is_vlan_as_vp_iface) {
+		spin_lock(&vlan_mgr_ctx.lock);
+		v->xlate_info.br = bridge_iface;
+		v->bridge_iface = bridge_iface;
+		spin_unlock(&vlan_mgr_ctx.lock);
+		return 0;
+	}
+
+	/*
 	 * If real_dev is bond_master, update for all slaves
 	 * Check if real_dev is bond master
 	 */
@@ -1350,7 +1581,7 @@ int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, struct ppe_drv_iface *b
 
 	port_id = nss_ppe_vlan_mgr_get_port_id(real_dev);
 	if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
-		nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", real_dev, real_dev->name, port_id);
+		nss_ppe_vlan_mgr_warn("%px: %s:%d is invalid port\n", real_dev, real_dev->name, port_id);
 		nss_ppe_vlan_mgr_instance_deref(v);
 		return -1;
 	}
@@ -1619,7 +1850,7 @@ void __exit nss_ppe_vlan_mgr_exit_module(void)
 int __init nss_ppe_vlan_mgr_init_module(void)
 {
 	int idx;
-
+	struct net_device *vlan_as_vp_dev = NULL;
 	INIT_LIST_HEAD(&vlan_mgr_ctx.list);
 	spin_lock_init(&vlan_mgr_ctx.lock);
 
@@ -1639,6 +1870,33 @@ int __init nss_ppe_vlan_mgr_init_module(void)
 
 	for (idx = 0; idx < NSS_PPE_VLAN_MGR_PORT_MAX; idx++) {
 		vlan_mgr_ctx.port_role[idx] = FAL_QINQ_EDGE_PORT;
+	}
+
+	/*
+	 * If vlan_as_vp_interface module param contains empty string,
+	 * then VLAN as VP mode is not enabled. Return from here.
+	 */
+	if (vlan_as_vp_interface[0] == '\0') {
+		register_netdevice_notifier(&nss_ppe_vlan_mgr_netdevice_nb);
+		nss_ppe_vlan_mgr_info("Module (Build %s) loaded\n", NSS_PPE_BUILD_ID);
+		return 0;
+	}
+
+	vlan_as_vp_dev = dev_get_by_name(&init_net, vlan_as_vp_interface);
+	if (vlan_as_vp_dev) {
+		vlan_as_vp_port_num = nss_ppe_vlan_mgr_get_port_id(vlan_as_vp_dev);
+		dev_put(vlan_as_vp_dev);
+	}
+
+	nss_ppe_vlan_mgr_info("VLAN as VP interface name: %s port number: %d\n", vlan_as_vp_interface, vlan_as_vp_port_num);
+
+	/*
+	 * Do sanity check to support VLAN over VP only on ethernet net devices which are represented as
+	 * physical ports in PPE. Physical interface number would be within physical port range.
+	 */
+	if (vlan_as_vp_port_num < PPE_DRV_PHY_ETH_PORT_START || vlan_as_vp_port_num > PPE_DRV_PHY_ETH_PORT_MAX) {
+		nss_ppe_vlan_mgr_warn("This is not correct physical port:%d\n", vlan_as_vp_port_num);
+		vlan_as_vp_port_num = NSS_PPE_VLAN_MGR_INVALID_PORT;
 	}
 
 	register_netdevice_notifier(&nss_ppe_vlan_mgr_netdevice_nb);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -97,6 +97,22 @@ ppe_drv_ret_t ppe_drv_vlan_port_role_set(struct ppe_drv_iface *iface, uint32_t p
 ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info);
 
 /**
+ * ppe_drv_vlan_as_vp_del_xlate_rules
+ *	Delete vlan translation rules with VP.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * ppe_drv_vlan_xlate_info
+ *
+ * @param[in] iface  PPE interface for vlan device.
+ * @param[in] ppe_drv_vlan_xlate_info Translation info.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_vlan_as_vp_del_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info);
+
+/**
  * ppe_drv_vlan_add_xlate_rule
  *	Add vlan translation rules.
  *
@@ -105,12 +121,28 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
  * ppe_drv_vlan_xlate_info
  *
  * @param[in] iface  PPE interface for vlan device.
- * @param[in] ppe_drv_vlan_xlate_info	Translation info.
+ * @param[in] ppe_drv_vlan_xlate_info Translation info.
  *
  * @return
  * Status of the operation.
  */
 ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info);
+
+/**
+ * ppe_drv_vlan_as_vp_add_xlate_rules
+ *	Add vlan translation rules with VP.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * ppe_drv_vlan_xlate_info
+ *
+ * @param[in] iface  PPE interface for vlan device.
+ * @param[in] ppe_drv_vlan_xlate_info Translation info.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_vlan_as_vp_add_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info);
 
 /**
  * ppe_drv_vlan_deinit
