@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -394,6 +394,30 @@ bool ppe_drv_tun_port_reset_physical_port(struct ppe_drv_port *pp)
 }
 
 /*
+ * ppe_drv_tun_physical_port_from_xmit_port_get
+ * 	Get Physical port associated with the xmit port
+ */
+uint16_t ppe_drv_tun_physical_port_from_xmit_port_get(uint16_t xmit_port, struct ppe_drv_port *dp)
+{
+	uint16_t phy_port = PPE_DRV_PORT_CPU;
+
+	if (PPE_DRV_PHY_PORT_CHK(xmit_port)) {
+		phy_port = xmit_port;
+	} else if (PPE_DRV_VIRTUAL_PORT_CHK(xmit_port)) {
+		if (ppe_drv_port_flags_check(dp, PPE_DRV_PORT_FLAG_IDTLS) ||
+			ppe_drv_port_flags_check(dp, PPE_DRV_PORT_FLAG_IIPSEC)) {
+			phy_port = PPE_DRV_PORT_EIP197;
+		} else if (ppe_drv_port_flags_check(dp, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
+			phy_port = PPE_DRV_PORT_CPU;
+		}
+	} else {
+		ppe_drv_warn("%p: Destination port is not Physical or Virtual port %d", dp, xmit_port);
+	}
+
+	return phy_port;
+}
+
+/*
  * ppe_drv_tun_port_configure
  * 	Configure L2 VP port table.
  */
@@ -406,6 +430,7 @@ bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port)
 	uint16_t extra_hdr_len = 0;
 	uint8_t dp_queue_id;
 	struct ppe_drv_port *dp = NULL; /* Destination port */
+	uint16_t phy_port;
 
 	/*
 	 * TODO: Update extra header length setting in port MTU config
@@ -416,11 +441,6 @@ bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port)
 		ppe_drv_warn("%p: failed to set mtu extra header len for port %d", ptun, pp->port);
 		return false;
 	}
-
-	/*
-	 * Set phyiscal port or CPU port based on xmit_port value
-	 */
-	xmit_port = (xmit_port < PPE_DRV_PHYSICAL_MAX) ? xmit_port : 0;
 
 	/*
 	 * Get destination port
@@ -441,7 +461,12 @@ bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port)
 	}
 	ppe_drv_trace("%p: Destination port: %p:%d, queue_id:%d", ptun, dp, xmit_port, dp_queue_id);
 
-	err = fal_vport_physical_port_id_set(PPE_DRV_SWITCH_ID, v_port, xmit_port);
+	/*
+	 * Set phyiscal port based on xmit_port value
+	 */
+	phy_port = ppe_drv_tun_physical_port_from_xmit_port_get(xmit_port, dp);
+
+	err = fal_vport_physical_port_id_set(PPE_DRV_SWITCH_ID, v_port, phy_port);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: failed to set physical port:%d for vp port:%d", pp,
 					xmit_port, pp->port);
@@ -559,11 +584,6 @@ bool ppe_drv_tun_decap_xmitport_cfg_set(struct ppe_drv_tun *ptun, uint16_t xmit_
 	fal_tunnel_port_intf_t port_tnl_cfg = {0};
 	struct ppe_drv_port *dp = NULL;
 	sw_error_t err;
-
-	/*
-	 * Set phyiscal port or CPU port based on xmit_port value
-	 */
-	xmit_port = (xmit_port < PPE_DRV_PHYSICAL_MAX) ? xmit_port : 0;
 
 	/*
 	 * Get destination port

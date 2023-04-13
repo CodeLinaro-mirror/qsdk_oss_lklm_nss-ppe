@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -479,6 +479,14 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 	encap_cfg.l3_offset = ptec->l3_offset;
 	if (ptec->l4_offset_valid) {
 		encap_cfg.l4_offset = ptec->l4_offset;
+	}
+
+	/*
+	 * Configure vport information in encap if xmit port is vp
+	 */
+	if (PPE_DRV_VIRTUAL_PORT_CHK(l2_hdr->xmit_port)) {
+		encap_cfg.vport_en = 1;
+		encap_cfg.vport = l2_hdr->xmit_port;
 	}
 
 	/*
