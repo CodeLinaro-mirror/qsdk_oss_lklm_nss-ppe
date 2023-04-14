@@ -57,7 +57,10 @@
 #endif
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
-#define NSS_PPE_LAG_MAX_BOND_DEVICES 16
+/*
+ * Support 24 bond MLO devices and bond0
+ */
+#define NSS_PPE_LAG_MAX_BOND_DEVICES 25
 #define NSS_PPE_LAG_MAX_SLAVES_PER_BOND_ID 16
 
 /*
@@ -74,6 +77,21 @@ struct nss_ppe_lag_bond_entry {
 } bond_entry[NSS_PPE_LAG_MAX_BOND_DEVICES];
 
 DEFINE_SPINLOCK(nss_ppe_lag_spinlock);
+
+/*
+ * nss_ppe_lag_is_mlo_device()
+ *	Check if bond netdevice is MLO device
+ *	To-do: Add this function into linux bond module
+ */
+static bool nss_ppe_lag_is_mlo_device(struct net_device *bond_dev)
+{
+	struct bonding *bond = netdev_priv(bond_dev);
+
+	if (BOND_MODE(bond) == BOND_MODE_MLO)
+		return true;
+
+	return false;
+}
 
 /*
  * nss_ppe_bond_dev_get_id()
@@ -245,7 +263,7 @@ static int nss_ppe_lag_update_slave(struct netdev_notifier_info *info)
 static int nss_ppe_lag_unregister_event(struct netdev_notifier_info *info)
 {
 	struct nss_ppe_lag_bond_entry *entry;
-	ppe_drv_ret_t ret, ret_mac;
+	ppe_drv_ret_t ret, ret_mac = PPE_DRV_RET_SUCCESS;
 	int32_t bond_id;
 	uint8_t i;
 	struct net_device *bond_dev;
@@ -278,7 +296,12 @@ static int nss_ppe_lag_unregister_event(struct netdev_notifier_info *info)
 		}
 	}
 
-	ret_mac = ppe_drv_iface_mac_addr_clear(entry->iface);
+	/*
+	 * MAC addresses are not added for MLO devices.
+	 */
+	if (!nss_ppe_lag_is_mlo_device(bond_dev)) {
+		ret_mac = ppe_drv_iface_mac_addr_clear(entry->iface);
+	}
 
 	ret = ppe_drv_lag_deinit(entry->iface);
 	if (ret != PPE_DRV_RET_SUCCESS) {
@@ -383,26 +406,28 @@ static int nss_ppe_lag_register_event(struct netdev_notifier_info *info)
 	ether_addr_copy(entry->dev_addr, bond_dev->dev_addr);
 	spin_unlock(&nss_ppe_lag_spinlock);
 
-
-	ret = ppe_drv_iface_mac_addr_set(entry->iface, entry->dev_addr);
-	if (ret != PPE_DRV_RET_SUCCESS) {
-		nss_ppe_lag_warn("%px: failed to set mac_addr, error = %d \n", bond_dev, ret);
-		goto fail;
-	}
-
 	ret = ppe_drv_iface_mtu_set(entry->iface, entry->mtu);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		nss_ppe_lag_warn("%px: failed to set mtu, error = %d \n", bond_dev, ret);
-		goto fail2;
+		goto fail;
+	}
+
+	/*
+	 * Avoid MAC address configuration for MLO mode to ensure optimum usage of mymac table.
+	 * Note that we intend to support flow offload for multiple MLO devices when they are added to bridge.
+	 * However, routed flow offload to bond without bridge in MLO mode is restricted.
+	 */
+	if (!nss_ppe_lag_is_mlo_device(bond_dev)) {
+		ret = ppe_drv_iface_mac_addr_set(entry->iface, entry->dev_addr);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			nss_ppe_lag_warn("%px: failed to set mac_addr, error = %d \n", bond_dev, ret);
+			goto fail;
+		}
 	}
 
 	nss_ppe_lag_info("%px: Bond interface (%s) is created=%d\n", bond_dev, bond_dev->name, bond_id);
 
 	return NOTIFY_DONE;
-
-fail2:
-	ppe_drv_iface_mac_addr_clear(entry->iface);
-
 fail:
 	ppe_drv_lag_deinit(entry->iface);
 	ppe_drv_iface_deref(entry->iface);
@@ -498,16 +523,21 @@ static int nss_ppe_lag_changeaddr_event(struct netdev_notifier_info *info)
 		return NOTIFY_DONE;
 	}
 
-	ret = ppe_drv_iface_mac_addr_clear(entry->iface);
-	if (ret != PPE_DRV_RET_SUCCESS) {
-		nss_ppe_lag_warn("%px: failed to clear MAC address, error = %d\n", bond_dev, ret);
-		return NOTIFY_DONE;
-	}
+	/*
+	 * We avoid MAC address changes for MLO mode.
+	 */
+	if (!nss_ppe_lag_is_mlo_device(bond_dev)) {
+		ret = ppe_drv_iface_mac_addr_clear(entry->iface);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			nss_ppe_lag_warn("%px: failed to clear MAC address, error = %d\n", bond_dev, ret);
+			return NOTIFY_DONE;
+		}
 
-	ret = ppe_drv_iface_mac_addr_set(entry->iface, bond_dev->dev_addr);
-	if (ret != PPE_DRV_RET_SUCCESS) {
-		nss_ppe_lag_warn("%px: failed to set mac_addr, error = %d \n", bond_dev, ret);
-		return NOTIFY_DONE;
+		ret = ppe_drv_iface_mac_addr_set(entry->iface, bond_dev->dev_addr);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			nss_ppe_lag_warn("%px: failed to set mac_addr, error = %d \n", bond_dev, ret);
+			return NOTIFY_DONE;
+		}
 	}
 
 	spin_lock(&nss_ppe_lag_spinlock);

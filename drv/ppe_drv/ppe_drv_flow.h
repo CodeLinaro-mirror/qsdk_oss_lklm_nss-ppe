@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,8 +26,46 @@
 #define PPE_DRV_FLOW_EIP	0x0040
 #define PPE_DRV_FLOW_MAPT	0x0080
 
+/*
+ * Macros for configuration of MSDUQ in WiFi-QoS.
+ */
+#define PPE_DRV_FLOW_FO_MASK	0x08
+#define PPE_DRV_FLOW_WC_MASK	0x30
+#define PPE_DRV_FLOW_TID_MASK	0x07
+#define PPE_DRV_FLOW_TID_SHIFT	1
+
 struct ppe_drv_v4_conn_flow;
 struct ppe_drv_v6_conn_flow;
+
+/*
+ * ppe_drv_flow_sawf_metadata
+ *	SAWF data to be configured in tree_id.
+ */
+struct ppe_drv_flow_sawf_metadata {
+	uint8_t service_class;	/* SAWF service class per-flow */
+	uint16_t peer_id;	/* Peer ID */
+};
+
+/*
+ * ppe_drv_flow_tree_id_data
+ *	Structure for tree_id field.
+ */
+struct ppe_drv_flow_tree_id_data {
+	ppe_drv_tree_id_type_t type;					/* Type of Tree ID (Max 16) */
+	union {
+		uint32_t value;						/* Plain Tree ID information */
+		struct ppe_drv_flow_sawf_metadata sawf_metadata;	/* Tree ID configured for SAWF. */
+	} info;
+};
+
+/*
+ * ppe_drv_flow_metadata
+ *	Structure for flow metadata.
+ */
+struct ppe_drv_flow_metadata {
+	uint32_t wifi_qos;				/* WiFi-QoS to be configured. */
+	struct ppe_drv_flow_tree_id_data tree_id_data;	/* Tree-ID to be configured. */
+};
 
 /*
  * ppe_drv_flow_pmtu_type

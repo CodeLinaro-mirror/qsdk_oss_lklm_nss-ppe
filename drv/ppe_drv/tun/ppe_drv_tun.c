@@ -1714,6 +1714,7 @@ bool ppe_drv_tun_global_init(struct ppe_drv *p)
 
 	err = fal_tunnel_program_entry_add(PPE_DRV_SWITCH_ID, FAL_TUNNEL_PROGRAM_TYPE_5, &pgm);
 	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: program entry add failed for GRE with error %d", p, err);
 		return false;
 	}
@@ -1723,6 +1724,7 @@ bool ppe_drv_tun_global_init(struct ppe_drv *p)
 	 */
 	err = fal_tunnel_program_cfg_set(PPE_DRV_SWITCH_ID, FAL_TUNNEL_PROGRAM_TYPE_5, &cfg);
 	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: program entry configuration failed for GRE with error %d", p, err);
 		return false;
 	}

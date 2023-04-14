@@ -64,8 +64,7 @@
 
 #define PPE_DS_INTR_ENABLE	0	/* Flag for PPE-DS mode.
 					   0 means timer mode and 1 means interrupt mode */
-#define PPE_DS_MAX_NODE		3	/* Max DS node supported */
-#define PPE_DS_TXCMPL_BUDGET	256	/* PPE-DS node's Tx complete budget */
+#define PPE_DS_MAX_NODE		4	/* Max DS node supported */
 #define PPE_DS_RXFILL_LOW_THRES_DIVISOR	3	/* PPE-DS node's Rxfill low threshold divisor */
 #define PPE_DS_RXFILL_NUM_DESC_MAX	65535	/* PPE-DS node's Rxfill maximum descriptor count */
 #define PPE_DS_RXFILL_NUM_DESC_MIN	1024	/* PPE-DS node's Rxfill minimum descriptor count */
@@ -73,15 +72,19 @@
 #define PPE_DS_TXCMPL_NUM_DESC_MAX	65535	/* PPE-DS node's Txcmpl maximum descriptor count */
 #define PPE_DS_TXCMPL_NUM_DESC_MIN	1024	/* PPE-DS node's Txcmpl minimum descriptor count */
 #define PPE_DS_TXCMPL_NUM_DESC_DEF	8192	/* PPE-DS node's Txcmpl default descriptor count */
+#define PPE_DS_TXCMPL_MIN_BUDGET	16	/* PPE-DS node's Txcmpl minimum budget */
+#define PPE_DS_TXCMPL_DEF_BUDGET	256	/* PPE-DS node's Txcmpl default budget */
 
 extern unsigned int polling_for_idx_update;
 extern unsigned int idx_mgmt_freq;
 extern unsigned int cpu_mask_2g;
-extern unsigned int cpu_mask_5g;
+extern unsigned int cpu_mask_5g_lo;
+extern unsigned int cpu_mask_5g_hi;
 extern unsigned int cpu_mask_6g;
 extern unsigned int ppe2tcl_rxfill_num_desc;
 extern unsigned int reo2ppe_txcmpl_num_desc;
 extern unsigned int rxfill_low_threshold;
+extern unsigned int txcmpl_budget;
 
 /*
  * ppe_ds_node_state_t

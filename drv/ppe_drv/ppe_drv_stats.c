@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -44,7 +44,6 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_EDIT_REDIR_CORE2",	  /* PPE RFS service code for core2 for Active VP */
 	"PPE_DRV_SC_EDIT_REDIR_CORE3",	  /* PPE RFS service code for core3 for Active VP */
 	"PPE_DRV_SC_VP_RPS",			/* PPE RPS service code for VP flow */
-	"PPE_DRV_SC_SAWF",			/* Service code for SAWF telemetry */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 
@@ -241,16 +240,60 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 };
 
 /*
+ * ppe_drv_stats_sawf_sc_str
+ *	PPE DRV connection statistics
+ */
+static const char *ppe_drv_stats_sawf_sc_str[] = {
+	"rx_packets",		/* Per service-class counter for packets recieved on ethernet port */
+	"rx_bytes",		/* Per service-class coutner for bytes recieved on ethernet port */
+	"flow_count",		/* Per service-class counter for number of flows */
+};
+
+/*
+ * ppe_drv_conn_stats_sawf_sc_show()
+ *	Read ppe connection statistics
+ */
+static int ppe_drv_conn_stats_sawf_sc_show(struct seq_file *m, void __attribute__((unused))*ptr)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_stats_sawf_sc *sawf_sc_stats;
+	uint64_t *stats_shadow;
+	int i;
+
+	sawf_sc_stats = kzalloc(PPE_DRV_SAWF_SC_MAX * sizeof(struct ppe_drv_stats_sawf_sc), GFP_KERNEL);
+	if (!sawf_sc_stats) {
+		ppe_drv_warn("Error in allocating the service stats buffer\n");
+		return -ENOMEM;
+	}
+
+	spin_lock_bh(&p->lock);
+	memcpy(sawf_sc_stats, p->stats.sawf_sc_stats, sizeof(struct ppe_drv_stats_sawf_sc) * PPE_DRV_SAWF_SC_MAX);
+	spin_unlock_bh(&p->lock);
+
+	seq_puts(m, "\nPPE_SAWF per service class stats:\n\n");
+	stats_shadow = (uint64_t *)sawf_sc_stats;
+	for (i = PPE_DRV_SAWF_SC_START; i <= PPE_DRV_SAWF_SC_END; i++) {
+		uint64_t stats1 = *stats_shadow++;
+		uint64_t stats2 = *stats_shadow++;
+		uint64_t stats3 = *stats_shadow++;
+		seq_printf(m, "\t\t For service class: %d \t\t %s:%llu  %s:%llu  %s:%llu\n", i, ppe_drv_stats_sawf_sc_str[0], stats1, ppe_drv_stats_sawf_sc_str[1], stats2, ppe_drv_stats_sawf_sc_str[2], stats3);
+	}
+
+	kfree(sawf_sc_stats);
+	return 0;
+};
+
+/*
  * ppe_drv_stats_sc_str
  * 	PPE DRV connection statistics
  */
 static const char *ppe_drv_stats_sc_str[] = {
 	"sc_cb_unregister",		/* Per service-code counter for callback not registered */
-	"sc_cb_success",		/* Per service-code coutner for successful callback */
-	"sc_cb_failure",		/* Per service-code counter for failure callback */
-	"sc_rx_packets",		/* Per service-class counter for packets recieved on the ethernet port */
-	"sc_rx_bytes",			/* Per service-class counter for bytes recieved on the ethernet port */
-	"sc_flow_count",		/* Per service-class counter for number of flows present */
+	"sc_cb_packet_consumed",	/* Per service-code coutner for successful packet consumption in callback */
+	"sc_cb_packet_processed",	/* Per service-code counter for packet processed in callback */
+	"sc_vp_cb_unregister",		/* Per service-code counter for vp callback not registered */
+	"sc_vp_cb_packet_consumed",	/* Per service-code coutner for successful packet consumption in vp callback */
+	"sc_vp_cb_packet_processed",	/* Per service-code counter for packet processed in vp callback */
 };
 
 /*
@@ -284,21 +327,6 @@ static int ppe_drv_conn_stats_sc_show(struct seq_file *m, void __attribute__((un
 		uint64_t stats5 = *stats_shadow++;
 		uint64_t stats6 = *stats_shadow++;
 		seq_printf(m, "\t\t %s\t %s:%llu  %s:%llu  %s:%llu  %s:%llu  %s:%llu  %s:%llu\n", ppe_drv_stats_sc_name_str[i], ppe_drv_stats_sc_str[0], stats1, ppe_drv_stats_sc_str[1], stats2, ppe_drv_stats_sc_str[2], stats3, ppe_drv_stats_sc_str[3], stats4, ppe_drv_stats_sc_str[4], stats5, ppe_drv_stats_sc_str[5], stats6);
-	}
-
-	/*
-	 * SAWF service codes.
-	 */
-	stats_shadow = (uint64_t *)(sc_stats + 128);
-	for (i = PPE_DRV_SC_SAWF_START; i <= PPE_DRV_SC_SAWF_END; i++) {
-		uint8_t sawf_stats_idx = PPE_DRV_SC_SAWF_STR;
-		uint64_t stats1 = *stats_shadow++;
-		uint64_t stats2 = *stats_shadow++;
-		uint64_t stats3 = *stats_shadow++;
-		uint64_t stats4 = *stats_shadow++;
-		uint64_t stats5 = *stats_shadow++;
-		uint64_t stats6 = *stats_shadow++;
-		seq_printf(m, "\t\t %s:%u\t %s:%llu  %s:%llu  %s:%llu  %s:%llu  %s:%llu  %s:%llu\n", ppe_drv_stats_sc_name_str[sawf_stats_idx], i, ppe_drv_stats_sc_str[0], stats1, ppe_drv_stats_sc_str[1], stats2, ppe_drv_stats_sc_str[2], stats3, ppe_drv_stats_sc_str[3], stats4, ppe_drv_stats_sc_str[4], stats5, ppe_drv_stats_sc_str[5], stats6);
 	}
 
 	kfree(sc_stats);
@@ -357,6 +385,26 @@ static int ppe_drv_conn_stats_show(struct seq_file *m, void __attribute__((unuse
 	kfree(stats);
 	return 0;
 }
+
+/*
+ * ppe_drv_conn_stats_sawf_sc_open()
+ *	PPE drv conn open callback API
+ */
+static int ppe_drv_conn_stats_sawf_sc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ppe_drv_conn_stats_sawf_sc_show, inode->i_private);
+}
+
+/*
+ * ppe_drv_conn_stats_sawf_sc_file_ops
+ *	File operations for EDMA common stats
+ */
+const struct file_operations ppe_drv_conn_stats_sawf_sc_file_ops = {
+	.open = ppe_drv_conn_stats_sawf_sc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
 
 /*
  * ppe_drv_conn_stats_sc_open()
@@ -430,7 +478,13 @@ int ppe_drv_stats_debugfs_init(void)
 
 	if (!debugfs_create_file("sc_stats", S_IRUGO, p->stats_dentry,
 			NULL, &ppe_drv_conn_stats_sc_file_ops)) {
-		ppe_drv_warn("%p: Unable to create common statistics file entry in debugfs\n", p);
+		ppe_drv_warn("%p: Unable to create sc_stats statistics file entry in debugfs\n", p);
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("sawf_sc_stats", S_IRUGO, p->stats_dentry,
+			NULL, &ppe_drv_conn_stats_sawf_sc_file_ops)) {
+		ppe_drv_warn("%p: Unable to create sawf_sc_stats file entry in debugfs\n", p);
 		goto debugfs_dir_failed;
 	}
 

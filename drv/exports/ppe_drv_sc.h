@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -52,24 +52,34 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_EDIT_REDIR_CORE2,	/* Service code to re-direct packets to core 2 with editing required for regular forwarding */
 	PPE_DRV_SC_EDIT_REDIR_CORE3,	/* Service code to re-direct packets to core 3 with editing required for regular forwarding */
 	PPE_DRV_SC_VP_RPS,		/* Service code to allow RPS for special VP flows when user type is DS and core_mask is 0 */
-	PPE_DRV_SC_SAWF_START = 128,	/* First SAWF telemetry based service code */
-	PPE_DRV_SC_SAWF_END = 255,	/* Last SAWF telemetry based service code */
-	PPE_DRV_SC_MAX,			/* Max service code */
+	PPE_DRV_SC_MAX = 256,		/* Max service code */
 } ppe_drv_sc_t;
 
-typedef bool (*ppe_drv_sc_callback_t)(void *app_data, struct sk_buff *skb);
+/*
+ * ppe_drv_sc_metadata
+ *	metadata for service codes.
+ */
+struct ppe_drv_sc_metadata {
+	uint32_t tree_id;		/* Tree id from EDMA descriptor */
+	uint32_t wifi_qos;		/* WiFi-qos from EDMA descriptor*/
+	uint32_t int_pri;		/* Priority from EDMA descriptor*/
+	uint8_t vp_num;			/* Destination VP number */
+	uint8_t service_code;		/* Service code from EDMA descriptor*/
+};
+
+typedef bool (*ppe_drv_sc_callback_t)(void *app_data, struct sk_buff *skb, void *sc_data);
 
 /*
  * ppe_drv_sc_process_skbuff()
  *	Register callback for a specific service code
  *
- * @param[IN] sc   Service code number.
+ * @param[IN] sc   Service code related metadata.
  * @param[IN] skb  Socket buffer with service code.
  *
  * @return
  * true if packet is consumed by the API or false if the packet is not consumed.
  */
-extern bool ppe_drv_sc_process_skbuff(uint8_t sc, struct sk_buff *skb);
+extern bool ppe_drv_sc_process_skbuff(struct ppe_drv_sc_metadata *sc, struct sk_buff *skb);
 
 /*
  * ppe_drv_sc_unregister_cb()
@@ -96,16 +106,30 @@ extern void ppe_drv_sc_unregister_cb(ppe_drv_sc_t sc);
 extern void ppe_drv_sc_register_cb(ppe_drv_sc_t sc, ppe_drv_sc_callback_t cb, void *app_data);
 
 /*
- * ppe_drv_sc_nsm_stats_update()
- *	Update stats in NSM for given service class
+ * ppe_drv_sc_unregister_vp_cb()
+ *	Unregister vp callback for a specific service code
  *
- * @param[IN] nsm_stats		Pointer to stats structure in NSM.
- * @param[IN] service_class	Service class corresponding to which stats are needed.
+ * @param[IN] sc   Service code number.
+ * @param[IN] vp_num   Virtual port number unregistering the callback.
  *
  * @return
- * Status of the API.
+ * void
  */
-extern bool ppe_drv_sc_nsm_stats_update(struct ppe_drv_nsm_stats *nsm_stats, uint8_t service_class);
+extern void ppe_drv_sc_unregister_vp_cb(ppe_drv_sc_t sc, uint16_t vp_num);
+
+/*
+ * ppe_drv_sc_register_vp_cb()
+ *	Register vp callback for a specific service code
+ *
+ * @param[IN] sc   Service code number.
+ * @param[IN] cb   Callback API.
+ * @param[IN] app_data   Application data to be passed to callback.
+ * @param[IN] vp_num     Virtual port number registering the callback.
+ *
+ * @return
+ * void
+ */
+extern bool ppe_drv_sc_register_vp_cb(ppe_drv_sc_t sc, ppe_drv_sc_callback_t cb, void *app_data, uint16_t vp_num);
 
 /** @} */ /* end_addtogroup ppe_drv_sc_subsystem */
 
