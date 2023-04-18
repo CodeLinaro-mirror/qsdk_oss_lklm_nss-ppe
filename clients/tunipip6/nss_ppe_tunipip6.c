@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -122,9 +122,15 @@ static int nss_ppe_tunipip6_dev_event(struct notifier_block  *nb,
 {
 	struct net_device *dev = netdev_notifier_info_to_dev(info);
 	struct ppe_drv_tun_cmn_ctx *tun_hdr;
+	struct ip6_tnl *tunnel = (struct ip6_tnl *)netdev_priv(dev);
 	bool status;
 
 	if (dev->type != ARPHRD_TUNNEL6) {
+		return NOTIFY_DONE;
+	}
+
+	if (tunnel->parms.fmrs) {
+		nss_ppe_tunipip6_trace("%p: IPIP6 does not support fmr, skip PPE.\n", dev);
 		return NOTIFY_DONE;
 	}
 
