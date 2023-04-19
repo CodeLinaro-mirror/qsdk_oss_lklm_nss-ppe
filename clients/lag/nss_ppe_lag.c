@@ -132,6 +132,16 @@ static int nss_ppe_lag_update_slave(struct netdev_notifier_info *info)
 	struct nss_ppe_lag_bond_entry *entry;
 	ppe_drv_ret_t ret;
 
+	/*
+	 * Notifier info points to netdev_notifier_changeupper_info structure
+	 */
+	struct netdev_notifier_changeupper_info *cu_info = (struct netdev_notifier_changeupper_info *)info;
+
+	if (!cu_info->upper_dev || !netif_is_bond_master(cu_info->upper_dev)) {
+		nss_ppe_lag_warn("%px: Master not present for slave dev: %s\n", info, slave_dev->name);
+		return NOTIFY_DONE;
+	}
+
 	if (!netif_is_bond_slave(slave_dev)) {
 		return NOTIFY_DONE;
 	}
@@ -143,11 +153,12 @@ static int nss_ppe_lag_update_slave(struct netdev_notifier_info *info)
 		return NOTIFY_DONE;
 	}
 
-	bond_dev = netdev_master_upper_dev_get(slave_dev);
-	if (bond_dev) {
+	bond_dev = cu_info->upper_dev;
+	if (cu_info->linking) {
 
 		/*
-		 * Figure out the aggregation id of this slave
+		 * Slave is added to the LAG master
+		 * Figure out the aggregation id of the bond master
 		 */
 		bond_id = nss_ppe_bond_dev_get_id(bond_dev);
 		if ((bond_id < 0) || (bond_id >= NSS_PPE_LAG_MAX_BOND_DEVICES)) {

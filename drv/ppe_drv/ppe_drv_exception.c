@@ -248,9 +248,9 @@ void ppe_drv_exception_init(void)
 	struct ppe_drv *p = &ppe_drv_gbl;
 	const uint8_t exception_max = ppe_drv_exception_max();
 	const uint8_t l4_except_max = ppe_drv_exception_tcpflag_max();
-	fal_l4_excep_parser_ctrl tcp_except_ctrl;
+	fal_l4_excep_parser_ctrl tcp_except_ctrl = {0};
 	struct ppe_drv_exception_tcpflag *tcpflag;
-	fal_l3_excep_ctrl_t except_ctrl;
+	fal_l3_excep_ctrl_t except_ctrl = {0};
 	sw_error_t err;
 	uint32_t i;
 
@@ -319,6 +319,7 @@ void ppe_drv_exception_init(void)
 		 */
 		if ((pe->flow_type & PPE_DRV_EXCEPTION_FLOW_TYPE_L2_FLOW_HIT)
 				== PPE_DRV_EXCEPTION_FLOW_TYPE_L2_FLOW_HIT) {
+			except_ctrl.l2flow_en = true;
 			except_ctrl.l2flow_type = FAL_FLOW_HIT;
 		}
 
@@ -327,6 +328,7 @@ void ppe_drv_exception_init(void)
 		 */
 		if ((pe->flow_type & PPE_DRV_EXCEPTION_FLOW_TYPE_L3_FLOW_HIT)
 				== PPE_DRV_EXCEPTION_FLOW_TYPE_L3_FLOW_HIT) {
+			except_ctrl.l3flow_en = true;
 			except_ctrl.l3flow_type = FAL_FLOW_HIT;
 		}
 
