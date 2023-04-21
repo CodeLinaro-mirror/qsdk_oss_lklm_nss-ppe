@@ -571,6 +571,7 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 
 		if (sch->parent == TC_H_ROOT) {
 			ppe_qdisc_stats_start_polling(pq);
+			ppe_drv_qos_port_bm_control_enable(pq->port_id, false);
 		}
 	}
 

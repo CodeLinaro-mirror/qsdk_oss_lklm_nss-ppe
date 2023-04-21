@@ -20,6 +20,7 @@
 #include <fal/fal_qm.h>
 #include <fal/fal_qos.h>
 #include <fal/fal_shaper.h>
+#include <fal/fal_bm.h>
 
 #include "ppe_drv.h"
 
@@ -742,6 +743,23 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 EXPORT_SYMBOL(ppe_drv_qos_queue_limit_set);
 
 /*
+ *ppe_drv_qos_port_bm_control_enable()
+ *	Enable or disable port buffer management for flow control
+ */
+void ppe_drv_qos_port_bm_control_enable(uint32_t port_id, bool set)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	fal_port_bm_ctrl_set(PPE_DRV_SWITCH_ID, port_id, set);
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px: port buffer flow control is successfully set to %d for port %u", p, set, port_id);
+
+}
+EXPORT_SYMBOL(ppe_drv_qos_port_bm_control_enable);
+
+/*
  * ppe_drv_qos_default_conf_set()
  *	Sets default queue scheduler in PPE.
  */
@@ -760,6 +778,7 @@ ppe_drv_ret_t ppe_drv_qos_default_conf_set(uint32_t port_id)
 	}
 
 	spin_unlock_bh(&p->lock);
+	ppe_drv_qos_port_bm_control_enable(port_id, true);
 	ppe_drv_info("%px:queue configuration successful for port:%u", p, port_id);
 	return PPE_DRV_RET_SUCCESS;
 }

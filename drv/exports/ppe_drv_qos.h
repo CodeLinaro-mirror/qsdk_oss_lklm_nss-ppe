@@ -459,6 +459,19 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res);
 ppe_drv_ret_t ppe_drv_qos_default_conf_set(uint32_t port_id);
 
 /**
+ *
+ * ppe_drv_qos_port_bm_control_enable
+ * 	Enable or disable port buffer management for flow control
+ *
+ * @param[in] port_id  Port ID of the port.
+ * @param[in] set      Enable/Disable flow control.
+ *
+ * @return
+ * none
+ */
+void ppe_drv_qos_port_bm_control_enable(uint32_t port_id, bool set);
+
+/**
  * ppe_drv_qos_port_res_get
  *	Gets boot time QoS resource allocation information for a given port.
  *
