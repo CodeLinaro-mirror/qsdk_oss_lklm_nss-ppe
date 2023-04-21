@@ -84,22 +84,6 @@ static bool ppe_drv_fse_interface_check(struct ppe_drv_v4_conn_flow *pcf)
 		return false;
 	}
 
-	/*
-	 * TODO: Handle Inter-VAP FSE rule push as a seperate patch
-	 */
-	if (is_tx_ds && is_rx_ds) {
-		ppe_drv_trace("Inter VAP FSE rule push not enabled for DS VP\n");
-		return false;
-	}
-
-	/*
-	 * TODO: Handle Inter-VAP FSE rule push as a seperate patch
-	 */
-	if (is_tx_active_vp && is_rx_active_vp) {
-		ppe_drv_trace("Inter VAP FSE rule push not enabled for active VP\n");
-		return false;
-	}
-
 	return true;
 }
 
@@ -974,10 +958,12 @@ static bool ppe_drv_v4_flow_del(struct ppe_drv_v4_conn_flow *pcf)
 		ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
 
 		if (p->fse_ops->destroy_fse_rule(&fse_info)) {
+			ppe_drv_stats_inc(&p->stats.comm_stats->v4_destroy_fse_fail);
 			ppe_drv_warn("%p: FSE v4 rule deletion failed\n", pcf);
 			return true;
 		}
 
+		ppe_drv_stats_inc(&p->stats.comm_stats->v4_destroy_fse_success);
 		ppe_drv_v4_conn_flow_flags_clear(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
 		kref_put(&p->fse_ops_ref, ppe_drv_fse_ops_free);
 		ppe_drv_trace("%p: FSE v4 rule deletion successfull\n", pcf);
@@ -1804,6 +1790,7 @@ static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create,
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
         struct ppe_drv_fse_rule_info fse_info = {0};
+        struct ppe_drv_fse_rule_info fse_info_return = {0};
         struct ppe_drv_v4_conn_flow *fse_cn = NULL;
 	struct ppe_drv_port *rx_port = ppe_drv_v4_conn_flow_rx_port_get(pcf);
 	struct ppe_drv_port *tx_port = ppe_drv_v4_conn_flow_tx_port_get(pcf);
@@ -1811,6 +1798,7 @@ static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create,
 	bool is_rx_ds = (rx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS);
 	bool is_tx_active_vp = (tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP);
 	bool is_rx_active_vp = (rx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP);
+	bool inter_vap = false;
 
 	/*
 	 * Check if Connection manager is setting DS flag in the rule; if yes then decision
@@ -1824,6 +1812,13 @@ static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create,
 		} else if (is_tx_ds && !is_rx_ds) {
 			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info, true);
 			fse_cn = pcr;
+		} else if (is_tx_ds && is_rx_ds) {
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, true);
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info_return, true);
+			inter_vap = true;
+		} else {
+			ppe_drv_trace("%p: Inter VAP configuration not valid when DS flags is set for V4 flows\n", p);
+			return false;
 		}
 	} else if ((create->rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW)  == PPE_DRV_V4_RULE_FLAG_VP_FLOW) {
 		if ((is_rx_ds && !is_tx_ds) || (is_rx_active_vp && !is_tx_active_vp)) {
@@ -1832,9 +1827,45 @@ static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create,
 		} else if ((is_tx_ds && !is_rx_ds) || (is_tx_active_vp && !is_rx_active_vp)) {
 			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info, false);
 			fse_cn = pcr;
+		} else if (is_tx_ds && is_rx_ds) {
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info_return, false);
+			inter_vap = true;
 		}
 	} else {
-		if (is_rx_active_vp && !is_tx_active_vp) {
+		/*
+		 * Check if both tx and rx interfaces are active vp and prepare fse rules
+		 * for each radio
+		 */
+		if (is_rx_active_vp && is_tx_active_vp) {
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info_return, false);
+			inter_vap = true;
+		} else if (is_tx_ds && is_rx_ds) {
+			/*
+			 * Check if both tx and rx interfaces are DS and prepare fse rules
+			 * for each radio
+			 */
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, true);
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info_return, true);
+			inter_vap = true;
+		} else if (is_rx_active_vp && is_tx_ds) {
+			/*
+			 * Check if tx and rx interfaces are DS and active_vp respectively and
+			 * prepare two fse rules one for each radio.
+			 */
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info_return, true);
+			inter_vap = true;
+		} else if (is_tx_active_vp && is_rx_ds) {
+			/*
+			 * Check if rx and tx interfaces are DS and active_vp respectively and
+			 * prepare two fse rules one for each radio.
+			 */
+			ppe_drv_fill_fse_v4_tuple_info(pcr, &fse_info, false);
+			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info_return, true);
+			inter_vap = true;
+		} else if (is_rx_active_vp && !is_tx_active_vp) {
 			ppe_drv_fill_fse_v4_tuple_info(pcf, &fse_info, false);
 			fse_cn = pcf;
 		} else if (is_tx_active_vp && !is_rx_active_vp) {
@@ -1849,9 +1880,27 @@ static bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create,
 		}
 	}
 
-	if (p->fse_ops->create_fse_rule(&fse_info)) {
-		ppe_drv_trace("%p: FSE rule configuration failed\n", p);
-		return false;
+	if (!inter_vap) {
+		if (p->fse_ops->create_fse_rule(&fse_info)) {
+			ppe_drv_trace("%p: FSE rule configuration failed\n", p);
+			return false;
+		}
+	} else {
+		ppe_drv_trace("pushing intervap rules\n");
+		if (p->fse_ops->create_fse_rule(&fse_info)) {
+			ppe_drv_trace("%p: Inter VAP v4 FSE rule configuration failed\n", p);
+			return false;
+		}
+
+		if (p->fse_ops->create_fse_rule(&fse_info_return)) {
+			p->fse_ops->destroy_fse_rule(&fse_info);
+			ppe_drv_trace("%p: Inter VAP v4 FSE rule configuration failed for return\n", p);
+			return false;
+		}
+
+		ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
+		ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_FSE);
+		return true;
 	}
 
 	ppe_drv_trace("%p: FSE rule configuration successful\n", p);
@@ -2027,12 +2076,13 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	 */
 	if (ppe_drv_fse_interface_check(pcf)) {
 		if (!ppe_drv_v4_fse_flow_configure(create, pcf, pcr)) {
-			/* TODO: Add a counter for this failure */
+			ppe_drv_stats_inc(&comm_stats->v4_create_fse_fail);
 			ppe_drv_warn("%p: FSE flow table programming failed\n", p);
 			goto fail;
 		}
 
 		kref_get(&p->fse_ops_ref);
+		ppe_drv_stats_inc(&comm_stats->v4_create_fse_success);
 	}
 
 	list_add(&cn->list, &p->conn_v4);
