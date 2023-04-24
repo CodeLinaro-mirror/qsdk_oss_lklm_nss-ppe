@@ -3,6 +3,10 @@
 ccflags-y := -I$(obj)/../exports -I$(obj)/..
 ccflags-y += -DPPE_DRV_BUILD_ID="$(BUILD_ID)"
 
+ifeq ($(SoC),$(filter $(SoC),ipq95xx))
+ccflags-y += -DPPE_DRV_FLOW_IG_MAC_WAR
+endif
+
 obj-m += qca-nss-ppe.o
 qca-nss-ppe-objs := ppe_drv.o
 qca-nss-ppe-objs += ppe_drv_br.o
