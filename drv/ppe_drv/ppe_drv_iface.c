@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -698,7 +698,11 @@ ppe_drv_ret_t ppe_drv_iface_mac_addr_clear(struct ppe_drv_iface *iface)
 			break;
 		}
 
+#ifndef PPE_DRV_FLOW_IG_MAC_WAR
 		if (!ppe_drv_l3_if_mac_addr_clear(l3_if)) {
+#else
+		if (!ppe_drv_l3_if_eg_mac_addr_clear(l3_if)) {
+#endif
 			ppe_drv_warn("%p: L3_IF mac_addr failed(%p)\n", iface, vsi);
 			status =  PPE_DRV_RET_MAC_ADDR_CLEAR_CFG_FAIL;
 			break;
@@ -716,7 +720,11 @@ ppe_drv_ret_t ppe_drv_iface_mac_addr_clear(struct ppe_drv_iface *iface)
 			break;
 		}
 
+#ifndef PPE_DRV_FLOW_IG_MAC_WAR
 		if (!ppe_drv_l3_if_mac_addr_clear(l3_if)) {
+#else
+		if (!ppe_drv_l3_if_eg_mac_addr_clear(l3_if)) {
+#endif
 			ppe_drv_warn("%p: L3_IF mac_addr failed(%p)\n", iface, l3_if);
 			status =  PPE_DRV_RET_MAC_ADDR_CLEAR_CFG_FAIL;
 			break;
@@ -794,7 +802,11 @@ ppe_drv_ret_t ppe_drv_iface_mac_addr_set(struct ppe_drv_iface *iface, uint8_t *m
 			break;
 		}
 
+#ifndef PPE_DRV_FLOW_IG_MAC_WAR
 		if (!ppe_drv_l3_if_mac_addr_set(l3_if, mac_addr)) {
+#else
+		if (!ppe_drv_l3_if_eg_mac_addr_set(l3_if, mac_addr)) {
+#endif
 			ppe_drv_warn("%p: L3_IF mac_addr failed(%p)\n", iface, vsi);
 			status =  PPE_DRV_RET_MAC_ADDR_SET_CFG_FAIL;
 			break;
@@ -812,7 +824,11 @@ ppe_drv_ret_t ppe_drv_iface_mac_addr_set(struct ppe_drv_iface *iface, uint8_t *m
 			break;
 		}
 
+#ifndef PPE_DRV_FLOW_IG_MAC_WAR
 		if (!ppe_drv_l3_if_mac_addr_set(l3_if, mac_addr)) {
+#else
+		if (!ppe_drv_l3_if_eg_mac_addr_set(l3_if, mac_addr)) {
+#endif
 			ppe_drv_warn("%p: L3_IF mac_addr failed(%p)\n", iface, l3_if);
 			status =  PPE_DRV_RET_MAC_ADDR_SET_CFG_FAIL;
 			break;

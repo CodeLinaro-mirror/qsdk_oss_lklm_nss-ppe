@@ -94,7 +94,8 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"ce_opaque_invalid",				/* Fail due to invalid opaque in CE */
 	"fail_fqg_full",				/* Req fail due to flow qos group full */
 	"fail_ingress_vlan_add",			/* Ingress VLAN add rule failed */
-	"fail_egress_vlan_add"				/* Egress VLAN add rule failed */
+	"fail_egress_vlan_add",				/* Egress VLAN add rule failed */
+	"fail_my_mac_full",				/* Fail due to MY_MAC table full */
 };
 
 /*

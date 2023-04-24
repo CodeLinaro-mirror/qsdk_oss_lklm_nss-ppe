@@ -48,6 +48,7 @@
 #define PPE_DRV_V6_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK 0x00000400
 					/* source interface check */
 #endif
+#define PPE_DRV_V6_CONN_FLAG_FLOW_IGMAC_VALID 0x00000800
 
 /*
  * ppe_drv_v6_conn_flow

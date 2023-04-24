@@ -250,6 +250,87 @@ static inline void ppe_drv_v6_conn_flow_metadata_set(struct ppe_drv_v6_conn_flow
 	}
 }
 
+#ifdef PPE_DRV_FLOW_IG_MAC_WAR
+/*
+ * ppe_drv_v6_conn_flow_igmac_add()
+ *	Ingress mac address add API
+ */
+static bool ppe_drv_v6_conn_flow_igmac_add(struct ppe_drv_v6_conn_flow *pcf)
+{
+	struct ppe_drv_iface *in_l3_if;
+
+	/*
+	 * ingress mac configuration needed only for routed flows.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		return true;
+	}
+
+	/*
+	 * If no ingress L3_IF, no mac address configuration needed.
+	 */
+	in_l3_if = ppe_drv_v6_conn_flow_in_l3_if_get(pcf);
+	if (!in_l3_if) {
+		return true;
+	}
+
+	/*
+	 * MY_MAC address is needed only if the ingress l3_if mac address
+	 * is different than rx port mac address.
+	 */
+	if (in_l3_if->l3 && in_l3_if->l3->is_eg_mac_set
+		&& pcf->rx_port && pcf->rx_port->mac_valid) {
+		if (!memcmp(in_l3_if->l3->eg_mac_addr, pcf->rx_port->mac_addr, ETH_ALEN)) {
+			ppe_drv_info("%p: same mac address for ingress l3 and port mac: %pM",
+					pcf, pcf->rx_port->mac_addr);
+			return true;
+		}
+	}
+
+	if (!ppe_drv_l3_if_ig_mac_add_and_ref(in_l3_if->l3)) {
+		ppe_drv_warn("%p: failed to allocate MY_MAC entries for l3_if: %p",
+				pcf, in_l3_if->l3);
+		return false;
+	}
+
+	ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_IGMAC_VALID);
+	return true;
+}
+
+/*
+ * ppe_drv_v6_conn_flow_igmac_del()
+ *	Ingress mac address delete API.
+ */
+static bool ppe_drv_v6_conn_flow_igmac_del(struct ppe_drv_v6_conn_flow *pcf)
+{
+	struct ppe_drv_iface *in_l3_if;
+
+	/*
+	 * ingress mac configuration needed only for routed flows.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		return true;
+	}
+
+	/*
+	 * If no ingress L3_IF, no mac address deletion needed.
+	 */
+	in_l3_if = ppe_drv_v6_conn_flow_in_l3_if_get(pcf);
+	if (!in_l3_if) {
+		return true;
+	}
+
+	if (!ppe_drv_l3_if_ig_mac_deref(in_l3_if->l3)) {
+		ppe_drv_warn("%p: failed to deref MY_MAC entries for l3_if: %p",
+				pcf, in_l3_if->l3);
+		return false;
+	}
+
+	ppe_drv_v6_conn_flow_flags_clear(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_IGMAC_VALID);
+	return true;
+}
+#endif
+
 /*
  * ppe_drv_v6_conn_fill()
  *	Populate each direction flow object.
@@ -737,28 +818,18 @@ bool ppe_drv_v6_if_walk(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_top_if_
 	pcf->eg_l3_if = eg_l3_if ? ppe_drv_iface_ref(eg_l3_if) : NULL;
 	pcf->eg_port_if = ppe_drv_iface_ref(tx_port_if);
 
-#ifdef NSS_PPE_IPQ53XX
 	/*
-	 * If source interface check is requested, get the l3_if interface.
+	 * If top rx interface is valid, use ingress l3 if of that iface.
+	 * else use port's l3
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK)) {
-
-		/*
-		 * If valid top rx interface, use l3 if of that iface.
-		 */
-		if ((top_rx_iface) && (ppe_drv_iface_l3_if_get(top_rx_iface))) {
-			ppe_drv_trace("Using top rx iface's l3 if");
-			ppe_drv_v6_conn_flow_in_l3_if_set(pcf, top_rx_iface);
-			return true;
-		}
-
-		/*
-		 * Use port's l3 if.
-		 */
+	if ((top_rx_iface) && (ppe_drv_iface_l3_if_get(top_rx_iface))) {
+		ppe_drv_trace("Using top rx iface's l3 if");
+		ppe_drv_v6_conn_flow_in_l3_if_set(pcf, top_rx_iface);
+	} else {
 		ppe_drv_trace("Using port's l3 if");
 		ppe_drv_v6_conn_flow_in_l3_if_set(pcf, rx_port_if);
 	}
-#endif
+
 	return true;
 }
 
@@ -829,6 +900,15 @@ static bool ppe_drv_v6_flow_del(struct ppe_drv_v6_conn_flow *pcf)
 		ppe_drv_nexthop_deref(flow->nh);
 		flow->nh = NULL;
 	}
+
+#ifdef PPE_DRV_FLOW_IG_MAC_WAR
+	/*
+	 * Release reference on ingress MAC
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_IGMAC_VALID)) {
+		ppe_drv_v6_conn_flow_igmac_del(pcf);
+	}
+#endif
 
 	/*
 	 * Clear the QOS map information.
@@ -1007,6 +1087,16 @@ static struct ppe_drv_flow *ppe_drv_v6_flow_add(struct ppe_drv_v6_conn_flow *pcf
 		goto flow_add_fail;
 	}
 
+#ifdef PPE_DRV_FLOW_IG_MAC_WAR
+	/*
+	 * Configure the MY_MAC during flow creation.
+	 */
+	if (!ppe_drv_v6_conn_flow_igmac_add(pcf)) {
+		ppe_drv_warn("%p: flow entry valid set failed for flow: %p", pcf, flow);
+		goto flow_add_fail;
+	}
+#endif
+
 	/*
 	 * Now the QOS mapping is set, mark the flow entry as valid.
 	 */
@@ -1049,6 +1139,12 @@ static struct ppe_drv_flow *ppe_drv_v6_flow_add(struct ppe_drv_v6_conn_flow *pcf
 	return flow;
 
 flow_add_fail:
+#ifdef PPE_DRV_FLOW_IG_MAC_WAR
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_IGMAC_VALID)) {
+		ppe_drv_v6_conn_flow_igmac_del(pcf);
+	}
+#endif
+
 	if (flow) {
 		ppe_drv_flow_del(flow);
 	}

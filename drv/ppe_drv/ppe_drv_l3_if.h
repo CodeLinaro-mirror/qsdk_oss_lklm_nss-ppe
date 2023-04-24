@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -38,11 +38,18 @@ struct ppe_drv_l3_if {
 	struct list_head list;		/* List of L3_IF instance */
 	struct kref ref;		/* Reference count */
 	struct ppe_drv_pppoe *pppoe;	/* pppoe interface associated with l3 */
-	uint8_t mac_addr[ETH_ALEN];	/* MAC address of the L3 interface */
 	uint8_t l3_if_index;		/* L3 interface number */
 	uint16_t mtu;			/* MTU size of L3 interface */
 	enum ppe_drv_l3_if_type type;	/* L3_IF type port or pppoe */
+
 	bool is_mac_set;		/* Mac address already set on L3_IF */
+
+	uint8_t ig_mac_addr[ETH_ALEN];	/* Ingress MAC address of the L3 interface */
+	uint16_t ig_mac_ref;		/* Reference on ingress MAC */
+	bool is_ig_mac_set;		/* Ingress MAC address set on L3_IF */
+
+	uint8_t eg_mac_addr[ETH_ALEN];	/* Egress MAC address of the L3 interface */
+	bool is_eg_mac_set;		/* Egress MAC address set on L3_IF */
 };
 
 uint16_t ppe_drv_l3_if_get_index(struct ppe_drv_l3_if *l3_if);
@@ -51,6 +58,9 @@ void ppe_drv_l3_if_dmac_check_set(struct ppe_drv_l3_if *l3_if, bool enable);
 bool ppe_drv_l3_if_mtu_mru_set(struct ppe_drv_l3_if *l3_if, uint16_t mtu, uint16_t mru);
 bool ppe_drv_l3_if_mtu_mru_clear(struct ppe_drv_l3_if *l3_if);
 bool ppe_drv_l3_if_mtu_mru_disable(struct ppe_drv_l3_if *l3_if);
+
+bool ppe_drv_l3_if_ig_mac_add_and_ref(struct ppe_drv_l3_if *l3_if);
+bool ppe_drv_l3_if_ig_mac_deref(struct ppe_drv_l3_if *l3_if);
 
 bool ppe_drv_l3_if_eg_mac_addr_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr);
 bool ppe_drv_l3_if_eg_mac_addr_clear(struct ppe_drv_l3_if *l3_if);
