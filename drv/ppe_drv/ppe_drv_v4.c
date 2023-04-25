@@ -468,15 +468,21 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		/*
 		 * Bridge + VLAN? Make sure both top interfaces are attached to same parent.
 		 */
-		if ((rule_flags & PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW)
-		       && (ppe_drv_v4_conn_flow_ingress_vlan_cnt_get(pcf)
-			|| ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf))) {
-
-			if (ppe_drv_iface_parent_get(top_if_rx) != ppe_drv_iface_parent_get(top_if_tx)) {
-				ppe_drv_stats_inc(&comm_stats->v4_create_fail_vlan_filter);
-				ppe_drv_warn("%p: IF not part of same bridge rx_if: %d tx_if: %d",
+		if (rule_flags & PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW) {
+			if (!ppe_drv_iface_parent_get(top_if_rx) || !ppe_drv_iface_parent_get(top_if_tx)) {
+				ppe_drv_stats_inc(&comm_stats->v4_create_fail_bridge_noexist);
+				ppe_drv_warn("%p: one of top's parent interface is null: top_rx_if : %d tx_if: %d",
 						create, top_rule->rx_if, top_rule->tx_if);
 				return PPE_DRV_RET_FAILURE_NOT_BRIDGE_SLAVES;
+			}
+
+			if (ppe_drv_v4_conn_flow_ingress_vlan_cnt_get(pcf) || ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf)) {
+				if (ppe_drv_iface_parent_get(top_if_rx) != ppe_drv_iface_parent_get(top_if_tx)) {
+					ppe_drv_stats_inc(&comm_stats->v4_create_fail_vlan_filter);
+					ppe_drv_warn("%p: IF not part of same bridge rx_if: %d tx_if: %d",
+							create, top_rule->rx_if, top_rule->tx_if);
+					return PPE_DRV_RET_FAILURE_NOT_BRIDGE_SLAVES;
+				}
 			}
 		}
 
