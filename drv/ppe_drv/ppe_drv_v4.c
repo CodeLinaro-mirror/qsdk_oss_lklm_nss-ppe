@@ -1703,21 +1703,6 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 EXPORT_SYMBOL(ppe_drv_v4_destroy);
 
 /*
- * ppe_drv_v4_vxlan_tunnel()
- *	Check if create request for Vxlan tunnel.
- */
-static bool ppe_drv_v4_vxlan_tunnel(struct ppe_drv_v4_rule_create *create)
-{
-	if ((create->tuple.protocol == IPPROTO_UDP) &&
-		((create->tuple.flow_ident == IANA_VXLAN_UDP_PORT) ||
-		(create->tuple.return_ident == IANA_VXLAN_UDP_PORT))) {
-		return true;
-	}
-
-	return false;
-}
-
-/*
  * ppe_drv_v4_rfs_create()
  *	Adds a connection entry in PPE.
  */
@@ -1963,7 +1948,7 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	/*
 	 * PPE accelearation is only supported for default port currently.
 	 */
-	if (ppe_drv_tun_check_support(create->tuple.protocol) || ppe_drv_v4_vxlan_tunnel(create)) {
+	if (ppe_drv_v4_tun_allow_tunnel_create(create)) {
 		comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
 		ppe_drv_stats_inc(&comm_stats->v4_create_req);
 		ret = ppe_drv_v4_tun_add_ce_notify(create);

@@ -205,6 +205,23 @@ bool ppe_drv_v6_tun_allow_tunnel_create(struct ppe_drv_v6_rule_create *create)
 {
 	struct ppe_drv_tun *port_tun;
 	struct net_device *dev;
+	struct ppe_drv_iface *if_rx, *if_tx;
+
+	if_tx = ppe_drv_iface_get_by_idx(create->conn_rule.tx_if);
+	if_rx = ppe_drv_iface_get_by_idx(create->conn_rule.rx_if);
+
+	if(!(if_tx && if_rx)) {
+		ppe_drv_warn("No PPE interface corresponding to if_tx or if_rx interface\n");
+		return false;
+	}
+
+	/*
+	 * Not a hardware accelerated tunnel, if neither of the ingress or egress interface if of HW tunnel type.
+	 */
+	if (!((if_tx->type == PPE_DRV_IFACE_TYPE_VP_L2_TUN) || (if_tx->type == PPE_DRV_IFACE_TYPE_VP_L3_TUN)
+				|| (if_rx->type == PPE_DRV_IFACE_TYPE_VP_L2_TUN) || (if_rx->type == PPE_DRV_IFACE_TYPE_VP_L3_TUN))) {
+		return false;
+	}
 
 	/*
 	 * Check if the rule is for GRE or IPIP6
