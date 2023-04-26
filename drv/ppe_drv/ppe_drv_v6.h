@@ -44,6 +44,9 @@
 					/* Flow is also pushed to FSE HW in Wifi */
 #define PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID 0x00000200
 					/* Flow is VP valid when VP rule comes in DS user type */
+#define PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV 0x00000400
+					/* Flow is via bridge VLAN netdev */
+
 #ifdef NSS_PPE_IPQ53XX
 #define PPE_DRV_V6_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK 0x00000400
 					/* source interface check */

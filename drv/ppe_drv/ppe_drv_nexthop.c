@@ -509,7 +509,8 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 		fal_nh.type = FAL_NEXTHOP_VP;
 		fal_nh.port = pp->port;
 	} else {
-		if (vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled) {
+		if (vsi && vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled
+		   && !(ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV))) {
 			fal_nh.type = FAL_NEXTHOP_L3;
 			fal_nh.vsi = vsi->index;
 		} else {
@@ -519,7 +520,8 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 			fal_nh.type = FAL_NEXTHOP_VP;
 			fal_nh.port = pp->port;
 
-			ppe_drv_trace("%p: fdb learning disable on vsi:%u", pcf, vsi->index);
+			ppe_drv_trace("%p: fdb learning disable on vsi:%u out_vlan %d in_vlan %d dev %s\n", pcf,
+				      vsi->index, out_vlan, in_vlan, pp->dev->name);
 
 			if (out_vlan != PPE_DRV_VLAN_NOT_CONFIGURED) {
 				ppe_drv_trace("%p: fdb learning disable configuring STAG:%u", pcf, out_vlan);
@@ -895,7 +897,8 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 		fal_nh.type = FAL_NEXTHOP_VP;
 		fal_nh.port = pp->port;
 	} else {
-		if (vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled) {
+		if (vsi && vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled &&
+		   !(ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_BRIDGE_VLAN_NETDEV))) {
 			fal_nh.type = FAL_NEXTHOP_L3;
 			fal_nh.vsi = vsi->index;
 		} else {
@@ -905,7 +908,8 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 			fal_nh.type = FAL_NEXTHOP_VP;
 			fal_nh.port = pp->port;
 
-			ppe_drv_trace("%p: fdb learning disable on vsi:%u", pcf, vsi->index);
+			ppe_drv_trace("%p: fdb learning disable on vsi:%u out_vlan %d in_vlan %d dev %s\n", pcf,
+				      vsi->index, out_vlan, in_vlan, pp->dev->name);
 
 			if (out_vlan != PPE_DRV_VLAN_NOT_CONFIGURED) {
 				ppe_drv_trace("%p: fdb learning disable configuring STAG:%u", pcf, out_vlan);

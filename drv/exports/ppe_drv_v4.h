@@ -40,6 +40,8 @@
 #define PPE_DRV_V4_RULE_FLAG_DS_FLOW			0x0080	/**< Rule creation for DS flow */
 #define PPE_DRV_V4_RULE_FLAG_VP_FLOW			0x0100	/**< Rule creation for VP flow */
 #define PPE_DRV_V4_RULE_FLAG_SRC_INTERFACE_CHECK	0x0200	/**< Rule creation for source interface check */
+#define PPE_DRV_V4_RULE_TO_BRIDGE_VLAN_NETDEV		0x0400  /**< VLAN over bridge in egress direction */
+#define PPE_DRV_V4_RULE_FROM_BRIDGE_VLAN_NETDEV		0x0800  /**< VLAN over bridge in ingress direction */
 
 /*
  * v4 valid flags

@@ -98,6 +98,8 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"fail_my_mac_full",				/* Fail due to MY_MAC table full */
 	"fail_ingress_untag_vlan_add",			/* Ingress VLAN add rule failed */
 	"fail_ingress_untag_vlan_del",			/* Ingress VLAN del rule failed */
+	"fail_ingress_vlan_over_bridge_add",		/* Ingress VLAN over bridge add rule failed */
+	"fail_ingress_vlan_over_bridge_del",		/* Ingress VLAN over bridge delete rule failed */
 };
 
 /*

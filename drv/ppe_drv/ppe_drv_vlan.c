@@ -343,6 +343,153 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 }
 EXPORT_SYMBOL(ppe_drv_vlan_add_xlate_rule);
 
+
+/*
+ * ppe_drv_vlan_over_bridge_del_ig_rule
+ *	Delete ingress xlate rule for the iface
+ */
+ppe_drv_ret_t ppe_drv_vlan_over_bridge_del_ig_rule(struct ppe_drv_iface *slave_iface,
+						   struct ppe_drv_iface *vlan_iface)
+{
+	uint32_t port_id, ret = 0;
+	fal_port_t fal_port;
+	fal_vlan_trans_adv_action_t xlt_action = {0};
+	fal_vlan_trans_adv_rule_t xlt_rule =  {0};
+	struct ppe_drv_vsi *vsi;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	vsi = ppe_drv_iface_vsi_get(vlan_iface);
+	if (!vsi) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Invalid VSI for given iface\n", vlan_iface);
+		return PPE_DRV_RET_VSI_NOT_FOUND;
+	}
+
+	port_id = ppe_drv_iface_port_idx_get(slave_iface);
+
+	if (port_id == -1) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("PortId is invalid for %s\n", slave_iface->dev->name);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port_id) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port_id)
+			: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port_id);
+
+	/*
+	 * Field for match
+	 */
+	if (vsi->vlan.outer_vlan == PPE_DRV_VLAN_HDR_VLAN_NOT_CONFIGURED) {
+		xlt_rule.s_tagged = FAL_PORT_VLAN_XLT_MATCH_UNTAGGED;
+		xlt_rule.s_vid_enable = false;
+	} else {
+		xlt_rule.s_tagged = FAL_PORT_VLAN_XLT_MATCH_TAGGED;
+		xlt_rule.s_vid_enable = true;
+		xlt_rule.s_vid = vsi->vlan.outer_vlan;
+	}
+	xlt_rule.c_tagged = FAL_PORT_VLAN_XLT_MATCH_TAGGED;
+	xlt_rule.c_vid_enable = true;
+	xlt_rule.c_vid = vsi->vlan.inner_vlan;
+
+	/*
+	 * Field for action
+	 */
+	xlt_action.vsi_xlt_enable = true;
+	xlt_action.vsi_xlt = vsi->index;
+
+	ret = fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_INGRESS, &xlt_rule,
+					  &xlt_action);
+
+	if (ret != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_ingress_vlan_over_bridge_del);
+		ppe_drv_warn("Delete rule failed for %s portid %d ret %d\n", slave_iface->dev->name, port_id, ret);
+		return PPE_DRV_RET_VLAN_INGRESS_DEL_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("Delete ingress success rule svid %d cvid %d fal_port %d dev %s port_id %d\n",
+		       vsi->vlan.outer_vlan, vsi->vlan.inner_vlan, fal_port, slave_iface->dev->name, port_id);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_over_bridge_del_ig_rule);
+
+/*
+ * ppe_drv_vlan_over_bridge_add_ig_rule
+ *	Installing ingress xlate rule for the iface
+ */
+ppe_drv_ret_t ppe_drv_vlan_over_bridge_add_ig_rule(struct ppe_drv_iface *slave_iface,
+						   struct ppe_drv_iface *vlan_iface)
+{
+	uint32_t port_id, ret = 0;
+	fal_port_t fal_port;
+	fal_vlan_trans_adv_action_t xlt_action = {0};
+	fal_vlan_trans_adv_rule_t xlt_rule = {0};
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_vsi *vsi;
+
+	spin_lock_bh(&p->lock);
+	vsi = ppe_drv_iface_vsi_get(vlan_iface);
+	if (!vsi) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Invalid VSI for given iface\n", vlan_iface);
+		return PPE_DRV_RET_VSI_NOT_FOUND;
+	}
+
+	port_id = ppe_drv_iface_port_idx_get(slave_iface);
+
+	if (port_id == -1) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("PortId is invalid for %s\n", slave_iface->dev->name);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port_id) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port_id)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port_id);
+
+	/*
+	 * Field for match
+	 */
+	if (vsi->vlan.outer_vlan == PPE_DRV_VLAN_HDR_VLAN_NOT_CONFIGURED) {
+		xlt_rule.s_tagged = FAL_PORT_VLAN_XLT_MATCH_UNTAGGED;
+		xlt_rule.s_vid_enable = false;
+	} else {
+		xlt_rule.s_tagged = FAL_PORT_VLAN_XLT_MATCH_TAGGED;
+		xlt_rule.s_vid_enable = true;
+		xlt_rule.s_vid = vsi->vlan.outer_vlan;
+	}
+	xlt_rule.c_tagged = FAL_PORT_VLAN_XLT_MATCH_TAGGED;
+	xlt_rule.c_vid_enable = true;
+	xlt_rule.c_vid = vsi->vlan.inner_vlan;
+
+	/*
+	 * Field for action
+	 */
+	xlt_action.vsi_xlt_enable = true;
+	xlt_action.vsi_xlt = vsi->index;
+
+	ret = fal_port_vlan_trans_adv_add(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_INGRESS, &xlt_rule,
+					  &xlt_action);
+
+	if (ret != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_ingress_vlan_over_bridge_add);
+		ppe_drv_warn("Add ingress rule failed for %s portid %d ret %d\n", slave_iface->dev->name, port_id, ret);
+		return PPE_DRV_RET_INGRESS_VLAN_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("Add ingress rule success svid %d cvid %d fal_port %d dev %s port_id %d\n",
+		      vsi->vlan.outer_vlan, xlt_rule.c_vid, fal_port, slave_iface->dev->name, port_id);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_over_bridge_add_ig_rule);
+
 /*
  * ppe_drv_vlan_deinit()
  *	De-Initialize VLAN interfaces
@@ -392,7 +539,7 @@ EXPORT_SYMBOL(ppe_drv_vlan_deinit);
  * ppe_drv_vlan_init()
  *	VLAN init
  */
-ppe_drv_ret_t ppe_drv_vlan_init(struct ppe_drv_iface *ppe_iface, struct net_device *base_dev, uint32_t vlan_id)
+ppe_drv_ret_t ppe_drv_vlan_init(struct ppe_drv_iface *ppe_iface, struct net_device *base_dev, uint32_t vlan_id, bool vlan_over_bridge)
 {
 	struct ppe_drv_iface *base_if, *port_if;
 	struct ppe_drv *p = &ppe_drv_gbl;
@@ -417,8 +564,13 @@ ppe_drv_ret_t ppe_drv_vlan_init(struct ppe_drv_iface *ppe_iface, struct net_devi
 		return PPE_DRV_RET_VSI_ALLOC_FAIL;
 	}
 
-	ppe_drv_iface_vsi_set(ppe_iface, vsi);
+	if (vlan_over_bridge) {
+		ppe_drv_trace("VLAN over bridge baseif dev %s iface dev %s base_dev %s vlan_id %d\n",
+			      base_if->dev->name, ppe_iface->dev->name, base_dev->name, vlan_id);
+		base_if->flags |= PPE_DRV_IFACE_VLAN_OVER_BRIDGE;
+	}
 
+	ppe_drv_iface_vsi_set(ppe_iface, vsi);
 	/*
 	 * Set inner and outer vlan for a given VSI
 	 */

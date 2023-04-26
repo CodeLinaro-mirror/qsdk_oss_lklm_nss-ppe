@@ -836,6 +836,14 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		}
 
 		/*
+		 * VLAN over bridge flow
+		 */
+		if ((rule_flags & PPE_DRV_V4_RULE_TO_BRIDGE_VLAN_NETDEV) == PPE_DRV_V4_RULE_TO_BRIDGE_VLAN_NETDEV) {
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_BRIDGE_VLAN_NETDEV);
+			ppe_drv_trace("%p: VLAN over bridge case to\n", pcf);
+		}
+
+		/*
 		 * For VP flow if user type is DS, set conn rule VP valid.
 		 */
 		if ((rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW) && (pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
@@ -962,6 +970,14 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_DSCP_MARKING) {
 			ppe_drv_v4_conn_flow_egress_dscp_set(pcr, dscp_rule->return_dscp);
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_DSCP_MARKING);
+		}
+
+		/*
+		 * VLAN over bridge flow
+		 */
+		if ((rule_flags & PPE_DRV_V4_RULE_FROM_BRIDGE_VLAN_NETDEV) == PPE_DRV_V4_RULE_FROM_BRIDGE_VLAN_NETDEV) {
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_BRIDGE_VLAN_NETDEV);
+			ppe_drv_trace("%p: VLAN over bridge case from\n", pcr);
 		}
 
 		/*

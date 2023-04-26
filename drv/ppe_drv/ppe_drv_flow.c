@@ -524,6 +524,16 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 		}
 	}
 
+	if ((sc == PPE_DRV_SC_NONE) &&
+	    (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV))) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: service code %d update failed in VLAN over bridge sc %d\n", pcf, service_code,
+				     sc);
+			return false;
+		}
+	}
+
 	*scp = service_code;
 	return true;
 }
@@ -656,15 +666,18 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 
 	ppe_drv_trace("%p: flow_tbl[host_idx]: %u", pcf, host->index);
 	flow_cfg.host_addr_type = PPE_DRV_HOST_LAN;
-        flow_cfg.host_addr_index = host->index;
-        flow_cfg.deacclr_en = false;
-        flow_cfg.invalid = !entry_valid;
-
+	flow_cfg.host_addr_index = host->index;
+	flow_cfg.deacclr_en = false;
+	flow_cfg.invalid = !entry_valid;
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
+
 	if (!ppe_drv_flow_v6_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
 		ppe_drv_warn("%p: failed to obtain a valid service code", pcf);
 		return NULL;
 	}
+
+	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index,
+		      flow_cfg.sevice_code);
 
 	/*
 	 * Get the tree ID corresponding to flow.
@@ -1145,6 +1158,16 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		}
 	}
 
+	if ((sc == PPE_DRV_SC_NONE) &&
+	    (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_BRIDGE_VLAN_NETDEV))) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: service code %d update failed in VLAN over bridge sc %d\n", pcf, service_code,
+				     sc);
+			return false;
+		}
+	}
+
 	*scp = service_code;
 	return true;
 }
@@ -1315,18 +1338,18 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		return NULL;
 	}
 
-	ppe_drv_trace("%p: flow_tbl[host_idx]: %u", pcf, host->index);
 	flow_cfg.host_addr_type = PPE_DRV_HOST_LAN;
-        flow_cfg.host_addr_index = host->index;
-        flow_cfg.deacclr_en = false;
-        flow_cfg.invalid = !entry_valid;
-
+	flow_cfg.host_addr_index = host->index;
+	flow_cfg.deacclr_en = false;
+	flow_cfg.invalid = !entry_valid;
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
+
 	if (!ppe_drv_flow_v4_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
 		ppe_drv_warn("%p: failed to obtain a valid service code", pcf);
 		return NULL;
 	}
 
+	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index, flow_cfg.sevice_code);
 	/*
 	 * Get the tree ID corresponding to flow.
 	 */
