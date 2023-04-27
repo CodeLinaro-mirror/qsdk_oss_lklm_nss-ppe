@@ -70,6 +70,10 @@
 #define PPE_TUN_DISABLE	0
 #define PPE_TUN_ENABLE	1
 
+enum ppe_tun_state {
+	PPE_TUN_STATE_CONFIGURED	= (1 << 0),
+};
+
 enum xcpn_mode {PPE_TUN_XCPN_MODE_0, PPE_TUN_XCPN_MODE_1};
 
 typedef bool(*ppe_tun_exception_method_t)(struct net_device *dev, struct sk_buff *skb);
@@ -103,6 +107,7 @@ struct ppe_tun {
 	struct kref ref;			/* Reference count */
 	int32_t idx;				/* PPE tunne Index */
 	ppe_vp_num_t vp_num;			/* Port number attached for VP */
+	enum ppe_tun_state state;		/* PPE tunnel status flags */
 	enum ppe_drv_tun_cmn_ctx_type type;	/* Tunnel type */
 	struct net_device *dev;			/* Tunnel netdev */
 	struct net_device *phys_dev;		/* Physical dev attached to VP */
