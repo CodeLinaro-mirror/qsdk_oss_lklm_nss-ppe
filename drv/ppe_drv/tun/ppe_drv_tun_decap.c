@@ -71,17 +71,19 @@ static void ppe_drv_tun_decap_free(struct kref *kref)
  */
 bool ppe_drv_tun_decap_deref(struct ppe_drv_tun_decap *ptdc)
 {
+	uint8_t index = ptdc->index;
+
 	ppe_drv_assert(kref_read(&ptdc->ref), "%p: ref count under run for ptdc", ptdc);
 
 	if (kref_put(&ptdc->ref, ppe_drv_tun_decap_free)) {
 		/*
 		 * Deconfigure EG_TUN_CTRL entry
 		 */
-		ppe_drv_trace("reference count is 0 for tun at index: %u", ptdc->index);
+		ppe_drv_trace("reference count is 0 for tun at index: %u", index);
 		return true;
 	}
 
-	ppe_drv_trace("%p: tun_idx: %u ref dec:%u", ptdc, ptdc->index, kref_read(&ptdc->ref));
+	ppe_drv_trace("%p: tun_idx: %u ref dec:%u", ptdc, index, kref_read(&ptdc->ref));
 	return false;
 }
 

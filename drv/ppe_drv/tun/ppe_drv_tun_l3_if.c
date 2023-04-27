@@ -92,10 +92,11 @@ static void ppe_drv_tun_l3_if_free(struct kref *kref)
  */
 bool ppe_drv_tun_l3_if_deref(struct ppe_drv_tun_l3_if *tun_l3_if)
 {
+	uint8_t index = tun_l3_if->index;
 	ppe_drv_assert(kref_read(&tun_l3_if->ref), "%p: ref count under run for tun_l3_if", tun_l3_if);
 
 	if (kref_put(&tun_l3_if->ref, ppe_drv_tun_l3_if_free)) {
-		ppe_drv_trace("%p: TL L3 interface is free at index: %d", tun_l3_if, tun_l3_if->index);
+		ppe_drv_trace("%p: TL L3 interface is free at index: %d", tun_l3_if, index);
 		return true;
 	}
 

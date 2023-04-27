@@ -130,12 +130,14 @@ static void ppe_tun_ctx_free(struct kref *kref)
  */
 static bool ppe_tun_deref(struct ppe_tun *tun)
 {
+	int32_t idx = tun->idx;
+
 	if (kref_put(&tun->ref, ppe_tun_ctx_free)) {
-		ppe_tun_trace("%p: reference count is 0 for tun at index: %u", tun, tun->idx);
+		ppe_tun_trace("%p: reference count is 0 for tun at index: %u", tun, idx);
 		return true;
 	}
 
-	ppe_tun_trace("%p: tun_idx: %u ref dec:%u", tun, tun->idx, kref_read(&tun->ref));
+	ppe_tun_trace("%p: tun_idx: %u ref dec:%u", tun, idx, kref_read(&tun->ref));
 	return false;
 }
 

@@ -82,10 +82,12 @@ void ppe_drv_tun_decap_map_deconfigure(struct kref *kref)
  */
 bool ppe_drv_tun_decap_map_entry_deref(struct ppe_drv_tun_decap *ptdcm)
 {
+	uint8_t index = ptdcm->index;
+
 	ppe_drv_assert(kref_read(&ptdcm->ref), "%p: ref count under run for ppe_drv_tun_decap", ptdcm);
 
 	if (kref_put(&ptdcm->ref, ppe_drv_tun_decap_map_deconfigure)) {
-		ppe_drv_trace("%p:  MAP tunnel action interface is free at index: %d", ptdcm, ptdcm->index);
+		ppe_drv_trace("%p:  MAP tunnel action interface is free at index: %d", ptdcm, index);
 		return true;
 	}
 

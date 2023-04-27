@@ -114,14 +114,16 @@ static void ppe_drv_tun_free(struct kref *kref)
  */
 static bool ppe_drv_tun_deref(struct ppe_drv_tun *ptun)
 {
+	uint8_t tun_idx = ptun->tun_idx;
+
 	ppe_drv_assert(kref_read(&ptun->ref), "%p: ref count under run for tun", ptun);
 
 	if (kref_put(&ptun->ref, ppe_drv_tun_free)) {
-		ppe_drv_trace("reference count is 0 for tun: %p at index: %u", ptun, ptun->tun_idx);
+		ppe_drv_trace("reference count is 0 for tun: %p at index: %u", ptun, tun_idx);
 		return true;
 	}
 
-	ppe_drv_trace("%p: tun_idx: %u ref dec:%u", ptun, ptun->tun_idx, kref_read(&ptun->ref));
+	ppe_drv_trace("%p: tun_idx: %u ref dec:%u", ptun, tun_idx, kref_read(&ptun->ref));
 	return false;
 }
 

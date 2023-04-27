@@ -84,13 +84,15 @@ static void ppe_drv_tun_decap_xlate_rule_free(struct kref *kref)
  */
 bool ppe_drv_tun_decap_xlate_rule_deref(struct ppe_drv_tun_decap_xlate_rule *ptdxrule)
 {
+	uint8_t index = ptdxrule->index;
+
 	ppe_drv_assert(kref_read(&ptdxrule->ref), "%p: ref count under run for tun_decap_xlate_rule", ptdxrule);
 
 	/*
 	 * Deconfigure xlate rule entry if ref count becomes zero
 	 */
 	if (kref_put(&ptdxrule->ref, ppe_drv_tun_decap_xlate_rule_free)) {
-		ppe_drv_trace("%p: tun_decap_xlate_rule freed  at index: %d", ptdxrule, ptdxrule->index);
+		ppe_drv_trace("%p: tun_decap_xlate_rule freed  at index: %d", ptdxrule, index);
 		return true;
 	}
 
