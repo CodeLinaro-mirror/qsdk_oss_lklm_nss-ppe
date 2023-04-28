@@ -455,6 +455,7 @@ void ppe_qdisc_destroy(struct ppe_qdisc *pq)
 int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_t type, uint32_t classid,
 		struct netlink_ext_ack *extack)
 {
+	int err;
 	struct Qdisc *root;
 	u32 parent;
 	struct net_device *dev;
@@ -534,11 +535,13 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 		return -1;
 	}
 
-	/*
-	 * Initialize filter list.
-	 */
 	RCU_INIT_POINTER(pq->filter_list, NULL);
 	pq->block = NULL;
+	err = tcf_block_get(&pq->block, &pq->filter_list, sch, extack);
+	if (err) {
+		ppe_qdisc_warning("%px: Unable to initialize tcf_block\n", &pq->block);
+		return -1;
+	}
 
 	/*
 	 * Set the parent of PPE qdisc.
