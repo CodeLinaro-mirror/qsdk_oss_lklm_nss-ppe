@@ -35,6 +35,7 @@
 #include "ppe_drv_vsi.h"
 #include "ppe_drv_v4.h"
 #include "ppe_drv_v6.h"
+#include "ppe_drv_flow_dump.h"
 
 /*
  * PPE debug macros

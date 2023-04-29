@@ -92,6 +92,14 @@ struct ppe_drv_v4_conn_flow {
 	uint8_t xmit_dest_mac_addr[ETH_ALEN];	/* Destination MAC address after forwarding */
 
 	/*
+	 * PPE netwokr to host order ip
+	 */
+	uint32_t dump_match_src_ip;		/* Source IP address */
+	uint32_t dump_match_dest_ip;		/* Destination IP address */
+	uint32_t dump_xlate_src_ip;		/* Address after source translation */
+	uint32_t dump_xlate_dest_ip;		/* Address after destination translation */
+
+	/*
 	 * PPE to and from port
 	 */
 	struct ppe_drv_port *rx_port;		/* Rx ppe port */
@@ -548,12 +556,30 @@ static inline void ppe_drv_v4_conn_flow_match_src_ip_set(struct ppe_drv_v4_conn_
 }
 
 /*
+ * ppe_drv_v4_conn_flow_dump_match_src_ip_set()
+ *	Sets flow source IP in host order.
+ */
+static inline void ppe_drv_v4_conn_flow_dump_match_src_ip_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t match_src_ip)
+{
+        pcf->dump_match_src_ip = ntohl(match_src_ip);
+}
+
+/*
  * ppe_drv_v4_conn_flow_match_dest_ip_set()
  *	Sets flow destination IP.
  */
 static inline void ppe_drv_v4_conn_flow_match_dest_ip_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t match_dest_ip)
 {
         pcf->match_dest_ip = match_dest_ip;
+}
+
+/*
+ * ppe_drv_v4_conn_flow_dump_match_dest_ip_set()
+ *	Sets flow destination IP in host order.
+ */
+static inline void ppe_drv_v4_conn_flow_dump_match_dest_ip_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t match_dest_ip)
+{
+        pcf->dump_match_dest_ip = htonl(match_dest_ip);
 }
 
 /*
@@ -584,6 +610,15 @@ static inline void ppe_drv_v4_conn_flow_xlate_src_ip_set(struct ppe_drv_v4_conn_
 }
 
 /*
+ * ppe_drv_v4_conn_flow_dump_xlate_src_ip_set()
+ *	Sets flow xlate source IP in host order.
+ */
+static inline void ppe_drv_v4_conn_flow_dump_xlate_src_ip_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t xlate_src_ip)
+{
+        pcf->dump_xlate_src_ip = ntohl(xlate_src_ip);
+}
+
+/*
  * ppe_drv_v4_conn_flow_xlate_src_ident_set()
  *	Sets flow xlate source l4 port.
  */
@@ -599,6 +634,15 @@ static inline void ppe_drv_v4_conn_flow_xlate_src_ident_set(struct ppe_drv_v4_co
 static inline void ppe_drv_v4_conn_flow_xlate_dest_ip_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t xlate_dest_ip)
 {
         pcf->xlate_dest_ip = xlate_dest_ip;
+}
+
+/*
+ * ppe_drv_v4_conn_flow_dump_xlate_dest_ip_set()
+ *	Sets flow xlate destination IP in host order.
+ */
+static inline void ppe_drv_v4_conn_flow_dump_xlate_dest_ip_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t xlate_dest_ip)
+{
+        pcf->dump_xlate_dest_ip = ntohl(xlate_dest_ip);
 }
 
 /*

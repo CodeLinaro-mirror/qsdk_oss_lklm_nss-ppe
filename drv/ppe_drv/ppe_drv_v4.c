@@ -432,6 +432,14 @@ ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, st
 	ppe_drv_v4_conn_flow_xlate_dest_ident_set(pcf, conn->return_ident_xlate);
 
 	/*
+	 * Network to host order for the src/dst ip.
+	 */
+	ppe_drv_v4_conn_flow_dump_match_src_ip_set(pcf, pcf->match_src_ip);
+	ppe_drv_v4_conn_flow_dump_match_dest_ip_set(pcf, pcf->match_dest_ip);
+	ppe_drv_v4_conn_flow_dump_xlate_src_ip_set(pcf, pcf->xlate_src_ip);
+	ppe_drv_v4_conn_flow_dump_xlate_dest_ip_set(pcf, pcf->xlate_dest_ip);
+
+	/*
 	 * Flow MTU and transmit MAC address.
 	 */
 	ppe_drv_v4_conn_flow_xmit_interface_mtu_set(pcf, conn->flow_mtu);
@@ -537,6 +545,14 @@ ppe_drv_ret_t ppe_drv_v4_policer_conn_fill(struct ppe_drv_v4_rule_create *create
 		ppe_drv_v4_conn_flow_xlate_dest_ident_set(pcf, conn->return_ident_xlate);
 
 		/*
+		 * Network to host order for the src/dst ip.
+		 */
+		ppe_drv_v4_conn_flow_dump_match_src_ip_set(pcf, pcf->match_src_ip);
+		ppe_drv_v4_conn_flow_dump_match_dest_ip_set(pcf, pcf->match_dest_ip);
+		ppe_drv_v4_conn_flow_dump_xlate_src_ip_set(pcf, pcf->xlate_src_ip);
+		ppe_drv_v4_conn_flow_dump_xlate_dest_ip_set(pcf, pcf->xlate_dest_ip);
+
+		/*
 		 * Flow MTU and transmit MAC address.
 		 */
 		ppe_drv_v4_conn_flow_xmit_interface_mtu_set(pcf, conn->return_mtu);
@@ -568,6 +584,14 @@ ppe_drv_ret_t ppe_drv_v4_policer_conn_fill(struct ppe_drv_v4_rule_create *create
 		ppe_drv_v4_conn_flow_xlate_src_ident_set(pcr, tuple->return_ident);
 		ppe_drv_v4_conn_flow_xlate_dest_ip_set(pcr, tuple->flow_ip);
 		ppe_drv_v4_conn_flow_xlate_dest_ident_set(pcr, tuple->flow_ident);
+
+		/*
+		 * Network to Host order src/dst ip.
+		 */
+		ppe_drv_v4_conn_flow_dump_match_src_ip_set(pcr, pcr->match_src_ip);
+		ppe_drv_v4_conn_flow_dump_match_dest_ip_set(pcr, pcr->match_dest_ip);
+		ppe_drv_v4_conn_flow_dump_xlate_src_ip_set(pcr, pcr->xlate_src_ip);
+		ppe_drv_v4_conn_flow_dump_xlate_dest_ip_set(pcr, pcr->xlate_dest_ip);
 
 		/*
 		 * Flow MTU and transmit MAC address.
@@ -827,6 +851,14 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		ppe_drv_v4_conn_flow_xlate_dest_ip_set(pcf, conn->return_ip_xlate);
 		ppe_drv_v4_conn_flow_xlate_dest_ident_set(pcf, conn->return_ident_xlate);
 
+		/*
+		 * Network to host order for the src/dst ip.
+		 */
+		ppe_drv_v4_conn_flow_dump_match_src_ip_set(pcf, pcf->match_src_ip);
+		ppe_drv_v4_conn_flow_dump_match_dest_ip_set(pcf, pcf->match_dest_ip);
+		ppe_drv_v4_conn_flow_dump_xlate_src_ip_set(pcf, pcf->xlate_src_ip);
+		ppe_drv_v4_conn_flow_dump_xlate_dest_ip_set(pcf, pcf->xlate_dest_ip);
+
 		if ((ppe_drv_v4_conn_flow_match_src_ip_get(pcf) != ppe_drv_v4_conn_flow_xlate_src_ip_get(pcf))
 			|| (ppe_drv_v4_conn_flow_match_src_ident_get(pcf) != ppe_drv_v4_conn_flow_xlate_src_ident_get(pcf))) {
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_XLATE_SRC);
@@ -973,6 +1005,14 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		ppe_drv_v4_conn_flow_xlate_src_ident_set(pcr, tuple->return_ident);
 		ppe_drv_v4_conn_flow_xlate_dest_ip_set(pcr, tuple->flow_ip);
 		ppe_drv_v4_conn_flow_xlate_dest_ident_set(pcr, tuple->flow_ident);
+
+		/*
+		 * Network to Host order src/dst ip.
+		 */
+		ppe_drv_v4_conn_flow_dump_match_src_ip_set(pcr, pcr->match_src_ip);
+		ppe_drv_v4_conn_flow_dump_match_dest_ip_set(pcr, pcr->match_dest_ip);
+		ppe_drv_v4_conn_flow_dump_xlate_src_ip_set(pcr, pcr->xlate_src_ip);
+		ppe_drv_v4_conn_flow_dump_xlate_dest_ip_set(pcr, pcr->xlate_dest_ip);
 
 		if ((ppe_drv_v4_conn_flow_match_src_ip_get(pcr) != ppe_drv_v4_conn_flow_xlate_src_ip_get(pcr))
 			|| (ppe_drv_v4_conn_flow_match_src_ident_get(pcr) != ppe_drv_v4_conn_flow_xlate_src_ident_get(pcr))) {

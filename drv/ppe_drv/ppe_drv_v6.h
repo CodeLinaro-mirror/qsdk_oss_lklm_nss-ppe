@@ -76,6 +76,12 @@ struct ppe_drv_v6_conn_flow {
 	uint8_t xmit_dest_mac_addr[ETH_ALEN];	/* Destination MAC address after forwarding */
 
 	/*
+	 * Host order
+	 */
+	uint32_t dump_match_src_ip[4];		/* Source IP address */
+	uint32_t dump_match_dest_ip[4];		/* Destination IP address */
+
+	/*
 	 * PPE to and from port
 	 */
 	struct ppe_drv_port *rx_port;		/* Rx ppe port */
@@ -517,6 +523,18 @@ static inline void ppe_drv_v6_conn_flow_match_src_ip_set(struct ppe_drv_v6_conn_
 }
 
 /*
+ * ppe_drv_v6_conn_flow_dump_match_src_ip_set()
+ *	Sets flow source IP in Host order.
+ */
+static inline void ppe_drv_v6_conn_flow_dump_match_src_ip_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t match_src_ip[4])
+{
+        pcf->dump_match_src_ip[0] = htonl(match_src_ip[0]);
+        pcf->dump_match_src_ip[1] = htonl(match_src_ip[1]);
+        pcf->dump_match_src_ip[2] = htonl(match_src_ip[2]);
+        pcf->dump_match_src_ip[3] = htonl(match_src_ip[3]);
+}
+
+/*
  * ppe_drv_v6_conn_flow_match_dest_ip_set()
  *	Sets flow destination IP.
  */
@@ -526,6 +544,18 @@ static inline void ppe_drv_v6_conn_flow_match_dest_ip_set(struct ppe_drv_v6_conn
         pcf->match_dest_ip[1] = match_dest_ip[1];
         pcf->match_dest_ip[2] = match_dest_ip[2];
         pcf->match_dest_ip[3] = match_dest_ip[3];
+}
+
+/*
+ * ppe_drv_v6_conn_flow_dump_match_dest_ip_set()
+ *	Sets flow destination IP.
+ */
+static inline void ppe_drv_v6_conn_flow_dump_match_dest_ip_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t match_dest_ip[4])
+{
+        pcf->dump_match_dest_ip[0] = htonl(match_dest_ip[0]);
+        pcf->dump_match_dest_ip[1] = htonl(match_dest_ip[1]);
+        pcf->dump_match_dest_ip[2] = htonl(match_dest_ip[2]);
+        pcf->dump_match_dest_ip[3] = htonl(match_dest_ip[3]);
 }
 
 /*
