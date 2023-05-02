@@ -159,6 +159,10 @@ int ppe_ds_ppe2tcl_wlan_handle_intr(void *ctxt)
 	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
 
 	if (!node->en_process_irq) {
+		if (node->umac_reset_inprogress) {
+			node->wlan_ops->enable_tx_consume_intr(wlan_handle,
+							       false);
+		}
 		return 0;
 	}
 
@@ -581,6 +585,7 @@ void ppe_ds_wlan_instance_stop(ppe_ds_wlan_handle_t *wlan_handle,
 	edma_handle = node->edma_handle;
 
 	node->en_process_irq = false;
+	node->umac_reset_inprogress = info_hdl->umac_reset_inprogress;
 
 	write_lock_bh(&node_cfg->lock);
 	if(node_cfg->node_state != PPE_DS_NODE_STATE_START_DONE) {
@@ -684,7 +689,6 @@ int ppe_ds_wlan_instance_start(ppe_ds_wlan_handle_t *wlan_handle,
 		ppe_ds_err("NULL EDMA operation in PPE-DS start API\n");
 		return -1;
 	}
-
 	node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
 	edma_handle = node->edma_handle;
 
@@ -713,6 +717,7 @@ int ppe_ds_wlan_instance_start(ppe_ds_wlan_handle_t *wlan_handle,
 		hrtimer_cancel(&node->timer);
 	}
 
+	node->umac_reset_inprogress = info_hdl->umac_reset_inprogress;
 	write_lock_bh(&node_cfg->lock);
 	node_cfg->node_state = PPE_DS_NODE_STATE_START_DONE;
 	write_unlock_bh(&node_cfg->lock);
@@ -889,6 +894,7 @@ ppe_ds_wlan_handle_t *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t
 	node->edma_handle = edma_handle;
 	node->node_cfg_idx = i;
 	node->en_process_irq = false;
+	node->umac_reset_inprogress = 0;
 
 	write_lock_bh(&ppe_ds_node_cfg[i].lock);
 	ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_ALLOC;

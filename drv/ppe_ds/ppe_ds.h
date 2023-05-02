@@ -128,6 +128,7 @@ struct ppe_ds {
 	uint16_t last_edma_rx_cons_idx;		/* Last read EDMA Rx consumer index */
 	uint16_t last_reo2ppe_cons_idx;		/* Last read WLAN REO2PPE consumer index */
 	uint16_t last_edma_tx_prod_idx;		/* Last read EDMA Tx producer index */
+	uint16_t umac_reset_inprogress;		/* Umac reset in progress information */
 	nss_dp_ppeds_handle_t *edma_handle;	/* EDMA handle */
 	ppe_ds_wlan_handle_t wlan_handle;	/* WLAN handle */
 };
