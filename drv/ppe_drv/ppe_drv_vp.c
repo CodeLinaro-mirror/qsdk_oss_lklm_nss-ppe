@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,7 +14,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <linux/if_vlan.h>
 #include "ppe_drv.h"
+#include <fal_vport.h>
 
 /*
  * ppe_drv_vp_deinit()
@@ -60,13 +62,14 @@ EXPORT_SYMBOL(ppe_drv_vp_deinit);
  * ppe_drv_vp_init()
  *	Initialize API exposed to VP driver
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type)
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_info *info)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 	uint8_t tunnel_vp_cfg = 0;
 	enum ppe_drv_port_type port_type = PPE_DRV_PORT_VIRTUAL;
+	sw_error_t err = SW_OK;
 
 	switch (iface->type) {
 	case PPE_DRV_IFACE_TYPE_VIRTUAL:
@@ -95,6 +98,19 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, ui
 		return PPE_DRV_RET_PORT_ALLOC_FAIL;
 	}
 
+	/*
+	 * Associate VP with xmit port if VP is created on virtual interface VLAN interface on top of physical port
+	*/
+	if (is_vlan_dev(iface->dev) && info->xmit_port) {
+		err = fal_vport_physical_port_id_set(PPE_DRV_SWITCH_ID, port->port, info->xmit_port);
+		if (err != SW_OK) {
+			ppe_drv_port_deref(port);
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: failed to set physical port:%d for vp port:%d",p, info->xmit_port, port->port);
+			return PPE_DRV_RET_PORT_ALLOC_FAIL;
+		}
+	}
+
 	l3_if = ppe_drv_l3_if_alloc(PPE_DRV_L3_IF_TYPE_PORT);
 	if (!l3_if) {
 		ppe_drv_port_deref(port);
@@ -115,14 +131,14 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, ui
 	}
 
 	port->port_l3_if = l3_if;
-	port->core_mask = port->shadow_core_mask = core_mask;
-	port->user_type = usr_type;
+	port->core_mask = port->shadow_core_mask = info->core_mask;
+	port->user_type = info->usr_type;
 
-	if (core_mask) {
+	if (info->core_mask) {
 		port->flags |= PPE_DRV_PORT_RFS_ENABLED;
 	}
 
-	if (net_dev_type == PPE_DRV_PORT_NETDEV_TYPE_WIFI) {
+	if (info->net_dev_type == (uint8_t)PPE_DRV_PORT_NETDEV_TYPE_WIFI) {
 		port->flags |= PPE_DRV_PORT_FLAG_WIFI_DEV;
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -24,17 +24,17 @@
 
 /*
  * ppe_drv_iface
- *	 PPE interface information
+ *	PPE interface information
  */
 struct ppe_drv_iface {
 	struct ppe_drv_iface *base_if;		/* Base list for hierarchy creation */
 	struct ppe_drv_iface *parent;		/* Pointer to parent ppe-if– used for bridge/lag slaves */
-	struct ppe_drv_port *port;  		/* Pointer to port structure */
-	struct ppe_drv_vsi *vsi;    		/* Pointer to vsi structure */
-	struct ppe_drv_l3_if *l3;   		/* Pointer to l3_if structure */
-	struct kref ref;            		/* Reference count */
-	struct net_device *dev;   		/* Corresponding net-device */
-	uint16_t flags;         		/* Flag to indicate valid handles */
+	struct ppe_drv_port *port;		/* Pointer to port structure */
+	struct ppe_drv_vsi *vsi;		/* Pointer to vsi structure */
+	struct ppe_drv_l3_if *l3;		/* Pointer to l3_if structure */
+	struct kref ref;			/* Reference count */
+	struct net_device *dev;			/* Corresponding net-device */
+	uint16_t flags;				/* Flag to indicate valid handles */
 	uint16_t index;				/* Interface index */
 	enum ppe_drv_iface_type type;		/* Interface type */
 };

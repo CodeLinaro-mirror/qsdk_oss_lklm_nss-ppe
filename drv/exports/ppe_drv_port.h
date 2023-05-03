@@ -120,6 +120,18 @@ bool ppe_drv_port_is_flow_offload_enabled(struct net_device *dev);
 struct net_device *ppe_drv_port_get_vp_phys_dev(struct net_device *dev);
 
 /**
+ * ppe_drv_port_ucast_queue_get_by_port
+ *	Return queue id of port number.
+ *
+ * @datatypes
+ * int
+ *
+ * @return
+ * -1 for failure else port ID
+ */
+int32_t ppe_drv_port_ucast_queue_get_by_port(int port);
+
+/**
  * ppe_drv_port_num_from_dev
  *	Get port index from device.
  *

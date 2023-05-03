@@ -16,6 +16,8 @@
 
 #include <linux/netdevice.h>
 #include <linux/if_ether.h>
+#include <linux/version.h>
+#include <linux/if_vlan.h>
 #include <fal/fal_fdb.h>
 #include <fal/fal_ip.h>
 #include <fal/fal_misc.h>
@@ -870,6 +872,29 @@ bool ppe_drv_port_is_flow_offload_enabled(struct net_device *dev)
 EXPORT_SYMBOL(ppe_drv_port_is_flow_offload_enabled);
 
 /*
+ * ppe_drv_port_ucast_queue_get_by_port()
+ *	Return queue id of port number.
+ */
+int32_t ppe_drv_port_ucast_queue_get_by_port(int port)
+{
+	fal_ucast_queue_dest_t q_dst = {0};
+	uint32_t queue_id = 0;
+	uint8_t profile = 0;
+	sw_error_t err;
+
+	q_dst.dst_port = port;
+
+	err = fal_ucast_queue_base_profile_get(PPE_DRV_SWITCH_ID, &q_dst, &queue_id, &profile);
+	if (err != SW_OK) {
+		ppe_drv_warn("error %d getting queue base for port %d\n", err, port);
+		return -1;
+	}
+
+	return queue_id;
+}
+EXPORT_SYMBOL(ppe_drv_port_ucast_queue_get_by_port);
+
+/*
  * ppe_drv_port_get_vp_phys_dev()
  * 	Get the net device corresponding to physical port
  * 	on which tunnel is created
@@ -1257,6 +1282,10 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 	 */
 	if (pp->type == PPE_DRV_PORT_VIRTUAL_PO) {
 		profile = FAL_QM_PROFILE_PO_ID;
+	}
+
+	if ((pp->type == PPE_DRV_PORT_VIRTUAL) && is_vlan_dev(pp->dev)) {
+		profile = PPE_DRV_REDIR_PROFILE_ID;
 	}
 
 	/*
@@ -1764,7 +1793,6 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	}
 
 	pp->is_fdb_learn_enabled = false;
-
 
 	/*
 	 * Set VP type as normal VP.
