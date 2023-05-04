@@ -255,7 +255,7 @@ static int ppe_htb_change_class(struct Qdisc *sch, u32 classid, u32 parentid,
 	struct ppe_htb_class_data *cl = (struct ppe_htb_class_data *)*arg;
 	struct ppe_htb_class_data *parent;
 	struct ppe_qdisc *pq_parent;
-	struct ppe_qdisc *prev_pq;
+	struct ppe_qdisc *prev_pq = NULL;
 	struct ppe_htb_param param;
 	bool new_init = false;
 

@@ -325,7 +325,7 @@ int ppe_qdisc_node_attach(struct ppe_qdisc *pq, struct ppe_qdisc *pq_child)
 int ppe_qdisc_configure(struct ppe_qdisc *pq, struct ppe_qdisc *prev_pq)
 {
 	struct ppe_drv_qos_res *rp = &pq->res;
-	struct ppe_drv_qos_res *prev_rp = &prev_pq->res;
+	struct ppe_drv_qos_res *prev_rp = NULL;
 
 	ppe_qdisc_info("Qdisc %px (type %d) configuring", pq->qdisc, pq->type);
 
@@ -380,6 +380,11 @@ fail:
 	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_CONFIGURED)) {
 		return -EINVAL;
 	}
+
+	if (!prev_pq) {
+		return -EINVAL;
+	}
+	prev_rp = &prev_pq->res;
 
 	/*
 	 * Restore to previous configuration if exists.
