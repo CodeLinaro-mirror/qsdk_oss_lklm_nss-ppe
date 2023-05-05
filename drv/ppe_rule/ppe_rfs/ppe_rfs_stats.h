@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,6 +28,8 @@ struct ppe_rfs_stats {
 	atomic64_t v4_create_mem_fail;			/* v4 create rfs memory allocation failed */
 	atomic64_t v4_create_flow_interface_fail;	/* v4 create rfs flow interface invalid */
 	atomic64_t v4_create_return_interface_fail;	/* v4 create rfs return interface invalid */
+	atomic64_t v4_create_flow_top_interface_fail;	/* v4 create rfs flow top interface invalid */
+	atomic64_t v4_create_return_top_interface_fail; /* v4 create rfs return top interface invalid */
 	atomic64_t v4_create_rfs_not_enabled;		/* v4 create rfs not enabled on both tx and rx interface */
 	atomic64_t v4_create_ppe_rule_fail;		/* v4 create rfs ppe rule addition failed */
 	atomic64_t v4_create_rfs_direction_check_fail;	/* v4 create rfs enabled on both tx and rx interface */
@@ -41,6 +43,8 @@ struct ppe_rfs_stats {
 	atomic64_t v6_create_mem_fail;			/* v6 create rfs memory allocation failed */
 	atomic64_t v6_create_flow_interface_fail;	/* v6 create rfs flow interface invalid */
 	atomic64_t v6_create_return_interface_fail;	/* v6 create rfs return interface invalid */
+	atomic64_t v6_create_flow_top_interface_fail;	/* v6 create rfs flow top interface invalid */
+	atomic64_t v6_create_return_top_interface_fail;	/* v6 create rfs return top interface invalid */
 	atomic64_t v6_create_rfs_not_enabled;		/* v6 create rfs not enabled on both tx and rx interface */
 	atomic64_t v6_create_ppe_rule_fail;		/* v6 create rfs ppe rule addition failed */
 	atomic64_t v6_create_rfs_direction_check_fail;		/* v6 destroy rfs enabled on both tx and rx interface */
