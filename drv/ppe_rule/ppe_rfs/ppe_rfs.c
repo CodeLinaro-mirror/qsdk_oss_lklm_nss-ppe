@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -83,6 +83,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 	bool tx_rfs_enabled = false;
 	bool rx_rfs_enabled = false;
 	ppe_drv_ret_t ret;
+	struct net_device *top_rule_rx_dev, *top_rule_tx_dev;
 
 	ppe_rfs_stats_inc(&p->stats.v6_create_ppe_rule_rfs);
 
@@ -107,6 +108,26 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 	pd6rc.conn_rule.tx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
 	tx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
+
+	top_rule_rx_dev = dev_get_by_index(&init_net, create_ipv6->conn_rule.flow_top_interface_num);
+	if (!top_rule_rx_dev) {
+		ppe_rfs_warn("Top rule dev not found during ppe dummy config for flow iface: %d\n", create_ipv6->conn_rule.flow_top_interface_num);
+		ppe_rfs_stats_inc(&p->stats.v6_create_flow_top_interface_fail);
+		return PPE_RFS_RET_FAILURE;
+	};
+
+	pd6rc.top_rule.rx_if = ppe_drv_iface_idx_get_by_dev(top_rule_rx_dev);
+	dev_put(top_rule_rx_dev);
+
+	top_rule_tx_dev = dev_get_by_index(&init_net, create_ipv6->conn_rule.return_top_interface_num);
+	if (!top_rule_tx_dev) {
+		ppe_rfs_warn("Top rule return dev not found during ppe dummy config for flow iface: %d\n", create_ipv6->conn_rule.return_top_interface_num);
+		ppe_rfs_stats_inc(&p->stats.v6_create_return_top_interface_fail);
+		return PPE_RFS_RET_FAILURE;
+	};
+
+	pd6rc.top_rule.tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
+	dev_put(top_rule_tx_dev);
 
 	if (tx_rfs_enabled && rx_rfs_enabled) {
 		ppe_rfs_warn("RFS enabled on both tx(%d) and rx interface(%d)\n", create_ipv6->conn_rule.return_interface_num, create_ipv6->conn_rule.flow_interface_num);
@@ -207,6 +228,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 	bool tx_rfs_enabled = false;
 	bool rx_rfs_enabled = false;
 	ppe_drv_ret_t ret;
+	struct net_device *top_rule_rx_dev, *top_rule_tx_dev;
 
 	ppe_rfs_stats_inc(&p->stats.v4_create_ppe_rule_rfs);
 
@@ -237,6 +259,26 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		ppe_rfs_stats_inc(&p->stats.v4_create_rfs_direction_check_fail);
 		return PPE_RFS_RET_FAILURE;
 	}
+
+	top_rule_rx_dev = dev_get_by_index(&init_net, create_ipv4->conn_rule.flow_top_interface_num);
+	if (!top_rule_rx_dev) {
+		ppe_rfs_warn("Top rule dev not found during ppe dummy config for flow iface: %d\n", create_ipv4->conn_rule.flow_top_interface_num);
+		ppe_rfs_stats_inc(&p->stats.v4_create_flow_top_interface_fail);
+		return PPE_RFS_RET_FAILURE;
+	};
+
+	pd4rc.top_rule.rx_if = ppe_drv_iface_idx_get_by_dev(top_rule_rx_dev);
+	dev_put(top_rule_rx_dev);
+
+	top_rule_tx_dev = dev_get_by_index(&init_net, create_ipv4->conn_rule.return_top_interface_num);
+	if (!top_rule_tx_dev) {
+		ppe_rfs_warn("Top rule return dev not found during ppe dummy config for flow iface: %d\n", create_ipv4->conn_rule.return_top_interface_num);
+		ppe_rfs_stats_inc(&p->stats.v4_create_return_top_interface_fail);
+		return PPE_RFS_RET_FAILURE;
+	};
+
+	pd4rc.top_rule.tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
+	dev_put(top_rule_tx_dev);
 
 	if (!tx_rfs_enabled && !rx_rfs_enabled) {
 		ppe_rfs_warn("RFS disable on both tx(%d) and rx interface(%d)\n", create_ipv4->conn_rule.return_interface_num, create_ipv4->conn_rule.flow_interface_num);

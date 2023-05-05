@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -64,6 +64,8 @@ struct ppe_rfs_ipv4_connection_rule {
 	__be32 return_ip_xlate;         /**< Translated return IP address. */
 	__be16 flow_ident_xlate;        /**< Translated flow identifier, e.g., port. */
 	__be16 return_ident_xlate;      /**< Translated return identifier, e.g., port. */
+	s32 flow_top_interface_num;	/**< Flow top interface number. */
+	s32 return_top_interface_num;	/**< Return top interface number. */
 };
 
 /**
@@ -109,6 +111,8 @@ struct ppe_rfs_ipv6_connection_rule {
 	int8_t return_interface_num;		/**< Return interface number. */
 	uint16_t flow_mtu;			/**< Flow interface's MTU. */
 	uint16_t return_mtu;			/**< Return interface's MTU. */
+	int8_t flow_top_interface_num;		/**< Flow top interface number. */
+	int8_t return_top_interface_num;	/**< Return top interface number. */
 };
 
 /**
