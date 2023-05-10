@@ -103,6 +103,16 @@ static inline struct ppe_drv_l3_if *ppe_drv_nexthop_v6_l3_if_get(struct ppe_drv_
 		l3_if = ppe_drv_port_find_port_l3_if(pp);
 	}
 
+	/*
+	 * For port with active vlans use l3_if associated with
+	 * untag VLAN rule. This l3_if can be used only for flows
+	 * without VLAN tags.
+	 */
+	if (!ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf)
+		&& pp && pp->ingress_untag_vlan) {
+		l3_if = pp->active_l3_if;
+	}
+
 	return l3_if;
 }
 
@@ -202,6 +212,16 @@ static inline struct ppe_drv_l3_if *ppe_drv_nexthop_v4_l3_if_get(struct ppe_drv_
 	pp = ppe_drv_v4_conn_flow_tx_port_get(pcf);
 	if (pp) {
 		l3_if = ppe_drv_port_find_port_l3_if(pp);
+	}
+
+	/*
+	 * For port with active vlans use l3_if associated with
+	 * untag VLAN rule. This l3_if can be used only for flows
+	 * without VLAN tags.
+	 */
+	if (!ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf)
+		&& pp && pp->ingress_untag_vlan) {
+		l3_if = pp->active_l3_if;
 	}
 
 	return l3_if;

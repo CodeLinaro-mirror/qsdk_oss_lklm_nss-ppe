@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -27,6 +27,88 @@
 #include <fal/fal_portvlan.h>
 #include "ppe_drv.h"
 #include "ppe_drv_stats.h"
+
+/*
+ * ppe_drv_vlan_del_untag_ingress_rule()
+ *	Delete ingress VLAN translation rule for untagged frames
+ */
+bool ppe_drv_vlan_del_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_drv_l3_if *src_l3_if)
+{
+	fal_vlan_trans_adv_rule_t xlt_rule = {0};
+	fal_vlan_trans_adv_action_t xlt_action = {0};
+	struct ppe_drv *p = &ppe_drv_gbl;
+	fal_port_t fal_port;
+	sw_error_t err;
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port->port) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port->port)
+			: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port->port);
+
+	/*
+	 * Fields for match
+	 */
+	xlt_rule.s_tagged = 0x1;				/* Accept untagged svlan */
+	xlt_rule.c_tagged = 0x1;				/* Accept untagged cvlan */
+
+	/*
+	 * Fields for action
+	 */
+	xlt_action.src_info_enable = true;
+	xlt_action.src_info_type = 1;
+	xlt_action.src_info = src_l3_if->l3_if_index;
+
+	err = fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_INGRESS, &xlt_rule,
+				&xlt_action);
+	if (err != SW_OK) {
+		ppe_drv_warn("%px: Failed to delete ingress translation rule for untagged VLAN port: %d, error: %d\n",
+				p, fal_port, err);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_ingress_untag_vlan_del);
+		return false;
+	}
+
+	ppe_drv_info("%p: Deleted untag vlan rule for port: %d, with src_l3_if: %d", p, port->port, src_l3_if->l3_if_index);
+	return true;
+}
+
+/*
+ * ppe_drv_vlan_add_untag_ingress_rule()
+ *	Add Ingress VLAN translation rule for untagged frames
+ */
+bool ppe_drv_vlan_add_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_drv_l3_if *src_l3_if)
+{
+	fal_vlan_trans_adv_rule_t xlt_rule = {0};
+	fal_vlan_trans_adv_action_t xlt_action = {0};
+	struct ppe_drv *p = &ppe_drv_gbl;
+	fal_port_t fal_port;
+	sw_error_t err;
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port->port) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port->port)
+			: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port->port);
+
+	/*
+	 * Fields for match
+	 */
+	xlt_rule.s_tagged = 0x1;				/* Accept untagged svlan */
+	xlt_rule.c_tagged = 0x1;				/* Accept untagged cvlan */
+
+	/*
+	 * Fields for action
+	 */
+	xlt_action.src_info_enable = true;
+	xlt_action.src_info_type = 1;
+	xlt_action.src_info = src_l3_if->l3_if_index;
+
+	err = fal_port_vlan_trans_adv_add(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_INGRESS, &xlt_rule,
+				&xlt_action);
+	if (err != SW_OK) {
+		ppe_drv_warn("%px: Failed to update ingress translation rule for untagged VLAN port: %d, error: %d\n",
+				p, fal_port, err);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_ingress_untag_vlan_add);
+		return false;
+	}
+
+	ppe_drv_info("%p: Added untag vlan rule for port: %d, with src_l3_if: %d", p, port->port, src_l3_if->l3_if_index);
+	return true;
+}
 
 /*
  * ppe_drv_vlan_tpid_set()

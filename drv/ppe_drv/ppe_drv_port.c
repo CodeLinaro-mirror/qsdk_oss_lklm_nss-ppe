@@ -568,6 +568,19 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 
 	case PPE_DRV_VSI_TYPE_BRIDGE:
 		/*
+		 * Delete ingress translation rule for untagged frames.
+		 *
+		 * When port is added to bridge, the ingress VLAN rule for
+		 * untag frame is not needed, since the l3_if associated
+		 * with bridge VSI would provide the correct l3_if.
+		 */
+		if (pp->ingress_untag_vlan) {
+			if (ppe_drv_vlan_del_untag_ingress_rule(pp, pp->active_l3_if)) {
+				pp->ingress_untag_vlan = false;
+			}
+		}
+
+		/*
 		 * Detach port_vsi while attaching a new bridge-vsi.
 		 */
 		if (!pp->port_vsi && pp->active_l3_if && pp->active_l3_if_attached) {
@@ -586,6 +599,16 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		 */
 		if (pp->active_l3_if && !pp->active_vlan && pp->active_l3_if_attached) {
 			ppe_drv_port_l3_if_detach(pp, pp->active_l3_if);
+
+			/*
+			 * Add ingress translation rule for untagged frames.
+			 *
+			 * This is needed if both VLAN and underlying ports are used
+			 * as routed interfaces.
+			 */
+			if (ppe_drv_vlan_add_untag_ingress_rule(pp, pp->active_l3_if)) {
+				pp->ingress_untag_vlan = true;
+			}
 		}
 
 		/*
@@ -691,6 +714,19 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 			ppe_drv_port_l3_if_attach(pp, pp->active_l3_if);
 		}
 
+		/*
+		 * Add ingress translation rule for untagged frames.
+		 *
+		 * If there are active vlans on the port, while removing
+		 * port from the bridge, the ingress VLAN rule for
+		 * untag frame provides the l3_if for port.
+		 */
+		if (pp->active_vlan && pp->active_l3_if) {
+			if (ppe_drv_vlan_add_untag_ingress_rule(pp, pp->active_l3_if)) {
+				pp->ingress_untag_vlan = true;
+			}
+		}
+
 		break;
 
 	case PPE_DRV_VSI_TYPE_VLAN:
@@ -709,6 +745,18 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		 */
 		if (!pp->br_vsi && pp->active_l3_if && !pp->active_vlan && !pp->active_l3_if_attached) {
 			ppe_drv_port_l3_if_attach(pp, pp->active_l3_if);
+
+			/*
+			 * Delete ingress translation rule for untagged frames.
+			 *
+			 * Not needed if there are no more active VLANs on this
+			 * interface.
+			 */
+			if (pp->ingress_untag_vlan) {
+				if (ppe_drv_vlan_del_untag_ingress_rule(pp, pp->active_l3_if)) {
+					pp->ingress_untag_vlan = false;
+				}
+			}
 		}
 
 		return;
