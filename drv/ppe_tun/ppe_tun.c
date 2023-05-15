@@ -437,6 +437,7 @@ bool ppe_tun_deactivate(struct net_device *dev)
 	}
 
 	if (!ppe_drv_tun_deactivate(tun->vp_num, NULL)) {
+		ppe_tun_deref(tun);
 		ppe_tun_warn("%p: failed to deactivate tunnel for dev %s", tun, dev->name);
 		return false;
 	}
@@ -492,6 +493,33 @@ bool ppe_tun_conf_accel(enum ppe_drv_tun_cmn_ctx_type type, bool action)
 	struct ppe_tun *tun;
 	int i;
 
+	/*
+	 * Allow setting tunnel accel mode to disabled only if ppe_tun of
+	 * netdev is deconfigured.
+	 */
+	for (i = 0; (action == PPE_TUN_DISABLE) && (i < PPE_TUN_MAX); i++) {
+		spin_lock_bh(&ptp->lock);
+		tun = ptp->tun[i];
+		if (!tun) {
+			spin_unlock_bh(&ptp->lock);
+			continue;
+		}
+
+		spin_unlock_bh(&ptp->lock);
+
+		if (tun->state & PPE_TUN_STATE_CONFIGURED) {
+			printk("dev %s should be down before disabling acceleration\n", tun->dev->name);
+			return false;
+		}
+
+		atomic_inc(&ptp->free_pending);
+
+		/*
+		 * Release the reference taken during kref init
+		 */
+		ppe_tun_deref(tun);
+	}
+
 	switch (type) {
 	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP:
 		ptp->tun_accel.ppe_tun_gretap_accel = action;
@@ -514,39 +542,6 @@ bool ppe_tun_conf_accel(enum ppe_drv_tun_cmn_ctx_type type, bool action)
 		return false;
 	}
 
-	if (action == PPE_TUN_ENABLE) {
-		goto skip_deactivate;
-	}
-
-	for (i = 0; i < PPE_TUN_MAX; i++) {
-		spin_lock_bh(&ptp->lock);
-		tun = ptp->tun[i];
-		if (!tun) {
-			spin_unlock_bh(&ptp->lock);
-			continue;
-		}
-
-		ppe_tun_ref(tun);
-		spin_unlock_bh(&ptp->lock);
-
-		if (tun->type == type) {
-			/*
-			 * Deactivate tunnel
-			 */
-			if (tun->phys_dev) {
-				ppe_tun_deactivate(tun->dev);
-			}
-
-			/*
-			 * deconfigure the tunnel
-			 */
-			ppe_drv_tun_deconfigure(tun->vp_num);
-			ppe_tun_deref(tun);
-		}
-		ppe_tun_deref(tun);
-	}
-
-skip_deactivate:
 	ppe_tun_info("%p: Acceleration %s for tunnel type %u", ptp, (action) ? ("enabled") : ("disabled"), type);
 	return true;
 }
@@ -573,6 +568,8 @@ bool ppe_tun_deconfigure(struct net_device *dev)
 
 	tun->src_cb = NULL;
 	tun->dest_cb = NULL;
+	tun->phys_dev = NULL;
+	tun->state &= ~PPE_TUN_STATE_CONFIGURED;
 	ppe_tun_info("%p: Tunnel disabled for dev %s", tun, dev->name);
 	ppe_tun_deref(tun);
 	return true;
@@ -608,6 +605,7 @@ bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_h
 	tun->src_cb = src_cb;
 	tun->dest_cb = dest_cb;
 
+	tun->state |= PPE_TUN_STATE_CONFIGURED;
 	ppe_tun_info("%p: Tunnel is configured at idx:%d", tun, tun->idx);
 	ppe_tun_deref(tun);
 	return true;
