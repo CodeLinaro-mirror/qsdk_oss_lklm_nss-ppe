@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -199,6 +199,27 @@ static struct notifier_block nss_ppe_vxlanmgr_tunnel_fdb_notifier = {
 };
 
 /*
+ * nss_ppe_vxlan_src_exception()
+ *	handle the source VP exception.
+ */
+static bool nss_ppe_vxlan_src_exception(struct net_device *dev, struct sk_buff *skb)
+{
+	int ret;
+
+	skb->dev = dev;
+	skb->skb_iif = dev->ifindex;
+	skb->protocol = eth_type_trans(skb, dev);
+	skb_reset_network_header(skb);
+
+	ret = netif_receive_skb(skb);
+	if (ret != NET_RX_SUCCESS) {
+		nss_ppe_vxlanmgr_warn("%p: excpetion packet dropped. err:%d \n", dev, ret);
+	}
+
+	return true;
+}
+
+/*
  * nss_ppe_vxlanmgr_tunnel_config()
  *	Function to send dynamic interface enable message
  */
@@ -229,7 +250,7 @@ int nss_ppe_vxlanmgr_tunnel_config(struct net_device *dev, struct ppe_drv_tun_cm
 	tun_hdr->l3.dscp = 0;
 	tun_hdr->type = PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN;
 
-	ret = ppe_tun_configure(dev, tun_hdr, NULL, NULL);
+	ret = ppe_tun_configure(dev, tun_hdr, nss_ppe_vxlan_src_exception, NULL);
 	if (!ret) {
 		nss_ppe_vxlanmgr_warn("Getting  PPE VXLAN tunnel failed.\n");
 		dev_put(dev);
