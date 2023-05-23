@@ -148,12 +148,12 @@ void ppe_drv_v4_flow_vlan_set(struct ppe_drv_v4_conn_flow *pcf,
  * ppe_drv_v4_rfs_conn_fill()
  *	Populate single direction flow object rule.
  */
-ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, struct ppe_drv_v4_conn *cn,
-				   enum ppe_drv_conn_type flow_type)
+ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, struct ppe_drv_top_if_rule *top_if,
+				       struct ppe_drv_v4_conn *cn, enum ppe_drv_conn_type flow_type)
 {
 	struct ppe_drv_v4_connection_rule *conn = &create->conn_rule;
 	struct ppe_drv_v4_5tuple *tuple = &create->tuple;
-	struct ppe_drv_iface *if_rx, *if_tx;
+	struct ppe_drv_iface *if_rx, *if_tx, *top_rx_iface;
 	struct ppe_drv_v4_conn_flow *pcf = &cn->pcf;
 	uint16_t rule_flags = create->rule_flags;
 	struct ppe_drv_comm_stats *comm_stats;
@@ -201,6 +201,20 @@ ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, st
 		pcf->eg_port_if = ppe_drv_iface_ref(if_tx);
 	} else if ((pp_rx->flags & PPE_DRV_PORT_RFS_ENABLED) && (pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP)) {
 		pcf->eg_port_if = ppe_drv_iface_ref(if_rx);
+	}
+
+	top_rx_iface = ppe_drv_iface_get_by_idx(top_if->rx_if);
+	if (!top_rx_iface) {
+		ppe_drv_warn("%p: No PPE interface corresponding to top rx interface\n", p);
+		return false;
+	}
+
+	if (ppe_drv_iface_l3_if_get(top_rx_iface)) {
+		ppe_drv_trace("%p: Using top rx iface's l3 if for dev: %s\n", top_rx_iface, top_rx_iface->dev->name);
+		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, top_rx_iface);
+	} else {
+		ppe_drv_trace("%p: Using port's l3 if for dev: %s\n", top_rx_iface, top_rx_iface->dev->name);
+		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, if_rx);
 	}
 
 	/*
@@ -301,7 +315,7 @@ static bool ppe_drv_v4_conn_flow_igmac_add(struct ppe_drv_v4_conn_flow *pcf)
 		}
 	}
 
-	if (!ppe_drv_l3_if_ig_mac_add_and_ref(in_l3_if->l3)) {
+	if (in_l3_if->l3 && !ppe_drv_l3_if_ig_mac_add_and_ref(in_l3_if->l3)) {
 		ppe_drv_warn("%p: failed to allocate MY_MAC entries for l3_if: %p",
 				pcf, in_l3_if->l3);
 		return false;
@@ -1078,9 +1092,10 @@ static struct ppe_drv_flow *ppe_drv_v4_flow_add(struct ppe_drv_v4_conn_flow *pcf
 
 	/*
 	 * Fetch a new nexthop entry.
-	 * Note: NEXTHOP entry is not required for bridged flows.
+	 * Note: NEXTHOP entry is not required for bridged and RFS flows.
 	 */
-	if (!ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+	if (!(ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) ||
+	     ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST))) {
 		nh = ppe_drv_nexthop_v4_get_and_ref(pcf);
 		if (!nh) {
 			ppe_drv_warn("%p: unable to allocate nexthop", pcf);
@@ -1811,6 +1826,7 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 	struct ppe_drv_comm_stats *comm_stats;
 	struct ppe_drv_v4_conn *cn = NULL;
 	ppe_drv_ret_t ret;
+	struct ppe_drv_top_if_rule top_if = {0};
 
 	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_FLOW];
 
@@ -1834,7 +1850,9 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 	 */
 	spin_lock_bh(&p->lock);
 
-	ret = ppe_drv_v4_rfs_conn_fill(create, cn, PPE_DRV_CONN_TYPE_FLOW);
+	top_if.rx_if = create->top_rule.rx_if;
+	top_if.tx_if = create->top_rule.tx_if;
+	ret = ppe_drv_v4_rfs_conn_fill(create, &top_if, cn, PPE_DRV_CONN_TYPE_FLOW);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_conn);
 		ppe_drv_warn("%p: failed to fill connection object: %p", p, create);
@@ -1857,6 +1875,7 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 	}
 
 	pcf = &cn->pcf;
+	ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST);
 
 	/*
 	 * Add flow direction flow entry
@@ -1869,10 +1888,10 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 		ppe_drv_iface_deref_internal(pcf->eg_port_if);
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
+		ppe_drv_v4_conn_flow_flags_clear(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST);
 		return ret;
 	}
 
-	ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST);
 	pcf->conn = cn;
 
 	cn->pcr.pf = NULL;
