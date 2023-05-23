@@ -51,6 +51,8 @@
 #define PPE_DRV_V4_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK 0x00001000
 					/* source interface check */
 #endif
+#define PPE_DRV_V4_CONN_FLAG_FLOW_IGMAC_VALID 0x00002000
+					/* Flow has ingress mac configured */
 
 /*
  * ppe_drv_v4_addr_equal()
