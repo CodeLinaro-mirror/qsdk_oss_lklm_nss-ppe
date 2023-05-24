@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2017-2018, 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -80,6 +80,7 @@ struct nss_ppe_vlan_mgr_context {
 	struct list_head list;			/* List of vlan private instance */
 	spinlock_t lock;			/* Lock to protect vlan private instance */
 	struct ctl_table_header *sys_hdr;	/* "/pro/sys/nss/vlan_client" directory */
+	spinlock_t v_lock;			/* Lock to resolve the race condition in unreg & leave bridge path */
 };
 
 /*
