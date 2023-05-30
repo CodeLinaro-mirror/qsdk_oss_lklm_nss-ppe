@@ -383,20 +383,55 @@ static bool ppe_drv_flow_v6_vpn_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_
  * ppe_drv_flow_ds_wifi_qos_set()
  *	Sets the WiFi QoS for DS mode
  */
-static void ppe_drv_flow_ds_wifi_qos_set(uint32_t *wifi_qos, uint32_t *msduq_value)
+static void ppe_drv_flow_ds_wifi_qos_set(uint32_t *wifi_qos, uint32_t *msduq_value, bool flow_override_mode)
 {
-	uint8_t tid;
 	bool flow_override;
+	uint8_t tid;
 
 	/*
-	 * In case of DS mode, wifi qos is configured as below:
+	 * In case of DS mode,
+	 *
+	 * For flow override mode, wifi qos is configured as below:
 	 * --------------------------------------------------------------------------------------
 	 * |	Who Classify (2 bits)	|	TID (3 bits)	|	Flow override (1 bit)	|
 	 * --------------------------------------------------------------------------------------
+	 *
+	 * OR
+	 *
+	 * fill wifi_qos[7]=1 to support hlos_tid Override configuration interpretation
+	 * ---------------------------------------------------------------------------------------
+         * |  HLOS_TID override mode(1 bit)  |   (3 bits)   |       TID (3 bits)    |  (1 bit)   |
+         * ---------------------------------------------------------------------------------------
 	 */
-	tid = *msduq_value & PPE_DRV_FLOW_TID_MASK;
-	flow_override = *msduq_value & PPE_DRV_FLOW_FO_MASK;
-	*wifi_qos = (*msduq_value & PPE_DRV_FLOW_WC_MASK) | (tid << PPE_DRV_FLOW_TID_SHIFT) | flow_override;
+
+	if (flow_override_mode) {
+		/*
+		 * In sawf, tid value is mapped from msduq
+		 */
+		tid = *msduq_value & PPE_DRV_FLOW_TID_MASK;
+		flow_override = *msduq_value & PPE_DRV_FLOW_FO_MASK;
+		*wifi_qos = (*msduq_value & PPE_DRV_FLOW_WC_MASK) | (tid << PPE_DRV_FLOW_TID_SHIFT) | flow_override;
+		return;
+	}
+
+	/*
+	 * For scs, msduq is passed as tid.
+	 */
+	*wifi_qos = 0;
+	tid = *msduq_value;
+	*wifi_qos = PPE_DRV_FLOW_DS_HLOS_TID_OVERRIDE_ENABLE | (tid << PPE_DRV_FLOW_TID_SHIFT);
+}
+
+/*
+ * ppe_drv_flow_override_mode_get()
+ * 	Return false for hlos override mode.
+ */
+static bool ppe_drv_flow_override_mode_get(uint32_t *msduq_value)
+{
+	if (*msduq_value <= PPE_DRV_FLOW_HLOS_OVERRIDE_MSDUQ_MAX)
+		return false;
+
+	return true;
 }
 
 /*
@@ -405,6 +440,8 @@ static void ppe_drv_flow_ds_wifi_qos_set(uint32_t *wifi_qos, uint32_t *msduq_val
  */
 static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *wifi_qos, bool *wifi_qos_en)
 {
+	bool flow_override_mode = true;
+
 	/*
 	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
@@ -423,7 +460,15 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 		 */
 		if (!ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID) &&
 				(pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
-			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos);
+			flow_override_mode = ppe_drv_flow_override_mode_get(&pcf->flow_metadata.wifi_qos);
+
+			/*
+			 * Disabling WIFI_QOS flag for hlos tid mode
+			 */
+			if (!flow_override_mode)
+				*wifi_qos_en = false;
+
+			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos, flow_override_mode);
 		}
 
 		ppe_drv_trace("For User type: %u, WiFi_QoS initially: 0x%x and WiFi_QoS configured: 0x%x", pcf->tx_port->user_type, pcf->flow_metadata.wifi_qos, *wifi_qos);
@@ -994,6 +1039,8 @@ static bool ppe_drv_flow_v4_vpn_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_
  */
 static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *wifi_qos, bool *wifi_qos_en)
 {
+	bool flow_override_mode = true;
+
 	/*
 	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
@@ -1012,7 +1059,16 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
 		 */
 		if (!ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID) &&
 				(pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
-			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos);
+			flow_override_mode = ppe_drv_flow_override_mode_get(&pcf->flow_metadata.wifi_qos);
+
+			/*
+			 * Disabling WIFI_QOS flag for hlos tid mode
+			 */
+			if (!flow_override_mode)
+				*wifi_qos_en = false;
+
+			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos, flow_override_mode);
+
 		}
 
 		ppe_drv_trace("For User type: %u, WiFi_QoS initially: 0x%x and WiFi_QoS configured: 0x%x", pcf->tx_port->user_type, pcf->flow_metadata.wifi_qos, *wifi_qos);
