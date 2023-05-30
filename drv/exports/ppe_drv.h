@@ -78,7 +78,7 @@ enum ppe_drv_ip_type {
 typedef enum ppe_drv_sawf_sc_type {
 	PPE_DRV_SAWF_SC_NONE = 0,	/**< Invalid service class. */
 	PPE_DRV_SAWF_SC_START,		/**< SAWF service class start. */
-	PPE_DRV_SAWF_SC_END = 127,	/**< SAWF service class end. */
+	PPE_DRV_SAWF_SC_END = 128,	/**< SAWF service class end. */
 	PPE_DRV_SAWF_SC_MAX,		/**< Maximum number of SAWF service classes */
 } ppe_drv_sawf_sc_t;
 
