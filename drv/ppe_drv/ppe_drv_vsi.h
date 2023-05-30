@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -63,6 +63,10 @@ struct ppe_drv_vsi {
 	uint8_t index;			/* vsi number */
 	uint8_t type;			/* vsi type */
 };
+
+bool ppe_drv_vlan_del_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_drv_l3_if *src_l3_if);
+bool ppe_drv_vlan_add_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_drv_l3_if *src_l3_if);
+
 
 bool ppe_drv_vsi_set_vlan(struct ppe_drv_vsi *vsi, uint32_t vlan_id, struct ppe_drv_iface *nh_iface);
 bool ppe_drv_vsi_match_vlan(struct ppe_drv_vsi *vsi, uint32_t inner_vlan, uint32_t outer_vlan);

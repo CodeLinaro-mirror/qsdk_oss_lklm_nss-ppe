@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -71,7 +71,8 @@ struct ppe_drv_port {
 	struct ppe_drv_tun_l3_if *tl_l3_if;	/* Tunnel L3 interface corresponding to this port entry */
 	enum ppe_drv_port_type type;		/* Port type */
 	uint32_t flags;				/* Port flags */
-	bool active_l3_if_attached;               /* Port L3_IF attached? */
+	bool ingress_untag_vlan;		/* Ingress VLAN rule for untag packets configured? */
+	bool active_l3_if_attached;		/* Port L3_IF attached? */
 	bool is_fdb_learn_enabled;		/* Port FDB learning enabled */
 	uint16_t mtu;				/* MTU value of port */
 	uint16_t mru;				/* MRU value of port */

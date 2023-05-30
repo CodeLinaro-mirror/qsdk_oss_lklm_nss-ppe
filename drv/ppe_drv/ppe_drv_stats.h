@@ -83,7 +83,9 @@ struct ppe_drv_gen_stats {
 	atomic64_t fail_fqg_full;		/* Create req fail due to flow qos group full */
 	atomic64_t fail_ingress_vlan_add;	/* Ingress vlan translation addition failed */
 	atomic64_t fail_egress_vlan_add;	/* Egress vlan translation addition failed */
-	atomic64_t fail_my_mac_full;			/* Create req fail due to MAC table full */
+	atomic64_t fail_my_mac_full;		/* Create req fail due to MAC table full */
+	atomic64_t fail_ingress_untag_vlan_add;	/* Ingress untag vlan translation addition failed */
+	atomic64_t fail_ingress_untag_vlan_del;	/* Ingress untag vlan translation deletion failed */
 };
 
 /*
