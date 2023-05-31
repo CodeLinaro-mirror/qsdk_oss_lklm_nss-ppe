@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -50,6 +50,8 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_EDIT_REDIR_CORE1,	/* Service code to re-direct packets to core 1 with editing required for regular forwarding */
 	PPE_DRV_SC_EDIT_REDIR_CORE2,	/* Service code to re-direct packets to core 2 with editing required for regular forwarding */
 	PPE_DRV_SC_EDIT_REDIR_CORE3,	/* Service code to re-direct packets to core 3 with editing required for regular forwarding */
+	PPE_DRV_SC_VP_RPS,		/* Service code to allow RPS for special VP flows when use
+r type is DS and core_mask is 0 */
 	PPE_DRV_SC_MAX,			/* Max service code */
 } ppe_drv_sc_t;
 

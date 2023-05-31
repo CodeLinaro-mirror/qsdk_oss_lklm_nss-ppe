@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -123,6 +123,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_create_rfs_fail_invalid_rx_port;	/* No of v4 RFS create failure due to invalid Rx Port */
 	atomic64_t v4_create_rfs_fail_invalid_tx_port;	/* No of v4 RFS create failure due to invalid Tx Port */
 	atomic64_t v4_create_rfs_noedit_flow;		/* No of v4 request for non edit rfs mode */
+	atomic64_t v4_create_offload_disabled;		/* No of v4 request where offload is disabled */
 
 	atomic64_t v6_create_req;		/* No of v6 create requests */
 	atomic64_t v6_create_fail;		/* No of v6 create failure */
@@ -154,6 +155,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_rfs_fail_invalid_rx_port;	/* No of v6 RFS create failure due to invalid Rx Port */
 	atomic64_t v6_create_rfs_fail_invalid_tx_port;	/* No of v6 RFS create failure due to invalid Tx Port */
 	atomic64_t v6_create_rfs_noedit_flow;		/* No of v6 request for non edit rfs mode */
+	atomic64_t v6_create_offload_disabled;		/* No of v6 request where offload is disabled */
 };
 
 /*

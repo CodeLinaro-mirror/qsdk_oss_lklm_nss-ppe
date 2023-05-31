@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -209,6 +209,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_TUN_ADD_CE_NULL,			/**< Add connection entry callback is NULL */
 	PPE_DRV_RET_INVALID_EIP_SERVICE,		/**< Invalid inline EIP service */
 	PPE_DRV_RET_FAILURE_DUMMY_RULE,			/**< Failed to push rule to PPE for passive VP */
+	PPE_DRV_RET_PORT_NO_OFFLOAD,			/**< Offload is disabled on the PPE port */
 } ppe_drv_ret_t;
 
 /**

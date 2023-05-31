@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -355,32 +355,39 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (pp->core_mask) {
-		if (pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
-			}
-		} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			sc = PPE_DRV_CORE2SC_EDIT(next_core);
-			pp->shadow_core_mask &= ~(1 << next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		if (pp->flags & PPE_DRV_PORT_FLAG_DS_RFS_ENABLED) {
+			if (pp->core_mask) {
+				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+				pp->shadow_core_mask &= ~(1 << next_core);
+				sc = PPE_DRV_CORE2SC_EDIT(next_core);
+				if (!pp->shadow_core_mask) {
+					pp->shadow_core_mask = pp->core_mask;
+				}
+			} else {
+				ppe_drv_warn("%p: invalid core mask for DS user type", pcf);
+				return false;
 			}
 		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_EDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	}
 
+	if (sc != PPE_DRV_SC_NONE) {
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
-					pcf, service_code, sc);
-			return false;
-		}
-	} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
-		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
@@ -391,8 +398,20 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	 */
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC)) {
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP);
+			return false;
+		}
+	}
+
+	/*
+	 * SC required when its a bridge flow.
+	 */
+	if ((sc == PPE_DRV_SC_NONE) && ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
@@ -824,32 +843,38 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (pp->core_mask) {
-		if (pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
-			}
-		} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
-			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-			pp->shadow_core_mask &= ~(1 << next_core);
-			sc = PPE_DRV_CORE2SC_EDIT(next_core);
-			if (!pp->shadow_core_mask) {
-				pp->shadow_core_mask = pp->core_mask;
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		if (pp->flags & PPE_DRV_PORT_FLAG_DS_RFS_ENABLED) {
+			if (pp->core_mask) {
+				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+				pp->shadow_core_mask &= ~(1 << next_core);
+				sc = PPE_DRV_CORE2SC_EDIT(next_core);
+				if (!pp->shadow_core_mask) {
+					pp->shadow_core_mask = pp->core_mask;
+				}
+			} else {
+				sc = PPE_DRV_SC_VP_RPS;
 			}
 		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_EDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) && pp->core_mask) {
+		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+		pp->shadow_core_mask &= ~(1 << next_core);
+		sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+		if (!pp->shadow_core_mask) {
+			pp->shadow_core_mask = pp->core_mask;
+		}
+	}
 
+	if (sc != PPE_DRV_SC_NONE) {
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
-					pcf, service_code, sc);
-			return false;
-		}
-	} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
-		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
 					pcf, service_code, sc);
 			return false;
 		}
@@ -860,8 +885,20 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	 */
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_IPSEC)) {
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP)) {
-			ppe_drv_warn("%p: flow requires multiple service codes existing:%u new:%u",
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP);
+			return false;
+		}
+	}
+
+	/*
+	 * SC required when its a bridge flow.
+	 */
+	if ((sc == PPE_DRV_SC_NONE) && ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}

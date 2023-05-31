@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,6 +28,8 @@
 #include <fal/fal_qm.h>
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
+
+uint32_t if_bm_to_offload = PPE_DRV_PORT_OFFLOAD_DEF_VAL;
 
 /*
  * Define the filename to be used for assertions.
@@ -798,6 +800,73 @@ static struct platform_driver ppe_drv_platform = {
 };
 
 /*
+ * ppe_drv_if_bm_to_offload_handler()
+ *	API to configure the interface bitmask where the offload is enabled
+ */
+static int ppe_drv_if_bm_to_offload_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if (if_bm_to_offload > PPE_DRV_PORT_OFFLOAD_MAX_VAL) {
+		ppe_drv_warn("Incorrect value of offload bitmask. Setting it to"
+				" default value. Value: %0x, if_bm_to_offload: %0x\n",
+				if_bm_to_offload, PPE_DRV_PORT_OFFLOAD_MAX_VAL);
+		if_bm_to_offload = PPE_DRV_PORT_OFFLOAD_DEF_VAL;
+	}
+
+	ppe_drv_warn("PPE DRV interface bitmask to offload is %0x\n", if_bm_to_offload);
+	return ret;
+}
+
+/*
+ * ppe_drv_sub
+ *	PPE DRV sub directory
+ */
+static struct ctl_table ppe_drv_sub[] = {
+	{
+		.procname	=	"if_bm_to_offload",
+		.data		=	&if_bm_to_offload,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_if_bm_to_offload_handler
+	},
+	{}
+};
+
+/*
+ * ppe_drv_main
+ *	PPE DRV main directory
+ */
+static struct ctl_table ppe_drv_main[] = {
+	{
+		.procname	=	"ppe_drv",
+		.mode		=	0555,
+		.child		=	ppe_drv_sub,
+	},
+	{}
+};
+
+/*
+ * ppe_drv_root
+ *	PPE DRV root directory
+ */
+static struct ctl_table ppe_drv_root[] = {
+	{
+		.procname	=	"ppe",
+		.mode		=	0555,
+		.child		=	ppe_drv_main,
+	},
+	{}
+};
+
+/*
  * ppe_drv_module_init()
  *	module init for ppe driver
  */
@@ -813,6 +882,16 @@ static int __init ppe_drv_module_init(void)
 		return -EIO;
 	}
 
+	/*
+	 * Register sysctl framework for PPE DRV
+	 */
+	ppe_drv_gbl.ppe_drv_header = register_sysctl_table(ppe_drv_root);
+	if (!ppe_drv_gbl.ppe_drv_header) {
+		ppe_drv_warn("sysctl table configuration failed");
+		platform_driver_unregister(&ppe_drv_platform);
+		return -EINVAL;
+	}
+
 	return 0;
 }
 module_init(ppe_drv_module_init);
@@ -823,6 +902,8 @@ module_init(ppe_drv_module_init);
  */
 static void __exit ppe_drv_module_exit(void)
 {
+	unregister_sysctl_table(ppe_drv_gbl.ppe_drv_header);
+	ppe_drv_gbl.ppe_drv_header = NULL;
 	platform_driver_unregister(&ppe_drv_platform);
 }
 module_exit(ppe_drv_module_exit);

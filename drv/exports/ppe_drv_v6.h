@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -200,7 +200,7 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 
 /**
  * ppe_drv_v6_rfs_destroy
- *	Destroys IPv4 RFS connection rule in PPE.
+ *	Destroys IPv6 RFS connection rule in PPE.
  *
  * @datatypes
  * ppe_drv_v6_rfs_destroy
