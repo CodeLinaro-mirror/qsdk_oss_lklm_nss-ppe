@@ -821,6 +821,55 @@ struct ppe_drv_l3_if *ppe_drv_port_find_pppoe_l3_if(struct ppe_drv_port *pp, uin
 }
 
 /*
+ * ppe_drv_port_is_flow_offload_enabled()
+ *	API to check whether given netdevice is enabled for offload or not
+ */
+bool ppe_drv_port_is_flow_offload_enabled(struct net_device *dev)
+{
+	struct ppe_drv_iface *iface;
+	struct ppe_drv_port *drv_port = NULL;
+
+	if (!dev) {
+		ppe_drv_warn("Net device is NULL\n");
+		return false;
+	}
+
+	iface = ppe_drv_iface_get_by_dev_internal(dev);
+	if (!iface) {
+		ppe_drv_warn("failed in getting iface from netdev (%s)\n",
+					dev->name);
+		return false;
+	}
+
+	drv_port = ppe_drv_iface_port_get(iface);
+	if (!drv_port) {
+		ppe_drv_warn("failed in getting drv port from iface\n");
+		return false;
+	}
+
+	ppe_drv_warn("dev: %s, port: %x, if_bm_to_offload: %x\n",
+				dev->name, drv_port->port, if_bm_to_offload);
+
+	/*
+	 * PPE offload disable feature is supported only on physical ports
+	 */
+	if (!PPE_DRV_PHY_PORT_CHK(drv_port->port)) {
+		ppe_drv_warn("port:%d is not physical\n", drv_port->port);
+		return true;
+	}
+
+	if (if_bm_to_offload & (1 << (drv_port->port - 1))) {
+		ppe_drv_warn("port offload enabled flag is set for %d port\n",
+					drv_port->port);
+		return true;
+	}
+
+	ppe_drv_warn("port offload is disabled for %d port\n", drv_port->port);
+	return false;
+}
+EXPORT_SYMBOL(ppe_drv_port_is_flow_offload_enabled);
+
+/*
  * ppe_drv_port_get_vp_phys_dev()
  * 	Get the net device corresponding to physical port
  * 	on which tunnel is created

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,8 @@
 
 #ifndef _PPE_DRV_PORT_H_
 #define _PPE_DRV_PORT_H_
+
+#include <linux/netdevice.h>
 
 /*
  * PPE port defines
@@ -88,6 +90,20 @@ enum ppe_drv_port_qos_res_pre {
 	PPE_DRV_PORT_QOS_RES_PREC_6,
 	PPE_DRV_PORT_QOS_RES_PREC_7_RESERVED,
 };
+
+/**
+ * ppe_drv_port_is_flow_offload_enabled
+ *	API to check whether given netdevice is enabled for PPE offload or not
+ *
+ * @datatypes
+ * net_device
+ *
+ * @param[in] dev   Netdevice where offload needs to be checked.
+ *
+ * @return
+ * Status of the offload decision
+ */
+bool ppe_drv_port_is_flow_offload_enabled(struct net_device *dev);
 
 /**
  * ppe_drv_port_get_vp_phys_dev

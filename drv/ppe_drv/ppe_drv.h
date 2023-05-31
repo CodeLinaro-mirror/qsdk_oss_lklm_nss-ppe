@@ -175,6 +175,13 @@
  */
 #define PPE_DRV_MIRR_INVAL_PORT 0xF
 
+#define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3f
+#if defined(NSS_PPE_IPQ53XX)
+#define PPE_DRV_PORT_OFFLOAD_DEF_VAL		0x3
+#else
+#define PPE_DRV_PORT_OFFLOAD_DEF_VAL		0x3f
+#endif
+
 /*
  * ppe_drv_entry_valid
  *	PPE entry validity
@@ -235,6 +242,7 @@ struct ppe_drv {
 	struct ppe_drv_cc *cc;				/* Memory for PPE CPU Code table */
 	struct dentry *dentry;				/* Debugfs entry */
 	struct dentry *stats_dentry;				/* Debugfs entry */
+	struct ctl_table_header *ppe_drv_header;	/* PPE DRV sysctl */
 	ppe_drv_v4_sync_callback_t ipv4_stats_sync_cb;		/* Callback to call to sync ipv4 statistics */
 	void *ipv4_stats_sync_data;				/* Argument for above callback: ipv4_stats_sync_cb */
 	ppe_drv_v6_sync_callback_t ipv6_stats_sync_cb;		/* Callback to call to sync ipv6 statistics */
@@ -274,3 +282,4 @@ static inline ppe_drv_tree_id_type_t ppe_drv_tree_id_type_get(struct ppe_drv_flo
 
 void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv ppe_drv_gbl;
+extern uint32_t if_bm_to_offload;

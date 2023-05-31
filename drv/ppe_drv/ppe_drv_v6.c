@@ -988,14 +988,14 @@ static bool ppe_drv_v6_flow_del(struct ppe_drv_v6_conn_flow *pcf)
 		ppe_drv_fill_fse_v6_tuple_info(pcf, &fse_info, false);
 
 		if (p->fse_ops->destroy_fse_rule(&fse_info)) {
-			ppe_drv_stats_inc(&p->stats.comm_stats->v4_destroy_fse_fail);
+			ppe_drv_stats_inc(&p->stats.comm_stats->v6_destroy_fse_fail);
 			ppe_drv_warn("%p: FSE v6 rule deletion failed\n", pcf);
 			return true;
 		}
 
 		ppe_drv_v6_conn_flow_flags_clear(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FSE);
 		kref_put(&p->fse_ops_ref, ppe_drv_fse_ops_free);
-		ppe_drv_stats_inc(&p->stats.comm_stats->v4_destroy_fse_success);
+		ppe_drv_stats_inc(&p->stats.comm_stats->v6_destroy_fse_success);
 		ppe_drv_trace("%p: FSE v6 rule deletion successfull\n", pcf);
 	}
 
@@ -1174,6 +1174,63 @@ flow_add_fail:
 
 	return NULL;
 }
+
+/*
+ * ppe_drv_v6_port_offload_enabled()
+ *	check if the offload is enabled for the rule's port or not
+ */
+static bool ppe_drv_v6_port_offload_enabled(struct ppe_drv_v6_rule_create *create)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *tx_pp = NULL;
+	struct ppe_drv_port *rx_pp = NULL;
+	struct ppe_drv_iface *if_rx, *if_tx;
+
+	if_rx = ppe_drv_iface_get_by_idx(create->conn_rule.rx_if);
+	if (!if_rx) {
+		ppe_drv_warn("%p: No PPE interface corresponding to rx_if: %d", create, create->conn_rule.rx_if);
+		return false;
+	}
+
+	if_tx = ppe_drv_iface_get_by_idx(create->conn_rule.tx_if);
+	if (!if_tx) {
+		ppe_drv_warn("%p: No PPE interface corresponding to tx_if: %d", create, create->conn_rule.tx_if);
+		return false;
+	}
+
+	tx_pp = ppe_drv_iface_port_get(if_tx);
+	if (!tx_pp) {
+		ppe_drv_warn("%p: create failed:%p, invalid TX port", p, create);
+		return false;
+	}
+
+	rx_pp = ppe_drv_iface_port_get(if_rx);
+	if (!rx_pp) {
+		ppe_drv_warn("%p: create failed:%p, invalid RX port", p, create);
+		return false;
+	}
+
+	if ((rx_pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) ||
+			(rx_pp->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		if (!ppe_drv_port_is_flow_offload_enabled(ppe_drv_port_to_dev(tx_pp))) {
+			ppe_drv_warn("%p: offload not enabled for %d port\n",
+					create, tx_pp->port);
+			return false;
+		}
+	}
+
+	if ((tx_pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) ||
+			(tx_pp->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		if (!ppe_drv_port_is_flow_offload_enabled(ppe_drv_port_to_dev(rx_pp))) {
+			ppe_drv_warn("%p: offload not enabled for %d port\n",
+					create, rx_pp->port);
+			return false;
+		}
+	}
+
+	return true;
+}
+
 
 /*
  * ppe_drv_v6_passive_vp_flow()
@@ -1954,6 +2011,16 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 		ppe_drv_stats_inc(&comm_stats->v6_create_rfs_noedit_flow);
 		ppe_drv_warn("%p: v6 Flow needs to be pushed through RFS API(s): %p", p, create);
 		return PPE_DRV_RET_FAILURE_DUMMY_RULE;
+	}
+
+	/*
+	 * Check if the PPE offload is enabled on the rule's ports or not
+	 */
+	if (!ppe_drv_v6_port_offload_enabled(create)) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&comm_stats->v6_create_offload_disabled);
+		ppe_drv_warn("%p: v6 Flow is configured to not offload: %p", p, create);
+		return PPE_DRV_RET_PORT_NO_OFFLOAD;
 	}
 
 	spin_unlock_bh(&p->lock);

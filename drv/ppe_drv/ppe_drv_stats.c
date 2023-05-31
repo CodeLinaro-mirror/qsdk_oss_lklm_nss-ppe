@@ -144,6 +144,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_create_fse_fail",			/* No of v4 Wi-Fi FSE rule create failure */
 	"v4_destroy_fse_success",			/* No of v4 Wi-Fi FSE rule delete failure */
 	"v4_destroy_fse_fail",			/* No of v4 Wi-Fi FSE rule delete failure */
+	"v4_create_offload_disabled",		/* No of v4 rules where offload is disabled */
 
 	"v6_create_req",			/* No of v6 create requests */
 	"v6_create_fail",			/* No of v6 create failure */
@@ -181,6 +182,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
 	"v6_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v6_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
+	"v6_create_offload_disabled",		/* No of v6 rules where offload is disabled */
 };
 
 /*
@@ -227,6 +229,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
 	"v4_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v4_tun_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
+	"v4_create_offload_disabled",		/* No of v4 rules where offload is disabled */
 
 	"v6_tun_create_req",			/* No of v6 create requests */
 	"v6_tun_create_fail",			/* No of v6 create failure */
@@ -264,6 +267,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
 	"v6_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v6_tun_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
+	"v6_create_offload_disabled",		/* No of v6 rules where offload is disabled */
 };
 
 /*

@@ -335,7 +335,8 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_FLUSH_FDB_FAIL,			/**< Failed to flush all FDB */
 	PPE_DRV_RET_SET_MIRROR_ANALYSIS_FAIL,	/**< Failed to set Mirror analysis port */
 	PPE_DRV_RET_GET_MIRROR_ANALYSIS_FAIL,	/**< Failed to get Mirror analysis port */
-	PPE_DRV_RET_GET_MIRROR_ANALYSIS_NO_PORT	/**< No port is set for mirror analysis */
+	PPE_DRV_RET_GET_MIRROR_ANALYSIS_NO_PORT,	/**< No port is set for mirror analysis */
+	PPE_DRV_RET_PORT_NO_OFFLOAD,			/**< Offload is disabled on the PPE port */
 } ppe_drv_ret_t;
 
 /**

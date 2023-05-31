@@ -203,7 +203,7 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 
 /**
  * ppe_drv_v6_rfs_destroy
- *	Destroys IPv4 RFS connection rule in PPE.
+ *	Destroys IPv6 RFS connection rule in PPE.
  *
  * @datatypes
  * ppe_drv_v6_rfs_destroy
