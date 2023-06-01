@@ -141,7 +141,7 @@ struct ppe_drv_v4_conn_sync {
  */
 struct ppe_drv_v4_conn_sync_many {
         uint16_t count;					/* How many conn_sync included in this sync callback */
-        struct ppe_drv_v4_conn_sync conn_sync[];	/* Connection sync array */
+        struct ppe_drv_v4_conn_sync *conn_sync;		/* Connection sync array */
 };
 
 /**
