@@ -421,7 +421,8 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 		/*
 		 * In case of DS mode, rearrange the MSDUQ representation in wifi qos field to be aligned with TCL descriptor.
 		 */
-		if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		if (!ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID) &&
+				(pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
 			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos);
 		}
 
@@ -1013,7 +1014,8 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
 		/*
 		 * In case of DS mode, rearrange the MSDUQ representation in wifi qos field to be aligned with TCL descriptor.
 		 */
-		if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		if (!ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID) &&
+				(pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
 			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos);
 		}
 
