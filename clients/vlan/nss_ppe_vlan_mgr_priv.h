@@ -80,6 +80,7 @@ struct nss_ppe_vlan_mgr_context {
 	struct list_head list;			/* List of vlan private instance */
 	spinlock_t lock;			/* Lock to protect vlan private instance */
 	struct ctl_table_header *sys_hdr;	/* "/pro/sys/nss/vlan_client" directory */
+	nss_ppe_vlan_mgr_br_vlan_cb_t vlan_over_bridge_cb;	/* CB to update bridge manager */
 };
 
 /*
@@ -111,5 +112,7 @@ struct nss_vlan_pvt {
 	struct ppe_drv_vlan_xlate_info xlate_info;
 						/* XLATE info */
 	struct kref ref;			/* Reference count */
+	struct net_device *br_net_dev;		/* base dev of bridge VLAN netdev*/
+	bool is_vlan_over_bridge;		/* VLAN interface is created over bridge */
 };
 #endif

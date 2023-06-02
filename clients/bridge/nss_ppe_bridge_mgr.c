@@ -185,6 +185,48 @@ fail:
 }
 
 /*
+ * nss_ppe_bridge_mgr_bridge_vlan_interfaces_get()
+ *	Return the number of VLAN over bridge interfaces present in the bridge
+ */
+static int nss_ppe_bridge_mgr_bridge_vlan_interfaces_get(struct nss_ppe_bridge_mgr_pvt *b_pvt)
+{
+	nss_ppe_bridge_mgr_trace("%px: bridge %s bridge_vlan_iface_cnt %lld\n", b_pvt, b_pvt->dev->name,
+				 atomic64_read(&b_pvt->bridge_vlan_iface_cnt));
+	return atomic64_read(&b_pvt->bridge_vlan_iface_cnt);
+}
+
+/*
+ * nss_ppe_bridge_mgr_vlan_over_bridge_notfication()
+ *	API for incrementing and decrementing the number of VLAN over bridge interfaces present in the bridge
+ */
+bool nss_ppe_bridge_mgr_vlan_over_bridge_notfication(struct net_device *bridge_dev,
+						     enum NSS_PPE_VLAN_MGR_BR_VLAN br_action)
+{
+	struct nss_ppe_bridge_mgr_pvt *b_pvt;
+	bool ret = true;
+
+	b_pvt = nss_ppe_bridge_mgr_find_instance(bridge_dev);
+	if (!b_pvt) {
+		nss_ppe_bridge_mgr_warn("%px: b_pvt not found for bridge %s\n", b_pvt, bridge_dev->name);
+		ret = false;
+		return ret;
+	}
+
+	if (br_action == NSS_PPE_VLAN_MGR_BR_VLAN_INC) {
+		atomic64_inc(&b_pvt->bridge_vlan_iface_cnt);
+	} else if (br_action == NSS_PPE_VLAN_MGR_BR_VLAN_DEC) {
+		atomic64_dec(&b_pvt->bridge_vlan_iface_cnt);
+	} else {
+		ret = false;
+		nss_ppe_bridge_mgr_warn("Invalid action %d in bridge %s\n", br_action, bridge_dev->name);
+	}
+
+	nss_ppe_bridge_mgr_trace("Bridge %s action %d bridge_vlan_iface_cnt %lld\n", bridge_dev->name, br_action,
+				 atomic64_read(&b_pvt->bridge_vlan_iface_cnt));
+	return ret;
+}
+
+/*
  * nss_ppe_bridge_mgr_ppe_leave_br()
  *	Leave net_device from the bridge.
  */
@@ -310,6 +352,12 @@ static int nss_ppe_bridge_mgr_bond_master_join(struct net_device *bond_master,
 
 	ASSERT_RTNL();
 
+	if (nss_ppe_bridge_mgr_bridge_vlan_interfaces_get(b_pvt)) {
+		nss_ppe_bridge_mgr_warn("Bond interface %s not allowed to be added in VLAN over bridge "
+				"%s", bond_master->name, b_pvt->dev->name);
+		return NOTIFY_DONE;
+	}
+
 	/*
 	 * Join each of the bonded slaves to the VSI group
 	 */
@@ -421,6 +469,12 @@ static int nss_ppe_bridge_mgr_bond_master_leave(struct net_device *bond_master,
 	bond = netdev_priv(bond_master);
 
 	nss_ppe_bridge_mgr_assert(b_pvt->bond_slave_num == 0);
+
+	if (nss_ppe_bridge_mgr_bridge_vlan_interfaces_get(b_pvt)) {
+		nss_ppe_bridge_mgr_warn("Bond interface %s not allowed to be leave in VLAN over bridge case "
+					"%s", bond_master->name, b_pvt->dev->name);
+		return NOTIFY_DONE;
+	}
 
 	ret = ppe_drv_br_leave(b_pvt->iface, bond_master);
 	if (ret != PPE_DRV_RET_SUCCESS) {
@@ -1017,6 +1071,7 @@ int nss_ppe_bridge_mgr_leave_bridge(struct net_device *dev, struct nss_ppe_bridg
 	struct net_device *real_dev;
 	ppe_drv_ret_t ret;
 	struct ppe_drv_iface *iface;
+	enum NSS_PPE_VLAN_MGR_INGRESS_BR_VLAN_RULE rule_action = NSS_PPE_VLAN_MGR_INGRESS_BR_VLAN_RULE_DEL;
 
 	if (!is_vlan_dev(dev)) {
 
@@ -1024,6 +1079,12 @@ int nss_ppe_bridge_mgr_leave_bridge(struct net_device *dev, struct nss_ppe_bridg
 		if (!iface) {
 			nss_ppe_bridge_mgr_warn("%px: failed to find PPE interface\n", dev);
 			return -EPERM;
+		}
+
+		if (nss_ppe_bridge_mgr_bridge_vlan_interfaces_get(b_pvt)) {
+			if (nss_ppe_vlan_mgr_config_bridge_vlan_ingress_rule(iface, b_pvt->dev, rule_action)) {
+				nss_ppe_bridge_mgr_warn("Ingress xlate rule delete failed for %s\n", dev->name);
+			}
 		}
 
 		/*
@@ -1048,6 +1109,20 @@ int nss_ppe_bridge_mgr_leave_bridge(struct net_device *dev, struct nss_ppe_bridg
 		return 0;
 	}
 
+	/*
+	 * Post creating bridge VLAN netdev (br-wan1.100), with below sequence ingress rule is not removed for eth4.10
+	 * 1) Create eth4.10 - Ingress rule is created is created in eth4 with CVID as 10
+	 * 2) Add eth4.10 in the bridge (br-wan1) using brctl cmd
+	 * 3) Delete eth4.10 from the bridge (br-wan1)
+	 * 4) Delete eth4.10 - Ingres rule is not removed
+	 * In #4,nss_ppe_vlan_mgr_join_bridge invokes add xlate rule API
+	 * Hence, returning here to avoid creation of rule
+	 */
+	if (nss_ppe_bridge_mgr_bridge_vlan_interfaces_get(b_pvt)) {
+		nss_ppe_bridge_mgr_warn("VLAN interface is created over bridge(%s) and so, removing VLAN interface(%s)"
+					"from bridge in PPE is not required", b_pvt->dev->name, dev->name);
+		return -EINVAL;
+	}
 	/*
 	 * Find real_dev associated with the VLAN.
 	 */
@@ -1130,6 +1205,7 @@ int nss_ppe_bridge_mgr_join_bridge(struct net_device *dev, struct nss_ppe_bridge
 	ppe_drv_ret_t ret;
 	struct net_device *real_dev;
 	struct ppe_drv_iface *iface;
+	enum NSS_PPE_VLAN_MGR_INGRESS_BR_VLAN_RULE rule_action = NSS_PPE_VLAN_MGR_INGRESS_BR_VLAN_RULE_ADD;
 
 	/*
 	 * If device is VLAN, we need get real_dev.
@@ -1141,6 +1217,12 @@ int nss_ppe_bridge_mgr_join_bridge(struct net_device *dev, struct nss_ppe_bridge
 		if (!iface) {
 			nss_ppe_bridge_mgr_warn("%px: failed to find PPE interface\n", dev);
 			return -EPERM;
+		}
+
+		if (nss_ppe_bridge_mgr_bridge_vlan_interfaces_get(b_pvt)) {
+			if (nss_ppe_vlan_mgr_config_bridge_vlan_ingress_rule(iface, b_pvt->dev, rule_action)) {
+				nss_ppe_bridge_mgr_warn("Ingress xlate rule add failed for %s\n", dev->name);
+			}
 		}
 
 		/*
@@ -1164,6 +1246,16 @@ int nss_ppe_bridge_mgr_join_bridge(struct net_device *dev, struct nss_ppe_bridge
 		return 0;
 	}
 
+	/*
+	 * When a VLAN interface is already created over bridge (br-wan1.100), we are not allowing any VLAN interfaces
+	 * associated with slaves which are part of parent bridge
+	 */
+
+	if (nss_ppe_bridge_mgr_bridge_vlan_interfaces_get(b_pvt)) {
+		nss_ppe_bridge_mgr_warn("VLAN interface is created over bridge(%s) and so, adding VLAN interface(%s)"
+					"in the bridge is not supported", b_pvt->dev->name, dev->name);
+		return -EINVAL;
+	}
 	/*
 	 * Find real_dev associated with the VLAN
 	 */
@@ -1317,6 +1409,7 @@ static void __exit nss_ppe_bridge_mgr_exit_module(void)
 #if defined(NSS_PPE_BRIDGE_MGR_OVS_ENABLE)
 	nss_ppe_bridge_mgr_ovs_exit();
 #endif
+	nss_ppe_vlan_mgr_vlan_over_bridge_unregister_cb();
 }
 
 /*
@@ -1346,7 +1439,7 @@ static int __init nss_ppe_bridge_mgr_init_module(void)
 #if defined(NSS_PPE_BRIDGE_MGR_OVS_ENABLE)
 	nss_ppe_bridge_mgr_ovs_init();
 #endif
-
+	nss_ppe_vlan_mgr_vlan_over_bridge_register_cb(nss_ppe_bridge_mgr_vlan_over_bridge_notfication);
 	return 0;
 }
 
