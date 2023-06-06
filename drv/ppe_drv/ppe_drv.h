@@ -274,6 +274,8 @@ struct ppe_drv {
 	bool tun_toggled_v4;		        /* Tunnel specific Toggled bit for v4 sync during a particular iteration*/
 	bool tun_toggled_v6;		        /* Tunnel specific Toggled bit for v6 sync during a particular iteration*/
 	struct list_head notifier_list_head;	/* List of event notifier operations in PPE */
+	struct ppe_drv_tun_prgm_prsr *pgm;	/* Program Parser entries list */
+	struct ppe_drv_tun_udf *pgm_udf;	/* Program Parser udf entries list */
 };
 
 /*
