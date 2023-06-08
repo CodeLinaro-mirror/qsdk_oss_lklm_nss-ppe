@@ -233,6 +233,34 @@ ppe_drv_ret_t ppe_drv_v6_rfs_destroy(struct ppe_drv_v6_rule_destroy *destroy);
 ppe_drv_ret_t ppe_drv_v6_rfs_create(struct ppe_drv_v6_rule_create *create);
 
 /**
+ * ppe_drv_v6_policer_flow_create
+ *	Creates IPv6 policer rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v6_policer_create
+ *
+ * @param[in] create   Pointer to the NSS PPE IPv6 create rule message.
+ *
+ * @return
+ * Status of the create operation.
+ */
+ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *create);
+
+/**
+ * ppe_drv_v6_policer_flow_destroy
+ *	Destroy IPv6 policer rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v6_policer_destroy
+ *
+ * @param[in] destroy   Pointer to the NSS PPE IPv6 destroy rule message.
+ *
+ * @return
+ * Status of the destroy operation.
+ */
+ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *destroy);
+
+/**
  * ppe_drv_v6_destroy
  *	Destroys IPv6 connection rule in PPE.
  *

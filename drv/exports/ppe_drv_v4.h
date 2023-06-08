@@ -204,6 +204,34 @@ void ppe_drv_v4_conn_sync_many(struct ppe_drv_v4_conn_sync_many *cn_syn, uint8_t
 ppe_drv_ret_t ppe_drv_v4_rfs_destroy(struct ppe_drv_v4_rule_destroy *destroy);
 
 /**
+ * ppe_drv_v4_policer_create
+ *	Creates IPv4 policer rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v4_policer_create
+ *
+ * @param[in] create   Pointer to the NSS PPE IPv4 create rule message.
+ *
+ * @return
+ * Status of the create operation.
+ */
+ppe_drv_ret_t ppe_drv_v4_policer_flow_create(struct ppe_drv_v4_rule_create *create);
+
+/**
+ * ppe_drv_v4_policer_destroy
+ *	Destroy IPv4 policer rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v4_policer_destroy
+ *
+ * @param[in] destroy   Pointer to the NSS PPE IPv4 destroy rule message.
+ *
+ * @return
+ * Status of the destroy operation.
+ */
+ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *destroy);
+
+/**
  * ppe_drv_v4_rfs_create
  *	Creates IPv4 RFS rule in PPE.
  *

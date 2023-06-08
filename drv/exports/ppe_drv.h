@@ -246,6 +246,7 @@ typedef enum ppe_drv_acl_policer_rule_type {
  */
 struct ppe_drv_acl_policer_rule {
 	ppe_drv_acl_policer_rule_t type;	/**< Whether ACL or Policer rule? */
+	bool pkt_noedit;			/**< Is packet edit required. */
 	union {
 		struct {
 			uint8_t flags;			/**< Valid flag. */
@@ -316,6 +317,9 @@ struct ppe_drv_notifier_ops {
  */
 typedef enum ppe_drv_ret {
 	PPE_DRV_RET_SUCCESS = 0,			/**< Success */
+	PPE_DRV_POLICER_CREATE_FAIL,			/**< Create Fail */
+	PPE_DRV_POLICER_DESTROY_FAIL,			/**< Destroy Fail */
+	PPE_DRV_POLICER_DESTROY_SUCCESS,		/**< Destroy success */
 	PPE_DRV_RET_IFACE_INVALID,			/**< Failure due to Invalid PPE interface */
 	PPE_DRV_RET_FAILURE_NOT_SUPPORTED,		/**< Failure due to unsupported feature */
 	PPE_DRV_RET_FAILURE_NO_RESOURCE,		/**< Failure due to out of resource */

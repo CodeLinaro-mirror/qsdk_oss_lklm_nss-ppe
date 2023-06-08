@@ -56,6 +56,10 @@
 
 #define PPE_DRV_V4_CONN_FLAG_FLOW_ACL_VALID 0x00004000
 					/* Flow + ACL combination match */
+#define PPE_DRV_V4_CONN_FLAG_FLOW_POLICER_VALID 0x00008000
+					/* Flow + Policer combination match */
+#define PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST 0x0010000
+					/* Flow + Policer Assist */
 
 /*
  * ppe_drv_v4_addr_equal()
@@ -133,6 +137,8 @@ struct ppe_drv_v4_conn_flow {
 	 */
 	ppe_drv_sc_t acl_sc;
 	uint16_t acl_id;
+	uint16_t policer_hw_id;		/* HW policer index */
+	uint16_t policer_id;		/* User policer index */
 
 	/*
 	 * Statistics for this flow entry
@@ -723,7 +729,7 @@ static inline void ppe_drv_v4_conn_flow_in_l3_if_set(struct ppe_drv_v4_conn_flow
  */
 static inline bool ppe_drv_v4_conn_flow_flags_check(struct ppe_drv_v4_conn_flow *pcf, uint32_t flags)
 {
-        return (pcf->flags & flags);
+	return (pcf->flags & flags);
 }
 
 /*

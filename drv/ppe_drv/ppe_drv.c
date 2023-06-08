@@ -650,6 +650,12 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
+	p->pol_ctx = ppe_drv_policer_entries_alloc();
+	if (!p->pol_ctx) {
+		ppe_drv_warn("%p: failed to allocate global policer context", p);
+		goto fail;
+	}
+
 	/*
 	 * Take a reference
 	 */
@@ -697,6 +703,11 @@ fail:
 	if (p->ptun_l3_if) {
 		ppe_drv_tun_l3_if_entries_free(p->ptun_l3_if);
 		p->ptun_l3_if = NULL;
+	}
+
+	if (p->pol_ctx) {
+		ppe_drv_policer_entries_free(p->pol_ctx);
+		p->pol_ctx = NULL;
 	}
 
 	if (p->acl) {
@@ -860,6 +871,11 @@ static int ppe_drv_remove(struct platform_device *pdev)
 	if (p->acl) {
 		ppe_drv_acl_entries_free(p->acl);
 		p->acl = NULL;
+	}
+
+	if (p->pol_ctx) {
+		ppe_drv_policer_entries_free(p->pol_ctx);
+		p->pol_ctx = NULL;
 	}
 
 	ppe_drv_tun_vxlan_deconfigure(p);

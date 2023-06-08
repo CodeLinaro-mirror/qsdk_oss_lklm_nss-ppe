@@ -51,7 +51,8 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_DS = 0x4,
 	PPE_DRV_PORT_FLAG_MAX = 0x8,
 	PPE_DRV_PORT_RFS_ENABLED = 0x10,
-	PPE_DRV_PORT_FLAG_WIFI_DEV = 0x20
+	PPE_DRV_PORT_FLAG_WIFI_DEV = 0x20,
+	PPE_DRV_PORT_POLICER_ENABLED = 0x40,
 } ppe_drv_port_flag_t;
 
 /*

@@ -432,6 +432,22 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 	return true;
 }
 
+#ifdef NSS_PPE_IPQ53XX
+/*
+ * ppe_drv_flow_v6_policer_get()
+ *	Find the Policer get associated with a flow
+ */
+static bool ppe_drv_flow_v6_policer_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *policer_index, a_bool_t *policer_valid)
+{
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_POLICER_VALID)) {
+		*policer_index = pcf->policer_hw_id;
+		*policer_valid = true;
+	}
+
+	return true;
+}
+#endif
+
 /*
  * ppe_drv_flow_v6_service_code_get()
  *	Return service code required for this flow.
@@ -445,7 +461,14 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+	if ((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_POLICER_VALID) ||
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID)) && (pcf->acl_sc != PPE_DRV_SC_NONE)) {
+		if (!ppe_drv_sc_check_and_set(&service_code, pcf->acl_sc)) {
+			ppe_drv_warn("%p: Policer service codes set problem:%u new:%u",
+					pcf, service_code, pcf->acl_sc);
+			return false;
+		}
+	} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
 		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID)) {
 			if (pp->core_mask) {
 				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
@@ -674,6 +697,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	flow_cfg.flow_qos.wifi_qos_en = wifi_qos_en;
 
 #ifdef NSS_PPE_IPQ53XX
+	if (!ppe_drv_flow_v6_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
+		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
+		return NULL;
+	}
+
 	/*
 	 * Get the Source interface index.
 	 */
@@ -706,7 +734,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	/*
 	 * Set forwarding type
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_ASSIST)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
+		flow_cfg.fwd_type = ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) ?
+					FAL_FLOW_BRIDGE: FAL_FLOW_ROUTE;
+		ppe_drv_trace("%p: Policer enabled flow\n", pcf);
+	} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_ASSIST)) {
 		flow_cfg.fwd_type = ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) ?
 				    FAL_FLOW_BRIDGE: FAL_FLOW_ROUTE;
 		ppe_drv_trace("%p: RFS enabled flow\n", pcf);
@@ -1025,6 +1057,22 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
 	return true;
 }
 
+#ifdef NSS_PPE_IPQ53XX
+/*
+ * ppe_drv_flow_v4_policer_get()
+ *	Find the Policer get associated with a flow
+ */
+static bool ppe_drv_flow_v4_policer_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *policer_index, a_bool_t *policer_valid)
+{
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_POLICER_VALID)) {
+		*policer_index = pcf->policer_hw_id;
+		*policer_valid = true;
+	}
+
+	return true;
+}
+#endif
+
 /*
  * ppe_drv_flow_v4_service_code_get()
  *	Return service code required for this flow.
@@ -1038,7 +1086,14 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+	if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_POLICER_VALID) ||
+		ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_ACL_VALID)) && (pcf->acl_sc != PPE_DRV_SC_NONE)) {
+		if (!ppe_drv_sc_check_and_set(&service_code, pcf->acl_sc)) {
+			ppe_drv_warn("%p: Policer service codes set problem:%u new:%u",
+					pcf, service_code, pcf->acl_sc);
+			return false;
+		}
+	} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
 		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID)) {
 			if (pp->core_mask) {
 				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
@@ -1307,6 +1362,11 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	flow_cfg.flow_qos.wifi_qos_en = wifi_qos_en;
 
 #ifdef NSS_PPE_IPQ53XX
+	if (!ppe_drv_flow_v4_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
+		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
+		return NULL;
+	}
+
 	/*
 	 * Get the Source interface index.
 	 */
@@ -1339,7 +1399,11 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	/*
 	 * Set forwarding type
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
+		flow_cfg.fwd_type = ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) ?
+				    FAL_FLOW_BRIDGE: FAL_FLOW_ROUTE;
+		ppe_drv_trace("%p: Policer enabled flow\n", pcf);
+	} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST)) {
 		flow_cfg.fwd_type = ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) ?
 				    FAL_FLOW_BRIDGE: FAL_FLOW_ROUTE;
 		ppe_drv_trace("%p: RFS enabled flow\n", pcf);

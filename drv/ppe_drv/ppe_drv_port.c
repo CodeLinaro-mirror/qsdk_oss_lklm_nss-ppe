@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -1125,6 +1125,80 @@ bool ppe_drv_port_check_rfs_support(struct net_device *dev)
 }
 EXPORT_SYMBOL(ppe_drv_port_check_rfs_support);
 
+/*
+ * ppe_drv_port_clear_policer_support()
+ *	Clear policer support
+ */
+void ppe_drv_port_clear_policer_support(struct net_device *dev)
+{
+	struct ppe_drv_port *pp = NULL;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_dev(dev);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p unable to find valid ppe port for given dev: %s\n", dev, dev->name);
+		return;
+	}
+
+	pp->flags &= ~PPE_DRV_PORT_POLICER_ENABLED;
+	spin_unlock_bh(&p->lock);
+	ppe_drv_trace("%p Clear policer flag for given dev: %s\n", p, dev->name);
+	return;
+}
+EXPORT_SYMBOL(ppe_drv_port_clear_policer_support);
+
+/*
+ * ppe_drv_port_set_policer_support()
+ *	set policer support
+ */
+void ppe_drv_port_set_policer_support(struct net_device *dev)
+{
+	struct ppe_drv_port *pp = NULL;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_dev(dev);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p unable to find valid ppe port for given dev: %s\n", dev, dev->name);
+		return;
+	}
+
+	pp->flags |= PPE_DRV_PORT_POLICER_ENABLED;
+	spin_unlock_bh(&p->lock);
+	ppe_drv_trace("%p Set policer flag for given dev: %s\n", p, dev->name);
+	return;
+}
+EXPORT_SYMBOL(ppe_drv_port_set_policer_support);
+
+/*
+ * ppe_drv_port_check_policer_support()
+ *	check policer support
+ *
+ * TODO: Enhance framework to do Virtual port based policing using L2_VP_TBL
+ */
+bool ppe_drv_port_check_policer_support(struct net_device *dev)
+{
+	struct ppe_drv_port *pp = NULL;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	bool policer_en = false;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_dev(dev);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p unable to find valid ppe port for given dev: %s\n", dev, dev->name);
+		return false;
+	}
+
+	policer_en = !!(pp->flags & PPE_DRV_PORT_POLICER_ENABLED);
+	spin_unlock_bh(&p->lock);
+	ppe_drv_trace("%p policer status for given dev: %s is %d\n", p, dev->name, policer_en);
+	return policer_en;
+}
+EXPORT_SYMBOL(ppe_drv_port_check_policer_support);
 
 /*
  * ppe_drv_port_is_physical()

@@ -24,6 +24,7 @@ qca-nss-ppe-objs += ppe_drv_iface.o
 qca-nss-ppe-objs += ppe_drv_lag.o
 qca-nss-ppe-objs += ppe_drv_l3_if.o
 qca-nss-ppe-objs += ppe_drv_nexthop.o
+qca-nss-ppe-objs += ppe_drv_policer.o
 qca-nss-ppe-objs += ppe_drv_port.o
 qca-nss-ppe-objs += ppe_drv_pppoe.o
 qca-nss-ppe-objs += ppe_drv_pppoe_session.o

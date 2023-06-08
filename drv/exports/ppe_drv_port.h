@@ -171,6 +171,37 @@ bool ppe_drv_port_xcpn_mode_set(uint16_t vp_num, uint8_t action);
 bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_stats);
 
 /*
+ * ppe_drv_port_clear_policer_support
+ *	Clear Policer enabled on Port.
+ *
+ * @param[in] dev  Netdevie.
+ *
+ * @return
+ */
+void ppe_drv_port_clear_policer_support(struct net_device *dev);
+
+/*
+ * ppe_drv_port_set_policer_support
+ *	Set Policer enabled on Port.
+ *
+ * @param[in] dev  Netdevie.
+ *
+ * @return
+ */
+void ppe_drv_port_set_policer_support(struct net_device *dev);
+
+/*
+ * ppe_drv_port_check_policer_support
+ *	Is Policer enabled on Port.
+ *
+ * @param[in] dev  Netdevie.
+ *
+ * @return
+ * True or False.
+ */
+bool ppe_drv_port_check_policer_support(struct net_device *dev);
+
+/*
  * ppe_drv_port_check_rfs_support
  *	Is RFS enabled on Port.
  *

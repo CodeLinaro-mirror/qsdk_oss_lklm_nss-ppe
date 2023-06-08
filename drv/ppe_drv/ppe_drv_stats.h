@@ -220,6 +220,23 @@ struct ppe_drv_stats_acl {
 };
 
 /*
+ * ppe_drv_stats_policer
+ *	Message structure for policer stats.
+ */
+struct ppe_drv_stats_policer {
+	atomic64_t fail_acl_policer_full;			/* Policer table full */
+	atomic64_t fail_port_policer_full;			/* Policer table full */
+	atomic64_t fail_hw_port_policer_destroy_cfg;	/* Fail to reset port policer config */
+	atomic64_t fail_hw_acl_policer_destroy_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t fail_hw_port_policer_create_cfg;	/* Fail to reset port policer config */
+	atomic64_t fail_hw_acl_policer_create_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t success_hw_port_policer_destroy_cfg;	/* Fail to reset port policer config */
+	atomic64_t success_hw_acl_policer_destroy_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t success_hw_port_policer_create_cfg;	/* Fail to reset port policer config */
+	atomic64_t success_hw_acl_policer_create_cfg;	/* Fail to reset ACL policer config */
+};
+
+/*
  * ppe_drv_stats
  *	Message structure for ppe stats
  */
@@ -229,6 +246,7 @@ struct ppe_drv_stats {
 	struct ppe_drv_stats_sc	sc_stats[PPE_DRV_SC_CNT_MAX];		/* Per service-code stats */
 	struct ppe_drv_stats_sawf_sc sawf_sc_stats[PPE_DRV_SAWF_SC_MAX];	/* Per service-class stats */
 	struct ppe_drv_stats_acl acl_stats;
+	struct ppe_drv_stats_policer policer_stats;
 };
 
 /*

@@ -271,7 +271,6 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_rfs_fail_invalid_rx_port",	/* No of v6 RFS create failure due to invalid Rx Port */
 	"v6_tun_create_rfs_fail_invalid_tx_port",	/* No of v6 RFS create failure due to invalid Tx Port */
 	"v6_tun_create_rfs_noedit_rule",	/* No of v6 rfs non edit rule create */
-
 	"v6_tun_create_fse_success",			/* No of v6 Wi-Fi FSE rule create failure */
 	"v6_tun_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
 	"v6_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
@@ -297,6 +296,23 @@ static const char *ppe_drv_stats_acl_str[] = {
 	"rule_bind_fail",	/* ACL rule bind failures */
 	"rule_delete_fail",	/* ACL rule delete failures */
 	"list_delete_fail",	/* ACL list delete failures */
+};
+
+/*
+ * ppe_drv_stats_policer_str
+ *	PPE DRV policer statistics
+ */
+static const char *ppe_drv_stats_policer_str[] = {
+	"fail_acl_policer_full",			/* Policer table full */
+	"fail_port_policer_full",			/* Policer table full */
+	"fail_hw_port_policer_free_cfg",		/* Fail to reset port policer config */
+	"fail_hw_acl_policer_free_cfg",			/* Fail to reset ACL policer config */
+	"fail_hw_port_policer_create_cfg",		/* Fail to reset port policer config */
+	"fail_hw_acl_policer_create_cfg",		/* Fail to reset ACL policer config */
+	"success_hw_port_policer_free_cfg",		/* Fail to reset port policer config */
+	"success_hw_acl_policer_free_cfg",		/* Fail to reset ACL policer config */
+	"success_hw_port_policer_create_cfg",		/* Fail to reset port policer config */
+	"success_hw_acl_policer_create_cfg",		/* Fail to reset ACL policer config */
 };
 
 /*
@@ -326,6 +342,36 @@ static int ppe_drv_stats_acl_show(struct seq_file *m, void __attribute__((unused
 	}
 
 	kfree(acl_stats);
+	return 0;
+};
+
+/*
+ * ppe_drv_stats_policer_show()
+ *	Read ppe acl statistics
+ */
+static int ppe_drv_stats_policer_show(struct seq_file *m, void __attribute__((unused))*ptr)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint64_t *stats_shadow, *policer_stats;
+	int i;
+
+	policer_stats = kzalloc(sizeof(struct ppe_drv_stats_policer), GFP_KERNEL);
+	if (!policer_stats) {
+		ppe_drv_warn("%p: failed to allocate acl stats buffer\n", p);
+		return -ENOMEM;
+	}
+
+	spin_lock_bh(&p->lock);
+	memcpy(policer_stats, &p->stats.policer_stats, sizeof(struct ppe_drv_stats_policer));
+	spin_unlock_bh(&p->lock);
+
+	seq_puts(m, "\nPPE ACL stats:\n\n");
+	stats_shadow = policer_stats;
+	for (i = 0; i < sizeof(struct ppe_drv_stats_policer) / sizeof(uint64_t); i++) {
+		seq_printf(m, "\t\t [%s]:  %llu\n", ppe_drv_stats_policer_str[i], stats_shadow[i]);
+	}
+
+	kfree(policer_stats);
 	return 0;
 };
 
@@ -497,6 +543,26 @@ const struct file_operations ppe_drv_stats_acl_file_ops = {
 };
 
 /*
+ * ppe_drv_stats_policer_open()
+ *	PPE Policer stats open callback API
+ */
+static int ppe_drv_stats_policer_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ppe_drv_stats_policer_show, inode->i_private);
+}
+
+/*
+ * ppe_drv_stats_policer_file_ops
+ *	File operations for Policer stats
+ */
+const struct file_operations ppe_drv_stats_policer_file_ops = {
+	.open = ppe_drv_stats_policer_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+/*
  * ppe_drv_conn_stats_sawf_sc_open()
  *	PPE drv conn open callback API
  */
@@ -601,6 +667,12 @@ int ppe_drv_stats_debugfs_init(void)
 	if (!debugfs_create_file("acl_stats", S_IRUGO, p->stats_dentry,
 			NULL, &ppe_drv_stats_acl_file_ops)) {
 		ppe_drv_warn("%p: Unable to create acl_stats file entry in debugfs\n", p);
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("policer_stats", S_IRUGO, p->stats_dentry,
+			NULL, &ppe_drv_stats_policer_file_ops)) {
+		ppe_drv_warn("%p: Unable to create policer_stats file entry in debugfs\n", p);
 		goto debugfs_dir_failed;
 	}
 

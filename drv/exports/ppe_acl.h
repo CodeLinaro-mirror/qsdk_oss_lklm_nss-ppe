@@ -500,6 +500,7 @@ struct ppe_acl_rule_flow_policer {
 	 */
 	uint16_t hw_policer_idx;			/**< Policer index to be used for flow + policer combination. */
 	ppe_acl_rule_id_t rule_id;			/**< ACL rule ID associated with flow + policer. */
+	bool pkt_noedit;				/**< Indication if policing is required in packet non-edit mode */
 
 	/*
 	 * Response

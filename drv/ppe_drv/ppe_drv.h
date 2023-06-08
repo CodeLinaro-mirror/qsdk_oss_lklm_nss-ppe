@@ -26,6 +26,7 @@
 #include "ppe_drv_iface.h"
 #include "ppe_drv_l3_if.h"
 #include "ppe_drv_nexthop.h"
+#include "ppe_drv_policer.h"
 #include "ppe_drv_port.h"
 #include "ppe_drv_pppoe.h"
 #include "ppe_drv_pub_ip.h"
@@ -233,6 +234,7 @@ struct ppe_drv {
 	struct ppe_drv_l3_if *l3_if;			/* Memory for PPE L3_IF shadow table */
 	struct ppe_drv_pppoe *pppoe;			/* Memory for PPE PPPoe table */
 	struct ppe_drv_queue *queue;			/* Memory for PPE queue table */
+	struct ppe_drv_policer_ctx *pol_ctx;		/* Policer global context */
 	struct ppe_drv_tun_encap *ptun_ec;	/* PPE EG tunnel/translate control entries */
 	struct ppe_drv_tun_decap *ptun_dc;	/* PPE tunnel decap control entries */
 	struct ppe_drv_tun_l3_if *ptun_l3_if;	/* PPE tunnel L3 interface info */
