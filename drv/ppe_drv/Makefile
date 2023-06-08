@@ -12,6 +12,7 @@ endif
 
 obj-m += qca-nss-ppe.o
 qca-nss-ppe-objs := ppe_drv.o
+qca-nss-ppe-objs += ppe_drv_acl.o
 qca-nss-ppe-objs += ppe_drv_br.o
 qca-nss-ppe-objs += ppe_drv_cc.o
 qca-nss-ppe-objs += ppe_drv_dp.o

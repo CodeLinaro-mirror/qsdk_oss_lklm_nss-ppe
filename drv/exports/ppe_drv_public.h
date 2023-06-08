@@ -23,6 +23,7 @@
  */
 
 #include "ppe_drv.h"
+#include "ppe_drv_acl.h"
 #include "ppe_drv_br.h"
 #include "ppe_drv_cc.h"
 #include "ppe_drv_dp.h"

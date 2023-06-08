@@ -50,6 +50,9 @@
 #endif
 #define PPE_DRV_V6_CONN_FLAG_FLOW_IGMAC_VALID 0x00000800
 
+#define PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID 0x00001000
+					/* Flow + ACL combination match */
+
 /*
  * ppe_drv_v6_conn_flow
  *	Structure for individual flow direction
@@ -110,6 +113,13 @@ struct ppe_drv_v6_conn_flow {
 	 */
 	struct ppe_drv_iface *in_port_if;
 	struct ppe_drv_iface *in_l3_if;
+
+	/*
+	 * Flow + ACL info
+	 */
+	ppe_drv_sc_t acl_sc;
+	uint16_t acl_id;
+
 
 	/*
 	 * Statistics for this flow entry

@@ -72,6 +72,8 @@
 #define PPE_DRV_V6_VALID_FLAG_QOS		0x0008  /**< QoS fields are valid. */
 #define PPE_DRV_V6_VALID_FLAG_DSCP_MARKING	0x0010  /**< DSCP fields are valid. */
 #define PPE_DRV_V6_VALID_FLAG_SAWF		0x0020  /**< SAWF fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_ACL_POLICER	0x0040  /**< ACL/Policer fields are valid. */
+
 
 #define PPE_DRV_V6_MAX_CONN_COUNT               1024
 
@@ -118,6 +120,7 @@ struct ppe_drv_v6_rule_create {
 	struct ppe_drv_vlan_rule vlan_rule;		/**< VLAN-related acceleration parameters. */
 	struct ppe_drv_top_if_rule top_rule;		/**< Parameters related to the top interface in hierarchy. */
 	struct ppe_drv_service_class_rule sawf_rule;    /**< Service class related information. */
+	struct ppe_drv_acl_policer_rule ap_rule;	/**< ACL/Policer rule ID information. */
 };
 
 /**

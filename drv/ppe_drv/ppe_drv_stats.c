@@ -146,6 +146,9 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_destroy_fse_fail",			/* No of v4 Wi-Fi FSE rule delete failure */
 	"v4_create_offload_disabled",		/* No of v4 rules where offload is disabled */
 
+	"v4_create_fail_acl",		/* No of v4 create failure due to ACL linking */
+	"v4_destroy_fail_acl",		/* No of v4 delete failure due to ACL unlinking */
+
 	"v6_create_req",			/* No of v6 create requests */
 	"v6_create_fail",			/* No of v6 create failure */
 	"v6_destroy_req",			/* No of v6 delete requests */
@@ -183,6 +186,9 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v6_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v6_create_offload_disabled",		/* No of v6 rules where offload is disabled */
+
+	"v6_create_fail_acl",		/* No of v6 create failure due to ACL linking */
+	"v6_destroy_fail_acl",		/* No of v6 delete failure due to ACL unlinking */
 };
 
 /*
@@ -231,6 +237,9 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v4_create_offload_disabled",		/* No of v4 rules where offload is disabled */
 
+	"v4_tun_create_fail_acl",		/* No of v4 create failure due to ACL linking */
+	"v4_tun_destroy_fail_acl",		/* No of v4 delete failure due to ACL unlinking */
+
 	"v6_tun_create_req",			/* No of v6 create requests */
 	"v6_tun_create_fail",			/* No of v6 create failure */
 	"v6_tun_destroy_req",			/* No of v6 delete requests */
@@ -268,6 +277,56 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v6_tun_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v6_create_offload_disabled",		/* No of v6 rules where offload is disabled */
+
+	"v6_tun_create_fail_acl",		/* No of v6 create failure due to ACL linking */
+	"v6_tun_destroy_fail_acl",		/* No of v6 delete failure due to ACL unlinking */
+};
+
+/*
+ * ppe_drv_stats_acl_str
+ *	PPE DRV ACL statistics
+ */
+static const char *ppe_drv_stats_acl_str[] = {
+	"active_rules",		/* Number of active rules */
+	"req_slices",		/* Number of request ACL slices */
+	"total_slices",		/* Number of total ACL slices used */
+	"list_id_full",		/* ACL list ID full */
+	"list_create_fail",	/* ACL list create failures */
+	"configure_fail",	/* ACL rule configure failures */
+	"rule_add_fail",	/* ACL rule add failures */
+	"rule_bind_fail",	/* ACL rule bind failures */
+	"rule_delete_fail",	/* ACL rule delete failures */
+	"list_delete_fail",	/* ACL list delete failures */
+};
+
+/*
+ * ppe_drv_stats_acl_show()
+ *	Read ppe acl statistics
+ */
+static int ppe_drv_stats_acl_show(struct seq_file *m, void __attribute__((unused))*ptr)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint64_t *stats_shadow, *acl_stats;
+	int i;
+
+	acl_stats = kzalloc(sizeof(struct ppe_drv_stats_acl), GFP_KERNEL);
+	if (!acl_stats) {
+		ppe_drv_warn("%p: failed to allocate acl stats buffer\n", p);
+		return -ENOMEM;
+	}
+
+	spin_lock_bh(&p->lock);
+	memcpy(acl_stats, &p->stats.acl_stats, sizeof(struct ppe_drv_stats_acl));
+	spin_unlock_bh(&p->lock);
+
+	seq_puts(m, "\nPPE ACL stats:\n\n");
+	stats_shadow = acl_stats;
+	for (i = 0; i < sizeof(struct ppe_drv_stats_acl) / sizeof(uint64_t); i++) {
+		seq_printf(m, "\t\t [%s]:  %llu\n", ppe_drv_stats_acl_str[i], stats_shadow[i]);
+	}
+
+	kfree(acl_stats);
+	return 0;
 };
 
 /*
@@ -418,6 +477,26 @@ static int ppe_drv_conn_stats_show(struct seq_file *m, void __attribute__((unuse
 }
 
 /*
+ * ppe_drv_stats_acl_open()
+ *	PPE ACL stats open callback API
+ */
+static int ppe_drv_stats_acl_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ppe_drv_stats_acl_show, inode->i_private);
+}
+
+/*
+ * ppe_drv_stats_acl_file_ops
+ *	File operations for ACL stats
+ */
+const struct file_operations ppe_drv_stats_acl_file_ops = {
+	.open = ppe_drv_stats_acl_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+/*
  * ppe_drv_conn_stats_sawf_sc_open()
  *	PPE drv conn open callback API
  */
@@ -516,6 +595,12 @@ int ppe_drv_stats_debugfs_init(void)
 	if (!debugfs_create_file("sawf_sc_stats", S_IRUGO, p->stats_dentry,
 			NULL, &ppe_drv_conn_stats_sawf_sc_file_ops)) {
 		ppe_drv_warn("%p: Unable to create sawf_sc_stats file entry in debugfs\n", p);
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("acl_stats", S_IRUGO, p->stats_dentry,
+			NULL, &ppe_drv_stats_acl_file_ops)) {
+		ppe_drv_warn("%p: Unable to create acl_stats file entry in debugfs\n", p);
 		goto debugfs_dir_failed;
 	}
 

@@ -26,6 +26,13 @@ struct ppe_drv;
 struct ppe_drv_nsm_stats;
 
 /*
+ * FLOW ACL rule service code range.
+ */
+#define PPE_DRV_SC_FLOW_ACL_MAX 128
+#define PPE_DRV_SC_FLOW_ACL_START 128
+#define PPE_DRV_SC_FLOW_ACL_END (PPE_DRV_SC_FLOW_ACL_START + PPE_DRV_SC_FLOW_ACL_MAX - 1)
+
+/*
  * ppe_drv_sc_type
  *	Service code types
  */
@@ -52,6 +59,10 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_EDIT_REDIR_CORE2,	/* Service code to re-direct packets to core 2 with editing required for regular forwarding */
 	PPE_DRV_SC_EDIT_REDIR_CORE3,	/* Service code to re-direct packets to core 3 with editing required for regular forwarding */
 	PPE_DRV_SC_VP_RPS,		/* Service code to allow RPS for special VP flows when user type is DS and core_mask is 0 */
+	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
+					/* First service code for combining flow and ACL rule */
+	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,
+					/* Last service code for combining flow and ACL rule */
 	PPE_DRV_SC_MAX = 256,		/* Max service code */
 } ppe_drv_sc_t;
 

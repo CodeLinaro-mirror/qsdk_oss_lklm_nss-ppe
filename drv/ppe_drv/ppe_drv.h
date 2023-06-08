@@ -18,6 +18,7 @@
 #include <ppe_drv_public.h>
 #include <ppe_drv_tun_cmn_ctx.h>
 #include <ppe_drv_tun_public.h>
+#include "ppe_drv_acl.h"
 #include "ppe_drv_exception.h"
 #include "ppe_drv_cc.h"
 #include "ppe_drv_flow.h"
@@ -240,6 +241,7 @@ struct ppe_drv {
 	struct ppe_drv_tun_decap_xlate_rule *decap_xlate_rules; 	/* PPE Tunnel decap xlate rules */
 	struct ppe_drv_sc *sc;				/* Memory for PPE Service Code table */
 	struct ppe_drv_cc *cc;				/* Memory for PPE CPU Code table */
+	struct ppe_drv_acl *acl;			/* Memory for PPE ACL entries */
 	struct dentry *dentry;				/* Debugfs entry */
 	struct dentry *stats_dentry;				/* Debugfs entry */
 	struct ctl_table_header *ppe_drv_header;	/* PPE DRV sysctl */

@@ -19,6 +19,106 @@
 #include "tun/ppe_drv_tun_v6.h"
 
 /*
+ * ppe_drv_v6_bind_acl_policer()
+ *	Map ACL/POLICER ID to service code.
+ */
+static bool ppe_drv_v6_bind_acl_policer(struct ppe_drv_v6_rule_create *create, struct ppe_drv_v6_conn *cn)
+{
+	struct ppe_drv_acl_policer_rule *ap_rule = &create->ap_rule;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+	struct ppe_drv_acl_flow_bind info = {0};
+	struct ppe_drv_comm_stats *comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_FLOW];
+
+	if (!(create->valid_flags & PPE_DRV_V6_VALID_FLAG_ACL_POLICER) || !acl->flow_add_cb) {
+		return true;
+	}
+
+	switch (ap_rule->type) {
+		case PPE_DRV_RULE_TYPE_FLOW_ACL:
+			if (ap_rule->rule_id.acl.flags & PPE_DRV_VALID_FLAG_FLOW_ACL) {
+				info.id = ap_rule->rule_id.acl.flow_acl_id;
+				if (!acl->flow_add_cb(acl->flow_app_data, &info)) {
+					ppe_drv_warn("%p: invalid rule_id or no valid sc found for rule_id: %d",
+							p, info.id);
+					ppe_drv_stats_inc(&comm_stats->v6_create_fail_acl);
+					return false;
+				}
+
+				cn->pcf.acl_sc = info.sc;
+				cn->pcf.acl_id = info.id;
+				ppe_drv_v6_conn_flow_flags_set(&cn->pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID);
+				ppe_drv_info("%p: using sc: %d for rule_id: %d", p, info.sc, info.id);
+			}
+
+			if (ap_rule->rule_id.acl.flags & PPE_DRV_VALID_FLAG_RETURN_ACL) {
+				info.id = ap_rule->rule_id.acl.return_acl_id;
+				if (!acl->flow_add_cb(acl->flow_app_data, &info)) {
+					ppe_drv_warn("%p: invalid rule_id or no valid sc found for rule_id: %d",
+							p, info.id);
+					ppe_drv_stats_inc(&comm_stats->v6_create_fail_acl);
+					return false;
+				}
+
+				cn->pcr.acl_sc = info.sc;
+				cn->pcr.acl_id = info.id;
+				ppe_drv_v6_conn_flow_flags_set(&cn->pcr, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID);
+				ppe_drv_info("%p: using sc: %d for rule_id: %d", p, info.sc, info.id);
+			}
+
+			break;
+
+		case PPE_DRV_RULE_TYPE_FLOW_POLICER:
+			/*
+			 * TODO: handle this
+			 */
+			break;
+	}
+
+	return true;
+}
+
+/*
+ * ppe_drv_v6_unbind_acl()
+ *	Unbind ACL ID from service code.
+ */
+static bool ppe_drv_v6_unbind_acl(struct ppe_drv_v6_conn *cn)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+	struct ppe_drv_acl_flow_bind info = {0};
+	struct ppe_drv_comm_stats *comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_FLOW];
+
+	if (ppe_drv_v6_conn_flow_flags_check(&cn->pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID)) {
+		info.id = cn->pcf.acl_id;
+		if (!acl->flow_del_cb(acl->flow_app_data, &info)) {
+			ppe_drv_warn("%p: no valid rule found for rule_id: %d", p, info.id);
+			ppe_drv_stats_inc(&comm_stats->v6_destroy_fail_acl);
+			return false;
+		}
+
+		cn->pcf.acl_sc = 0;
+		ppe_drv_v6_conn_flow_flags_clear(&cn->pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID);
+		ppe_drv_info("%p: unlinking flow from ACL rule_id: %d", p, info.id);
+	}
+
+	if (ppe_drv_v6_conn_flow_flags_check(&cn->pcr, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID)) {
+		info.id = cn->pcr.acl_id;
+		if (!acl->flow_del_cb(acl->flow_app_data, &info)) {
+			ppe_drv_warn("%p: no valid rule found for rule_id: %d", p, info.id);
+			ppe_drv_stats_inc(&comm_stats->v6_destroy_fail_acl);
+			return false;
+		}
+
+		cn->pcr.acl_sc = 0;
+		ppe_drv_v6_conn_flow_flags_clear(&cn->pcr, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID);
+		ppe_drv_info("%p: Unlinking flow from ACL rule_id: %d", p, info.id);
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_fill_fse_v6_tuple_info()
  *	Fill FSE v6 tuple information
  */
@@ -1755,6 +1855,13 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy)
 
 	spin_unlock_bh(&p->lock);
 
+	/*
+	 * Check if this flow is combined with ACL for n-tuple lookup.
+	 */
+	if (!ppe_drv_v6_unbind_acl(cn)) {
+		ppe_drv_warn("%p: failed to unlink with ACL, destroy object: %p", p, destroy);
+	}
+
 	if (cns) {
 		ppe_drv_v6_conn_stats_sync_invoke_cb(cns);
 		ppe_drv_v6_conn_stats_free(cns);
@@ -2056,6 +2163,15 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 		ppe_drv_stats_inc(&comm_stats->v6_create_fail_mem);
 		ppe_drv_warn("%p: failed to allocate connection memory: %p", p, create);
 		return PPE_DRV_RET_FAILURE_CREATE_OOM;
+	}
+
+	/*
+	 * Check if this flow is combined with ACL for n-tuple lookup.
+	 */
+	if (!ppe_drv_v6_bind_acl_policer(create, cn)) {
+		ppe_drv_warn("%p: failed to combine with ACL, connection object: %p", p, create);
+		ret = PPE_DRV_RET_ACL_RULE_BIND_FAIL;
+		goto fail;
 	}
 
 	/*
