@@ -18,6 +18,7 @@
 #include <linux/netdevice.h>
 #include <ppe_drv_public.h>
 #include <ppe_drv_acl.h>
+#include "../ppe_policer/ppe_policer.h"
 #include "ppe_acl.h"
 
 /*
@@ -1305,17 +1306,13 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 	}
 
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_POLICER_EN) {
-		/*
-		 *
-		 * TODO enable this with policer patch.
-		 *
-		 * acl_action->policer_index = ppe_policer_id_to_hwidx(r_action->policer_id);
-		 * if (acl_action->policer_index < 0) {
-		 * 	ppe_acl_warn("%p: no valid hw policer index for id: %d",
-		 * 	r_action, r_action->policer_id);
-		 * 	return false;
-		 * }
-		 */
+		acl_action->policer_index = ppe_policer_id_to_hwidx(r_action->policer_id);
+		if (acl_action->policer_index < 0) {
+			ppe_acl_warn("%p: no valid hw policer index for id: %d",
+				r_action, r_action->policer_id);
+			return false;
+		}
+
 		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_POLICER_INDEX;
 	}
 
@@ -2059,6 +2056,11 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	 */
 	info.action.policer_index = rule->hw_policer_idx;
 	info.action.flags |= PPE_DRV_ACL_ACTION_FLAG_POLICER_INDEX;
+
+	if (rule->pkt_noedit) {
+		info.action.flags |= PPE_DRV_ACL_ACTION_FLAG_SC;
+		info.action.service_code = PPE_DRV_SC_NOEDIT_ACL_POLICER;
+	}
 
 	if (ppe_drv_acl_configure(ctx, &info) != PPE_DRV_RET_SUCCESS) {
 		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_config);
