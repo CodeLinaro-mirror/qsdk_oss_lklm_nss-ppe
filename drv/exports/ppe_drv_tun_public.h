@@ -109,4 +109,28 @@ bool ppe_drv_tun_decap_disable_by_port_num(uint16_t port_num);
  * Success or failure.
  */
 bool ppe_drv_tun_decap_enable_by_port_num(uint16_t port_num);
+
+/*
+ * ppe_drv_tun_l2tp_port_set
+ *      Set L2TP source and destination port.
+ *
+ * @param[in] sport Source port value
+ * @param[in] dport Destination port value
+ *
+ * @return
+ * Success or failure.
+ */
+bool ppe_drv_tun_l2tp_port_set(uint16_t sport, uint16_t dport);
+
+/*
+ * ppe_drv_tun_l2tp_port_get
+ *      Get l2tp source and destination port configured.
+ *
+ * @param[in] sport Pointer to store source port
+ * @param[in] dport Pointer to store destination port
+ *
+ * @return
+ * Success or failure.
+ */
+bool ppe_drv_tun_l2tp_port_get(uint16_t *sport, uint16_t *dport);
 #endif /* _PPE_DRV_TUN_PUBLIC_H_ */

@@ -47,6 +47,7 @@ qca-nss-ppe-objs += tun/ppe_drv_tun_decap_map.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_decap_xlate_rule.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_encap.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_encap_xlate_rule.o
+qca-nss-ppe-objs += tun/ppe_drv_tun_l2tp.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_l3_if.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_prgm_prsr.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_prgm_prsr_gre.o

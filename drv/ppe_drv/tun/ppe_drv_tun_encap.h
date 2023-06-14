@@ -32,6 +32,14 @@
 #define PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP	7
 
 /*
+ * L2TP tunnel definitions
+ */
+#define PPE_DRV_TUN_ENCAP_L2TP_TUN_OFFSET	42
+#define PPE_DRV_TUN_ENCAP_L2TP_SRC_START	0
+#define PPE_DRV_TUN_ENCAP_L2TP_SRC_WIDTH	8
+#define PPE_DRV_TUN_ENCAP_L2TP_DEST_POS		48
+
+/*
  * ppe_drv_tun_encap
  *	EG tunnel control table information
  */
@@ -44,9 +52,29 @@ struct ppe_drv_tun_encap {
 	uint8_t tun_len;		/* Tunnel header length */
 	uint8_t l3_offset;		/* Tunnel L3 offset */
 	uint8_t l4_offset;		/* Tunnel L4 offset */
-	uint8_t rule_id;		/* EG edit rule index for MAP-T */
+	uint8_t rule_id;		/* EG edit rule index for MAP-T/L2TP */
 	uint8_t l4_offset_valid;	/* is L4 offset valid in header */
 };
+
+/*
+ * ppe_drv_tun_encap_ppp_hdr
+ * 	ppp header structure
+ */
+struct ppe_drv_tun_encap_ppp_hdr {
+	uint8_t address;	/* address feild */
+	uint8_t control;	/* Control feild */
+	uint16_t protocol;	/* Protocol value */
+}__attribute__((packed));
+
+/*
+ * ppe_drv_tun_encap_l2tp_hdr
+ * 	l2tp header structure
+ */
+struct ppe_drv_tun_encap_l2tp_hdr {
+	uint16_t flags;		/* Type flags */
+	uint16_t tunnel_id;	/* tunnel id */
+	uint16_t session_id;	/* Session id */
+}__attribute__((packed));
 
 /*
  * ppe_drv_tun_encap_hdr_ctrl
@@ -133,4 +161,5 @@ void ppe_drv_tun_encap_hdr_ctrl_free(struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl
 bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctrl);
 bool ppe_drv_tun_encap_hdr_ctrl_reset(uint8_t flags);
 bool ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
+bool ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
 #endif /* _PPE_DRV_TUN_ENCAP_H_ */

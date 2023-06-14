@@ -1591,6 +1591,7 @@ bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, v
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun *ptun = NULL;
 	uint16_t decap_hwidx = PPE_DRV_TUN_DECAP_INVALID_IDX;
+	uint8_t rule_id;
 
 	struct ppe_drv_port *pp = ppe_drv_port_from_port_num(port_num);
 	if (!pp) {
@@ -1664,7 +1665,35 @@ bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, v
 		goto err_exit;
 	}
 
+	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
+		/*
+		 * Alloc encap EG table entry for L2TP
+		 */
+		ptun->ptecxr = ppe_drv_tun_encap_xlate_rule_alloc(p);
+		if (!ptun->ptecxr) {
+			ppe_drv_warn("%p: couldn't get encap rule entry index", ptun);
+			goto err_exit;
+		}
+
+		rule_id = ppe_drv_tun_encap_xlate_rule_get_index(ptun->ptecxr);
+		ppe_drv_tun_encap_set_rule_id(ptun->ptec, rule_id);
+
+		/*
+		 * encap header control configuration for L2TP
+		 * protomap[1] and protomap[3] are used for ipv4 protocol
+		 * and ipv6 protocol update in PPP header
+		 */
+		if (!ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(p, ptun)) {
+			ppe_drv_warn("%p L2TP: failed to configure encap header control", p);
+			goto err_exit;
+		}
+	}
+
 	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN) {
+		/*
+		 * encap header control configuration for VXLAN.
+		 * UDP source port value is updated with a random value
+		 */
 		if (!ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(p, ptun)) {
 			ppe_drv_warn("%p VXLAN: failed to configure encap header control", p);
 			goto err_exit;
@@ -1732,7 +1761,6 @@ bool ppe_drv_tun_global_init(struct ppe_drv *p)
 	 * VxLAN IPv4/6 key configuration
 	 */
 	ptdkcfg.key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_DPORT_EN);
-	ptdkcfg.tunnel_info_mask = FAL_TUNNEL_DECAP_TUNNEL_INFO_MASK;
 	tunnel_type = FAL_TUNNEL_TYPE_VXLAN_OVER_IPV4;
 	err = fal_tunnel_decap_key_set(PPE_DRV_SWITCH_ID, tunnel_type, &ptdkcfg);
 	if (err != SW_OK) {

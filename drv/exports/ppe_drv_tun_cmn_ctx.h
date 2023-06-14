@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -57,6 +57,7 @@ enum ppe_drv_tun_cmn_ctx_type {
 	PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN,		/**< PPE Tunnel header type VxLAN >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6,		/**< PPE Tunnel header type DSLite/MAP-E >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_MAPT,		/**< PPE Tunnel header type MAP-T >*/
+	PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2,	/**< PPE Tunnel header type L2TP-V2 >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_MAX
 };
 
@@ -154,6 +155,19 @@ struct ppe_drv_tun_cmn_ctx_mapt {
 };
 
 /*
+ * ppe_drv_tun_cmn_ctx_l2tp
+ * 	L2TP header parameters
+ */
+struct ppe_drv_tun_cmn_ctx_l2tp {
+	uint16_t sport;			/**< Source Port >*/
+	uint16_t dport;			/**< Destination Port >*/
+	uint32_t tunnel_id;		/**< Tunnel ID >*/
+	uint32_t peer_tunnel_id;	/**< Peer Tunnel ID >*/
+	uint32_t session_id;		/**< Session ID >*/
+	uint32_t peer_session_id;	/**< Peer Session ID >*/
+};
+
+/*
  * ppe_drv_tun_cmn_ctx
  *	PPE tunnel header parameters
  */
@@ -164,6 +178,7 @@ struct ppe_drv_tun_cmn_ctx {
 		struct ppe_drv_tun_cmn_ctx_gretap gre;	/**< GRE tunnel configuration >*/
 		struct ppe_drv_tun_cmn_ctx_vxlan vxlan;	/**< VxLAN tunnel configuration >*/
 		struct ppe_drv_tun_cmn_ctx_mapt mapt;	/**< Map-T tunnel configuration >*/
+		struct ppe_drv_tun_cmn_ctx_l2tp l2tp;	/**< L2TP tunnel configuration >*/
 	} tun;
 	enum ppe_drv_tun_cmn_ctx_type type;
 };

@@ -186,6 +186,12 @@
 #endif
 
 /*
+ * L2TP Tunnel default UDP Port
+ */
+#define PPE_DRV_L2TP_DEFAULT_UDP_PORT	1701
+
+
+/*
  * ppe_drv_entry_valid
  *	PPE entry validity
  */
@@ -277,6 +283,8 @@ struct ppe_drv {
 	struct ppe_drv_tun_prgm_prsr *pgm;	/* Program Parser entries list */
 	struct ppe_drv_tun_udf *pgm_udf;	/* Program Parser udf entries list */
 	struct ppe_drv_tun_encap_hdr_ctrl *ecap_hdr_ctrl;	/* header control protomap data */
+	uint16_t l2tp_sport;				/* L2TP Source port */
+	uint16_t l2tp_dport;				/* L2TP Destination port */
 };
 
 /*

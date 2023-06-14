@@ -2157,7 +2157,7 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	/*
 	 * PPE accelearation is only supported for default port currently.
 	 */
-	if (ppe_drv_tun_check_support(destroy->tuple.protocol) || destroy->tuple.flow_ident == IANA_VXLAN_UDP_PORT || destroy->tuple.return_ident == IANA_VXLAN_UDP_PORT) {
+	if (ppe_drv_v4_tun_allow_tunnel_destroy(destroy)) {
 		comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
 		ppe_drv_stats_inc(&comm_stats->v4_destroy_req);
 		ret = ppe_drv_v4_tun_del_ce_notify(destroy);
