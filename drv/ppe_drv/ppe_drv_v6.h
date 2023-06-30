@@ -52,6 +52,8 @@
 					/* source interface check */
 #endif
 #define PPE_DRV_V6_CONN_FLAG_FLOW_IGMAC_VALID 0x00000800
+#define PPE_DRV_V6_CONN_FLAG_FLOW_OFFLOAD_DISABLED 0x00001000
+					/* Flow has the PPE offload disabled */
 
 #define PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID 0x00001000
 					/* Flow + ACL combination match */

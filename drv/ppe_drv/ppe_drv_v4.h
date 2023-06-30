@@ -56,6 +56,8 @@
 #endif
 #define PPE_DRV_V4_CONN_FLAG_FLOW_IGMAC_VALID 0x00002000
 					/* Flow has ingress mac configured */
+#define PPE_DRV_V4_CONN_FLAG_FLOW_OFFLOAD_DISABLED 0x00004000
+					/* Flow has PPE offload disabled */
 
 #define PPE_DRV_V4_CONN_FLAG_FLOW_ACL_VALID 0x00004000
 					/* Flow + ACL combination match */

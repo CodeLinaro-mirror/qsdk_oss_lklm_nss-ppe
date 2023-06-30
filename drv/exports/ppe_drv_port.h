@@ -92,20 +92,6 @@ enum ppe_drv_port_qos_res_pre {
 };
 
 /**
- * ppe_drv_port_is_flow_offload_enabled
- *	API to check whether given netdevice is enabled for PPE offload or not
- *
- * @datatypes
- * net_device
- *
- * @param[in] dev   Netdevice where offload needs to be checked.
- *
- * @return
- * Status of the offload decision
- */
-bool ppe_drv_port_is_flow_offload_enabled(struct net_device *dev);
-
-/**
  * ppe_drv_port_get_vp_phys_dev
  *	Get physical dev attached to VP.
  *

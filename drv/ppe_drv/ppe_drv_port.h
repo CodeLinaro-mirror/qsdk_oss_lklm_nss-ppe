@@ -53,6 +53,7 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_RFS_ENABLED = 0x10,
 	PPE_DRV_PORT_FLAG_WIFI_DEV = 0x20,
 	PPE_DRV_PORT_POLICER_ENABLED = 0x40,
+	PPE_DRV_PORT_FLAG_OFFLOAD_ENABLED = 0x80,
 } ppe_drv_port_flag_t;
 
 /*
@@ -138,6 +139,8 @@ void ppe_drv_port_tl_l3_if_attach(struct ppe_drv_port *pp, struct ppe_drv_tun_l3
 
 void  ppe_drv_port_tun_set(struct ppe_drv_port *pp, struct ppe_drv_tun *ptun);
 struct ppe_drv_tun *ppe_drv_port_tun_get(struct ppe_drv_port *pp);
+bool ppe_drv_port_check_flow_offload_enabled(struct ppe_drv_port *drv_port);
+bool ppe_drv_is_wlan_vp_port_type(uint8_t user_type);
 
 /*
  * ppe_drv_port_flags_check()

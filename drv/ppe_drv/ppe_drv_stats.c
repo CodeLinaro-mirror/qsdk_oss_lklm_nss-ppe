@@ -147,6 +147,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_destroy_fse_success",			/* No of v4 Wi-Fi FSE rule delete failure */
 	"v4_destroy_fse_fail",			/* No of v4 Wi-Fi FSE rule delete failure */
 	"v4_create_offload_disabled",		/* No of v4 rules where offload is disabled */
+	"v4_create_fail_offload_disabled",	/* No of v4 create failure due to offload disable */
 
 	"v4_create_fail_acl",		/* No of v4 create failure due to ACL linking */
 	"v4_destroy_fail_acl",		/* No of v4 delete failure due to ACL unlinking */
@@ -191,6 +192,8 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 
 	"v6_create_fail_acl",		/* No of v6 create failure due to ACL linking */
 	"v6_destroy_fail_acl",		/* No of v6 delete failure due to ACL unlinking */
+
+	"v6_create_fail_offload_disabled",	/* No of v6 create failure due to offload disable */
 };
 
 /*
@@ -238,6 +241,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v4_tun_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v4_create_offload_disabled",		/* No of v4 rules where offload is disabled */
+	"v4_create_fail_offload_disabled",	/* No of v4 create failure due to offload disable */
 
 	"v4_tun_create_fail_acl",		/* No of v4 create failure due to ACL linking */
 	"v4_tun_destroy_fail_acl",		/* No of v4 delete failure due to ACL unlinking */
@@ -281,6 +285,8 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 
 	"v6_tun_create_fail_acl",		/* No of v6 create failure due to ACL linking */
 	"v6_tun_destroy_fail_acl",		/* No of v6 delete failure due to ACL unlinking */
+
+	"v6_create_fail_offload_disabled",	/* No of v6 create failure due to offload disable */
 };
 
 /*

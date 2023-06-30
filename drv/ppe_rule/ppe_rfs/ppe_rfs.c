@@ -84,6 +84,8 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 	bool rx_rfs_enabled = false;
 	ppe_drv_ret_t ret;
 	struct net_device *top_rule_rx_dev, *top_rule_tx_dev;
+	ppe_drv_iface_t top_rx_if, rx_if;
+	ppe_drv_iface_t top_tx_if, tx_if;
 
 	ppe_rfs_stats_inc(&p->stats.v6_create_ppe_rule_rfs);
 
@@ -94,7 +96,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	pd6rc.conn_rule.rx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
+	rx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
 	rx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
 
@@ -105,7 +107,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	pd6rc.conn_rule.tx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
+	tx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
 	tx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
 
@@ -116,7 +118,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	pd6rc.top_rule.rx_if = ppe_drv_iface_idx_get_by_dev(top_rule_rx_dev);
+	top_rx_if = ppe_drv_iface_idx_get_by_dev(top_rule_rx_dev);
 	dev_put(top_rule_rx_dev);
 
 	top_rule_tx_dev = dev_get_by_index(&init_net, create_ipv6->conn_rule.return_top_interface_num);
@@ -126,7 +128,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	pd6rc.top_rule.tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
+	top_tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
 	dev_put(top_rule_tx_dev);
 
 	if (tx_rfs_enabled && rx_rfs_enabled) {
@@ -152,6 +154,15 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		pd6rc.tuple.return_ident = create_ipv6->tuple.return_ident;
 		pd6rc.tuple.protocol = create_ipv6->tuple.protocol;
 		pd6rc.conn_rule.flow_mtu = create_ipv6->conn_rule.return_mtu;
+
+		/*
+		 * Fill from and to interface for this direction.
+		 */
+		pd6rc.conn_rule.rx_if = rx_if;
+		pd6rc.top_rule.rx_if = top_rx_if;
+		pd6rc.conn_rule.tx_if = tx_if;
+		pd6rc.top_rule.tx_if = top_tx_if;
+
 	} else if (rx_rfs_enabled) {
 		memcpy(pd6rc.tuple.flow_ip, create_ipv6->tuple.return_ip, sizeof(create_ipv6->tuple.return_ip));
 		pd6rc.tuple.flow_ident = create_ipv6->tuple.return_ident;
@@ -159,6 +170,14 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		pd6rc.tuple.return_ident = create_ipv6->tuple.flow_ident;
 		pd6rc.tuple.protocol = create_ipv6->tuple.protocol;
 		pd6rc.conn_rule.flow_mtu = create_ipv6->conn_rule.flow_mtu;
+
+		/*
+		 * Fill from and to interface for this direction.
+		 */
+		pd6rc.conn_rule.rx_if = tx_if;
+		pd6rc.top_rule.rx_if = top_tx_if;
+		pd6rc.conn_rule.tx_if = rx_if;
+		pd6rc.top_rule.tx_if = top_rx_if;
 	}
 
 	pd6rc.rule_flags |= PPE_DRV_V6_RULE_FLAG_FLOW_VALID;
@@ -229,6 +248,8 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 	bool rx_rfs_enabled = false;
 	ppe_drv_ret_t ret;
 	struct net_device *top_rule_rx_dev, *top_rule_tx_dev;
+	ppe_drv_iface_t top_rx_if, rx_if;
+	ppe_drv_iface_t top_tx_if, tx_if;
 
 	ppe_rfs_stats_inc(&p->stats.v4_create_ppe_rule_rfs);
 
@@ -239,7 +260,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	pd4rc.conn_rule.rx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
+	rx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
 	rx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
 
@@ -250,7 +271,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	pd4rc.conn_rule.tx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
+	tx_if = ppe_drv_iface_idx_get_by_dev(ppe_dev);
 	tx_rfs_enabled = ppe_drv_port_check_rfs_support(ppe_dev);
 	dev_put(ppe_dev);
 
@@ -267,7 +288,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	pd4rc.top_rule.rx_if = ppe_drv_iface_idx_get_by_dev(top_rule_rx_dev);
+	top_rx_if = ppe_drv_iface_idx_get_by_dev(top_rule_rx_dev);
 	dev_put(top_rule_rx_dev);
 
 	top_rule_tx_dev = dev_get_by_index(&init_net, create_ipv4->conn_rule.return_top_interface_num);
@@ -277,7 +298,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	pd4rc.top_rule.tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
+	top_tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
 	dev_put(top_rule_tx_dev);
 
 	if (!tx_rfs_enabled && !rx_rfs_enabled) {
@@ -302,6 +323,14 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		pd4rc.conn_rule.flow_ident_xlate =  pd4rc.tuple.flow_ident;
 		pd4rc.conn_rule.return_ip_xlate =  pd4rc.tuple.return_ip;
 		pd4rc.conn_rule.return_ident_xlate =  pd4rc.tuple.return_ident;
+
+		/*
+		 * Fill from and to interface for this direction.
+		 */
+		pd4rc.conn_rule.rx_if = rx_if;
+		pd4rc.top_rule.rx_if = top_rx_if;
+		pd4rc.conn_rule.tx_if = tx_if;
+		pd4rc.top_rule.tx_if = top_tx_if;
 	} else if (rx_rfs_enabled) {
 		pd4rc.tuple.flow_ip = create_ipv4->conn_rule.return_ip_xlate;
 		pd4rc.tuple.flow_ident = create_ipv4->conn_rule.return_ident_xlate;
@@ -317,6 +346,14 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		pd4rc.conn_rule.flow_ident_xlate = pd4rc.tuple.flow_ident;
 		pd4rc.conn_rule.return_ip_xlate = pd4rc.tuple.return_ip;
 		pd4rc.conn_rule.return_ident_xlate = pd4rc.tuple.return_ident;
+
+		/*
+		 * Fill from and to interface for this direction.
+		 */
+		pd4rc.conn_rule.rx_if = tx_if;
+		pd4rc.top_rule.rx_if = top_tx_if;
+		pd4rc.conn_rule.tx_if = rx_if;
+		pd4rc.top_rule.tx_if = top_rx_if;
 	}
 
 	if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_FLAG_BRIDGE_FLOW) {

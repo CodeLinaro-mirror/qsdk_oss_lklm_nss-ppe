@@ -980,6 +980,70 @@ struct ppe_drv_iface *ppe_drv_iface_alloc(enum ppe_drv_iface_type type, struct n
 EXPORT_SYMBOL(ppe_drv_iface_alloc);
 
 /*
+ * ppe_drv_iface_check_flow_offload_enabled()
+ *	Check whether the given interface indexes are enabled for offload or not
+ */
+bool ppe_drv_iface_check_flow_offload_enabled(ppe_drv_iface_t rx_if,
+						ppe_drv_iface_t tx_if)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *tx_pp = NULL;
+	struct ppe_drv_port *rx_pp = NULL;
+	struct ppe_drv_iface *if_rx, *if_tx;
+
+	spin_lock_bh(&p->lock);
+	if_rx = ppe_drv_iface_get_by_idx(rx_if);
+	if (!if_rx) {
+		ppe_drv_trace("%p: No PPE interface corresponding to rx_if: %d", p, rx_if);
+		goto offload_disabled;
+	}
+
+	if_tx = ppe_drv_iface_get_by_idx(tx_if);
+	if (!if_tx) {
+		ppe_drv_trace("%p: No PPE interface corresponding to tx_if: %d", p, tx_if);
+		goto offload_disabled;
+	}
+
+	tx_pp = ppe_drv_iface_port_get(if_tx);
+	if (!tx_pp) {
+		ppe_drv_trace("%p: Invalid TX port", p);
+		goto offload_enabled;
+	}
+
+	rx_pp = ppe_drv_iface_port_get(if_rx);
+	if (!rx_pp) {
+		ppe_drv_trace("%p: Invalid RX port", p);
+		goto offload_enabled;
+	}
+
+	if ((rx_pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) ||
+			(rx_pp->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		if (!ppe_drv_port_check_flow_offload_enabled(tx_pp)) {
+			ppe_drv_trace("%p: offload not enabled for %d port\n",
+					p, tx_pp->port);
+			goto offload_disabled;
+		}
+	}
+
+	if ((tx_pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) ||
+			(tx_pp->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		if (!ppe_drv_port_check_flow_offload_enabled(rx_pp)) {
+			ppe_drv_trace("%p: offload not enabled for %d port\n",
+					p, rx_pp->port);
+			goto offload_disabled;
+		}
+	}
+
+offload_enabled:
+	spin_unlock_bh(&p->lock);
+	return true;
+offload_disabled:
+	spin_unlock_bh(&p->lock);
+	return false;
+}
+EXPORT_SYMBOL(ppe_drv_iface_check_flow_offload_enabled);
+
+/*
  * ppe_drv_iface_get_index
  *	Return PPE interface index
  */

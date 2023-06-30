@@ -135,6 +135,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_destroy_fse_success;		/* No of v4 FSE rule destroy failure */
 	atomic64_t v4_destroy_fse_fail;		/* No of v4 FSE rule destroy failure */
 	atomic64_t v4_create_offload_disabled;		/* No of v4 request where offload is disabled */
+	atomic64_t v4_create_fail_offload_disabled;	/* No of v4 create request where offload is disabled */
 
 	atomic64_t v4_create_fail_acl;		/* No of v4 create failure due to ACL linking */
 	atomic64_t v4_destroy_fail_acl;		/* No of v4 delete failure due to ACL unlinking */
@@ -179,6 +180,8 @@ struct ppe_drv_comm_stats {
 
 	atomic64_t v6_create_fail_acl;		/* No of v6 create failure due to ACL linking */
 	atomic64_t v6_destroy_fail_acl;		/* No of v6 delete failure due to ACL unlinking */
+
+	atomic64_t v6_create_fail_offload_disabled;	/* No of v6 create request where offload is disabled */
 };
 
 /*
