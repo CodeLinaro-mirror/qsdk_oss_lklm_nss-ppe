@@ -27,6 +27,8 @@
 #include "nss_ppenl_acl.h"
 #include "nss_ppenl_cmn_if.h"
 #include "nss_ppenl_acl_if.h"
+#include "nss_ppenl_policer.h"
+#include "nss_ppenl_policer_if.h"
 
 /*
  * nss_ppenl.c
@@ -60,6 +62,10 @@ static struct nss_ppenl_family family_handlers[] = {
 		/*
 		 * NSS_PPENL_POLICER
 		 */
+		.name = NSS_PPENL_POLICER_FAMILY,	/* Policer Family */
+		.entry = NSS_PPENL_POLICER_INIT,	/* Init */
+		.exit = NSS_PPENL_POLICER_EXIT,	/* exit */
+		.valid = CONFIG_NSS_PPENL_POLICER	/* 1 or 0 */
 	},
 };
 
