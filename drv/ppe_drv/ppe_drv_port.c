@@ -1106,7 +1106,7 @@ int32_t ppe_drv_port_num_from_dev(struct net_device *dev)
 	}
 
 	spin_unlock_bh(&p->lock);
-	return -1;
+	return PPE_DRV_PORT_ID_INVALID;
 }
 EXPORT_SYMBOL(ppe_drv_port_num_from_dev);
 
