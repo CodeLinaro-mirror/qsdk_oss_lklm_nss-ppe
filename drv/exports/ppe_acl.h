@@ -25,6 +25,8 @@
 #include <linux/if_ether.h>
 
 #define PPE_ACL_PRI_NOMINAL 1
+#define PPE_ACL_INVALID_HW_INDEX 0xFFFF
+#define PPE_ACL_HW_INDEX_MAX 1024
 
 /**
  * ACL rule ID
@@ -564,6 +566,41 @@ struct ppe_acl_rule {
 ppe_acl_ret_t ppe_acl_rule_flow_policer_destroy(ppe_acl_rule_id_t id);
 
 /**
+ * ppe_acl_rule_callback_t
+ *	External callback to be registered with ACL for certain actions.
+ */
+typedef bool (*ppe_acl_rule_callback_t)(void *app_data, void *skb, uint16_t acl_id);
+
+/**
+ * ppe_acl_rule_get_and_ref_hw_idx()
+ *	Get hardware index corresponding the ACL rule while
+ *	taking a reference to the ACL rule.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id	ACL rule ID for ref and hw index to be fetched.
+ *
+ * @return
+ * The hw index for ACL id.
+ */
+uint16_t ppe_acl_rule_get_and_ref_hw_idx(ppe_acl_rule_id_t acl_id);
+
+/**
+ * ppe_acl_rule_get_and_deref_hw_idx()
+ *	Get the hardware index and deref the ACL rule.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id	ACL rule ID to deref.
+ *
+ * @return
+ * The hw index for ACL id deref.
+ */
+uint16_t ppe_acl_rule_get_and_deref_hw_idx(ppe_acl_rule_id_t acl_id);
+
+/**
  * ppe_acl_rule_flow_policer_create()
  *	Create ACL rule for a flow & policer combination. This is API is used
  *	when user want to enable policer per flow and provide necessary details
@@ -606,5 +643,36 @@ ppe_acl_ret_t ppe_acl_rule_destroy(ppe_acl_rule_id_t id);
  * Status of rule create operation.
  */
 ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule);
+
+/**
+ * ppe_acl_rule_callback_register()
+ *	Register callbacks for ACL rules for certain actions to be taken.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ * ppe_acl_rule_callback_t_cb
+ *
+ * @param[IN] acl_id		ACL rule information.
+ * @param[IN] cb		callback.
+ * @param[IN] app_data		app_data.
+ *
+ * @return
+ * Status of register operation.
+ */
+bool ppe_acl_rule_callback_register(ppe_acl_rule_id_t acl_id, ppe_acl_rule_callback_t cb, void *app_data);
+
+/**
+ * ppe_acl_rule_callback_unregister()
+ *	Unregister callbacks for ACL rules.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id		ACL rule information.
+ *
+ * @return
+ * void.
+ */
+void ppe_acl_rule_callback_unregister(ppe_acl_rule_id_t acl_id);
 
 #endif /* _PPE_ACL_H_ */

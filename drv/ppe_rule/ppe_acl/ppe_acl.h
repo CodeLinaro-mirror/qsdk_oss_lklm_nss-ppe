@@ -102,6 +102,12 @@ struct ppe_acl {
 	uint8_t sc;
 
 	/*
+	 * callback information for this acl rule.
+	 */
+	ppe_acl_rule_callback_t cb;		/* callback for this ACL id. */
+	void *app_data;				/* app data to be passed in the cb. */
+
+	/*
 	 * TODO: Other book keeping info for stats and ACL dump.
 	 */
 };

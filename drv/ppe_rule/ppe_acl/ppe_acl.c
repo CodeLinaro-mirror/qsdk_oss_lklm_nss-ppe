@@ -131,6 +131,148 @@ static void ppe_acl_rule_free(struct kref *kref)
 }
 
 /*
+ * ppe_acl_rule_get_and_ref_hw_idx()
+ *	Get the hardware ACL index corresponding the ACL rule and
+ *	take a reference of the ACL rule.
+ */
+uint16_t ppe_acl_rule_get_and_ref_hw_idx(ppe_acl_rule_id_t acl_id)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *acl = NULL;
+	struct ppe_drv_acl_ctx *ctx = NULL;
+	uint16_t hw_index = PPE_ACL_INVALID_HW_INDEX;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return hw_index;
+	}
+
+	spin_lock_bh(&acl_g->lock);
+
+	/*
+	 * Get the ACL rule for the ACL ID.
+	 */
+	acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!acl) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_flow_add_invalid_id);
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("No ACL rule present for id %d\n", acl_id);
+		return hw_index;
+	}
+
+	/*
+	 * Get the hardware index from the ACL rule context.
+	 * The same is stored inside the ACL context while creating the rule.
+	 */
+	ctx = acl->ctx;
+	hw_index = ppe_drv_acl_get_hw_index(ctx);
+
+	/*
+	 * Take the reference of the ACL rule.
+	 * Defer in deref ACL rule call.
+	 * It is the callers responsibility to deref if this API is used
+	 * to take the reference.
+	 */
+	kref_get(&acl->ref_cnt);
+	spin_unlock_bh(&acl_g->lock);
+
+	return hw_index;
+}
+EXPORT_SYMBOL(ppe_acl_rule_get_and_ref_hw_idx);
+
+/*
+ * ppe_acl_rule_get_and_deref_hw_idx()
+ *     Deref the ACL rule.
+ */
+uint16_t ppe_acl_rule_get_and_deref_hw_idx(ppe_acl_rule_id_t acl_id) {
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *acl = NULL;
+	struct ppe_drv_acl_ctx *ctx = NULL;
+	uint16_t hw_index = PPE_ACL_INVALID_HW_INDEX;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return hw_index;
+	}
+
+	spin_lock_bh(&acl_g->lock);
+
+	/*
+	 * Get the ACL rule for the ACL ID.
+	 */
+	acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!acl) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_flow_add_invalid_id);
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("No ACL rule present for id %d\n", acl_id);
+		return hw_index;
+	}
+
+	/*
+	 * Get the hardware index from the ACL rule context.
+	 * The same is stored inside the ACL context while creating the rule.
+	 */
+	ctx = acl->ctx;
+	hw_index = ppe_drv_acl_get_hw_index(ctx);
+
+	/*
+	 * Defer the ACL reference taken while getting the hw index.
+	 */
+	if (kref_put(&acl->ref_cnt, ppe_acl_rule_free)) {
+		ppe_acl_trace("%p: reference goes down to 0 for acl: %p ID: %d\n",
+				acl_g, acl, acl_id);
+	}
+
+	spin_unlock_bh(&acl_g->lock);
+
+	return hw_index;
+}
+EXPORT_SYMBOL(ppe_acl_rule_get_and_deref_hw_idx);
+
+/*
+ * ppe_acl_rule_process_skb()
+ *	Process the packet based on ACL rule.
+ */
+bool ppe_acl_rule_process_skb(void *appdata, struct sk_buff *skb, void *info)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *acl;
+	struct ppe_drv_acl_metadata *acl_info =  (struct ppe_drv_acl_metadata *)info;
+	uint16_t acl_id = acl_info->acl_id;
+	ppe_acl_rule_callback_t cb;
+	void *app_data;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return false;
+	}
+
+	spin_lock_bh(&acl_g->lock);
+	acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!acl) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_flow_add_invalid_id);
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("%p: failed to find the rule for ID: %d", acl_g, acl_id);
+		return false;
+	}
+
+	cb = acl->cb;
+	app_data = acl->app_data;
+	if (!cb) {
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("%p: No callback registered for ACL id: %d", acl_g, acl_id);
+		return false;
+	}
+
+	spin_unlock_bh(&acl_g->lock);
+
+	return cb(app_data, (void *)skb, acl_id);
+}
+
+/*
  * ppe_acl_rule_flow_del_cb()
  *	 Flow delete callback for n-tuple match.
  */
@@ -2301,6 +2443,113 @@ fail:
 	return ret;
 }
 EXPORT_SYMBOL(ppe_acl_rule_create);
+
+/*
+ * ppe_acl_rule_callback_register()
+ *	Register PPE ACL callback for ACL rule module.
+ */
+bool ppe_acl_rule_callback_register(ppe_acl_rule_id_t acl_id, ppe_acl_rule_callback_t cb, void *appdata)
+{
+	uint16_t hw_index;
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *ppe_acl = NULL;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return false;
+	}
+
+	ppe_acl_assert(cb, "%p: cannot register null cb for ACL id %u", p, acl_id);
+
+	/*
+	 * Get the hardware index for the ACL ID and take the
+	 * reference for the ACL rule.
+	 */
+	hw_index = ppe_acl_rule_get_and_ref_hw_idx(acl_id);
+	if (hw_index == PPE_ACL_INVALID_HW_INDEX) {
+		ppe_acl_warn("Invalid Hardware index for ACL ID %d", acl_id);
+		return false;
+	}
+
+	/*
+	 * Store the external callback into the ACL rule.
+	 * So that later we can invoke the same based on the ACL id
+	 * received from driver.
+	 */
+	spin_lock_bh(&acl_g->lock);
+	ppe_acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!ppe_acl) {
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+		ppe_acl_warn("ACL rule not found for ID %d\n", acl_id);
+		return false;
+	}
+
+	ppe_acl_assert(!ppe_acl->cb, "%p: multiple registration for acl id:%u - "
+				"prev cb:%p current cb:%p", acl_g, acl_id, ppe_acl->cb, cb);
+
+	ppe_acl->cb = cb;
+	ppe_acl->app_data = appdata;
+	spin_unlock_bh(&acl_g->lock);
+
+	if (!ppe_drv_acl_register_cb(hw_index, acl_id, ppe_acl_rule_process_skb, appdata)) {
+		ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_acl_rule_callback_register);
+
+/*
+ * ppe_acl_rule_callback_unregister()
+ *	Unregister the acl rule callback.
+ */
+void ppe_acl_rule_callback_unregister(ppe_acl_rule_id_t acl_id)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *ppe_acl = NULL;
+	uint16_t hw_index;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return;
+	}
+
+	/*
+	 * Get the hardware index and deref the ACL rule taken at the time of
+	 * registering the callback.
+	 */
+	hw_index = ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+	if (hw_index == PPE_ACL_INVALID_HW_INDEX) {
+		ppe_acl_warn("Invalid Hardware index for ACL ID %d", acl_id);
+		return;
+	}
+
+	/*
+	 * Get the ACL rule to deregister the callback.
+	 */
+	spin_lock_bh(&acl_g->lock);
+	ppe_acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!ppe_acl) {
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("ACL rule not found for ID %d\n", acl_id);
+		ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+		return;
+	}
+
+	ppe_acl->cb = NULL;
+	ppe_acl->app_data = NULL;
+	spin_unlock_bh(&acl_g->lock);
+
+	/*
+	 * Unregister the callback with PPE Driver.
+	 */
+	ppe_drv_acl_unregister_cb(hw_index);
+}
+EXPORT_SYMBOL(ppe_acl_rule_callback_unregister);
 
 /*
  * ppe_acl_deinit()

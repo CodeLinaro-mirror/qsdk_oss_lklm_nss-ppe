@@ -35,6 +35,7 @@
  */
 #define PPE_DRV_ACL_RULE_ID 1
 #define PPE_DRV_ACL_RULE_NR 1
+#define PPE_DRV_ACL_HW_INDEX_MAX 1024
 
 /*
  * ppe_drv_acl_slice
@@ -92,8 +93,23 @@ struct ppe_drv_acl {
 };
 
 /*
+ * ppe_drv_acl_tbl
+ *	PPE drv ACL based actions framework
+ *	TODO: move it to the PPE RULE module.
+ */
+struct ppe_drv_acl_tbl {
+	uint16_t hw_index;				/* Hardware ACL index */
+	uint16_t acl_id;				/* Software ACL id */
+	void *app_data;					/* App data */
+	void *mirror_app_data;				/* Mirror callback App data */
+	ppe_drv_acl_process_callback_t cb;		/* Per ACL index registered callback */
+	ppe_drv_acl_process_callback_t mirror_cb;	/* Per ACL mirrored registered callback */
+};
+
+/*
  * Internal APIs.
  */
 void ppe_drv_acl_entries_free(struct ppe_drv_acl *acl);
+void ppe_drv_acl_tbl_entries_free(struct ppe_drv_acl_tbl *acl_tbl);
 struct ppe_drv_acl *ppe_drv_acl_entries_alloc(void);
-
+struct ppe_drv_acl_tbl *ppe_drv_acl_tbl_entries_alloc(void);
