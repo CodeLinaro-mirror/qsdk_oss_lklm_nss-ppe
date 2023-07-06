@@ -22,6 +22,7 @@
 #include "ppe_rfs/ppe_rfs.h"
 #include "ppe_acl/ppe_acl.h"
 #include "ppe_policer/ppe_policer.h"
+#include "ppe_mirror/ppe_mirror.h"
 
 struct dentry *d_rule;
 
@@ -46,6 +47,7 @@ static int __init ppe_rule_module_init(void)
 	ppe_rfs_init(d_rule);
 	ppe_acl_init(d_rule);
 	ppe_policer_init(d_rule);
+	ppe_mirror_init(d_rule);
 
 	printk("PPE-RULE module loaded successfully\n");
 	return 0;
@@ -61,6 +63,7 @@ static void __exit ppe_rule_module_exit(void)
 	ppe_policer_deinit();
 	ppe_rfs_deinit();
 	ppe_acl_deinit();
+	ppe_mirror_deinit();
 	debugfs_remove_recursive(d_rule);
 	printk("PPE-RULE module unloaded");
 }
