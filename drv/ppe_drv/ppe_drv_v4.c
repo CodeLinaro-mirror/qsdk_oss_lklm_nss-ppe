@@ -114,7 +114,7 @@ static bool ppe_drv_v4_bind_acl_policer(struct ppe_drv_v4_rule_create *create, s
 			if (policer_info.sc_valid) {
 				cn->pcr.acl_sc = policer_info.sc;
 			} else if (ap_rule->pkt_noedit) {
-				cn->pcf.acl_sc = PPE_DRV_SC_NOEDIT_ACL_POLICER;
+				cn->pcr.acl_sc = PPE_DRV_SC_NOEDIT_ACL_POLICER;
 			}
 
 			cn->pcr.policer_hw_id = ppe_drv_policer_user2hw_id(policer_info.id);

@@ -463,11 +463,7 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	 */
 	if ((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_POLICER_VALID) ||
 			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID)) && (pcf->acl_sc != PPE_DRV_SC_NONE)) {
-		if (!ppe_drv_sc_check_and_set(&service_code, pcf->acl_sc)) {
-			ppe_drv_warn("%p: Policer service codes set problem:%u new:%u",
-					pcf, service_code, pcf->acl_sc);
-			return false;
-		}
+		sc = pcf->acl_sc;
 	} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
 		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID)) {
 			if (pp->core_mask) {
@@ -1088,11 +1084,7 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	 */
 	if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_POLICER_VALID) ||
 		ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_ACL_VALID)) && (pcf->acl_sc != PPE_DRV_SC_NONE)) {
-		if (!ppe_drv_sc_check_and_set(&service_code, pcf->acl_sc)) {
-			ppe_drv_warn("%p: Policer service codes set problem:%u new:%u",
-					pcf, service_code, pcf->acl_sc);
-			return false;
-		}
+		sc = pcf->acl_sc;
 	} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
 		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID)) {
 			if (pp->core_mask) {
