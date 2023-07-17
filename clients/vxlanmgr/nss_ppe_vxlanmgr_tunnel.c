@@ -32,6 +32,51 @@
 #include "ppe_drv_tun_cmn_ctx.h"
 
 /*
+ * nss_ppe_vxlan_dev_stats_update()
+ *	Update vxlan dev statistics
+ */
+static bool nss_ppe_vxlan_dev_stats_update(struct net_device *dev, ppe_tun_hw_stats *stats, ppe_tun_data *tun_cb_data)
+{
+	struct pcpu_sw_netstats *tstats;
+	struct net_device *pdev;
+	int ifindex;
+
+	if (!dev) {
+		return false;
+	}
+
+	tstats = this_cpu_ptr(dev->tstats);
+
+	/*
+	 * For VXLAN device add the stats to the parent netdevice instead of nss_netdev.
+	 */
+	if (unlikely(strncmp(dev->name, "ppe_vxlan_tun", 13) == 0)) {
+		ifindex = *(int *)netdev_priv(dev);
+		pdev = dev_get_by_index(&init_net, ifindex);
+		if (!pdev) {
+			nss_ppe_vxlanmgr_warn("%p: Parent dev of the nss-netdev %s is not present.", dev, dev->name);
+			return true;
+		}
+
+		tstats = this_cpu_ptr(pdev->tstats);
+		dev_put(pdev);
+	}
+
+	u64_stats_update_begin(&tstats->syncp);
+	tstats->tx_bytes += stats->tx_byte_cnt;
+	tstats->tx_packets += stats->tx_pkt_cnt;
+	tstats->rx_bytes += stats->rx_byte_cnt;
+	tstats->rx_packets += stats->rx_pkt_cnt;
+	u64_stats_update_end(&tstats->syncp);
+
+	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);
+	atomic_long_add(stats->rx_drop_pkt_cnt, &dev->rx_dropped);
+
+	return true;
+}
+
+
+/*
  * VxLAN context
  */
 extern struct nss_ppe_vxlanmgr_ctx vxlan_ctx;
@@ -202,7 +247,7 @@ static struct notifier_block nss_ppe_vxlanmgr_tunnel_fdb_notifier = {
  * nss_ppe_vxlan_src_exception()
  *	handle the source VP exception.
  */
-static bool nss_ppe_vxlan_src_exception(struct net_device *dev, struct sk_buff *skb)
+static bool nss_ppe_vxlan_src_exception(struct net_device *dev, struct sk_buff *skb, ppe_tun_data *tun_data)
 {
 	nss_ppe_vxlanmgr_warn("%px: Dropping the skb for dev:%s", dev, dev->name);
 
@@ -216,6 +261,7 @@ static bool nss_ppe_vxlan_src_exception(struct net_device *dev, struct sk_buff *
 int nss_ppe_vxlanmgr_tunnel_config(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr)
 {
 	struct nss_ppe_vxlanmgr_tun_ctx *tun_ctx;
+	struct ppe_tun_excp tun_cb = {0};
 	bool ret;
 
 	dev_hold(dev);
@@ -240,7 +286,10 @@ int nss_ppe_vxlanmgr_tunnel_config(struct net_device *dev, struct ppe_drv_tun_cm
 	tun_hdr->l3.dscp = 0;
 	tun_hdr->type = PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN;
 
-	ret = ppe_tun_configure(dev, tun_hdr, nss_ppe_vxlan_src_exception, NULL);
+	tun_cb.src_excp_method = nss_ppe_vxlan_src_exception;
+	tun_cb.stats_update_method = nss_ppe_vxlan_dev_stats_update;
+
+	ret = ppe_tun_configure(dev, tun_hdr, &tun_cb);
 	if (!ret) {
 		nss_ppe_vxlanmgr_warn("Getting  PPE VXLAN tunnel failed.\n");
 		dev_put(dev);

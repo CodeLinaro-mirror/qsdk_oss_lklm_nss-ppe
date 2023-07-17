@@ -61,19 +61,6 @@ enum ppe_drv_tun_cmn_ctx_type {
 };
 
 /*
- * ppe_drv_tun_cmn_ctx_stats
- *	Tunnel statistics
- */
-struct ppe_drv_tun_cmn_ctx_stats {
-	uint64_t tx_bytes;		/**< Packet transmit counter in bytes >*/
-	uint64_t rx_bytes;		/**< Packet receive counter in bytes >*/
-	uint64_t rx_drop_bytes;		/**< Packet drop counter in bytes >*/
-	uint32_t rx_drop_pkts;		/**< Packet drop counter >*/
-	uint32_t tx_pkts;		/**< Packet transmit counter >*/
-	uint32_t rx_pkts;		/**< Packet receive counter >*/
-};
-
-/*
  * ppe_drv_tun_cmn_ctx_l3
  *	Layer 3 header parameters
  */

@@ -24,41 +24,10 @@
 #include <ppe_vp_public.h>
 #include <ppe_drv_tun_cmn_ctx.h>
 #include <ppe_drv_tun_public.h>
+#include <asm/cmpxchg.h>
 #include "ppe_tun.h"
 
 struct ppe_tun_priv *ptp;
-
-/*
- * ppe_tun_stats()
- *	Update the netdevice stats
- */
-bool ppe_tun_stats(struct net_device *dev, ppe_vp_hw_stats_t *stats)
-{
-	struct pcpu_sw_netstats *tstats = this_cpu_ptr(dev->tstats);
-
-	u64_stats_update_begin(&tstats->syncp);
-	tstats->tx_bytes += stats->tx_byte_cnt;
-	tstats->tx_packets += stats->tx_pkt_cnt;
-	tstats->rx_bytes += stats->rx_byte_cnt;
-	tstats->rx_packets += stats->rx_pkt_cnt;
-
-	/*
-	 * For Map-t device we need to update the rx and tx stats separately.
-	 */
-	if (unlikely(dev->priv_flags_ext & IFF_EXT_MAPT)) {
-		tstats->rx_bytes += stats->tx_byte_cnt;
-		tstats->rx_packets += stats->tx_pkt_cnt;
-		tstats->tx_bytes += stats->rx_byte_cnt;
-		tstats->tx_packets += stats->rx_pkt_cnt;
-	}
-
-	u64_stats_update_end(&tstats->syncp);
-
-	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);
-	atomic_long_add(stats->rx_drop_pkt_cnt, &dev->rx_dropped);
-
-	return true;
-}
 
 /*
  * ppe_tun_allow_accel()
@@ -104,6 +73,26 @@ static bool ppe_tun_allow_accel(enum ppe_drv_tun_cmn_ctx_type type)
 }
 
 /*
+ * ppe_tun_set_tun_data()
+ *	Set tunnel information
+ */
+bool ppe_tun_set_tun_data(struct ppe_tun *tun, ppe_tun_data *tun_data)
+{
+	if (!tun->tun_data) {
+		ppe_tun_trace("%p: tunnel info not allocated for tunnel", tun);
+		return false;
+	}
+
+	/*
+	 * Place holder logic to copy the tun info. The main logic to check the tunnel
+	 * type and assign the correct values is added in l2tp core gerrit which is the
+	 * first user of this framework.
+	 */
+	memcpy(tun->tun_data, tun_data, sizeof(*tun->tun_data));
+	return true;
+}
+
+/*
  * ppe_tun_ctx_free()
  *	Free ppe tunnel allocated instance
  */
@@ -115,6 +104,10 @@ static void ppe_tun_ctx_free(struct kref *kref)
 	spin_lock_bh(&ptp->lock);
 	ptp->tun[tun->idx] = NULL;
 	spin_unlock_bh(&ptp->lock);
+
+	if (tun->tun_data) {
+		kfree(tun->tun_data);
+	}
 
 	vp_num = tun->vp_num;
 	ppe_vp_free(vp_num);
@@ -174,6 +167,34 @@ static struct ppe_tun *ppe_tun_get_tun_by_netdev_and_ref(struct net_device *dev)
 	spin_unlock_bh(&ptp->lock);
 
 	return NULL;
+}
+
+/*
+ * ppe_tun_stats()
+ *	Update the netdevice stats
+ */
+bool ppe_tun_stats(struct net_device *dev, ppe_vp_hw_stats_t *stats)
+{
+	struct ppe_tun *tun;
+	bool ret;
+
+	tun = ppe_tun_get_tun_by_netdev_and_ref(dev);
+	if (!tun) {
+		ppe_tun_trace("%p: ppe tun stats update failed: tunnel not found", tun);
+		return false;
+	}
+
+	if (!tun->stats_excp) {
+		ppe_tun_trace("%p: tunnel stats callback not present", tun);
+		ret = false;
+		goto done;
+	}
+
+	ret = tun->stats_excp(dev, stats, tun->tun_data);
+
+done:
+	ppe_tun_deref(tun);
+	return ret;
 }
 
 /*
@@ -274,16 +295,16 @@ static bool ppe_tun_exception_dest_cb(struct net_device *dev, struct sk_buff *sk
 	atomic64_inc(&tun->exception_packet);
 	atomic64_add(skb->len, &tun->exception_bytes);
 
-	cb = tun->dest_cb;
+	cb = tun->dest_excp;
 	if (!cb) {
 		ppe_tun_warn("%p: No registered callback for destination exception %s", tun, dev->name);
 		ppe_tun_deref(tun);
 		goto free_skb;
 	}
 
+	cb(dev, skb, tun->tun_data);
 	ppe_tun_deref(tun);
 
-	cb(dev, skb);
 	return true;
 
 free_skb:
@@ -309,7 +330,7 @@ static bool ppe_tun_exception_src_cb(struct net_device *dev, struct sk_buff *skb
 	atomic64_inc(&tun->exception_packet);
 	atomic64_add(skb->len, &tun->exception_bytes);
 
-	cb = tun->src_cb;
+	cb = tun->src_excp;
 	if (!cb) {
 		ppe_tun_deref(tun);
 		ppe_tun_warn("%p: No registered callback for source exception %s", tun, dev->name);
@@ -328,9 +349,9 @@ static bool ppe_tun_exception_src_cb(struct net_device *dev, struct sk_buff *skb
 		}
 	}
 
+	cb(dev, skb, tun->tun_data);
 	ppe_tun_deref(tun);
 
-	cb(dev, skb);
 	return true;
 
 free_skb:
@@ -566,9 +587,11 @@ bool ppe_tun_deconfigure(struct net_device *dev)
 		return false;
 	}
 
-	tun->src_cb = NULL;
-	tun->dest_cb = NULL;
-	tun->phys_dev = NULL;
+	xchg(&tun->src_excp, NULL);
+	xchg(&tun->dest_excp, NULL);
+	xchg(&tun->stats_excp, NULL);
+	xchg(&tun->phys_dev, NULL);
+
 	tun->state &= ~PPE_TUN_STATE_CONFIGURED;
 	ppe_tun_info("%p: Tunnel disabled for dev %s", tun, dev->name);
 	ppe_tun_deref(tun);
@@ -580,8 +603,7 @@ EXPORT_SYMBOL(ppe_tun_deconfigure);
  * ppe_tun_configure()
  *	Configure a struct ppe_tun
  */
-bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr, ppe_tun_exception_method_t src_cb,
-		       ppe_tun_exception_method_t dest_cb)
+bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr, struct ppe_tun_excp *tun_cb)
 {
 	struct ppe_tun *tun = ppe_tun_get_tun_by_netdev_and_ref(dev);
 	ppe_vp_num_t vp_num;
@@ -594,6 +616,12 @@ bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_h
 
 	vp_num = tun->vp_num;
 
+	if (tun_cb->tun_data && !ppe_tun_set_tun_data(tun, tun_cb->tun_data)) {
+		ppe_tun_trace("%p: tunnel info set failed", tun);
+		ppe_tun_deref(tun);
+		return false;
+	}
+
 	status = ppe_drv_tun_configure(vp_num, tun_hdr, ppe_tun_activate_with_conn_entry,
 				       ppe_tun_deactivate_with_conn_entry);
 	if (!status) {
@@ -602,8 +630,10 @@ bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_h
 		return false;
 	}
 
-	tun->src_cb = src_cb;
-	tun->dest_cb = dest_cb;
+	tun->src_excp = tun_cb->src_excp_method;
+	tun->dest_excp = tun_cb->dest_excp_method;
+	tun->stats_excp = tun_cb->stats_update_method;
+
 
 	tun->state |= PPE_TUN_STATE_CONFIGURED;
 	ppe_tun_info("%p: Tunnel is configured at idx:%d", tun, tun->idx);
@@ -773,6 +803,7 @@ EXPORT_SYMBOL(ppe_tun_alloc);
  */
 bool ppe_tun_setup(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr)
 {
+	struct ppe_tun_excp tun_cb = {0};
 	bool status;
 
 	status = ppe_tun_alloc(dev, tun_hdr->type);
@@ -781,7 +812,7 @@ bool ppe_tun_setup(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr)
 		return false;
 	}
 
-	status = ppe_tun_configure(dev, tun_hdr, NULL, NULL);
+	status = ppe_tun_configure(dev, tun_hdr, &tun_cb);
 	if (!status) {
 		ppe_tun_free(dev);
 		ppe_tun_warn("%p: tunnel configuration failed", dev);
@@ -1275,7 +1306,7 @@ static int __init ppe_tun_module_init(void)
 	}
 
 	dir = debugfs_create_dir("xcpn_mode", ptp->dentry);
-	if(!dir) {
+	if (!dir) {
 		ppe_tun_warn("%p: Failed to create debugfs entry for xcpn_mode", ptp);
 		goto fail;
 	}
