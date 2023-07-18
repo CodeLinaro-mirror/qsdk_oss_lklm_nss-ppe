@@ -17,6 +17,7 @@
 #include <linux/in.h>
 #include <net/ipv6.h>
 #include <linux/netdevice.h>
+#include <linux/if_vlan.h>
 #include <fal/fal_flow.h>
 #include <fal/fal_qos.h>
 #include "ppe_drv.h"
@@ -438,9 +439,10 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
  */
 bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_port *pp, uint8_t *scp)
 {
+	struct ppe_drv_port *port_rx = pcf->rx_port;
 	ppe_drv_sc_t service_code = *scp;
-	int next_core;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
+	int next_core;
 
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
@@ -472,6 +474,11 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 		if (!pp->shadow_core_mask) {
 			pp->shadow_core_mask = pp->core_mask;
 		}
+	}
+
+	if (is_vlan_dev(port_rx->dev) && (port_rx->type == PPE_DRV_PORT_VIRTUAL) && (netif_is_bridge_port(port_rx->dev)) &&
+	    !ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_SPF_BYPASS;
 	}
 
 	if (sc != PPE_DRV_SC_NONE) {
@@ -1031,9 +1038,10 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
  */
 bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_port *pp, uint8_t *scp)
 {
+	struct ppe_drv_port *port_rx = pcf->rx_port;
 	ppe_drv_sc_t service_code = *scp;
-	int next_core;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
+	int next_core;
 
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
@@ -1065,6 +1073,11 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		if (!pp->shadow_core_mask) {
 			pp->shadow_core_mask = pp->core_mask;
 		}
+	}
+
+	if (is_vlan_dev(port_rx->dev) && (port_rx->type == PPE_DRV_PORT_VIRTUAL) && (netif_is_bridge_port(port_rx->dev)) &&
+	    !ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+		sc = PPE_DRV_SC_SPF_BYPASS;
 	}
 
 	if (sc != PPE_DRV_SC_NONE) {
