@@ -35,6 +35,8 @@
 
 static struct nss_ppe_vlan_mgr_context vlan_mgr_ctx;
 
+static bool nss_ppe_vlan_mgr_instance_deref(struct nss_vlan_pvt *v);
+
 /*
  * nss_ppe_vlan_mgr_update_ppe_tpid()
  *	Update tag protocol identifier.
@@ -121,48 +123,10 @@ static int32_t nss_ppe_vlan_mgr_get_port_id(struct net_device *dev)
 }
 
 /*
- * nss_ppe_vlan_mgr_instance_deref()
- *	Decreases the references of vlan_pvt instance.
- */
-static void nss_ppe_vlan_mgr_instance_deref(struct nss_vlan_pvt *v)
-{
-	spin_lock(&vlan_mgr_ctx.lock);
-	--v->refs;
-	BUG_ON(!(v->refs));
-	spin_unlock(&vlan_mgr_ctx.lock);
-}
-
-/*
- * nss_ppe_vlan_mgr_instance_find_and_ref()
- *	Increases the references of vlan_pvt instance.
- */
-static struct nss_vlan_pvt *nss_ppe_vlan_mgr_instance_find_and_ref(
-						struct net_device *dev)
-{
-	struct nss_vlan_pvt *v;
-
-	if (!is_vlan_dev(dev)) {
-		return NULL;
-	}
-
-	spin_lock(&vlan_mgr_ctx.lock);
-	list_for_each_entry(v, &vlan_mgr_ctx.list, list) {
-		if (v->ifindex == dev->ifindex) {
-			v->refs++;
-			spin_unlock(&vlan_mgr_ctx.lock);
-			return v;
-		}
-	}
-	spin_unlock(&vlan_mgr_ctx.lock);
-
-	return NULL;
-}
-
-/*
  * nss_ppe_vlan_mgr_calculate_new_port_role()
  *	check if we can change this port to edge port
  */
-static bool nss_ppe_vlan_mgr_calculate_new_port_role(int32_t port, int32_t portindex, struct net_device *dev)
+static bool nss_ppe_vlan_mgr_calculate_new_port_role(int32_t port, int32_t portindex)
 {
 	struct nss_vlan_pvt *v;
 	bool to_edge_port = true;
@@ -592,14 +556,13 @@ free_iface:
  * nss_ppe_vlan_mgr_instance_free()
  *	Destroy vlan instance
  */
-static void nss_ppe_vlan_mgr_instance_free(struct nss_vlan_pvt *v, struct net_device *dev)
+static void nss_ppe_vlan_mgr_instance_free(struct kref *kref)
 {
 	int32_t i;
 	ppe_drv_ret_t ret;
+	struct nss_vlan_pvt *v = container_of(kref, struct nss_vlan_pvt, ref);
 
 	spin_lock(&vlan_mgr_ctx.lock);
-	--v->refs;
-	BUG_ON(v->refs);
 	if (!list_empty(&v->list)) {
 		list_del(&v->list);
 	}
@@ -616,7 +579,7 @@ static void nss_ppe_vlan_mgr_instance_free(struct nss_vlan_pvt *v, struct net_de
 			v->xlate_info.port_id = v->port[i];
 			ret = ppe_drv_vlan_del_xlate_rule(v->iface, &v->xlate_info);
 			if (ret != PPE_DRV_RET_SUCCESS) {
-				nss_ppe_vlan_mgr_warn("%s: failed to delete vlan translation, error = %d \n", dev->name, ret);
+				nss_ppe_vlan_mgr_warn("%p: failed to delete vlan translation, error = %d \n", v, ret);
 			}
 			v->xlate_info.port_id = 0;
 		}
@@ -632,7 +595,7 @@ static void nss_ppe_vlan_mgr_instance_free(struct nss_vlan_pvt *v, struct net_de
 	 */
 	for (i = 0; i < NSS_PPE_VLAN_MGR_PORT_MAX; i++) {
 		if (v->port[i]) {
-			if (nss_ppe_vlan_mgr_calculate_new_port_role(v->port[i], i, dev)) {
+			if (nss_ppe_vlan_mgr_calculate_new_port_role(v->port[i], i)) {
 				nss_ppe_vlan_mgr_port_role_event(v->port[i], i);
 			}
 		}
@@ -648,6 +611,47 @@ static void nss_ppe_vlan_mgr_instance_free(struct nss_vlan_pvt *v, struct net_de
 		v->iface = NULL;
 	}
 	kfree(v);
+}
+
+/*
+ * nss_ppe_vlan_mgr_instance_deref()
+ *	Decreases the references of vlan_pvt instance.
+ */
+static bool nss_ppe_vlan_mgr_instance_deref(struct nss_vlan_pvt *v)
+{
+	if (kref_put(&v->ref, nss_ppe_vlan_mgr_instance_free)) {
+		nss_ppe_vlan_mgr_trace("%p: reference count is 0 for vlan ID: %u", v, v->vid);
+		return true;
+	}
+
+	nss_ppe_vlan_mgr_trace("%p: reference count is %d for vlan ID: %u", v, kref_read(&v->ref), v->vid);
+	return false;
+}
+
+/*
+ * nss_ppe_vlan_mgr_instance_find_and_ref()
+ *	Increases the references of vlan_pvt instance.
+ */
+static struct nss_vlan_pvt *nss_ppe_vlan_mgr_instance_find_and_ref(
+						struct net_device *dev)
+{
+	struct nss_vlan_pvt *v;
+
+	if (!is_vlan_dev(dev)) {
+		return NULL;
+	}
+
+	spin_lock(&vlan_mgr_ctx.lock);
+	list_for_each_entry(v, &vlan_mgr_ctx.list, list) {
+		if (v->ifindex == dev->ifindex) {
+			kref_get(&v->ref);
+			spin_unlock(&vlan_mgr_ctx.lock);
+			return v;
+		}
+	}
+	spin_unlock(&vlan_mgr_ctx.lock);
+
+	return NULL;
 }
 
 /*
@@ -787,7 +791,7 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(
 	v->mtu = dev->mtu;
 	ether_addr_copy(v->dev_addr, dev->dev_addr);
 	v->ifindex = dev->ifindex;
-	v->refs = 1;
+	kref_init(&v->ref);
 	return v;
 }
 
@@ -909,7 +913,7 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 	}
 
 	if (res < 0) {
-		nss_ppe_vlan_mgr_instance_free(v, dev);
+		nss_ppe_vlan_mgr_instance_deref(v);
 		return NOTIFY_DONE;
 	}
 
@@ -931,7 +935,7 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 		port_id = nss_ppe_vlan_mgr_get_port_id(slave_dev);
 		if (port_id == NSS_PPE_VLAN_MGR_INVALID_PORT) {
 			rcu_read_unlock();
-			nss_ppe_vlan_mgr_instance_free(v, dev);
+			nss_ppe_vlan_mgr_instance_deref(v);
 			nss_ppe_vlan_mgr_warn("%px: %s:%d is not valid PPE port\n", slave_dev, slave_dev->name, port_id);
 			return -1;
 		}
@@ -967,7 +971,8 @@ static int nss_ppe_vlan_mgr_unregister_event(struct netdev_notifier_info *info)
 	/*
 	 * Free instance
 	 */
-	nss_ppe_vlan_mgr_instance_free(v, dev);
+	nss_ppe_vlan_mgr_instance_deref(v);
+
 	return NOTIFY_DONE;
 }
 
@@ -1275,6 +1280,14 @@ int nss_ppe_vlan_mgr_leave_bridge(struct net_device *dev, struct ppe_drv_iface *
 		return -1;
 	}
 
+	/*
+	 * Release the reference taken in join
+	 */
+	nss_ppe_vlan_mgr_instance_deref(v);
+
+	/*
+	 * Release the reference taken above
+	 */
 	nss_ppe_vlan_mgr_instance_deref(v);
 	return 0;
 }
@@ -1290,6 +1303,10 @@ int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, struct ppe_drv_iface *b
 	int res;
 	int32_t port_id;
 	ppe_drv_ret_t ret;
+
+	/*
+	 * On successful bridge join release the reference on vlan instance, during bridge leave
+	 */
 	struct nss_vlan_pvt *v = nss_ppe_vlan_mgr_instance_find_and_ref(dev);
 
 	if (!v) {
@@ -1365,7 +1382,6 @@ int nss_ppe_vlan_mgr_join_bridge(struct net_device *dev, struct ppe_drv_iface *b
 
 	v->bridge_iface = bridge_iface;
 	spin_unlock(&vlan_mgr_ctx.lock);
-	nss_ppe_vlan_mgr_instance_deref(v);
 	return 0;
 }
 EXPORT_SYMBOL(nss_ppe_vlan_mgr_join_bridge);

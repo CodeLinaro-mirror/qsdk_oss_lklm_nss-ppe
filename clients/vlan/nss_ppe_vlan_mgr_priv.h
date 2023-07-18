@@ -110,6 +110,6 @@ struct nss_vlan_pvt {
 	uint32_t ppe_svid;			/* ppe_svid info */
 	struct ppe_drv_vlan_xlate_info xlate_info;
 						/* XLATE info */
-	int refs;				/* reference count */
+	struct kref ref;			/* Reference count */
 };
 #endif
