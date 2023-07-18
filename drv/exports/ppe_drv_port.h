@@ -35,6 +35,8 @@
 						/* Virtual ports ends at 256 */
 #define PPE_DRV_PORTS_MAX		256	/* Total ports in PPE Physical + Trunk + Virtual */
 
+#define PPE_DRV_PORT_ID_INVALID		-1	/* Invalid port ID */
+
 #define PPE_DRV_PORT_CPU		0	/* PPE egress port to reach CPUs */
 #define PPE_DRV_PORT_EIP197		7	/* PPE egress port to reach EIP197 */
 
