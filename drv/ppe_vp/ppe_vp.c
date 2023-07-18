@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <net/sch_generic.h>
+#include <fal/fal_qm.h>
 #include "ppe_vp_base.h"
 #include "ppe_vp_rx.h"
 
@@ -288,6 +289,7 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	struct ppe_vp_base *pvb = &vp_base;
 	enum ppe_vp_type type = vpai->type;
 	struct ppe_vp *vp;
+	struct ppe_drv_vp_info info = {0};
 	struct ppe_drv_iface *ppe_iface;
 	enum ppe_drv_iface_type ppe_type;
 	int32_t pp_num;
@@ -339,10 +341,16 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 		return -1;
 	}
 
+	info.core_mask = vpai->core_mask;
+	info.queue_num = vpai->queue_num;
+	info.xmit_port = vpai->xmit_port;
+	info.net_dev_type = vpai->net_dev_type;
+	info.usr_type = vpai->usr_type;
+
 	/*
 	 * Initialize the virtual port in PPE.
 	 */
-	ret = ppe_drv_vp_init(ppe_iface, vpai->core_mask, vpai->usr_type, vpai->net_dev_type);
+	ret = ppe_drv_vp_init(ppe_iface, &info);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_vp_warn("%px: netdev: %px, ppe iface %px PPE VP initialization failed, Err code %d", pvb, netdev, ppe_iface, ret);
 		vpai->status = PPE_VP_STATUS_VP_INIT_FAIL;

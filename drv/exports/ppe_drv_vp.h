@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,6 +30,18 @@ enum ppe_port_user_type;
  */
 
 /**
+ * ppe_drv_vp_info
+ *	PPE DRV VP info structure
+ */
+struct ppe_drv_vp_info {
+	uint32_t xmit_port;		/**< Physical port number */
+	uint8_t queue_num;		/**< Queue number */
+	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
+	uint32_t usr_type;		/**< VP user type */
+	uint32_t net_dev_type;		/**< VP netdev type */
+};
+
+/**
  * ppe_drv_vp_deinit
  *	Uninitialize a virutal port in PPE.
  *
@@ -51,14 +63,12 @@ ppe_drv_ret_t ppe_drv_vp_deinit(struct ppe_drv_iface *iface);
  * ppe_drv_iface
  *
  * @param[in] iface Pointer to the interface object.
- * @param[in] core_mask Core mask to be used for RFS.
- * @param[in] usr_type PPE VP user type.
- * @param[in] net_dev_type to indicate the netdev type of VP.
+ * @param[in] info Pointer to the VP info object.
  *
  * @return
  * Status of the initialization operation.
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type);
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_info *info);
 
 /** @} */ /* end_addtogroup ppe_drv_vp_subsystem */
 

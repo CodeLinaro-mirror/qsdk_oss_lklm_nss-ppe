@@ -80,6 +80,13 @@
 #define PPE_DRV_SWITCH_ID		0
 
 /*
+ * Profile ID
+ */
+#define PPE_DRV_COMMON_PROFILE_ID	FAL_QM_PROFILE_COMMON_ID
+#define PPE_DRV_PO_PROFILE_ID		FAL_QM_PROFILE_PO_ID
+#define PPE_DRV_REDIR_PROFILE_ID	9
+
+/*
  * PPE Hash seed and mask
  *
  * Note: we don't initialize the seed value with a random value
@@ -167,7 +174,6 @@
  */
 #define PPE_DRV_CORE2SC_NOEDIT(core_id) (PPE_DRV_SC_NOEDIT_REDIR_CORE0 + core_id)
 #define PPE_DRV_CORE2SC_EDIT(core_id) (PPE_DRV_SC_EDIT_REDIR_CORE0 + core_id)
-#define PPE_DRV_REDIR_PROFILE_ID 9
 
 /*
  * Default port number return from ssdk is 0xF

@@ -83,9 +83,9 @@ struct ppe_drv_port {
 	uint8_t ucast_queue;			/* Base queue ID for the port */
 	uint8_t tunnel_vp_cfg;			/* Port is of type tunnel VP */
 	uint8_t active_vlan;			/* Number active VLAN configured on the port */
-	struct ppe_drv_port_hw_stats stats;		/* PPE HW port statistics */
-        uint8_t core_mask;			/* Core mask for VP flow */
-        uint8_t shadow_core_mask;		/* Shadow Core mask for VP flow */
+	struct ppe_drv_port_hw_stats stats;	/* PPE HW port statistics */
+	uint8_t core_mask;			/* Core mask for VP flow */
+	uint8_t shadow_core_mask;		/* Shadow Core mask for VP flow */
 	uint8_t user_type;			/* PPE VP user type */
 	uint8_t next_core;			/* Next core to pick for RFS */
 };

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -128,19 +128,20 @@ enum ppe_vp_net_dev_type {
  *	Data structure VP allocation.
  */
 struct ppe_vp_ai {
-	ppe_vp_type_t type;		/**< VP dype */
+	ppe_vp_type_t type;		/**< VP type */
 	ppe_vp_callback_t dst_cb;	/**< VP dst callback */
 	void *dst_cb_data;		/**< VP dst callback data */
 	ppe_vp_callback_t src_cb;	/**< VP src callback */
 	void *src_cb_data;		/**< VP src callback data */
 	ppe_vp_stats_callback_t stats_cb;
 					/**< VP src callback */
+	uint32_t xmit_port;		/**< Physical port number */
 	uint8_t queue_num;		/**< Queue number */
+	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
 	ppe_vp_status_t status;		/**< VP return status */
 	enum ppe_vp_user_type usr_type;	/**< VP user type */
 	enum ppe_vp_net_dev_type net_dev_type;
 					/**< VP netdev type */
-	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
 };
 
 /*
