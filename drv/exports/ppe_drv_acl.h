@@ -22,6 +22,7 @@
  */
 
 #include <linux/if_ether.h>
+#include <ppe_drv.h>
 
 /*
  * General macros.
@@ -551,6 +552,18 @@ struct ppe_drv_acl_metadata {
 };
 
 /**
+ * ppe_drv_acl_mirror_core_select_cb_t
+ *	Function callback type for mirror core selection.
+ *
+ * @param[IN] core_id		core id for mirrored packets.
+ * @param[IN] app_data		Pointer to void context from caller.
+ *
+ * @return
+ * true for success and false for failure.
+ */
+typedef void (*ppe_drv_acl_mirror_core_select_cb_t)(uint8_t core_id, void *app_data);
+
+/**
  * ppe_drv_acl_flow_callback_t
  *	Function callback type for flow add and flow delete.
  *
@@ -616,6 +629,30 @@ void ppe_drv_acl_flow_unregister_cb(void);
  * true for success and false for failure.
  */
 void ppe_drv_acl_flow_register_cb(ppe_drv_acl_flow_callback_t add_cb, ppe_drv_acl_flow_callback_t del_cb, void *app_data);
+
+/**
+ * ppe_drv_acl_mirror_core_select_unregister_cb
+ *	Unegister the mirror core selection API with PPE driver.
+ *
+ * @return
+ * None.
+ */
+void ppe_drv_acl_mirror_core_select_unregister_cb(void);
+
+/**
+ * ppe_drv_acl_mirror_core_select_register_cb
+ *	Register the mirror core selection API with PPE driver.
+ *
+ * @datatypes
+ * ppe_drv_acl_mirror_core_select_cb_t
+ *
+ * @param[IN] cb		Mirror core register callback into DP.
+ * @param[IN] app_data		Pointer to void context from caller.
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_acl_mirror_core_select_register_cb(ppe_drv_acl_mirror_core_select_cb_t cb, void *app_data);
 
 /*
  * ppe_drv_acl_destroy()
@@ -684,6 +721,17 @@ bool ppe_drv_acl_process_skbuff(struct ppe_drv_acl_metadata *acl_info, struct sk
  * Hardware index for the ACL context.
  */
 uint16_t ppe_drv_acl_get_hw_index(struct ppe_drv_acl_ctx *ctx);
+
+/**
+ * ppe_drv_acl_enable_mirror_capture_core
+ *	Enable capture core for mirrored packets.
+ *
+ * @param[IN] core_id		Capture core to enable.
+ *
+ * @return
+ * Success or failure of the API.
+ */
+bool ppe_drv_acl_enable_mirror_capture_core(uint8_t core_id);
 
 /**
  * ppe_drv_acl_unregister_mirror_cb

@@ -1038,6 +1038,34 @@ ppe_drv_ret_t ppe_drv_acl_configure(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 EXPORT_SYMBOL(ppe_drv_acl_configure);
 
 /*
+ * ppe_drv_acl_enable_mirror_capture_core
+ *	Enable the capture core for mirrored packets.
+ */
+bool ppe_drv_acl_enable_mirror_capture_core(uint8_t core_id)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+	ppe_drv_acl_mirror_core_select_cb_t mirror_core_cb;
+	void *mirror_core_app_data;
+
+	spin_lock_bh(&p->lock);
+	mirror_core_cb = acl->mirror_core_cb;
+	mirror_core_app_data = acl->mirror_core_app_data;
+
+	if (!mirror_core_cb) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p No mirror core select callback is registered \n", acl);
+		return false;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	mirror_core_cb(core_id, mirror_core_app_data);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_acl_enable_mirror_capture_core);
+
+/*
  * ppe_drv_acl_alloc()
  *	Allocate slices for ACL rules.
  */
@@ -1148,6 +1176,38 @@ uint16_t ppe_drv_acl_get_hw_index(struct ppe_drv_acl_ctx *ctx)
 	return fal_rule->hw_info.hw_rule_id;
 }
 EXPORT_SYMBOL(ppe_drv_acl_get_hw_index);
+
+/*
+ * ppe_drv_acl_mirror_core_select_unregister_cb
+ *	Callback unregistration for mirror core selection.
+ */
+void ppe_drv_acl_mirror_core_select_unregister_cb(void)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+
+	spin_lock_bh(&p->lock);
+	acl->mirror_core_cb = NULL;
+	acl->mirror_core_app_data = NULL;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_mirror_core_select_unregister_cb);
+
+/*
+ * ppe_drv_acl_mirror_core_select_register_cb
+ *	Callback registration for mirror core selection.
+ */
+void ppe_drv_acl_mirror_core_select_register_cb(ppe_drv_acl_mirror_core_select_cb_t cb, void *app_data)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+
+	spin_lock_bh(&p->lock);
+	acl->mirror_core_cb = cb;
+	acl->mirror_core_app_data = app_data;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_mirror_core_select_register_cb);
 
 /*
  * ppe_drv_acl_flow_unregister_cb

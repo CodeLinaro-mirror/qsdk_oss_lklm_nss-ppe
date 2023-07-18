@@ -53,11 +53,14 @@ struct ppe_mirror_cmn_stats {
 	atomic64_t acl_mapping_del_fail_rule_not_found;		/* No ACL rule found for delete mapping request */
 	atomic64_t acl_mapping_del_fail_map_not_found;		/* ACL mapping deletion failure as mapping not found */
 	atomic64_t acl_mapping_del_fail_group_not_found;	/* ACL mapping deletion failure as group not found */
+	atomic64_t acl_mirror_process_mapping_invalid;		/* ACL mapping not found for mirrored packets */
+	atomic64_t acl_mirror_process_group_invalid;		/* ACL group is not found for mirrored packets */
 
 	/*
 	 * Capture core related counts.
 	 */
 	atomic64_t acl_mapping_invalid_capture_core;	/* ACL mapping invalid capture core received. */
+	atomic64_t acl_mapping_fail_en_capture_core;	/* ACL capture core enable failed. */
 };
 
 /*

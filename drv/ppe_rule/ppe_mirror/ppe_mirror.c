@@ -46,6 +46,7 @@ bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 	 */
 	if (!mirror_mapping->is_valid) {
 		spin_unlock_bh(&mirror_g->lock);
+		ppe_mirror_stats_inc(&mirror_g->stats.acl_mirror_process_mapping_invalid);
 		ppe_mirror_warn("%p: Mirror mapping is not valid for ACL id %d\n", mirror_g, acl_id);
 		return false;
 	}
@@ -56,6 +57,7 @@ bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 	group_info = mirror_mapping->group_info;
 	if (!group_info) {
 		spin_unlock_bh(&mirror_g->lock);
+		ppe_mirror_stats_inc(&mirror_g->stats.acl_mirror_process_group_invalid);
 		ppe_mirror_warn("%p: ACL id is not associated with a group %d\n", mirror_g, acl_id);
 		return false;
 	}
@@ -353,6 +355,7 @@ ppe_mirror_ret_t ppe_mirror_acl_mapping_delete(uint16_t acl_id)
 
 	ppe_mirror_info("%p: Mapping deleted succesfully for ACL rule %d\n", mirror_g, acl_id);
 	ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_del_success);
+	ppe_mirror_stats_dec(&mirror_g->stats.acl_mapping_count);
 	return PPE_MIRROR_RET_SUCCESS;
 
 fail:
@@ -417,6 +420,7 @@ ppe_mirror_ret_t ppe_mirror_acl_mapping_add(struct ppe_mirror_acl_mapping_info *
 
 	ppe_mirror_info("%p: Mapping added succesfully for ACL rule %d\n", mirror_g, acl_id);
 	ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_add_success);
+	ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_count);
 	return PPE_MIRROR_RET_SUCCESS;
 
 fail1:
@@ -441,6 +445,13 @@ ppe_mirror_ret_t ppe_mirror_enable_capture_core(uint8_t core_id)
 		ppe_mirror_warn("invalid core ID received %d\n", core_id);
 		ret = PPE_MIRROR_RET_INVALID_CAPTURE_CORE;
                 ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_invalid_capture_core);
+		return ret;
+	}
+
+	if (!ppe_drv_acl_enable_mirror_capture_core(core_id)) {
+		ppe_mirror_warn("Failed to enable capture core %d\n", core_id);
+		ret = PPE_MIRROR_RET_FAIL_EN_CAPTURE_CORE;
+		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_fail_en_capture_core);
 		return ret;
 	}
 
