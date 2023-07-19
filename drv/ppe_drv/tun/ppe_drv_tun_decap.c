@@ -364,6 +364,14 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 					PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_L4PROTO_EN);
 
 	/*
+	 * Allow decapsulated GRETAP tunnel exception service code.
+	 */
+	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP) {
+		ftde.decap_action.service_code_en = true;
+		ftde.decap_action.service_code = PPE_DRV_SC_L2_TUNNEL_EXCEPTION;
+	}
+
+	/*
 	 * Allow UDP checksum zero packets.
 	 * VXLAN IPV4 will always allow the UDP checksum zero packets but,
 	 * VXLAN IPV6 will allow UDP checksum zero packets only if PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM6_RX is set.
