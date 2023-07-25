@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2017-2018, 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -80,6 +80,7 @@ struct nss_ppe_vlan_mgr_context {
 	struct list_head list;			/* List of vlan private instance */
 	spinlock_t lock;			/* Lock to protect vlan private instance */
 	struct ctl_table_header *sys_hdr;	/* "/pro/sys/nss/vlan_client" directory */
+	nss_ppe_vlan_mgr_br_vlan_cb_t vlan_over_bridge_cb;	/* CB to update bridge manager */
 };
 
 /*
@@ -110,6 +111,9 @@ struct nss_vlan_pvt {
 	uint32_t ppe_svid;			/* ppe_svid info */
 	struct ppe_drv_vlan_xlate_info xlate_info;
 						/* XLATE info */
-	int refs;				/* reference count */
+	struct kref ref;			/* Reference count */
+	bool is_vlan_as_vp_iface;		/* is VP created for this VLAN */
+	struct net_device *br_net_dev;		/* base dev of bridge VLAN netdev*/
+	bool is_vlan_over_bridge;		/* VLAN interface is created over bridge */
 };
 #endif

@@ -62,6 +62,8 @@
 #define PPE_DRV_V6_RULE_FLAG_DS_FLOW			0x0080	/**< Rule creation for DS flow */
 #define PPE_DRV_V6_RULE_FLAG_VP_FLOW			0x0100	/**< Rule creation for VP flow */
 #define PPE_DRV_V6_RULE_FLAG_SRC_INTERFACE_CHECK	0x0200	/**< Rule creation for source interface check */
+#define PPE_DRV_V6_RULE_TO_BRIDGE_VLAN_NETDEV		0x0400  /**< VLAN over bridge in egress direction */
+#define PPE_DRV_V6_RULE_FROM_BRIDGE_VLAN_NETDEV		0x0800  /**< VLAN over bridge in ingress direction */
 
 /*
  * v6 valid flags
@@ -72,6 +74,8 @@
 #define PPE_DRV_V6_VALID_FLAG_QOS		0x0008  /**< QoS fields are valid. */
 #define PPE_DRV_V6_VALID_FLAG_DSCP_MARKING	0x0010  /**< DSCP fields are valid. */
 #define PPE_DRV_V6_VALID_FLAG_SAWF		0x0020  /**< SAWF fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_ACL_POLICER	0x0040  /**< ACL/Policer fields are valid. */
+
 
 #define PPE_DRV_V6_MAX_CONN_COUNT               1024
 
@@ -118,6 +122,7 @@ struct ppe_drv_v6_rule_create {
 	struct ppe_drv_vlan_rule vlan_rule;		/**< VLAN-related acceleration parameters. */
 	struct ppe_drv_top_if_rule top_rule;		/**< Parameters related to the top interface in hierarchy. */
 	struct ppe_drv_service_class_rule sawf_rule;    /**< Service class related information. */
+	struct ppe_drv_acl_policer_rule ap_rule;	/**< ACL/Policer rule ID information. */
 };
 
 /**
@@ -155,7 +160,7 @@ struct ppe_drv_v6_conn_sync {
  */
 struct ppe_drv_v6_conn_sync_many {
         uint16_t count;					/* How many conn_sync included in this sync callback */
-        struct ppe_drv_v6_conn_sync conn_sync[];	/* Connection sync array */
+        struct ppe_drv_v6_conn_sync *conn_sync;	/* Connection sync array */
 };
 
 /**
@@ -203,7 +208,7 @@ void ppe_drv_v6_conn_sync_many(struct ppe_drv_v6_conn_sync_many *cn_syn, uint8_t
 
 /**
  * ppe_drv_v6_rfs_destroy
- *	Destroys IPv4 RFS connection rule in PPE.
+ *	Destroys IPv6 RFS connection rule in PPE.
  *
  * @datatypes
  * ppe_drv_v6_rfs_destroy
@@ -228,6 +233,34 @@ ppe_drv_ret_t ppe_drv_v6_rfs_destroy(struct ppe_drv_v6_rule_destroy *destroy);
  * Status of the create operation.
  */
 ppe_drv_ret_t ppe_drv_v6_rfs_create(struct ppe_drv_v6_rule_create *create);
+
+/**
+ * ppe_drv_v6_policer_flow_create
+ *	Creates IPv6 policer rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v6_policer_create
+ *
+ * @param[in] create   Pointer to the NSS PPE IPv6 create rule message.
+ *
+ * @return
+ * Status of the create operation.
+ */
+ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *create);
+
+/**
+ * ppe_drv_v6_policer_flow_destroy
+ *	Destroy IPv6 policer rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v6_policer_destroy
+ *
+ * @param[in] destroy   Pointer to the NSS PPE IPv6 destroy rule message.
+ *
+ * @return
+ * Status of the destroy operation.
+ */
+ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *destroy);
 
 /**
  * ppe_drv_v6_destroy

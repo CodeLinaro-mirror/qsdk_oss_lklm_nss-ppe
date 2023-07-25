@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,10 +28,10 @@ typedef bool(*ppe_tun_exception_method_t)(struct net_device *dev, struct sk_buff
  * ppe_tun_configure()
  *	Configure tunnel tunnel
  *
- * @param[in] dev	netdevice structure
- * @param[in] tun_hdr	tunnel header structure
- * @param[in] src_cb	source exception handler
- * @param[in] dest_cb	destination exception handler
+ * @param[in] dev      netdevice structure
+ * @param[in] tun_hdr  tunnel header structure
+ * @param[in] src_cb   source exception handler
+ * @param[in] dest_cb  destination exception handler
  *
  * @return
  * Status of the configuration.
@@ -43,7 +43,7 @@ bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_h
  * ppe_tun_deactivate()
  *	Deactive tunnel
  *
- * @param[in] dev	netdevice structure
+ * @param[in] dev  netdevice structure
  *
  * @return
  * Status of deactivation
@@ -54,7 +54,7 @@ bool ppe_tun_deactivate(struct net_device *dev);
  * ppe_tun_mtu_get()
  *	Get the ppe vp mtu.
  *
- * @param[in] dev	netdevice structure
+ * @param[in] dev  netdevice structure
  *
  * @return
  * mtu size
@@ -65,8 +65,8 @@ uint32_t ppe_tun_mtu_get(struct net_device *dev);
  * ppe_tun_mtu_set()
  *	Set the ppe vp mtu.
  *
- * @param[in] dev	netdevice structure
- * @param[in] mtu	mtu number
+ * @param[in] dev  netdevice structure
+ * @param[in] mtu  mtu number
  *
  * @return
  * Status of operation
@@ -77,9 +77,9 @@ bool ppe_tun_mtu_set(struct net_device *dev, uint32_t mtu);
  * ppe_tun_exception_packet_get()
  *	Get te number of exception packets the tunnel has seen.
  *
- * @param[in] tun	tunnel structure
- * @param[in] num_pkt	number of packets
- * @param[in] num_bytes	number of bytes
+ * @param[in] tun       tunnel structure
+ * @param[in] num_pkt   number of packets
+ * @param[in] num_bytes number of bytes
  *
  * @return
  * Status of operation
@@ -90,8 +90,8 @@ bool ppe_tun_exception_packet_get(struct net_device *dev, uint64_t *num_pkt, uin
  * ppe_tun_conf_accel()
  *	Enable / Disable acceleration for a tunnel type
  *
- * @param[in] type	tunnel type
- * @param[in] action	1 for Enable, 0 for disable
+ * @param[in] type     tunnel type
+ * @param[in] action   1 for Enable, 0 for disable
  *
  * @return
  * Status of operation
@@ -111,8 +111,8 @@ uint16_t ppe_tun_get_active_tun_cnt(void);
  * ppe_tun_setup()
  *	Setup the netdevice
  *
- * @param[in] dev	net device
- * @param[in] tun_hdr	tunnel header
+ * @param[in] dev      net device
+ * @param[in] tun_hdr  tunnel header
  *
  * @return
  * Status of operation
@@ -123,7 +123,7 @@ bool ppe_tun_setup(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr);
  * ppe_tun_free()
  *	Free a struct ppe_tun
  *
- * @param[in] dev	net device
+ * @param[in] dev  net device
  *
  * @return
  * Status of operation
@@ -134,7 +134,7 @@ bool ppe_tun_free(struct net_device *dev);
  * ppe_tun_alloc()
  *	Allocate a struct ppe_tun
  *
- * @param[in] dev	net device
+ * @param[in] dev  net device
  *
  * @return
  * Status of operation
@@ -145,7 +145,7 @@ bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type);
  * ppe_tun_deconfigure()
  *	Deconfigure the tunnel
  *
- * @param[in] dev	net device
+ * @param[in] dev  net device
  *
  * @return
  * Status of operation
@@ -156,7 +156,7 @@ bool ppe_tun_deconfigure(struct net_device *dev);
  * ppe_tun_decap_disable()
  *	Disable tunnel decapsulation
  *
- * @param type[IN] netdevice
+ * @param type[IN] dev  netdevice
  */
 bool ppe_tun_decap_disable(struct net_device *dev);
 
@@ -164,7 +164,22 @@ bool ppe_tun_decap_disable(struct net_device *dev);
  * ppe_tun_decap_enable()
  *	Enable tunnel decapsulation
  *
- * @param type[IN] netdevice
+ * @param type[IN] dev  netdevice
+ *
+ * @return
+ * Status of operation
  */
 bool ppe_tun_decap_enable(struct net_device *dev);
+
+/*
+ *  ppe_tun_configure_vxlan_dport
+ *	Configure VXLAN destination port
+ *
+ * @param type[IN] dport  destination port
+ *
+ * @return
+ * Status of operation
+ */
+bool ppe_tun_configure_vxlan_dport(uint16_t dport);
+
 #endif /* _NSS_PPE_TUN_DRV_H_ */

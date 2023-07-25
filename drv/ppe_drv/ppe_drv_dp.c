@@ -61,6 +61,7 @@ ppe_drv_ret_t ppe_drv_dp_set_mirror_if(struct ppe_drv_iface *iface,
 		break;
 
 	default:
+		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("Failed to set Mirror direction: %u direction \
 				is not supported\n", direction);
 		return PPE_DRV_RET_SET_MIRROR_FAIL;

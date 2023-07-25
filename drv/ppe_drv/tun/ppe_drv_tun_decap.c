@@ -19,6 +19,7 @@
 #include <net/gre.h>
 #include <net/vxlan.h>
 #include <linux/if_tunnel.h>
+#include <linux/version.h>
 #include <fal_tunnel.h>
 #include <ppe_drv/ppe_drv.h>
 #include "ppe_drv_tun.h"
@@ -61,8 +62,11 @@ static void ppe_drv_tun_decap_free(struct kref *kref)
 	}
 
 	ppe_drv_tun_decap_deconfigure(ptdc);
-
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	memset(ptdc, 0, sizeof(*ptdc));
+#else
+        memset(&(ptdc->ppe_drv_tun_decap_group), 0, sizeof(*ptdc));
+#endif
 }
 
 /*

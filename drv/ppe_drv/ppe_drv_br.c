@@ -177,8 +177,7 @@ ppe_drv_ret_t ppe_drv_br_set_ageing_time(uint32_t ageing_time)
 	}
 
 	spin_unlock_bh(&p->lock);
-	ppe_drv_info("Bridge Ageing time set to %u\n", ageing_time);
-	pr_warn("Set globle Ageing time set to %u which is same for all bridge\n",
+	ppe_drv_trace("Global Bridge Ageing time set to %u, which is same for all bridge\n",
 			ageing_time);
 
 	return PPE_DRV_RET_SUCCESS;

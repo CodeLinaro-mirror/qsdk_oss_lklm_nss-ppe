@@ -22,7 +22,6 @@
 #include <linux/of_address.h>
 #include <linux/vmalloc.h>
 #include <linux/debugfs.h>
-#include <linux/version.h>
 #include <fal/fal_rss_hash.h>
 #include <fal/fal_ip.h>
 #include <fal/fal_init.h>
@@ -37,10 +36,21 @@ static bool ipfrag_2tuple_hash = true;
 module_param(ipfrag_2tuple_hash, bool, 0644);
 MODULE_PARM_DESC(ipfrag_2tuple_hash, "RSS hash for IP fragments based on SIP & DIP");
 
+uint32_t if_bm_to_offload = PPE_DRV_PORT_OFFLOAD_DEF_VAL;
+
 /*
  * Define the filename to be used for assertions.
  */
 struct ppe_drv ppe_drv_gbl;
+
+/*
+ * ppe_drv_get_vxlan_dport()
+ * Get the VXLAN destination port.
+ */
+int ppe_drv_get_vxlan_dport(void)
+{
+	return ppe_drv_gbl.vxlan_dport;
+}
 
 /*
  * ppe_drv_hw_stats_sync()
@@ -50,16 +60,8 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 
-/*
- * TODO: Remove the following check when Tunnel support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	struct ppe_drv_v4_conn *cn_v4, *cn_tun_v4;
 	struct ppe_drv_v6_conn *cn_v6, *cn_tun_v6;
-#else
-	struct ppe_drv_v4_conn *cn_v4;
-	struct ppe_drv_v6_conn *cn_v6;
-#endif
 	struct ppe_drv_v4_conn_flow *pcf_v4;
 	struct ppe_drv_v4_conn_flow *pcr_v4;
 	struct ppe_drv_v6_conn_flow *pcf_v6;
@@ -100,10 +102,6 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 	 * Update hw stats for tunnels associated with active v4 connections
 	 */
 
-/*
- * TODO: Remove the following check when Tunnel support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	if (!list_empty(&p->conn_tun_v4)) {
 		list_for_each_entry(cn_tun_v4, &p->conn_tun_v4, list) {
 			ppe_drv_tun_v4_port_stats_update(cn_tun_v4);
@@ -126,7 +124,6 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 			ppe_drv_tun_v6_port_stats_update(cn_tun_v6);
 		}
 	}
-#endif
 
 	spin_unlock_bh(&p->lock);
 
@@ -518,15 +515,10 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		return -1;
 	}
 
-/*
- * TODO: Remove the following check when Tunnel support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	if (!ppe_drv_tun_global_init(p)) {
 		ppe_drv_warn("%p: failed to do global config init for tunnels", p);
 		return -1;
 	}
-#endif
 
 	p->pub_ip = ppe_drv_pub_ip_entries_alloc();
 	if (!p->pub_ip) {
@@ -628,10 +620,6 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	 * Allocate tunnel specific entries
 	 */
 
-/*
- * TODO: Remove the following check when Tunnel support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	p->ptun_ec = ppe_drv_tun_encap_entries_alloc(p);
 	if (!p->ptun_ec) {
 		ppe_drv_warn("%p: failed to allocate tunnel encap entries", p);
@@ -667,7 +655,24 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		ppe_drv_warn("%p: failed to allocate TL MAP LPM action interface entries", p);
 		goto fail;
 	}
-#endif
+
+	p->acl = ppe_drv_acl_entries_alloc();
+	if (!p->acl) {
+		ppe_drv_warn("%p: failed to allocate ACL entries", p);
+		goto fail;
+	}
+
+	p->pol_ctx = ppe_drv_policer_entries_alloc();
+	if (!p->pol_ctx) {
+		ppe_drv_warn("%p: failed to allocate global policer context", p);
+		goto fail;
+	}
+
+	p->acl_tbl = ppe_drv_acl_tbl_entries_alloc();
+	if (!p->acl_tbl) {
+		ppe_drv_warn("%p: failed to allocate ACL callback entries", p);
+		goto fail;
+	}
 
 	/*
 	 * Take a reference
@@ -689,10 +694,6 @@ static int ppe_drv_probe(struct platform_device *pdev)
 
 fail:
 
-/*
- * TODO: Remove the following check when Tunnel support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	if (p->decap_map_entries) {
 		ppe_drv_tun_decap_entries_free(p->decap_map_entries);
 		p->decap_map_entries = NULL;
@@ -722,7 +723,21 @@ fail:
 		ppe_drv_tun_l3_if_entries_free(p->ptun_l3_if);
 		p->ptun_l3_if = NULL;
 	}
-#endif
+
+	if (p->pol_ctx) {
+		ppe_drv_policer_entries_free(p->pol_ctx);
+		p->pol_ctx = NULL;
+	}
+
+	if (p->acl) {
+		ppe_drv_acl_entries_free(p->acl);
+		p->acl = NULL;
+	}
+
+	if (p->acl_tbl) {
+		ppe_drv_acl_tbl_entries_free(p->acl_tbl);
+		p->acl_tbl = NULL;
+	}
 
 	if (p->pub_ip) {
 		ppe_drv_pub_ip_entries_free(p->pub_ip);
@@ -847,10 +862,6 @@ static int ppe_drv_remove(struct platform_device *pdev)
 		p->cc = NULL;
 	}
 
-/*
- * TODO: Remove the following check when Tunnel support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	if (p->ptun_ec) {
 		ppe_drv_tun_encap_entries_free(p->ptun_ec);
 		p->ptun_ec = NULL;
@@ -881,8 +892,22 @@ static int ppe_drv_remove(struct platform_device *pdev)
 		p->decap_xlate_rules = NULL;
 	}
 
+	if (p->acl) {
+		ppe_drv_acl_entries_free(p->acl);
+		p->acl = NULL;
+	}
+
+	if (p->acl_tbl) {
+		ppe_drv_acl_tbl_entries_free(p->acl_tbl);
+		p->acl_tbl = NULL;
+	}
+
 	ppe_drv_tun_vxlan_deconfigure(p);
-#endif
+
+	if (p->pol_ctx) {
+		ppe_drv_policer_entries_free(p->pol_ctx);
+		p->pol_ctx = NULL;
+	}
 
 	if (p->fse_ops) {
 		ppe_drv_warn("FSE ops still registered while ppe module getting removed\n");
@@ -1008,6 +1033,73 @@ void ppe_drv_notifier_ops_unregister(struct ppe_drv_notifier_ops *notifier_ops)
 EXPORT_SYMBOL(ppe_drv_notifier_ops_unregister);
 
 /*
+ * ppe_drv_if_bm_to_offload_handler()
+ *	API to configure the interface bitmask where the offload is enabled
+ */
+static int ppe_drv_if_bm_to_offload_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if (if_bm_to_offload > PPE_DRV_PORT_OFFLOAD_MAX_VAL) {
+		ppe_drv_warn("Incorrect value of offload bitmask. Setting it to"
+				" default value. Value: %0x, if_bm_to_offload: %0x\n",
+				if_bm_to_offload, PPE_DRV_PORT_OFFLOAD_MAX_VAL);
+		if_bm_to_offload = PPE_DRV_PORT_OFFLOAD_DEF_VAL;
+	}
+
+	ppe_drv_warn("PPE DRV interface bitmask to offload is %0x\n", if_bm_to_offload);
+	return ret;
+}
+
+/*
+ * ppe_drv_sub
+ *	PPE DRV sub directory
+ */
+static struct ctl_table ppe_drv_sub[] = {
+	{
+		.procname	=	"if_bm_to_offload",
+		.data		=	&if_bm_to_offload,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_if_bm_to_offload_handler
+	},
+	{}
+};
+
+/*
+ * ppe_drv_main
+ *	PPE DRV main directory
+ */
+static struct ctl_table ppe_drv_main[] = {
+	{
+		.procname	=	"ppe_drv",
+		.mode		=	0555,
+		.child		=	ppe_drv_sub,
+	},
+	{}
+};
+
+/*
+ * ppe_drv_root
+ *	PPE DRV root directory
+ */
+static struct ctl_table ppe_drv_root[] = {
+	{
+		.procname	=	"ppe",
+		.mode		=	0555,
+		.child		=	ppe_drv_main,
+	},
+	{}
+};
+
+/*
  * ppe_drv_module_init()
  *	module init for ppe driver
  */
@@ -1032,6 +1124,17 @@ static int __init ppe_drv_module_init(void)
 		return -EINVAL;
 	}
 
+	/*
+	 * Register sysctl framework for PPE DRV
+	 */
+	ppe_drv_gbl.ppe_drv_header = register_sysctl_table(ppe_drv_root);
+	if (!ppe_drv_gbl.ppe_drv_header) {
+		ppe_drv_warn("sysctl table configuration failed");
+		unregister_netdevice_notifier(&nss_ppe_netdevice);
+		platform_driver_unregister(&ppe_drv_platform);
+		return -EINVAL;
+	}
+
 	return 0;
 }
 module_init(ppe_drv_module_init);
@@ -1042,6 +1145,8 @@ module_init(ppe_drv_module_init);
  */
 static void __exit ppe_drv_module_exit(void)
 {
+	unregister_sysctl_table(ppe_drv_gbl.ppe_drv_header);
+	ppe_drv_gbl.ppe_drv_header = NULL;
 	unregister_netdevice_notifier(&nss_ppe_netdevice);
 	platform_driver_unregister(&ppe_drv_platform);
 }

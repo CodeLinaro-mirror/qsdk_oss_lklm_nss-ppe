@@ -222,7 +222,7 @@ static int ppe_tbl_dump(struct Qdisc *sch, struct sk_buff *skb)
 	ppe_qdisc_info("%x ppetbl dumping", sch->handle);
 
 	opts = ppe_qdisc_nla_nest_start(skb, TCA_OPTIONS);
-	if (nla_put(skb, TCA_PPETBL_PARMS, sizeof(opt), &opt)) {
+	if (!opts || nla_put(skb, TCA_PPETBL_PARMS, sizeof(opt), &opt)) {
 		goto nla_put_failure;
 	}
 

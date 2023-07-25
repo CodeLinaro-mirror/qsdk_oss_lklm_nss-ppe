@@ -523,7 +523,7 @@ static int nss_ppe_lag_changeaddr_event(struct netdev_notifier_info *info)
 		return NOTIFY_DONE;
 	}
 
-	ret = ppe_drv_iface_mac_addr_set(entry->iface, bond_dev->dev_addr);
+	ret = ppe_drv_iface_mac_addr_set(entry->iface, (uint8_t *)bond_dev->dev_addr);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		nss_ppe_lag_warn("%px: failed to set mac_addr, error = %d \n", bond_dev, ret);
 		return NOTIFY_DONE;

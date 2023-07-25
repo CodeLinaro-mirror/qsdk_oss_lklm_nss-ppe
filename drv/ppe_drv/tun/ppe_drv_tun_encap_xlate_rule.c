@@ -15,6 +15,7 @@
  */
 
 #include <fal_tunnel.h>
+#include <linux/if_vlan.h>
 #include <ppe_drv/ppe_drv.h>
 #include "ppe_drv_tun.h"
 

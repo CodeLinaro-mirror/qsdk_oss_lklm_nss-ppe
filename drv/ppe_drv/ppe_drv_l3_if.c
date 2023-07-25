@@ -242,7 +242,7 @@ bool ppe_drv_l3_if_ig_mac_deref(struct ppe_drv_l3_if *l3_if)
  * ppe_drv_l3_if_eg_mac_addr_set()
  *	Programs the given MAC address to L3 interface in PPE Egress table
  */
-bool ppe_drv_l3_if_eg_mac_addr_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr)
+bool ppe_drv_l3_if_eg_mac_addr_set(struct ppe_drv_l3_if *l3_if, const uint8_t *mac_addr)
 {
 	sw_error_t err;
 	fal_intf_macaddr_t mac_cfg = {0};
@@ -289,7 +289,7 @@ bool ppe_drv_l3_if_eg_mac_addr_clear(struct ppe_drv_l3_if *l3_if)
  * ppe_drv_l3_if_mac_addr_set()
  *	Programs the given MAC address to L3 interface in PPE
  */
-bool ppe_drv_l3_if_mac_addr_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr)
+bool ppe_drv_l3_if_mac_addr_set(struct ppe_drv_l3_if *l3_if, const uint8_t *mac_addr)
 {
 	sw_error_t err;
 	struct ppe_drv *p = &ppe_drv_gbl;

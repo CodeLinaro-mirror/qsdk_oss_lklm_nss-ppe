@@ -310,7 +310,11 @@ free_mem:
  */
 bool ppe_qdisc_stats_sync_many_init(struct ppe_qdisc *pq)
 {
-	if (!pq && !(pq->flags & PPE_QDISC_FLAG_NODE_ROOT)) {
+	if (!pq) {
+		return false;
+	}
+
+	if (!(pq->flags & PPE_QDISC_FLAG_NODE_ROOT)) {
 		return false;
 	}
 

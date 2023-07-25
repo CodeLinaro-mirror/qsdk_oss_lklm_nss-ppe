@@ -2,24 +2,28 @@
 
 ccflags-y := -I$(obj) -I$(obj)/.. -I$(obj)/../..
 
-ifneq ($(ppe-ds),)
-obj-m += ppe_ds/
-else
-ifneq ($(ppe-vp),)
-obj-m += ppe_vp/
-else
-ifneq ($(ppe-tun),)
-obj-m += ppe_tun/
-else
+ifneq ($(ppe-drv),)
 obj-m += ppe_drv/
 endif
-endif
-endif
-ifneq ($(ppe-rule),)
-obj-m += ppe_rule/
-endif
+
 ifneq ($(ppe-qdisc),)
 obj-m += ppe_qdisc/
+endif
+
+ifneq ($(ppe-vp),)
+obj-m += ppe_vp/
+endif
+
+ifneq ($(ppe-tun),)
+obj-m += ppe_tun/
+endif
+
+ifneq ($(ppe-ds),)
+obj-m += ppe_ds/
+endif
+
+ifneq ($(ppe-rule),)
+obj-m += ppe_rule/
 endif
 
 obj ?= .

@@ -164,12 +164,19 @@ static inline void ppe_qdisc_atomic_set(struct ppe_qdisc *pq)
 /*
  * ppe_qdisc_tcf_block()
  *	Return the block containing chain of qdisc.
- *
- * This is an empty callback, because, currently, tc filter iteration support
- * is not present at class of a qdisc.
  */
 static inline struct tcf_block *ppe_qdisc_tcf_block(struct Qdisc *sch, unsigned long cl, struct netlink_ext_ack *extack)
 {
+	struct ppe_qdisc *pq = qdisc_priv(sch);
+
+	/*
+	 * Currently, support is available only for tc filter iterations
+	 * at root qdisc.
+	 */
+	if (pq->flags & PPE_QDISC_FLAG_NODE_ROOT) {
+		return pq->block;
+	}
+
 	return NULL;
 }
 
@@ -232,6 +239,16 @@ static inline int ppe_qdisc_enqueue(struct sk_buff *skb,
 		struct Qdisc *sch,
 		struct sk_buff **to_free)
 {
+	if (!skb->priority) {
+		struct tcf_proto *tcf;
+		struct tcf_result res;
+		if (TC_ACT_UNSPEC != tcf_classify(skb, tcf, &res, false)) {
+			if (!res.class) {
+				skb->priority = res.classid;
+			}
+		}
+	}
+
 	/*
 	 * Set the SKB int_pri from SKB priority.
 	 * This int_pri will be used in EDMA Tx descriptor for PPE Tx queue.

@@ -51,7 +51,8 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_DS = 0x4,
 	PPE_DRV_PORT_FLAG_MAX = 0x8,
 	PPE_DRV_PORT_RFS_ENABLED = 0x10,
-	PPE_DRV_PORT_FLAG_WIFI_DEV = 0x20
+	PPE_DRV_PORT_FLAG_WIFI_DEV = 0x20,
+	PPE_DRV_PORT_POLICER_ENABLED = 0x40,
 } ppe_drv_port_flag_t;
 
 /*
@@ -83,9 +84,9 @@ struct ppe_drv_port {
 	uint8_t ucast_queue;			/* Base queue ID for the port */
 	uint8_t tunnel_vp_cfg;			/* Port is of type tunnel VP */
 	uint8_t active_vlan;			/* Number active VLAN configured on the port */
-	struct ppe_drv_port_hw_stats stats;		/* PPE HW port statistics */
-        uint8_t core_mask;			/* Core mask for VP flow */
-        uint8_t shadow_core_mask;		/* Shadow Core mask for VP flow */
+	struct ppe_drv_port_hw_stats stats;	/* PPE HW port statistics */
+	uint8_t core_mask;			/* Core mask for VP flow */
+	uint8_t shadow_core_mask;		/* Shadow Core mask for VP flow */
 	uint8_t user_type;			/* PPE VP user type */
 	uint8_t next_core;			/* Next core to pick for RFS */
 };
@@ -99,7 +100,7 @@ struct net_device *ppe_drv_port_to_dev(struct ppe_drv_port *pp);
 struct ppe_drv_port *ppe_drv_port_from_dev(struct net_device *dev);
 struct ppe_drv_port *ppe_drv_port_from_tl_l3_if(struct ppe_drv_tun_l3_if *tl_l3_if);
 
-void ppe_drv_port_mac_addr_set(struct ppe_drv_port *pp, uint8_t *mac_addr);
+void ppe_drv_port_mac_addr_set(struct ppe_drv_port *pp, const uint8_t *mac_addr);
 void ppe_drv_port_mac_addr_clear(struct ppe_drv_port *pp);
 
 bool ppe_drv_port_pp_mtu_cfg(struct ppe_drv_port *pp, bool enable);

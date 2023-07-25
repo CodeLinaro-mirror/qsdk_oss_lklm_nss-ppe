@@ -16,6 +16,7 @@
 
 #include <fal/fal_servcode.h>
 #include <fal/fal_qm.h>
+
 #include "ppe_drv.h"
 
 #if (PPE_DRV_DEBUG_LEVEL == 3)
@@ -232,6 +233,36 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 		 * Don't update service code in EDMA
 		 */
 		sc_cfg.field_update_bitmap = (1 << FLD_UPDATE_SERVICE_CODE);
+		break;
+
+	case PPE_DRV_SC_NOEDIT_ACL_POLICER:
+		/*
+		 * Don't update destination information and service code in EDMA
+		 */
+		sc_cfg.field_update_bitmap = ((1 << FLD_UPDATE_DEST_INFO) | (1 << FLD_UPDATE_SERVICE_CODE));
+
+		/*
+		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
+		 * packets sent to PPE, with SPF bypass service code.
+		 */
+		sc_cfg.bypass_bitmap[1] = ((1 << SOURCE_FLTR_BYP)
+						| (1 << BRIDGING_FWD_BYP)
+						| (1 << L2_SOURCE_SEC_BYP));
+
+		/*
+		 * Avoid any packet editing
+		 */
+		sc_cfg.bypass_bitmap[1] |= ((1 << L2_PKT_EDIT_BYP) | (1 << L3_PKT_EDIT_BYP));
+
+		break;
+
+	case PPE_DRV_SC_FLOW_ACL_FIRST ... PPE_DRV_SC_FLOW_ACL_LAST:
+		/*
+		 * These are primarily used for N-tuple lookup or flow+policer combintation.
+		 * Don't update service code in EDMA and there is no redirection needed with these SCs.
+		 */
+		sc_cfg.field_update_bitmap = (1 << FLD_UPDATE_SERVICE_CODE);
+		sc_cfg.dest_port_valid = false;
 		break;
 
 	default:
@@ -476,6 +507,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_sc *sc;
+	ppe_drv_sc_t acl_sc;
 
 	sc = vzalloc(sizeof(struct ppe_drv_sc) * p->sc_num);
 	if (!sc) {
@@ -504,6 +536,14 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE2, PPE_DRV_SC_EDIT_REDIR_CORE2, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_VP_RPS, PPE_DRV_SC_VP_RPS, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_ACL_POLICER, PPE_DRV_SC_NOEDIT_ACL_POLICER, PPE_DRV_PORT_CPU);
+
+	/*
+	 * Initialize FLOW ACL service code
+	 */
+	for (acl_sc = PPE_DRV_SC_FLOW_ACL_FIRST; acl_sc <= PPE_DRV_SC_FLOW_ACL_LAST; acl_sc++) {
+		ppe_drv_sc_config(acl_sc, acl_sc, PPE_DRV_PORT_CPU);
+	}
 
 	return sc;
 }

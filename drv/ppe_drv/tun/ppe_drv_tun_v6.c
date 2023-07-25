@@ -23,6 +23,7 @@
 
 #include <net/ipv6.h>
 #include <net/vxlan.h>
+#include <linux/ppp_defs.h>
 
 /*
  * ppe_drv_tun_v6_port_stats_update()
@@ -184,12 +185,18 @@ static struct ppe_drv_tun *ppe_drv_v6_tun_get_tun_from_create_rule(struct ppe_dr
  * ppe_drv_v6_vxlan_tunnel()
  *	Check if create request for Vxlan tunnel.
  */
-static bool ppe_drv_v6_vxlan_tunnel(struct ppe_drv_v6_rule_create *create)
+static bool ppe_drv_v6_vxlan_tunnel(struct ppe_drv_v6_rule_create *create, struct net_device *dev)
 {
-	if ((create->tuple.protocol == IPPROTO_UDP) &&
-		((create->tuple.flow_ident == IANA_VXLAN_UDP_PORT) ||
-		(create->tuple.return_ident == IANA_VXLAN_UDP_PORT))) {
-		return true;
+	int vxlan_dport = ppe_drv_get_vxlan_dport();
+
+	if (netif_is_vxlan(dev) || (!strncmp(dev->name, "ppe_vxlan_tun", 13))) {
+		/*
+		 * Check if it is an outer rule.
+		 */
+		if (((create->tuple.flow_ident == vxlan_dport) && (create->tuple.return_ident == vxlan_dport))) {
+			ppe_drv_info("%p: Creating VXLAN tunnel dev: %s", dev, dev->name);
+			return true;
+		}
 	}
 
 	return false;
@@ -230,22 +237,19 @@ bool ppe_drv_v6_tun_allow_tunnel_create(struct ppe_drv_v6_rule_create *create)
 		return true;
 	}
 
-	/*
-	 * Vxlan PPE accelearation is only supported for default port currently.
-	 */
-	if (ppe_drv_v6_vxlan_tunnel(create)) {
-		return true;
-	}
-
 	port_tun = ppe_drv_v6_tun_get_tun_from_create_rule(&create->conn_rule);
 	if (!port_tun) {
 		return false;
 	}
 
+	dev = ppe_drv_port_to_dev(port_tun->pp);
+	if (ppe_drv_v6_vxlan_tunnel(create, dev)) {
+		return true;
+	}
+
 	/*
 	 * Check if the rule is for MAP-T
 	 */
-	dev = ppe_drv_port_to_dev(port_tun->pp);
 	if (dev->priv_flags_ext & IFF_EXT_MAPT) {
 		return true;
 	}

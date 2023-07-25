@@ -16,7 +16,7 @@
 
 #include <linux/netdevice.h>
 #include <linux/if_ether.h>
-#include <linux/version.h>
+#include <linux/if_vlan.h>
 #include <fal/fal_fdb.h>
 #include <fal/fal_ip.h>
 #include <fal/fal_misc.h>
@@ -373,14 +373,7 @@ struct ppe_drv_tun_l3_if *ppe_drv_port_tl_l3_if_get_n_ref(struct ppe_drv_port *p
 		return NULL;
 	}
 
-/*
- * TODO: Remove the following check when Tunnel support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	return ppe_drv_tun_l3_if_ref(pp->tl_l3_if);
-#else
-	return NULL;
-#endif
 }
 
 /*
@@ -829,6 +822,78 @@ struct ppe_drv_l3_if *ppe_drv_port_find_pppoe_l3_if(struct ppe_drv_port *pp, uin
 }
 
 /*
+ * ppe_drv_port_is_flow_offload_enabled()
+ *	API to check whether given netdevice is enabled for offload or not
+ */
+bool ppe_drv_port_is_flow_offload_enabled(struct net_device *dev)
+{
+	struct ppe_drv_iface *iface;
+	struct ppe_drv_port *drv_port = NULL;
+
+	if (!dev) {
+		ppe_drv_warn("Net device is NULL\n");
+		return false;
+	}
+
+	iface = ppe_drv_iface_get_by_dev_internal(dev);
+	if (!iface) {
+		ppe_drv_warn("failed in getting iface from netdev (%s)\n",
+					dev->name);
+		return false;
+	}
+
+	drv_port = ppe_drv_iface_port_get(iface);
+	if (!drv_port) {
+		ppe_drv_warn("failed in getting drv port from iface\n");
+		return false;
+	}
+
+	ppe_drv_warn("dev: %s, port: %x, if_bm_to_offload: %x\n",
+				dev->name, drv_port->port, if_bm_to_offload);
+
+	/*
+	 * PPE offload disable feature is supported only on physical ports
+	 */
+	if (!PPE_DRV_PHY_PORT_CHK(drv_port->port)) {
+		ppe_drv_warn("port:%d is not physical\n", drv_port->port);
+		return true;
+	}
+
+	if (if_bm_to_offload & (1 << (drv_port->port - 1))) {
+		ppe_drv_warn("port offload enabled flag is set for %d port\n",
+					drv_port->port);
+		return true;
+	}
+
+	ppe_drv_warn("port offload is disabled for %d port\n", drv_port->port);
+	return false;
+}
+EXPORT_SYMBOL(ppe_drv_port_is_flow_offload_enabled);
+
+/*
+ * ppe_drv_port_ucast_queue_get_by_port()
+ *	Return queue id of port number.
+ */
+int32_t ppe_drv_port_ucast_queue_get_by_port(int port)
+{
+	fal_ucast_queue_dest_t q_dst = {0};
+	uint32_t queue_id = 0;
+	uint8_t profile = 0;
+	sw_error_t err;
+
+	q_dst.dst_port = port;
+
+	err = fal_ucast_queue_base_profile_get(PPE_DRV_SWITCH_ID, &q_dst, &queue_id, &profile);
+	if (err != SW_OK) {
+		ppe_drv_warn("error %d getting queue base for port %d\n", err, port);
+		return -1;
+	}
+
+	return queue_id;
+}
+EXPORT_SYMBOL(ppe_drv_port_ucast_queue_get_by_port);
+
+/*
  * ppe_drv_port_get_vp_phys_dev()
  * 	Get the net device corresponding to physical port
  * 	on which tunnel is created
@@ -1040,7 +1105,7 @@ int32_t ppe_drv_port_num_from_dev(struct net_device *dev)
 	}
 
 	spin_unlock_bh(&p->lock);
-	return -1;
+	return PPE_DRV_PORT_ID_INVALID;
 }
 EXPORT_SYMBOL(ppe_drv_port_num_from_dev);
 
@@ -1084,6 +1149,80 @@ bool ppe_drv_port_check_rfs_support(struct net_device *dev)
 }
 EXPORT_SYMBOL(ppe_drv_port_check_rfs_support);
 
+/*
+ * ppe_drv_port_clear_policer_support()
+ *	Clear policer support
+ */
+void ppe_drv_port_clear_policer_support(struct net_device *dev)
+{
+	struct ppe_drv_port *pp = NULL;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_dev(dev);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p unable to find valid ppe port for given dev: %s\n", dev, dev->name);
+		return;
+	}
+
+	pp->flags &= ~PPE_DRV_PORT_POLICER_ENABLED;
+	spin_unlock_bh(&p->lock);
+	ppe_drv_trace("%p Clear policer flag for given dev: %s\n", p, dev->name);
+	return;
+}
+EXPORT_SYMBOL(ppe_drv_port_clear_policer_support);
+
+/*
+ * ppe_drv_port_set_policer_support()
+ *	set policer support
+ */
+void ppe_drv_port_set_policer_support(struct net_device *dev)
+{
+	struct ppe_drv_port *pp = NULL;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_dev(dev);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p unable to find valid ppe port for given dev: %s\n", dev, dev->name);
+		return;
+	}
+
+	pp->flags |= PPE_DRV_PORT_POLICER_ENABLED;
+	spin_unlock_bh(&p->lock);
+	ppe_drv_trace("%p Set policer flag for given dev: %s\n", p, dev->name);
+	return;
+}
+EXPORT_SYMBOL(ppe_drv_port_set_policer_support);
+
+/*
+ * ppe_drv_port_check_policer_support()
+ *	check policer support
+ *
+ * TODO: Enhance framework to do Virtual port based policing using L2_VP_TBL
+ */
+bool ppe_drv_port_check_policer_support(struct net_device *dev)
+{
+	struct ppe_drv_port *pp = NULL;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	bool policer_en = false;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_dev(dev);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p unable to find valid ppe port for given dev: %s\n", dev, dev->name);
+		return false;
+	}
+
+	policer_en = !!(pp->flags & PPE_DRV_PORT_POLICER_ENABLED);
+	spin_unlock_bh(&p->lock);
+	ppe_drv_trace("%p policer status for given dev: %s is %d\n", p, dev->name, policer_en);
+	return policer_en;
+}
+EXPORT_SYMBOL(ppe_drv_port_check_policer_support);
 
 /*
  * ppe_drv_port_is_physical()
@@ -1218,6 +1357,10 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 		profile = FAL_QM_PROFILE_PO_ID;
 	}
 
+	if ((pp->type == PPE_DRV_PORT_VIRTUAL) && is_vlan_dev(pp->dev)) {
+		profile = PPE_DRV_REDIR_PROFILE_ID;
+	}
+
 	/*
 	 * Select PPE-DS profile ID for PPE-DS user ports.
 	 */
@@ -1260,7 +1403,7 @@ uint8_t ppe_drv_port_ucast_queue_get(struct ppe_drv_port *pp)
  * ppe_drv_port_mac_addr_set()
  *	Set MAC addr of a given port in PPE.
  */
-void ppe_drv_port_mac_addr_set(struct ppe_drv_port *pp, uint8_t *mac_addr)
+void ppe_drv_port_mac_addr_set(struct ppe_drv_port *pp, const uint8_t *mac_addr)
 {
 	sw_error_t err;
 	fal_macaddr_entry_t macaddr = {0};
@@ -1723,7 +1866,6 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	}
 
 	pp->is_fdb_learn_enabled = false;
-
 
 	/*
 	 * Set VP type as normal VP.

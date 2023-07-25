@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <linux/version.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <ppe_drv_port.h>
@@ -34,9 +35,12 @@ bool ppe_vp_rx_process_cb(struct net_device *rxdev, struct sk_buff *skb, void *c
 
 	/*
 	 * Reset the below flags in case any of DS flow is exceptioned.
+	 * TODO : Remove Kernel version check once we enable SKB recycler
 	 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	skb->fast_recycled = 0;
 	skb->recycled_for_ds = 0;
+#endif
 
 	netif_receive_skb(skb);
 	return true;

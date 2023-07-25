@@ -23,12 +23,14 @@
  */
 
 #include "ppe_drv.h"
+#include "ppe_drv_acl.h"
 #include "ppe_drv_br.h"
 #include "ppe_drv_cc.h"
 #include "ppe_drv_dp.h"
 #include "ppe_drv_eip.h"
 #include "ppe_drv_iface.h"
 #include "ppe_drv_lag.h"
+#include "ppe_drv_policer.h"
 #include "ppe_drv_port.h"
 #include "ppe_drv_qos.h"
 #include "ppe_drv_sc.h"

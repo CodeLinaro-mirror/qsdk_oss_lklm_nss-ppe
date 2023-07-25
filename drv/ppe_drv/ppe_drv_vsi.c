@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -278,6 +278,7 @@ bool ppe_drv_vsi_set_vlan(struct ppe_drv_vsi *vsi, uint32_t vlan_id, struct ppe_
 	if ((nh_iface->type == PPE_DRV_IFACE_TYPE_PHYSICAL)
 		|| (nh_iface->type == PPE_DRV_IFACE_TYPE_LAG)
 		|| (nh_iface->type == PPE_DRV_IFACE_TYPE_VIRTUAL)
+		|| (nh_iface->flags & PPE_DRV_IFACE_VLAN_OVER_BRIDGE)
 		|| (nh_iface->type == PPE_DRV_IFACE_TYPE_VIRTUAL_PO)
 		|| (nh_iface->type == PPE_DRV_IFACE_TYPE_VP_L2_TUN)) {
 
@@ -295,11 +296,13 @@ bool ppe_drv_vsi_set_vlan(struct ppe_drv_vsi *vsi, uint32_t vlan_id, struct ppe_
 		vsi->vlan.outer_vlan = nh_vsi->vlan.inner_vlan;
 		vsi->vlan.inner_vlan = vlan_id;
 	} else {
-		ppe_drv_warn("%p: Invalid nh_iface type(%d) during vlan setup", vsi, nh_iface->type);
+		ppe_drv_warn("%p: Invalid nh_iface type(%d) during vlan setup dev name %s\n", vsi, nh_iface->type,
+			     nh_iface->dev->name);
 		return false;
 	}
 
-	ppe_drv_trace("%p: vsi configuration done for vlan_id(%d) and interface_type(%d)", vsi, vlan_id, nh_iface->type);
+	ppe_drv_trace("%p: vsi configuration done for vlan_id(%d) and interface_type(%d) dev name %s\n", vsi,
+		      vlan_id, nh_iface->type, nh_iface->dev->name);
 	return true;
 }
 

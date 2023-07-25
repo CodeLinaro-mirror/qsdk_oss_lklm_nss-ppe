@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,7 +19,7 @@
 #include <linux/module.h>
 #include <linux/debugfs.h>
 #include <linux/netdevice.h>
-
+#include <linux/version.h>
 #include <ppe_drv_port.h>
 #include <ppe_vp_public.h>
 #include <ppe_drv_tun_cmn_ctx.h>
@@ -34,29 +34,65 @@ struct ppe_tun_priv *ptp;
  */
 bool ppe_tun_stats(struct net_device *dev, ppe_vp_hw_stats_t *stats)
 {
-	struct pcpu_sw_netstats *tstats = this_cpu_ptr(dev->tstats);
+	struct pcpu_sw_netstats *tstats;
+	struct net_device *pdev;
+	int ifindex;
+
+	tstats = this_cpu_ptr(dev->tstats);
+
+	/*
+	 * For VXLAN device add the stats to the parent netdevice instead of nss_netdev.
+	 */
+	if (unlikely(strncmp(dev->name, "ppe_vxlan_tun", 13) == 0)) {
+		ifindex = *(int *)netdev_priv(dev);
+		pdev = dev_get_by_index(&init_net, ifindex);
+		if (!pdev) {
+			ppe_tun_warn("%p: Parent dev of the nss-netdev %s is not present.", dev, dev->name);
+			return true;
+		}
+
+		tstats = this_cpu_ptr(pdev->tstats);
+		dev_put(pdev);
+	}
 
 	u64_stats_update_begin(&tstats->syncp);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	tstats->tx_bytes += stats->tx_byte_cnt;
 	tstats->tx_packets += stats->tx_pkt_cnt;
 	tstats->rx_bytes += stats->rx_byte_cnt;
 	tstats->rx_packets += stats->rx_pkt_cnt;
-
+#else
+        u64_stats_add(&tstats->tx_bytes, stats->tx_byte_cnt);
+	u64_stats_add(&tstats->tx_packets,  stats->tx_pkt_cnt);
+	u64_stats_add(&tstats->rx_bytes, stats->rx_byte_cnt);
+	u64_stats_add(&tstats->rx_packets,  stats->rx_pkt_cnt);
+#endif
 	/*
 	 * For Map-t device we need to update the rx and tx stats separately.
 	 */
 	if (unlikely(dev->priv_flags_ext & IFF_EXT_MAPT)) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		tstats->rx_bytes += stats->tx_byte_cnt;
 		tstats->rx_packets += stats->tx_pkt_cnt;
 		tstats->tx_bytes += stats->rx_byte_cnt;
 		tstats->tx_packets += stats->rx_pkt_cnt;
+#else
+	        u64_stats_add(&tstats->rx_bytes, stats->tx_byte_cnt);
+		u64_stats_add(&tstats->rx_packets,  stats->tx_pkt_cnt);
+	        u64_stats_add(&tstats->tx_bytes, stats->rx_byte_cnt);
+                u64_stats_add(&tstats->tx_packets,  stats->rx_pkt_cnt);
+#endif
 	}
 
 	u64_stats_update_end(&tstats->syncp);
-
+/*
+ * TODO: Remove the following check when net_device support for
+ * drop counters is added from Kernel for PPE Tunnel stats.
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);
 	atomic_long_add(stats->rx_drop_pkt_cnt, &dev->rx_dropped);
-
+#endif
 	return true;
 }
 
@@ -821,6 +857,7 @@ bool ppe_tun_decap_disable(struct net_device *dev)
 		ppe_tun_warn("%p, Failed to disable the decap for %s", tun, dev->name);
 	}
 
+	ppe_tun_trace("%px: Successfully enabled decap for nss_dev %s", tun, dev->name);
 	ppe_tun_deref(tun);
 	return ret;
 }
@@ -846,10 +883,22 @@ bool ppe_tun_decap_enable(struct net_device *dev)
 		ppe_tun_warn("%p, Failed to disable the decap for %s", tun, dev->name);
 	}
 
+	ppe_tun_trace("%px: Successfully enabled decap for nss_dev %s", tun, dev->name);
 	ppe_tun_deref(tun);
 	return ret;
 }
 EXPORT_SYMBOL(ppe_tun_decap_enable);
+
+/*
+ * ppe_tun_configure_vxlan_dport()
+ *	Configure the VXLAN destination port
+ */
+bool ppe_tun_configure_vxlan_dport(uint16_t dport)
+{
+	ppe_tun_trace("Configuring the destination port of VXLAN dport: %u", dport);
+	return ppe_drv_tun_configure_vxlan_and_dport(dport);
+}
+EXPORT_SYMBOL(ppe_tun_configure_vxlan_dport);
 
 /*
  * ppe_tun_gretap_read()

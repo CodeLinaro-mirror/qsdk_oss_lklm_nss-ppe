@@ -18,6 +18,7 @@
 #include <ppe_drv_public.h>
 #include <ppe_drv_tun_cmn_ctx.h>
 #include <ppe_drv_tun_public.h>
+#include "ppe_drv_acl.h"
 #include "ppe_drv_exception.h"
 #include "ppe_drv_cc.h"
 #include "ppe_drv_flow.h"
@@ -25,6 +26,7 @@
 #include "ppe_drv_iface.h"
 #include "ppe_drv_l3_if.h"
 #include "ppe_drv_nexthop.h"
+#include "ppe_drv_policer.h"
 #include "ppe_drv_port.h"
 #include "ppe_drv_pppoe.h"
 #include "ppe_drv_pub_ip.h"
@@ -78,6 +80,13 @@
  * Default switch ID
  */
 #define PPE_DRV_SWITCH_ID		0
+
+/*
+ * Profile ID
+ */
+#define PPE_DRV_COMMON_PROFILE_ID	FAL_QM_PROFILE_COMMON_ID
+#define PPE_DRV_PO_PROFILE_ID		FAL_QM_PROFILE_PO_ID
+#define PPE_DRV_REDIR_PROFILE_ID	9
 
 /*
  * PPE Hash seed and mask
@@ -167,13 +176,19 @@
  */
 #define PPE_DRV_CORE2SC_NOEDIT(core_id) (PPE_DRV_SC_NOEDIT_REDIR_CORE0 + core_id)
 #define PPE_DRV_CORE2SC_EDIT(core_id) (PPE_DRV_SC_EDIT_REDIR_CORE0 + core_id)
-#define PPE_DRV_REDIR_PROFILE_ID 9
 
 /*
  * Default port number return from ssdk is 0xF
  * Which indicates no port is set for mirror analysis
  */
 #define PPE_DRV_MIRR_INVAL_PORT 0xF
+
+#define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3f
+#if defined(NSS_PPE_IPQ53XX)
+#define PPE_DRV_PORT_OFFLOAD_DEF_VAL		0x3
+#else
+#define PPE_DRV_PORT_OFFLOAD_DEF_VAL		0x3f
+#endif
 
 /*
  * ppe_drv_entry_valid
@@ -225,6 +240,7 @@ struct ppe_drv {
 	struct ppe_drv_l3_if *l3_if;			/* Memory for PPE L3_IF shadow table */
 	struct ppe_drv_pppoe *pppoe;			/* Memory for PPE PPPoe table */
 	struct ppe_drv_queue *queue;			/* Memory for PPE queue table */
+	struct ppe_drv_policer_ctx *pol_ctx;		/* Policer global context */
 	struct ppe_drv_tun_encap *ptun_ec;	/* PPE EG tunnel/translate control entries */
 	struct ppe_drv_tun_decap *ptun_dc;	/* PPE tunnel decap control entries */
 	struct ppe_drv_tun_l3_if *ptun_l3_if;	/* PPE tunnel L3 interface info */
@@ -233,8 +249,11 @@ struct ppe_drv {
 	struct ppe_drv_tun_decap_xlate_rule *decap_xlate_rules; 	/* PPE Tunnel decap xlate rules */
 	struct ppe_drv_sc *sc;				/* Memory for PPE Service Code table */
 	struct ppe_drv_cc *cc;				/* Memory for PPE CPU Code table */
+	struct ppe_drv_acl_tbl *acl_tbl;		/* Memory for PPE ACL based actions table */
+	struct ppe_drv_acl *acl;			/* Memory for PPE ACL entries */
 	struct dentry *dentry;				/* Debugfs entry */
 	struct dentry *stats_dentry;				/* Debugfs entry */
+	struct ctl_table_header *ppe_drv_header;	/* PPE DRV sysctl */
 	ppe_drv_v4_sync_callback_t ipv4_stats_sync_cb;		/* Callback to call to sync ipv4 statistics */
 	void *ipv4_stats_sync_data;				/* Argument for above callback: ipv4_stats_sync_cb */
 	ppe_drv_v6_sync_callback_t ipv6_stats_sync_cb;		/* Callback to call to sync ipv6 statistics */
@@ -253,6 +272,7 @@ struct ppe_drv {
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
 	struct ppe_drv_fse_ops *fse_ops;        /* Wi-Fi FSE block operations */
 	struct kref fse_ops_ref;		/* FSE Reference count */
+	int vxlan_dport;			/* VXLAN destination port */
 	bool fse_enable;			/* FSE enabled */
 	bool is_wifi_fse_up;			/* Wi-FI FSE ops registered with PPE */
 
@@ -272,5 +292,7 @@ static inline ppe_drv_tree_id_type_t ppe_drv_tree_id_type_get(struct ppe_drv_flo
 	return flow_metadata->tree_id_data.type;
 }
 
+extern int ppe_drv_get_vxlan_dport(void);
 void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv ppe_drv_gbl;
+extern uint32_t if_bm_to_offload;

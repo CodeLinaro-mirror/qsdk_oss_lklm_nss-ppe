@@ -44,12 +44,20 @@
 					/* Flow is also pushed to FSE HW in Wifi */
 #define PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID 0x00000200
 					/* Flow is VP valid when VP rule comes in DS user type */
+#define PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV 0x00000400
+					/* Flow is via bridge VLAN netdev */
+
 #ifdef NSS_PPE_IPQ53XX
 #define PPE_DRV_V6_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK 0x00000400
 					/* source interface check */
 #endif
 #define PPE_DRV_V6_CONN_FLAG_FLOW_IGMAC_VALID 0x00000800
 
+#define PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID 0x00001000
+					/* Flow + ACL combination match */
+#define PPE_DRV_V6_CONN_FLAG_FLOW_POLICER_VALID 0x00002000
+#define PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST 0x00004000
+					/* Policer for NoEdit */
 /*
  * ppe_drv_v6_conn_flow
  *	Structure for individual flow direction
@@ -110,6 +118,14 @@ struct ppe_drv_v6_conn_flow {
 	 */
 	struct ppe_drv_iface *in_port_if;
 	struct ppe_drv_iface *in_l3_if;
+
+	/*
+	 * Flow + ACL info
+	 */
+	ppe_drv_sc_t acl_sc;
+	uint16_t acl_id;
+	uint16_t policer_hw_id;		/* HW policer index */
+	uint16_t policer_id;		/* User policer index */
 
 	/*
 	 * Statistics for this flow entry

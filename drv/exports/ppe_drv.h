@@ -53,6 +53,14 @@
 #define PPE_DRV_VALID_FLAG_RETURN_PPE_QOS	0x02	/**< PPE QOS is enabled in return direction. */
 
 /*
+ * ACL/POLICER VALID FLAGS
+ */
+#define PPE_DRV_VALID_FLAG_FLOW_ACL		0x01	/**< ACL is enabled in flow direction. */
+#define PPE_DRV_VALID_FLAG_RETURN_ACL		0x02	/**< ACL is enabled in return direction. */
+#define PPE_DRV_VALID_FLAG_FLOW_POLICER		0x01	/**< Policer is enabled in flow direction. */
+#define PPE_DRV_VALID_FLAG_RETURN_POLICER	0x02	/**< Policer is enabled in return direction. */
+
+/*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
  */
@@ -70,7 +78,7 @@ enum ppe_drv_ip_type {
 typedef enum ppe_drv_sawf_sc_type {
 	PPE_DRV_SAWF_SC_NONE = 0,	/**< Invalid service class. */
 	PPE_DRV_SAWF_SC_START,		/**< SAWF service class start. */
-	PPE_DRV_SAWF_SC_END = 127,	/**< SAWF service class end. */
+	PPE_DRV_SAWF_SC_END = 128,	/**< SAWF service class end. */
 	PPE_DRV_SAWF_SC_MAX,		/**< Maximum number of SAWF service classes */
 } ppe_drv_sawf_sc_t;
 
@@ -231,6 +239,39 @@ struct ppe_drv_nsm_stats {
 };
 
 /*
+ * ppe_drv_acl_policer_rule_type
+ *	Rule type to indicate flow+acl or flow+policer combination.
+ */
+typedef enum ppe_drv_acl_policer_rule_type {
+	PPE_DRV_RULE_TYPE_FLOW_ACL,		/**< Flow needs to be combined with ACL. */
+	PPE_DRV_RULE_TYPE_FLOW_POLICER,		/**< Flow needs to be combined with Policer. */
+} ppe_drv_acl_policer_rule_t;
+
+/*
+ * ppe_drv_acl_policer_rule
+ *	ACL/POLICER rule ID for each direction
+ *
+ * Note: This is used when the packets matching the flow need to be rate-limited (policed)
+ * 	or filtered by an ACL rule, post flow processing.
+ */
+struct ppe_drv_acl_policer_rule {
+	ppe_drv_acl_policer_rule_t type;	/**< Whether ACL or Policer rule? */
+	bool pkt_noedit;			/**< Is packet edit required. */
+	union {
+		struct {
+			uint8_t flags;			/**< Valid flag. */
+			uint32_t flow_acl_id;		/**< ACL rule ID in flow direction. */
+			uint32_t return_acl_id;		/**< ACL rule ID in return direction. */
+		} acl;
+		struct {
+			uint8_t flags;			/**< Valid flag. */
+			uint32_t flow_policer_id;	/**< Policer ID in flow direction. */
+			uint32_t return_policer_id;	/**< Policer ID in return direction. */
+		} policer;
+	} rule_id;
+};
+
+/*
  * ppe_drv_stats_sync_reason
  *	Stats sync reasons.
  */
@@ -286,6 +327,9 @@ struct ppe_drv_notifier_ops {
  */
 typedef enum ppe_drv_ret {
 	PPE_DRV_RET_SUCCESS = 0,			/**< Success */
+	PPE_DRV_POLICER_CREATE_FAIL,			/**< Create Fail */
+	PPE_DRV_POLICER_DESTROY_FAIL,			/**< Destroy Fail */
+	PPE_DRV_POLICER_DESTROY_SUCCESS,		/**< Destroy success */
 	PPE_DRV_RET_IFACE_INVALID,			/**< Failure due to Invalid PPE interface */
 	PPE_DRV_RET_FAILURE_NOT_SUPPORTED,		/**< Failure due to unsupported feature */
 	PPE_DRV_RET_FAILURE_NO_RESOURCE,		/**< Failure due to out of resource */
@@ -349,7 +393,14 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_QOS_QUEUE_CFG_FAIL,			/**< QoS queue configuration failed. */
 	PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL,		/**< QoS scheduler configuration failed. */
 	PPE_DRV_RET_QOS_SHAPER_CFG_FAIL,		/**< QoS shaper configuration failed. */
-	PPE_DRV_RET_QOS_PORT_CFG_FAIL			/**< QoS port configuration failed. */
+	PPE_DRV_RET_QOS_PORT_CFG_FAIL,			/**< QoS port configuration failed. */
+	PPE_DRV_RET_PORT_NO_OFFLOAD,			/**< Offload is disabled on the PPE port */
+	PPE_DRV_RET_ACL_RULE_INVALID,			/**< ACL rule invalid */
+	PPE_DRV_RET_ACL_RULE_ADD_FAIL,			/**< Failed to add ACL rule */
+	PPE_DRV_RET_ACL_RULE_BIND_FAIL,			/**< Failed to bind ACL rule to src */
+	PPE_DRV_RET_BASE_DEV_NOT_FOUND,			/**< Base Device not found */
+	PPE_DRV_RET_BASE_PORT_NOT_FOUND,		/**< Base Port not found */
+	PPE_DRV_RET_FAILURE_FLOW_CONFIGURE_FAIL,	/**< Failure due to FSE flow configuration failed */
 } ppe_drv_ret_t;
 
 /**

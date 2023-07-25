@@ -325,7 +325,7 @@ int ppe_qdisc_node_attach(struct ppe_qdisc *pq, struct ppe_qdisc *pq_child)
 int ppe_qdisc_configure(struct ppe_qdisc *pq, struct ppe_qdisc *prev_pq)
 {
 	struct ppe_drv_qos_res *rp = &pq->res;
-	struct ppe_drv_qos_res *prev_rp = &prev_pq->res;
+	struct ppe_drv_qos_res *prev_rp = NULL;
 
 	ppe_qdisc_info("Qdisc %px (type %d) configuring", pq->qdisc, pq->type);
 
@@ -380,6 +380,11 @@ fail:
 	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_CONFIGURED)) {
 		return -EINVAL;
 	}
+
+	if (!prev_pq) {
+		return -EINVAL;
+	}
+	prev_rp = &prev_pq->res;
 
 	/*
 	 * Restore to previous configuration if exists.
@@ -450,6 +455,7 @@ void ppe_qdisc_destroy(struct ppe_qdisc *pq)
 int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_t type, uint32_t classid,
 		struct netlink_ext_ack *extack)
 {
+	int err;
 	struct Qdisc *root;
 	u32 parent;
 	struct net_device *dev;
@@ -529,11 +535,13 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 		return -1;
 	}
 
-	/*
-	 * Initialize filter list.
-	 */
 	RCU_INIT_POINTER(pq->filter_list, NULL);
 	pq->block = NULL;
+	err = tcf_block_get(&pq->block, &pq->filter_list, sch, extack);
+	if (err) {
+		ppe_qdisc_warning("%px: Unable to initialize tcf_block\n", &pq->block);
+		return -1;
+	}
 
 	/*
 	 * Set the parent of PPE qdisc.
@@ -566,6 +574,7 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 
 		if (sch->parent == TC_H_ROOT) {
 			ppe_qdisc_stats_start_polling(pq);
+			ppe_drv_qos_port_bm_control_enable(pq->port_id, false);
 		}
 	}
 

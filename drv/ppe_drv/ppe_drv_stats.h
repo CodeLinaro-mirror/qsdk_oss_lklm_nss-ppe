@@ -86,6 +86,8 @@ struct ppe_drv_gen_stats {
 	atomic64_t fail_my_mac_full;		/* Create req fail due to MAC table full */
 	atomic64_t fail_ingress_untag_vlan_add;	/* Ingress untag vlan translation addition failed */
 	atomic64_t fail_ingress_untag_vlan_del;	/* Ingress untag vlan translation deletion failed */
+	atomic64_t fail_ingress_vlan_over_bridge_add;	/* Ingress VLAN over brige add rule failed */
+	atomic64_t fail_ingress_vlan_over_bridge_del;	/* Ingress VLAN over brige delete rule failed */
 };
 
 /*
@@ -132,6 +134,10 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_create_fse_fail;		/* No of v4 FSE rule create failure */
 	atomic64_t v4_destroy_fse_success;		/* No of v4 FSE rule destroy failure */
 	atomic64_t v4_destroy_fse_fail;		/* No of v4 FSE rule destroy failure */
+	atomic64_t v4_create_offload_disabled;		/* No of v4 request where offload is disabled */
+
+	atomic64_t v4_create_fail_acl;		/* No of v4 create failure due to ACL linking */
+	atomic64_t v4_destroy_fail_acl;		/* No of v4 delete failure due to ACL unlinking */
 
 	atomic64_t v6_create_req;		/* No of v6 create requests */
 	atomic64_t v6_create_fail;		/* No of v6 create failure */
@@ -169,6 +175,10 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_fse_fail;		/* No of v6 FSE rule create failure */
 	atomic64_t v6_destroy_fse_success;		/* No of v6 FSE rule destroy failure */
 	atomic64_t v6_destroy_fse_fail;		/* No of v6 FSE rule destroy failure */
+	atomic64_t v6_create_offload_disabled;		/* No of v6 request where offload is disabled */
+
+	atomic64_t v6_create_fail_acl;		/* No of v6 create failure due to ACL linking */
+	atomic64_t v6_destroy_fail_acl;		/* No of v6 delete failure due to ACL unlinking */
 };
 
 /*
@@ -195,6 +205,40 @@ struct ppe_drv_stats_sawf_sc {
 };
 
 /*
+ * ppe_drv_stats_acl
+ *	Message structure for acl stats.
+ */
+struct ppe_drv_stats_acl {
+	atomic64_t active_rules;	/* Number of active rules */
+	atomic64_t req_slices;		/* Number of request ACL slices */
+	atomic64_t total_slices;	/* Number of total ACL slices used */
+	atomic64_t list_id_full;	/* ACL list ID full */
+	atomic64_t list_create_fail;	/* ACL list create failures */
+	atomic64_t configure_fail;	/* ACL rule configure failures */
+	atomic64_t rule_add_fail;	/* ACL rule add failures */
+	atomic64_t rule_bind_fail;	/* ACL rule bind failures */
+	atomic64_t rule_delete_fail;	/* ACL rule delete failures */
+	atomic64_t list_delete_fail;	/* ACL list delete failures */
+};
+
+/*
+ * ppe_drv_stats_policer
+ *	Message structure for policer stats.
+ */
+struct ppe_drv_stats_policer {
+	atomic64_t fail_acl_policer_full;			/* Policer table full */
+	atomic64_t fail_port_policer_full;			/* Policer table full */
+	atomic64_t fail_hw_port_policer_destroy_cfg;	/* Fail to reset port policer config */
+	atomic64_t fail_hw_acl_policer_destroy_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t fail_hw_port_policer_create_cfg;	/* Fail to reset port policer config */
+	atomic64_t fail_hw_acl_policer_create_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t success_hw_port_policer_destroy_cfg;	/* Fail to reset port policer config */
+	atomic64_t success_hw_acl_policer_destroy_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t success_hw_port_policer_create_cfg;	/* Fail to reset port policer config */
+	atomic64_t success_hw_acl_policer_create_cfg;	/* Fail to reset ACL policer config */
+};
+
+/*
  * ppe_drv_stats
  *	Message structure for ppe stats
  */
@@ -203,7 +247,27 @@ struct ppe_drv_stats {
 	struct ppe_drv_comm_stats comm_stats[PPE_DRV_CONN_TYPE_MAX];	/* common stats for flow and tunnel */
 	struct ppe_drv_stats_sc	sc_stats[PPE_DRV_SC_CNT_MAX];		/* Per service-code stats */
 	struct ppe_drv_stats_sawf_sc sawf_sc_stats[PPE_DRV_SAWF_SC_MAX];	/* Per service-class stats */
+	struct ppe_drv_stats_acl acl_stats;
+	struct ppe_drv_stats_policer policer_stats;
 };
+
+/*
+ * ppe_drv_stats_add()
+ *	Add counters to stats atomically.
+ */
+static inline void ppe_drv_stats_add(atomic64_t *stat, uint32_t count)
+{
+	atomic64_add(count, stat);
+}
+
+/*
+ * ppe_drv_stats_sub()
+ *	Subtract counters to stats atomically.
+ */
+static inline void ppe_drv_stats_sub(atomic64_t *stat, uint32_t count)
+{
+	atomic64_sub(count, stat);
+}
 
 /*
  * ppe_drv_stats_dec()
