@@ -507,40 +507,6 @@ ppe_drv_ret_t ppe_drv_qos_l1_scheduler_set(struct ppe_drv_qos_res *res, uint32_t
 EXPORT_SYMBOL(ppe_drv_qos_l1_scheduler_set);
 
 /*
- * ppe_drv_qos_l0_scheduler_reset()
- *	Resets Level 0 scheduler configuration in PPE.
- */
-ppe_drv_ret_t ppe_drv_qos_l0_scheduler_reset(struct ppe_drv_qos_res *res, uint32_t port_id)
-{
-	struct ppe_drv *p = ppe_drv_gbl;
-	fal_qos_scheduler_cfg_t l0cfg = {0};
-
-	/*
-	 * Reset Level 0 configuration
-	 */
-	spin_lock_bh(&p->lock);
-	l0cfg.sp_id = res->l0spid;
-	l0cfg.c_drr_wt = 0;
-	l0cfg.e_drr_wt = 0;
-	l0cfg.c_drr_id = res->scheduler.l0c_drrid;
-	l0cfg.e_drr_id = res->scheduler.l0e_drrid;
-
-	ppe_drv_trace("%px:level0 configuration: port:%u, ucast_qid:%u, c_drrid:%u, c_pri:%u, c_drr_wt:%u, e_drrid:%u, e_pri:%u, e_drr_wt:%u, l0spid:%u",
-			p, port_id, res->q.ucast_qid, l0cfg.c_drr_id, l0cfg.c_pri, l0cfg.c_drr_wt, l0cfg.e_drr_id, l0cfg.e_pri, l0cfg.e_drr_wt, l0cfg.sp_id);
-	if (fal_queue_scheduler_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != SW_OK) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px:level0 queue scheduler configuration failed for port:%u", p, port_id);
-		return PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL;
-	}
-
-	spin_unlock_bh(&p->lock);
-
-	ppe_drv_info("%px:level0 queue scheduler configuration successful for port:%u", p, port_id);
-	return PPE_DRV_RET_SUCCESS;
-}
-EXPORT_SYMBOL(ppe_drv_qos_l0_scheduler_reset);
-
-/*
  * ppe_drv_qos_l0_scheduler_set()
  *	Configures a level 0 queue scheduler in PPE.
  */

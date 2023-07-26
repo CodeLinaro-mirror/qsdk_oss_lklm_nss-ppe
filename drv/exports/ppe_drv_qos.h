@@ -433,21 +433,6 @@ ppe_drv_ret_t ppe_drv_qos_tcont_set(struct ppe_drv_qos_res *res, uint32_t tcont_
 ppe_drv_ret_t ppe_drv_qos_l1_scheduler_set(struct ppe_drv_qos_res *res, uint32_t port_id);
 
 /**
- * ppe_drv_qos_l0_scheduler_reset
- *	Resets Level 0 scheduler configuration in PPE.
- *
- * @datatypes
- * ppe_drv_qos_res
- *
- * @param[in] res      Pointer to the QoS resource.
- * @param[in] port_id  Port ID of the port.
- *
- * @return
- * Status of the QoS QoS L0 scheduler reset operation.
- */
-ppe_drv_ret_t ppe_drv_qos_l0_scheduler_reset(struct ppe_drv_qos_res *res, uint32_t port_id);
-
-/**
  * ppe_drv_qos_l0_scheduler_set
  *	Sets a level 0 queue scheduler in PPE.
  *

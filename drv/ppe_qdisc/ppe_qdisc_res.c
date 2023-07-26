@@ -137,24 +137,24 @@ static int ppe_qdisc_res_l1_scheduler_set(struct ppe_qdisc *pq)
 	struct ppe_drv_qos_res *res = &pq->res;
 
 	/*
+	 * Allocate resources if we have not already done so.
+	 */
+	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_L1_SCHEDULER_VALID)) {
+		if (ppe_qdisc_res_l1_alloc(pq) != 0) {
+			ppe_qdisc_warning("Qdisc:%px level1 queue scheduler configuration failed", pq->qdisc);
+			return -EINVAL;
+		}
+
+		ppe_qdisc_info("Qdisc:%px level1 queue scheduler configuration successful", pq->qdisc);
+		return 0;
+	}
+
+	/*
 	 * Disable all queues and set Level 1 PPE configuration
 	 * We need to disable and flush the queues before
 	 * changing scheduler's sp_id/drr_id/priority.
 	 */
 	ppe_qdisc_port_disable_all_queue(pq->port_id);
-
-	/*
-	 * Allocate resources if we have not already done so.
-	 */
-	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_L1_SCHEDULER_VALID) && ppe_qdisc_res_l1_alloc(pq) != 0) {
-		ppe_qdisc_warning("Qdisc:%px level1 queue scheduler configuration failed", pq->qdisc);
-		ppe_qdisc_port_enable_assigned_queue(pq->port_id);
-		return -EINVAL;
-	}
-
-	/*
-	 * Set Level 1 configuration
-	 */
 	if (ppe_drv_qos_l1_scheduler_set(res, pq->port_id) != PPE_DRV_RET_SUCCESS) {
 		ppe_qdisc_warning("Qdisc:%px level1 queue scheduler configuration failed", pq->qdisc);
 		ppe_qdisc_res_l1_free(pq);
@@ -220,32 +220,6 @@ static int ppe_qdisc_res_l0_free(struct ppe_qdisc *pq)
 	ppe_qdisc_flags_clear(pq, PPE_QDISC_FLAG_L0_SCHEDULER_VALID);
 
 	ppe_qdisc_info("Qdisc:%px level0 scheduler resource de-allocation successful", pq->qdisc);
-	return 0;
-}
-
-/*
- * ppe_qdisc_res_l0_scheduler_reset()
- *	Resets Level 0 scheduler configuration in PPE.
- */
-static int ppe_qdisc_res_l0_scheduler_reset(struct ppe_qdisc *pq)
-{
-	struct ppe_drv_qos_res *res = &pq->res;
-
-	ppe_qdisc_port_disable_all_queue(pq->port_id);
-	if (ppe_drv_qos_l0_scheduler_reset(res, pq->port_id) != PPE_DRV_RET_SUCCESS) {
-		ppe_qdisc_warning("Qdisc:%px level0 queue scheduler configuration failed", pq->qdisc);
-		ppe_qdisc_port_enable_assigned_queue(pq->port_id);
-		return -EINVAL;
-	}
-
-	if (ppe_qdisc_res_l0_free(pq) != 0) {
-		ppe_qdisc_warning("Qdisc:%px level0 scheduler resources de-allocation failed", pq->qdisc);
-		ppe_qdisc_port_enable_assigned_queue(pq->port_id);
-		return -EINVAL;
-	}
-
-	ppe_qdisc_port_enable_assigned_queue(pq->port_id);
-	ppe_qdisc_info("Qdisc:%px level0 queue scheduler configuration successful", pq->qdisc);
 	return 0;
 }
 
@@ -338,13 +312,6 @@ static int ppe_qdisc_res_l0_scheduler_set(struct ppe_qdisc *pq)
 	struct ppe_drv_qos_res *res = &pq->res;
 
 	/*
-	 * Disable all queues and set Level 0 PPE configuration
-	 * We need to disable and flush the queues before
-	 * changing scheduler's sp_id/drr_id/priority.
-	 */
-	ppe_qdisc_port_disable_all_queue(pq->port_id);
-
-	/*
 	 * Allocate resources only if scheduler is not valid
 	 */
 	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_L0_SCHEDULER_VALID)) {
@@ -353,14 +320,19 @@ static int ppe_qdisc_res_l0_scheduler_set(struct ppe_qdisc *pq)
 		 */
 		if (ppe_qdisc_res_l0_alloc(pq) != 0) {
 			ppe_qdisc_warning("Qdisc:%px level0 queue scheduler configuration failed", pq->qdisc);
-			ppe_qdisc_port_enable_assigned_queue(pq->port_id);
 			return -EINVAL;
 		}
+
+		ppe_qdisc_info("Qdisc:%px level0 queue scheduler configuration successful", pq->qdisc);
+		return 0;
 	}
 
 	/*
-	 * Set Level 0 configuration
+	 * Disable all queues and set Level 0 PPE configuration
+	 * We need to disable and flush the queues before
+	 * changing scheduler's sp_id/drr_id/priority.
 	 */
+	ppe_qdisc_port_disable_all_queue(pq->port_id);
 	if (ppe_drv_qos_l0_scheduler_set(res, pq->port_id) != PPE_DRV_RET_SUCCESS) {
 		ppe_qdisc_warning("Qdisc:%px level0 queue scheduler configuration failed", pq->qdisc);
 		ppe_qdisc_res_l0_free(pq);
@@ -479,44 +451,53 @@ static int ppe_qdisc_res_scheduler_reset(struct ppe_qdisc *pq)
 	}
 
 	if (pq->level == PPE_DRV_QOS_PORT_LEVEL) {
+		/*
+		 * We allocate both L1 and L0 resources at this level if
+		 * the qdisc is type queue (fifo or RED).
+		 * No resources are allocated for other types of qdiscs
+		 * at this level.
+		 */
 		if (!ppe_qdisc_type_is_queue(pq)) {
+			ppe_qdisc_port_enable_assigned_queue(pq->port_id);
 			ppe_qdisc_info("Qdisc:%px reset scheduler successful", pq->qdisc);
 			return 0;
 		}
 
-		if (ppe_qdisc_res_l0_scheduler_reset(pq) != 0) {
+		ppe_qdisc_port_disable_all_queue(pq->port_id);
+		if (ppe_qdisc_res_l0_free(pq) != 0) {
+			ppe_qdisc_port_enable_assigned_queue(pq->port_id);
 			ppe_qdisc_warning("Qdisc:%px Level0 queue scheduler reset failed", pq->qdisc);
 			return -EINVAL;
 		}
 
 		if (ppe_qdisc_res_l1_free(pq) != 0) {
+			ppe_qdisc_port_enable_assigned_queue(pq->port_id);
 			ppe_qdisc_warning("Qdisc:%px Level1 queue scheduler reset failed", pq->qdisc);
 			return -EINVAL;
 		}
-
-		ppe_qdisc_info("Qdisc:%px reset scheduler successful", pq->qdisc);
-		return 0;
-	}
-
-	if (pq->level == PPE_DRV_QOS_FLOW_LEVEL) {
+	} else if (pq->level == PPE_DRV_QOS_FLOW_LEVEL) {
 
 		/*
-		 * We have allocated L0 resources if this qdisc is of type queue or
-		 * this is an hybrid (NSS) qdisc that is attached to PPE qdisc.
+		 * We have allocated L0 resources if this qdisc is of type queue
 		 */
+		ppe_qdisc_port_disable_all_queue(pq->port_id);
 		if (ppe_qdisc_type_is_queue(pq)) {
-			if (ppe_qdisc_res_l0_scheduler_reset(pq) < 0) {
+			if (ppe_qdisc_res_l0_free(pq) != 0) {
+				ppe_qdisc_port_enable_assigned_queue(pq->port_id);
 				ppe_qdisc_warning("Qdisc:%px Level0 configuration for attach of new qdisc failed", pq->qdisc);
 				return -EINVAL;
 			}
 		}
 
 		if (ppe_qdisc_res_l1_free(pq) != 0) {
+			ppe_qdisc_port_enable_assigned_queue(pq->port_id);
 			ppe_qdisc_warning("Qdisc:%px Level1 queue scheduler reset failed", pq->qdisc);
 			return -EINVAL;
 		}
 	} else if (pq->level == PPE_DRV_QOS_QUEUE_LEVEL) {
-		if (ppe_qdisc_res_l0_scheduler_reset(pq) != 0) {
+		ppe_qdisc_port_disable_all_queue(pq->port_id);
+		if (ppe_qdisc_res_l0_free(pq) != 0) {
+			ppe_qdisc_port_enable_assigned_queue(pq->port_id);
 			ppe_qdisc_warning("Qdisc:%px Level0 queue scheduler reset failed", pq->qdisc);
 			return -EINVAL;
 		}
@@ -529,9 +510,11 @@ static int ppe_qdisc_res_scheduler_reset(struct ppe_qdisc *pq)
 		 */
 		if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_UCAST_QUEUE_VALID)) {
 			ppe_drv_qos_queue_disable(pq->port_id, res->q.ucast_qid);
+			return 0;
 		}
 	}
 
+	ppe_qdisc_port_enable_assigned_queue(pq->port_id);
 	ppe_qdisc_info("Qdisc:%px reset scheduler successful", pq->qdisc);
 	return 0;
 }
