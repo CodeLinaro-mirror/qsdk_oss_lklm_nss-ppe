@@ -1,18 +1,7 @@
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include "ppe_qdisc.h"
@@ -171,6 +160,37 @@ void ppe_qdisc_port_enable_all_queue(uint32_t port_id)
 }
 
 /*
+ * ppe_qdisc_port_enable_assigned_queue()
+ *	Enables assigned level L0 queues corresponding to a port.
+ */
+void ppe_qdisc_port_enable_assigned_queue(uint32_t port_id)
+{
+	uint32_t qid = ppe_qdisc_port_res_base_get(port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
+	uint32_t mcast_qid = ppe_qdisc_port_res_base_get(port_id, PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE);
+	struct ppe_qdisc_port_res *res = NULL;
+	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port_id];
+
+	/*
+	 * Enable assigned queues enqueue and dequeue.
+	 */
+	spin_lock_bh(&ppe_port->lock);
+	res = ppe_port->res_used[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+	while (res) {
+		ppe_drv_qos_queue_enable(qid + res->offset);
+		res = res->next;
+	}
+
+	res = ppe_port->res_used[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+	while (res) {
+		ppe_drv_qos_queue_enable(mcast_qid + res->offset);
+		res = res->next;
+	}
+	spin_unlock_bh(&ppe_port->lock);
+
+	ppe_qdisc_info("Port:%d all assigned queues enabled", port_id);
+}
+
+/*
  * ppe_qdisc_port_res_base_get()
  *	Returns base of the particular resource for a given port.
  */
@@ -313,7 +333,7 @@ int ppe_qdisc_port_default_conf_set(uint32_t port_id)
 	 */
 	if (ppe_drv_qos_default_conf_set(port_id) != 0) {
 		ppe_qdisc_warning("Port:%d reset default queue configuration failed", port_id);
-		ppe_qdisc_port_enable_all_queue(port_id);
+		ppe_qdisc_port_enable_assigned_queue(port_id);
 		return -EINVAL;
 	}
 
