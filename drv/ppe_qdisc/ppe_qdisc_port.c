@@ -98,7 +98,7 @@ static void ppe_qdisc_port_res_attach_free(uint32_t port, struct ppe_qdisc_port_
  * ppe_qdisc_port_res_max_get()
  *	Returns maximum number of the particular resource for a given port.
  */
-static uint32_t ppe_qdisc_port_res_max_get(uint32_t port_id, ppe_drv_qos_res_type_t type)
+uint32_t ppe_qdisc_port_res_max_get(uint32_t port_id, ppe_drv_qos_res_type_t type)
 {
 	uint32_t max = 0;
 	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port_id];
@@ -205,6 +205,196 @@ uint32_t ppe_qdisc_port_res_base_get(uint32_t port_id, ppe_drv_qos_res_type_t ty
 
 	ppe_qdisc_info("port:%d, type:%d, base:%d", port_id, type, base);
 	return base;
+}
+
+/*
+ * ppe_qdisc_port_res_drr_deref()
+ *	Get and deref DRR mapped to respective priority
+ */
+int ppe_qdisc_port_res_drr_deref(uint32_t port_id, struct ppe_drv_qos_res *res, ppe_drv_qos_res_type_t type)
+{
+	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port_id];
+	struct ppe_drv_qos_port_drr_map *map = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? ppe_port->l1map : ppe_port->l0map;
+	struct ppe_drv_qos_port_drr_map *prev = map;
+	uint32_t spid = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? port_id : res->l0spid;
+	uint32_t drr_id = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? res->scheduler.l1c_drrid : res->scheduler.l0c_drrid;
+
+	/*
+	 * Find the DRR ID mapped to SP and Priority
+	 */
+	spin_lock_bh(&ppe_port->lock);
+	while (map) {
+		if ((map->sp_id == spid) && (map->drr_id == drr_id) && (map->priority == res->scheduler.priority)) {
+			map->ref_cnt--;
+			goto free_map;
+		}
+
+		prev = map;
+		map = map->next;
+	}
+
+	spin_unlock_bh(&ppe_port->lock);
+	ppe_qdisc_warning("port:%d, type:%d failed to get DRR mapping ", port_id, type);
+	return -EINVAL;
+
+free_map:
+	uint32_t res_type = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? PPE_DRV_QOS_RES_TYPE_L1_CDRR : PPE_DRV_QOS_RES_TYPE_L0_CDRR;
+	/*
+	 * Access port.base directly since ppe_port->lock is already held here.
+	 * Calling ppe_qdisc_port_res_base_get() would cause a recursive lock acquisition.
+	 */
+	uint32_t offset = drr_id - ppe_port->port.base[res_type];
+
+	if(map->ref_cnt) {
+		spin_unlock_bh(&ppe_port->lock);
+		ppe_qdisc_info("port:%d, type:%d id:%d drr_id:%d priority:%d ref:%d DRR unmapping successful", port_id, type, spid, drr_id, map->priority, map->ref_cnt);
+		return 0;
+	}
+
+	if (prev == map) {
+		if (type == PPE_DRV_QOS_RES_TYPE_L0_SP) {
+			ppe_port->l1map = map->next;
+		} else {
+			ppe_port->l0map = map->next;
+		}
+	} else {
+		prev->next = map->next;
+	}
+
+	kfree(map);
+	spin_unlock_bh(&ppe_port->lock);
+
+	ppe_qdisc_port_res_free(port_id, offset, res_type);
+
+	ppe_qdisc_info("port:%d, type:%d id:%d drr_id:%d priority:%d ref:%d DRR unmapping successful", port_id, type, spid, drr_id, map->priority, map->ref_cnt);
+	return 0;
+}
+
+/*
+ * ppe_qdisc_port_res_drr_ref()
+ *	Get, set and ref DRR mapped to respective priority
+ */
+int ppe_qdisc_port_res_drr_ref(uint32_t port_id, struct ppe_drv_qos_res *res, ppe_drv_qos_res_type_t type)
+{
+	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port_id];
+	struct ppe_drv_qos_port_drr_map *map = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? ppe_port->l1map : ppe_port->l0map;
+	struct ppe_drv_qos_port_drr_map *map_iter = map;
+	uint32_t spid = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? port_id : res->l0spid;
+
+	/*
+	 * Find the DRR ID mapped to SP and Priority
+	 */
+	spin_lock_bh(&ppe_port->lock);
+	while (map_iter) {
+		if ((map_iter->sp_id == spid) && (map_iter->priority == res->scheduler.priority)) {
+			goto drr_found;
+		}
+
+		map_iter = map_iter->next;
+	}
+
+	/*
+	 * DRR-ID mapped to priority not found, create a new map if DRR resource is available.
+	 * Release the lock before calling ppe_qdisc_port_res_alloc() and kzalloc() to avoid
+	 * recursive lock acquisition (both functions acquire ppe_port->lock internally).
+	 */
+	spin_unlock_bh(&ppe_port->lock);
+
+	uint32_t res_type = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? PPE_DRV_QOS_RES_TYPE_L1_CDRR : PPE_DRV_QOS_RES_TYPE_L0_CDRR;
+	struct ppe_qdisc_port_res *drr = NULL;
+
+	drr = ppe_qdisc_port_res_alloc(port_id, res_type);
+	if (!drr) {
+		ppe_qdisc_warning("port:%d, type:%d failed to get DRR", port_id, type);
+		return -EINVAL;
+	}
+
+	map_iter = kzalloc(sizeof(struct ppe_drv_qos_port_drr_map), GFP_ATOMIC);
+	if (!map_iter) {
+		ppe_qdisc_port_res_free(port_id, drr->offset, res_type);
+		ppe_qdisc_warning("Port:%d Map allocation failed\n", port_id);
+		return -EINVAL;
+	}
+
+	map_iter->level = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? PPE_DRV_QOS_FLOW_LEVEL - 1 : PPE_DRV_QOS_QUEUE_LEVEL - 1;
+	map_iter->sp_id = spid;
+	map_iter->priority = res->scheduler.priority;
+	map_iter->drr_id = ppe_qdisc_port_res_base_get(port_id, res_type) + drr->offset;
+
+	/*
+	 * Re-acquire the lock before inserting the new entry into the map list.
+	 * Use the current list head (not the stale 'map' snapshot) in case it
+	 * changed while the lock was released.
+	 */
+	spin_lock_bh(&ppe_port->lock);
+	map_iter->next = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? ppe_port->l1map : ppe_port->l0map;
+
+	if (type == PPE_DRV_QOS_RES_TYPE_L0_SP) {
+		ppe_port->l1map = map_iter;
+	} else {
+		ppe_port->l0map = map_iter;
+	}
+
+drr_found:
+	if (type == PPE_DRV_QOS_RES_TYPE_L0_SP) {
+		res->scheduler.l1c_drrid = map_iter->drr_id;
+		res->scheduler.l1e_drrid = map_iter->drr_id;
+	} else {
+		res->scheduler.l0c_drrid = map_iter->drr_id;
+		res->scheduler.l0e_drrid = map_iter->drr_id;
+	}
+
+	map_iter->ref_cnt++;
+	spin_unlock_bh(&ppe_port->lock);
+
+	ppe_qdisc_info("port:%d, type:%d id:%d drr_id:%d priority:%d ref:%d DRR mapping successful", port_id, type, spid, map_iter->drr_id, map_iter->priority, map_iter->ref_cnt);
+	return 0;
+}
+
+/*
+ * ppe_qdisc_port_res_drr_map_free()
+ *	Free the DRR map for a given port.
+ */
+static void ppe_qdisc_port_res_drr_map_free(uint32_t port_id, ppe_drv_qos_res_type_t type)
+{
+	struct ppe_drv_qos_port_drr_map *map, *head = NULL;
+	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port_id];
+
+	head = (type == PPE_DRV_QOS_RES_TYPE_L0_SP) ? ppe_port->l1map : ppe_port->l0map;
+
+	while (head) {
+		map = head;
+		head = head->next;
+		kfree(map);
+	}
+
+	ppe_qdisc_info("port:%d, type:%d, DRR MAP freed", port_id, type);
+}
+
+/*
+ * ppe_qdisc_port_res_all_drr_map_free()
+ *	Frees the allocated DRR maps.
+ */
+void ppe_qdisc_port_res_all_drr_map_free(uint32_t port_id)
+{
+	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port_id];
+
+	/*
+	 * Free drr map
+	 */
+	spin_lock_bh(&ppe_port->lock);
+	if (ppe_port->l0map) {
+		ppe_qdisc_port_res_drr_map_free(port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
+		ppe_port->l0map = NULL;
+	}
+
+	if (ppe_port->l1map) {
+		ppe_qdisc_port_res_drr_map_free(port_id, PPE_DRV_QOS_RES_TYPE_L0_SP);
+		ppe_port->l1map = NULL;
+	}
+	spin_unlock_bh(&ppe_port->lock);
+
+	ppe_qdisc_info("port:%d, DRR MAP freed", port_id);
 }
 
 /*
@@ -351,10 +541,15 @@ int ppe_qdisc_port_free(void)
 {
 	uint32_t i, j;
 
-	for (i = 0; i < PPE_DRV_QOS_PORT_MAX - 1; i++) {
-		for (j = 0; j < PPE_DRV_QOS_RES_TYPE_MAX; j++) {
+	for (i = 1; i < PPE_DRV_QOS_PORT_MAX - 1; i++) {
+		for (j = 0; j <= PPE_DRV_QOS_RES_TYPE_L0_SP; j++) {
 			ppe_qdisc_port_res_entries_free(i, j);
 		}
+
+		/*
+		 * Free drr map
+		 */
+		ppe_qdisc_port_res_all_drr_map_free(i);
 	}
 
 	ppe_qdisc_info("PPE ports resources freed");
@@ -376,7 +571,7 @@ int ppe_qdisc_port_alloc(void)
 	/*
 	 * Allocate resources for ethernet ports.
 	 */
-	for (i = 0; i < PPE_DRV_QOS_PORT_MAX - 1; i++) {
+	for (i = 1; i < PPE_DRV_QOS_PORT_MAX - 1; i++) {
 		ppe_qdisc_info("Resource allocation for port %u", i);
 		spin_lock_init(&ppe_qdisc_port[i].lock);
 		if (ppe_drv_qos_port_res_get(i, &ppe_qdisc_port[i].port) != PPE_DRV_RET_SUCCESS) {
@@ -384,7 +579,7 @@ int ppe_qdisc_port_alloc(void)
 			goto failure;
 		}
 
-		for (type = 0; type < PPE_DRV_QOS_RES_TYPE_MAX; type++) {
+		for (type = 0; type < PPE_DRV_QOS_RES_TYPE_L1_SP; type++) {
 			ppe_qdisc_port[i].res_free[type] = ppe_qdisc_port_res_entries_alloc(i, type);
 			if (!ppe_qdisc_port[i].res_free[type]) {
 				ppe_qdisc_warning("Resource list allocation failed for port:%u type:%u", i, type);
@@ -397,8 +592,11 @@ int ppe_qdisc_port_alloc(void)
 	return 0;
 
 failure:
-	while (i >= 0) {
-		for (j = 0; j < PPE_DRV_QOS_RES_TYPE_MAX; j++) {
+	/*
+	 * Free other port resources
+	 */
+	while (i > 0) {
+		for (j = 0; j < PPE_DRV_QOS_RES_TYPE_L1_SP; j++) {
 			ppe_qdisc_port_res_entries_free(i, j);
 		}
 		i--;

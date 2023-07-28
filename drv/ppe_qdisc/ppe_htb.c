@@ -126,13 +126,6 @@ static int ppe_htb_class_params_validate_and_save(struct Qdisc *sch, struct nlat
 		return -EINVAL;
 	}
 
-	if (!(qopt->priority < PPE_HTB_MAX_PRIORITY)) {
-		sch_tree_unlock(sch);
-		ppe_qdisc_warning("%x: ppehtb priority %u is greater than max prio %u",
-			sch->handle, qopt->priority, PPE_HTB_MAX_PRIORITY);
-		return -EINVAL;
-	}
-
 	if ((qopt->quantum % PPE_DRV_QOS_DRR_WEIGHT_MAX) != 0) {
 		sch_tree_unlock(sch);
 		ppe_qdisc_warning("%x: ppehtb requires quantum to be a multiple of 1024", sch->handle);
@@ -278,13 +271,43 @@ static int ppe_htb_change_class(struct Qdisc *sch, u32 classid, u32 parentid,
 	}
 
 	if (cl) {
-		/*
-		 * Save previous configuration for reset purpose.
-		 */
-		if (ppe_qdisc_flags_check(&cl->pq, PPE_QDISC_FLAG_NODE_CONFIGURED)) {
-			prev_pq = &cl->pq;
+		if (param.priority >= ppe_qdisc_get_max_priority(&cl->pq)) {
+			ppe_qdisc_warning("%x: ppehtb priority %u is greater than max prio %u",
+				sch->handle, param.priority, ppe_qdisc_get_max_priority(&cl->pq));
+			return -EINVAL;
 		}
 
+		/*
+		 * Save previous configuration for reset purpose and also free the DRR used.
+		 */
+		if (ppe_qdisc_flags_check(&cl->pq, PPE_QDISC_FLAG_NODE_CONFIGURED)) {
+			uint32_t res_type;
+			uint32_t pri_flag = 0;
+
+			prev_pq = &cl->pq;
+
+			if (prev_pq->level == PPE_DRV_QOS_PORT_LEVEL) {
+				goto configure;
+			}
+
+			if (ppe_qdisc_flags_check(prev_pq, PPE_QDISC_FLAG_L1_SCHEDULER_VALID)) {
+				res_type = PPE_DRV_QOS_RES_TYPE_L0_SP;
+				pri_flag = PPE_QDISC_FLAG_L1_PRI_CHANGE_VALID;
+			} else if (ppe_qdisc_flags_check(prev_pq, PPE_QDISC_FLAG_L0_SCHEDULER_VALID)) {
+				res_type = PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE;
+				pri_flag = PPE_QDISC_FLAG_L0_PRI_CHANGE_VALID;
+			}
+
+			/*
+			 * Deref the DRR mapping only if class priority is changed
+			 */
+			if (param.priority != (PPE_DRV_QOS_PRIORITY_MAX - prev_pq->res.scheduler.priority - 1)) {
+				ppe_qdisc_port_res_drr_deref(prev_pq->port_id, &prev_pq->res, res_type);
+				ppe_qdisc_flags_set(prev_pq, pri_flag);
+			}
+		}
+
+configure:
 		ppe_htb_class_params_fill(&cl->pq, &param);
 
 		/*
@@ -322,6 +345,13 @@ static int ppe_htb_change_class(struct Qdisc *sch, u32 classid, u32 parentid,
 		cl->pq.parent = pq_parent;
 		if (ppe_qdisc_init(sch, &cl->pq, PPE_QDISC_NODE_TYPE_HTB_GROUP, classid, extack) < 0) {
 			ppe_qdisc_warning("%x: ppehtb init for htb class %x failed", sch->handle, classid);
+			goto failure;
+		}
+
+		if (param.priority >= ppe_qdisc_get_max_priority(&cl->pq)) {
+			ppe_qdisc_warning("%x: ppehtb priority %u is greater than max prio %u",
+				sch->handle, param.priority, ppe_qdisc_get_max_priority(&cl->pq));
+			ppe_qdisc_destroy(&cl->pq);
 			goto failure;
 		}
 

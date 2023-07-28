@@ -18,22 +18,7 @@ static int ppe_qdisc_res_l1_free(struct ppe_qdisc *pq)
 		return 0;
 	}
 
-	/*
-	 * Free Level 1 DRR resource
-	 */
-	offset = pq->res.scheduler.l1c_drrid - ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_CDRR);
-	if (ppe_qdisc_port_res_free(pq->port_id, offset, PPE_DRV_QOS_RES_TYPE_L1_CDRR) != 0) {
-		ppe_qdisc_warning("Qdisc:%px used res:%d not found for port:%d, type:%d ",
-				pq->qdisc, pq->res.scheduler.l1c_drrid, pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_CDRR);
-		return -EINVAL;
-	}
-
-	offset = pq->res.scheduler.l1e_drrid - ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_EDRR);
-	if (ppe_qdisc_port_res_free(pq->port_id, offset, PPE_DRV_QOS_RES_TYPE_L1_EDRR) != 0) {
-		ppe_qdisc_warning("Qdisc:%px used res:%d not found for port:%d, type:%d ",
-				pq->qdisc, pq->res.scheduler.l1e_drrid, pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_EDRR);
-		return -EINVAL;
-	}
+	ppe_qdisc_port_res_drr_deref(pq->port_id, &pq->res, PPE_DRV_QOS_RES_TYPE_L0_SP);
 
 	/*
 	 * Free Level 0 SP resource
@@ -63,8 +48,6 @@ static int ppe_qdisc_res_l1_free(struct ppe_qdisc *pq)
  */
 static int ppe_qdisc_res_l1_alloc(struct ppe_qdisc *pq)
 {
-	struct ppe_qdisc_port_res *l1c_drr = NULL;
-	struct ppe_qdisc_port_res *l1e_drr = NULL;
 	struct ppe_qdisc_port_res *l0sp = NULL;
 
 	/*
@@ -74,23 +57,6 @@ static int ppe_qdisc_res_l1_alloc(struct ppe_qdisc *pq)
 	if (!l0sp) {
 		ppe_qdisc_warning("Qdisc:%px free res not found for port:%d, type:%d ",
 				pq->qdisc, pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_SP);
-		goto fail;
-	}
-
-	/*
-	 * Get Level 1 DRR resource
-	 */
-	l1c_drr = ppe_qdisc_port_res_alloc(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_CDRR);
-	if (!l1c_drr) {
-		ppe_qdisc_warning("Qdisc:%px free res not found for port:%d, type:%d ",
-				pq->qdisc, pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_CDRR);
-		goto fail;
-	}
-
-	l1e_drr = ppe_qdisc_port_res_alloc(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_EDRR);
-	if (!l1e_drr) {
-		ppe_qdisc_warning("Qdisc:%px free res not found for port:%d, type:%d ",
-				pq->qdisc, pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_EDRR);
 		goto fail;
 	}
 
@@ -106,8 +72,6 @@ static int ppe_qdisc_res_l1_alloc(struct ppe_qdisc *pq)
 
 	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_L1_SCHEDULER_VALID);
 	pq->res.l0spid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_SP) + l0sp->offset;
-	pq->res.scheduler.l1c_drrid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_CDRR) + l1c_drr->offset;
-	pq->res.scheduler.l1e_drrid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_EDRR) + l1e_drr->offset;
 	pq->res.l1spid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_SP);
 
 	ppe_qdisc_info("Qdisc:%px level1 scheduler resource allocation successful", pq->qdisc);
@@ -118,13 +82,6 @@ fail:
 		ppe_qdisc_port_res_free(pq->port_id, l0sp->offset, PPE_DRV_QOS_RES_TYPE_L0_SP);
 	}
 
-	if (l1e_drr) {
-		ppe_qdisc_port_res_free(pq->port_id, l1e_drr->offset, PPE_DRV_QOS_RES_TYPE_L1_EDRR);
-	}
-
-	if (l1c_drr) {
-		ppe_qdisc_port_res_free(pq->port_id, l1c_drr->offset, PPE_DRV_QOS_RES_TYPE_L1_CDRR);
-	}
 	return -EINVAL;
 }
 
@@ -147,6 +104,19 @@ static int ppe_qdisc_res_l1_scheduler_set(struct ppe_qdisc *pq)
 
 		ppe_qdisc_info("Qdisc:%px level1 queue scheduler configuration successful", pq->qdisc);
 		return 0;
+	}
+
+	/*
+	 * Get the DRR from the DRR map and set in qdisc resource only if priority is changed
+	 */
+	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_L1_PRI_CHANGE_VALID)) {
+		if (ppe_qdisc_port_res_drr_ref(pq->port_id, res, PPE_DRV_QOS_RES_TYPE_L0_SP) != 0) {
+			ppe_qdisc_warning("Qdisc:%px level1 DRR configuration failed", pq->qdisc);
+			ppe_qdisc_res_l1_free(pq);
+			return -EINVAL;
+		}
+
+		ppe_qdisc_flags_clear(pq, PPE_QDISC_FLAG_L1_PRI_CHANGE_VALID);
 	}
 
 	/*
@@ -180,22 +150,7 @@ static int ppe_qdisc_res_l0_free(struct ppe_qdisc *pq)
 		return 0;
 	}
 
-	/*
-	 * Free Level 0 DRR resource
-	 */
-	offset = pq->res.scheduler.l0c_drrid - ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_CDRR);
-	if (ppe_qdisc_port_res_free(pq->port_id, offset, PPE_DRV_QOS_RES_TYPE_L0_CDRR) != 0) {
-		ppe_qdisc_warning("Qdisc:%px used res:%d not found for port:%d, type:%d ",
-				pq->qdisc, pq->res.scheduler.l0c_drrid, pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_CDRR);
-		return -EINVAL;
-	}
-
-	offset = pq->res.scheduler.l0e_drrid - ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_EDRR);
-	if (ppe_qdisc_port_res_free(pq->port_id, offset, PPE_DRV_QOS_RES_TYPE_L0_EDRR) != 0) {
-		ppe_qdisc_warning("Qdisc:%px used res:%d not found for port:%d, type:%d ",
-				pq->qdisc, pq->res.scheduler.l0e_drrid, pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_EDRR);
-		return -EINVAL;
-	}
+	ppe_qdisc_port_res_drr_deref(pq->port_id, &pq->res, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
 
 	/*
 	 * Free Level 0 queue resource
@@ -229,26 +184,7 @@ static int ppe_qdisc_res_l0_free(struct ppe_qdisc *pq)
  */
 static int ppe_qdisc_res_l0_alloc(struct ppe_qdisc *pq)
 {
-	struct ppe_qdisc_port_res *l0c_drr = NULL;
-	struct ppe_qdisc_port_res *l0e_drr = NULL;
 	struct ppe_qdisc_port_res *q = NULL;
-
-	/*
-	 * Get Level 0 DRR Resource
-	 */
-	l0c_drr = ppe_qdisc_port_res_alloc(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_CDRR);
-	if (!l0c_drr) {
-		ppe_qdisc_warning("Qdisc:%px free res not found for port:%d, type:%d ",
-				pq->qdisc, pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_CDRR);
-		goto fail;
-	}
-
-	l0e_drr = ppe_qdisc_port_res_alloc(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_EDRR);
-	if (!l0e_drr) {
-		ppe_qdisc_warning("Qdisc:%px free res not found for port:%d, type:%d ",
-				pq->qdisc, pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_EDRR);
-		goto fail;
-	}
 
 	/*
 	 * Get Level 0 queue Resource
@@ -272,8 +208,6 @@ static int ppe_qdisc_res_l0_alloc(struct ppe_qdisc *pq)
 	}
 
 	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_L0_SCHEDULER_VALID);
-	pq->res.scheduler.l0c_drrid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_CDRR) + l0c_drr->offset;
-	pq->res.scheduler.l0e_drrid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_EDRR) + l0e_drr->offset;
 	pq->res.q.mcast_qid = 0;
 
 	/*
@@ -293,13 +227,6 @@ fail:
 		ppe_qdisc_port_res_free(pq->port_id, q->offset, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
 	}
 
-	if (l0c_drr) {
-		ppe_qdisc_port_res_free(pq->port_id, l0c_drr->offset, PPE_DRV_QOS_RES_TYPE_L0_CDRR);
-	}
-
-	if (l0e_drr) {
-		ppe_qdisc_port_res_free(pq->port_id, l0e_drr->offset, PPE_DRV_QOS_RES_TYPE_L0_EDRR);
-	}
 	return -EINVAL;
 }
 
@@ -325,6 +252,19 @@ static int ppe_qdisc_res_l0_scheduler_set(struct ppe_qdisc *pq)
 
 		ppe_qdisc_info("Qdisc:%px level0 queue scheduler configuration successful", pq->qdisc);
 		return 0;
+	}
+
+	/*
+	 * Get the DRR from the DRR map and set in qdisc resource only if priority is changed
+	 */
+	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_L0_PRI_CHANGE_VALID)) {
+		if (ppe_qdisc_port_res_drr_ref(pq->port_id, res, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE) != 0) {
+				ppe_qdisc_warning("Qdisc:%px level0 DRR configuration failed", pq->qdisc);
+				ppe_qdisc_res_l0_free(pq);
+				return -EINVAL;
+		}
+
+		ppe_qdisc_flags_clear(pq, PPE_QDISC_FLAG_L0_PRI_CHANGE_VALID);
 	}
 
 	/*
@@ -740,6 +680,7 @@ int ppe_qdisc_res_init(struct ppe_qdisc *pq)
 
 	memset(&pq->res, 0, sizeof(struct ppe_drv_qos_res));
 	pq->res.q.qlimit = dev->tx_queue_len ? : 1;
+	pq->res.scheduler.priority = PPE_DRV_QOS_PRIORITY_MAX - 1;
 
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
 
@@ -790,6 +731,8 @@ int ppe_qdisc_res_init(struct ppe_qdisc *pq)
 
 res_alloc:
 	if (alloc_scheduler) {
+		ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_L1_PRI_CHANGE_VALID);
+		ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_L0_PRI_CHANGE_VALID);
 		if (ppe_qdisc_res_scheduler_set(pq) < 0) {
 			ppe_qdisc_warning("Qdisc:%px Scheduler configuration failed", pq->qdisc);
 			return -1;

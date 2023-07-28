@@ -27,7 +27,7 @@
 #include "ppe_qdisc_stats.h"
 
 /*
- * Max number of PRIO bands supported based on level.
+ * Max number of priority supported based on level.
  */
 #define PPE_QDISC_PORT_LEVEL_PRIO_BANDS_MAX	4
 #define PPE_QDISC_FLOW_LEVEL_PRIO_BANDS_MAX	8
@@ -174,17 +174,35 @@ int ppe_qdisc_drr_weight_get(uint32_t quantum, ppe_drv_qos_drr_unit_t drr_unit)
 }
 
 /*
- * ppe_qdisc_get_max_prio_bands()
- *	Returns the number of PRIO bands supported based on qdisc level.
+ * ppe_qdisc_get_max_priority()
+ *	Returns the max priority supported based on qdisc level.
  */
-int ppe_qdisc_get_max_prio_bands(struct ppe_qdisc *pq)
+int ppe_qdisc_get_max_priority(struct ppe_qdisc *pq)
 {
 	switch (pq->level) {
 	case PPE_DRV_QOS_PORT_LEVEL:
-		return PPE_QDISC_PORT_LEVEL_PRIO_BANDS_MAX;
+		if (pq->type == PPE_QDISC_NODE_TYPE_HTB_GROUP) {
+			return ppe_qdisc_port_res_max_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_SP);
+		} else {
+			return ppe_qdisc_port_res_max_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_SP);
+		}
 
 	case PPE_DRV_QOS_FLOW_LEVEL:
-		return PPE_QDISC_FLOW_LEVEL_PRIO_BANDS_MAX;
+		if (pq->type == PPE_QDISC_NODE_TYPE_HTB_GROUP) {
+			return ppe_qdisc_port_res_max_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_SP);
+		} else {
+			return (ppe_qdisc_port_res_max_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE) > PPE_DRV_QOS_PRIORITY_MAX ?
+				 PPE_DRV_QOS_PRIORITY_MAX : ppe_qdisc_port_res_max_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE));
+		}
+
+	case PPE_DRV_QOS_QUEUE_LEVEL:
+		if (pq->type == PPE_QDISC_NODE_TYPE_HTB_GROUP) {
+			return (ppe_qdisc_port_res_max_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE) > PPE_DRV_QOS_PRIORITY_MAX ?
+				PPE_DRV_QOS_PRIORITY_MAX : ppe_qdisc_port_res_max_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE));
+		} else {
+			ppe_qdisc_warning("Qdisc:%px not supported at this level", pq->qdisc);
+			return 0;
+		}
 
 	default:
 		ppe_qdisc_warning("Qdisc:%px not supported at this level", pq->qdisc);
@@ -461,6 +479,7 @@ void ppe_qdisc_destroy(struct ppe_qdisc *pq)
 	ppe_qdisc_res_free(pq);
 
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
+		ppe_qdisc_port_res_all_drr_map_free(pq->port_id);
 		ppe_qdisc_port_default_conf_set(pq->port_id);
 		ppe_qdisc_stats_stop_polling(pq);
 	}

@@ -44,6 +44,8 @@
 #define PPE_QDISC_FLAG_L1_SCHEDULER_VALID	0x00000100	/* L1 scheduler is valid for the qdisc */
 #define PPE_QDISC_FLAG_SHAPER_VALID		0x00000200	/* Shaper is valid for the qdisc */
 #define PPE_QDISC_FLAG_INT_PRI_VALID		0x00000400	/* INT-PRI is valid for the qdisc */
+#define PPE_QDISC_FLAG_L1_PRI_CHANGE_VALID		0x00000800	/* Priority change is valid for the qdisc at L1*/
+#define PPE_QDISC_FLAG_L0_PRI_CHANGE_VALID		0x00001000	/* Priority change is valid for the qdisc at L0*/
 
 #define PPE_QDISC_STATS_SYNC_MANY_PERIOD msecs_to_jiffies(1000)	/* Statistics sync peroid */
 
@@ -352,10 +354,10 @@ bool ppe_qdisc_type_is_queue(struct ppe_qdisc *pq);
 int ppe_qdisc_drr_weight_get(uint32_t quantum, ppe_drv_qos_drr_unit_t drr_unit);
 
 /*
- * ppe_qdisc_get_max_prio_bands()
- *	Returns the number of PRIO bands supported based on qdisc level.
+ * ppe_qdisc_get_max_priority()
+ *	Returns the max priority supported based on qdisc level.
  */
-int ppe_qdisc_get_max_prio_bands(struct ppe_qdisc *pq);
+int ppe_qdisc_get_max_priority(struct ppe_qdisc *pq);
 
 /*
  * ppe_qdisc_is_depth_valid()

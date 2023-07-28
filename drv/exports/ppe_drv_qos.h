@@ -177,6 +177,19 @@ struct ppe_drv_qos_res {
 	uint32_t l1spid;			/**< Level 1 SP Id. */
 };
 
+/*
+ * ppe_drv_qos_port_drr_map
+ *	Level 1 and Level 0 DRR map for the port.
+ */
+struct ppe_drv_qos_port_drr_map {
+	ppe_drv_qos_level_t	level;	/**< QoS scheduler level. */
+	uint32_t sp_id;		/**< Level 1 SP ID or Level 0 SP ID. */
+	uint32_t priority;	/**< Priority value. */
+	uint32_t drr_id;		/**< Mapped DRR ID. */
+	uint32_t ref_cnt;	/**< Reference count */
+	struct ppe_drv_qos_port_drr_map *next; /**< Pointer to next map entry. */
+};
+
 /**
  * ppe_drv_qos_port
  *	Information for QoS port resources.

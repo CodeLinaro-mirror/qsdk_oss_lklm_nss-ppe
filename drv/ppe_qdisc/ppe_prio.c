@@ -140,9 +140,9 @@ static int ppe_prio_change(struct Qdisc *sch, struct nlattr *opt,
 		return -EINVAL;
 	}
 
-	if (qopt->bands > ppe_qdisc_get_max_prio_bands(&q->pq)) {
+	if (qopt->bands > ppe_qdisc_get_max_priority(&q->pq)) {
 		ppe_qdisc_warning("ppeprio requires max bands to be %d",
-			ppe_qdisc_get_max_prio_bands(&q->pq));
+			ppe_qdisc_get_max_priority(&q->pq));
 		return -EINVAL;
 	}
 
@@ -251,15 +251,36 @@ static int ppe_prio_graft(struct Qdisc *sch, unsigned long arg,
 	}
 
 	if (new != &noop_qdisc) {
+		uint32_t res_type;
+		uint32_t pri_flag = 0;
+
 		if (!(new->flags & TCQ_F_NSS)) {
 			ppe_qdisc_warning("non-ppe qdisc %px used along with ppe qdisc", new);
 			return -EINVAL;
 		}
 
 		pq_new = qdisc_priv(new);
+
+		if (ppe_qdisc_flags_check(pq_new, PPE_QDISC_FLAG_L1_SCHEDULER_VALID)) {
+			res_type = PPE_DRV_QOS_RES_TYPE_L0_SP;
+			pri_flag = PPE_QDISC_FLAG_L1_PRI_CHANGE_VALID;
+		} else if (ppe_qdisc_flags_check(pq_new, PPE_QDISC_FLAG_L0_SCHEDULER_VALID)) {
+			res_type = PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE;
+			pri_flag = PPE_QDISC_FLAG_L0_PRI_CHANGE_VALID;
+		}
+
+		/*
+		 * Deref the DRR mapping only if priority is changed
+		 */
+		if (band != (PPE_DRV_QOS_PRIORITY_MAX - pq_new->res.scheduler.priority - 1)) {
+			ppe_qdisc_port_res_drr_deref(pq_new->port_id, &pq_new->res, res_type);
+			ppe_qdisc_flags_set(pq_new, pri_flag);
+		}
+
 		pq_new->res.scheduler.priority = PPE_DRV_QOS_PRIORITY_MAX - band - 1;
 		ppe_qdisc_info("%x ppeprio attaching new child with qos tag: %x, priority: %u",
 			q->pq.qos_tag, pq_new->qos_tag, band);
+
 		if (ppe_qdisc_node_attach(&q->pq, pq_new) < 0) {
 			return -EINVAL;
 		}

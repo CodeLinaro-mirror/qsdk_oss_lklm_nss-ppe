@@ -25,8 +25,16 @@ struct ppe_qdisc_port {
 					/* Used res list */
 	struct ppe_qdisc_port_res *res_free[PPE_DRV_QOS_RES_TYPE_MAX];
 					/* Free res list */
+	struct ppe_drv_qos_port_drr_map *l1map;	/* DRR map initial configuration */
+	struct ppe_drv_qos_port_drr_map *l0map;	/* DRR map initial configuration */
 	spinlock_t lock;		/* Lock to protect the port structure */
 };
+
+/*
+ * ppe_qdisc_port_res_max_get()
+ *	Returns maximum number of the particular resource for a given port.
+ */
+extern uint32_t ppe_qdisc_port_res_max_get(uint32_t port_id, ppe_drv_qos_res_type_t type);
 
 /*
  * ppe_qdisc_port_default_conf_set()
@@ -57,6 +65,24 @@ extern void ppe_qdisc_port_enable_assigned_queue(uint32_t port_id);
  *	Returns base of the particular resource for a given port.
  */
 extern uint32_t ppe_qdisc_port_res_base_get(uint32_t port_id, ppe_drv_qos_res_type_t type);
+
+/*
+ * ppe_qdisc_port_res_drr_deref()
+ *	Get and deref DRR mapped to respective priority.
+ */
+extern int ppe_qdisc_port_res_drr_deref(uint32_t port_id, struct ppe_drv_qos_res *res, ppe_drv_qos_res_type_t type);
+
+/*
+ * ppe_qdisc_port_res_drr_ref()
+ *	Get, set and ref DRR mapped to respective priority.
+ */
+extern int ppe_qdisc_port_res_drr_ref(uint32_t port_id, struct ppe_drv_qos_res *res, ppe_drv_qos_res_type_t type);
+
+/*
+ * ppe_qdisc_port_res_all_drr_map_free()
+ *	Frees the allocated DRR maps.
+ */
+extern void ppe_qdisc_port_res_all_drr_map_free(uint32_t port_id);
 
 /*
  * ppe_qdisc_port_res_free()
