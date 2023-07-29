@@ -539,6 +539,16 @@ struct ppe_drv_acl_rule {
 	uint8_t src;								/**< ACL source binding. */
 };
 
+/*
+ * ppe_drv_acl_hw_info
+ *	ACL hardware rule information
+ */
+struct ppe_drv_acl_hw_info {
+	uint16_t hw_rule_id;		/**< ACL hardware rule ID. */
+	uint16_t hw_list_id;		/**< ACL hardware list ID. */
+	uint16_t hw_num_slices;		/**< Number of slices occupied. */
+};
+
 /**
  * ppe_drv_acl_metadata
  *	ACL rule metadata for packet processing based on ACL rule.
@@ -603,6 +613,37 @@ void ppe_drv_acl_sc_return(uint8_t sc);
  * Service code
  */
 uint8_t ppe_drv_acl_sc_get(void);
+
+/*
+ * ppe_drv_acl_get_hw_stats()
+ *	Return hardware stats for an ACL rule.
+ *
+ * @datatype
+ * struct ppe_drv_acl_ctx
+ *
+ * @param[OUT] pkts	Returned hardware packet counters.
+ * @param[OUT] bytes	Returned hardware byte counters.
+ *
+ * @return
+ * void
+ */
+void ppe_drv_acl_get_hw_stats(struct ppe_drv_acl_ctx *ctx, uint64_t *pkts, uint64_t *bytes);
+
+/*
+ * ppe_drv_acl_hw_info_get()
+ *	Return hardware information associated with an ACL rule.
+ *
+ * @datatype
+ * struct ppe_drv_acl_ctx
+ * struct ppe_drv_acl_hw_info
+ *
+ * @param[IN]  ctx		ACL rule context pointer.
+ * @param[OUT] hw_info		Returned hardware rule information.
+ *
+ * @return
+ * void
+ */
+void ppe_drv_acl_hw_info_get(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_acl_hw_info *hw_info);
 
 /**
  * ppe_drv_acl_flow_unregister_cb

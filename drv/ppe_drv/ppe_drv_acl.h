@@ -16,6 +16,7 @@
 
 #include <fal/fal_acl.h>
 #include <fal/fal_api.h>
+#include <fal/fal_flow.h>
 #include <ppe_drv_acl.h>
 
 /*
@@ -38,6 +39,12 @@
 #define PPE_DRV_ACL_HW_INDEX_MAX 1024
 
 /*
+ * ACL stats update macros.
+ */
+#define PPE_DRV_ACL_PKT_CNTR_ROLLOVER(delta) ((delta + FAL_FLOW_PKT_CNT_MASK + 1) & FAL_FLOW_PKT_CNT_MASK)
+#define PPE_DRV_ACL_BYTE_CNTR_ROLLOVER(delta) ((delta + FAL_FLOW_BYTE_CNT_MASK + 1) & FAL_FLOW_BYTE_CNT_MASK)
+
+/*
  * ppe_drv_acl_slice
  *	ACL slice
  */
@@ -57,6 +64,17 @@ struct ppe_drv_acl_ctx {
 	bool rule_valid;			/* Rule valid flag to handle failure with partial configuration. */
 	bool rule_type_valid;			/* Indicate if rule type is already set. */
 	ppe_drv_acl_ipo_t type;			/* IPO type - IPO or pre-IPO? */
+
+	/*
+	 * Hardware stats.
+	 */
+	fal_entry_counter_t pre_cntrs;		/* Previous hardware counters. */
+	atomic64_t total_pkts;			/* Accumulated matched packets. */
+	atomic64_t total_bytes;			/* Accumulated matched bytes. */
+
+	/*
+	 * Rule shadow.
+	 */
 	fal_acl_rule_t fal_rule;		/* FAL rule structure */
 };
 
@@ -81,11 +99,21 @@ struct ppe_drv_acl_sc {
 };
 
 /*
+ * ppe_drv_acl_list
+ *	ACL list ID structure.
+ */
+struct ppe_drv_acl_list {
+	uint8_t list_id_state;
+	struct ppe_drv_acl_ctx *ctx;
+};
+
+/*
  * ppe_drv_acl
  *	Complete list of rows and actions
  */
 struct ppe_drv_acl {
-	uint8_t list_id[PPE_DRV_ACL_LIST_ID_MAX];		/* List IDs */
+	struct ppe_drv_acl_list list_id[PPE_DRV_ACL_LIST_ID_MAX];
+								/* List IDs */
 	struct ppe_drv_acl_sc acl_sc[PPE_DRV_SC_FLOW_ACL_MAX];	/* List of service codes for flow/policer binding. */
 	ppe_drv_acl_flow_callback_t flow_add_cb;		/* Flow add callback when flow needs to be attached with ACL. */
 	ppe_drv_acl_flow_callback_t flow_del_cb;		/* Flow delete callback when flow needs to detached from ACL. */
@@ -109,8 +137,19 @@ struct ppe_drv_acl_tbl {
 };
 
 /*
+ * ppe_drv_acl_stats_add()
+ *	Add counters to ACL stats atomically.
+ */
+static inline void ppe_drv_acl_stats_add(struct ppe_drv_acl_ctx *ctx, uint32_t pkts, uint32_t bytes)
+{
+	atomic64_add(pkts, &ctx->total_pkts);
+	atomic64_add(bytes, &ctx->total_bytes);
+}
+
+/*
  * Internal APIs.
  */
+void ppe_drv_acl_stats_update(struct ppe_drv_acl_ctx *ctx);
 void ppe_drv_acl_entries_free(struct ppe_drv_acl *acl);
 void ppe_drv_acl_tbl_entries_free(struct ppe_drv_acl_tbl *acl_tbl);
 struct ppe_drv_acl *ppe_drv_acl_entries_alloc(void);

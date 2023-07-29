@@ -25,6 +25,7 @@ endif
 
 ifeq ($(PPE_ACL_ENABLED), y)
 qca-nss-ppe-rule-objs += ppe_acl/ppe_acl.o
+qca-nss-ppe-rule-objs += ppe_acl/ppe_acl_dump.o
 qca-nss-ppe-rule-objs += ppe_acl/ppe_acl_stats.o
 ccflags-y += -DPPE_ACL_DEBUG_LEVEL=3
 endif

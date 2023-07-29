@@ -56,6 +56,7 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 	struct ppe_drv_v4_conn_flow *pcr_v4;
 	struct ppe_drv_v6_conn_flow *pcf_v6;
 	struct ppe_drv_v6_conn_flow *pcr_v6;
+	uint16_t id;
 
 	/*
 	 * Update hw stats for flow associated with active v4 connections
@@ -111,6 +112,12 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 			}
 
 			ppe_drv_tun_v6_port_stats_update(cn_tun_v6);
+		}
+	}
+
+	for (id = 0; id < PPE_DRV_ACL_LIST_ID_MAX; id++) {
+		if (p->acl->list_id[id].list_id_state == PPE_DRV_ACL_LIST_ID_USED) {
+			ppe_drv_acl_stats_update(p->acl->list_id[id].ctx);
 		}
 	}
 

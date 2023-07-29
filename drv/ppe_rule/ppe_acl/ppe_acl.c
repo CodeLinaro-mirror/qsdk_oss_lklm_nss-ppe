@@ -2330,13 +2330,12 @@ fail:
 ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 {
 	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
-	bool slice_type[PPE_DRV_ACL_SLICE_TYPE_MAX] = {0};
 	enum ppe_drv_acl_slice_type slice_t;
 	struct ppe_drv_acl_ctx *ctx = NULL;
 	ppe_acl_rule_match_type_t rule_t;
 	ppe_acl_rule_id_t gen_id = -1;
 	struct ppe_acl *acl = NULL;
-	uint8_t slice_cnt = 0, i;
+	uint8_t slice_cnt = 0;
 	ppe_acl_ret_t ret;
 
 	ppe_acl_info("%p: rule create request: %p", acl_g, rule);
@@ -2384,14 +2383,14 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 			continue;
 		}
 
-		ppe_acl_rule_to_slice_type(&rule->rules[i], rule_t, &slice_type[0]);
+		ppe_acl_rule_to_slice_type(&rule->rules[rule_t], rule_t, &acl->slice_type[0]);
 	}
 
 	/*
 	 * Figure out the number of ACL slices needed based on the request from user.
 	 */
 	for (slice_t = 0; slice_t < PPE_DRV_ACL_SLICE_TYPE_MAX; slice_t++) {
-		if (!slice_type[slice_t]) {
+		if (!acl->slice_type[slice_t]) {
 			continue;
 		}
 
@@ -2512,6 +2511,8 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 	 */
 	acl->ctx = ctx;
 	kref_init(&acl->ref_cnt);
+	acl->slice_cnt = slice_cnt;
+	memcpy(&acl->rule, rule, sizeof(struct ppe_acl_rule));
 
 	spin_unlock_bh(&acl_g->lock);
 	return PPE_ACL_RET_SUCCESS;
@@ -2657,6 +2658,7 @@ void ppe_acl_deinit(void)
 
 	ppe_drv_acl_flow_unregister_cb();
 
+	ppe_acl_dump_exit();
 	ppe_acl_stats_debugfs_exit();
 }
 
@@ -2698,4 +2700,9 @@ void ppe_acl_init(struct dentry *d_rule)
 	 * Create debugfs directory/files.
 	 */
 	ppe_acl_stats_debugfs_init(d_rule);
+
+	/*
+	 * Initialization of ACL dump.
+	 */
+	ppe_acl_dump_init(d_rule);
 }
