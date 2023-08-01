@@ -2276,6 +2276,15 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 
 	ppe_acl_info("%p: rule create request: %p", acl_g, rule);
 
+	if (!(rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_NO_RULEID)) {
+		if (rule->rule_id >= PPE_ACL_USER_RULE_ID_MAX) {
+			ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_invalid_id);
+			ppe_acl_warn("%p: Invalid rule ID: %p", acl_g, rule);
+			ret = PPE_ACL_RET_CREATE_FAIL_INVALID_ID;
+			goto fail;
+		}
+	}
+
 	spin_lock_bh(&acl_g->lock);
 	acl = ppe_acl_alloc();
 	if (!acl) {

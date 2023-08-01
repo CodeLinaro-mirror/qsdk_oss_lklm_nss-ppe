@@ -48,6 +48,7 @@ struct ppe_acl_stats_cmn {
 	atomic64_t acl_create_fail_policer_sc;		/* ACL rule create failure due to sc table full. */
 	atomic64_t acl_create_fail_rule_exist;		/* ACL rule create failure due to collision. */
 	atomic64_t acl_create_fail_action_config;	/* ACL rule create failure due to invalid action. */
+	atomic64_t acl_create_fail_invalid_id;		/* ACL rule create failure due to invalid rule-ID. */
 
 	/*
 	 * Destroy failures.

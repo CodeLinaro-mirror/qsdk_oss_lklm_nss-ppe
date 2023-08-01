@@ -43,6 +43,7 @@ static const char *ppe_acl_stats_cmn_str[] = {
 	"acl_create_fail_policer_sc",		/* ACL rule create failure due to policer sc table full. */
 	"acl_create_fail_rule_exist",		/* ACL rule create failure due to collision. */
 	"acl_create_fail_action_config",	/* ACL rule create failure due to invalid action. */
+	"acl_create_fail_invalid_id",		/* ACL rule create failure due to invalid rule-ID. */
 	"acl_destroy_fail_invalid_id",		/* ACL destroy failure due to invalid rule ID. */
 };
 

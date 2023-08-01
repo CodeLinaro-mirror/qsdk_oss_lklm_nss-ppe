@@ -100,6 +100,7 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_CMN_FLAG_PRI_EN		0x00000040	/**< Rule common flag to indicate priority configuration. */
 #define PPE_ACL_RULE_CMN_FLAG_POST_RT_EN	0x00000080	/**< Rule common flag to enable match for post routing fields. */
 #define PPE_ACL_RULE_CMN_FLAG_OUTER_HDR_MATCH	0x00000100	/**< Rule common flag to enable match on tunnel outer headers fields. */
+#define PPE_ACL_RULE_CMN_FLAG_NO_RULEID		0x00000200	/**< Rule common flag to indicate rule ID is not passed by caller. */
 
 /*
  * ACL rule flag general - applicable for each rule separately.
@@ -269,6 +270,7 @@ typedef enum ppe_acl_ret {
 	PPE_ACL_RET_CREATE_FAIL_RULE_PARSE,		/**< Rule create failed due to rule parse failure. */
 	PPE_ACL_RET_CREATE_FAIL_SC_ALLOC,		/**< Rule create failed due to service code allocation failure. */
 	PPE_ACL_RET_CREATE_FAIL_ACTION_CONFIG,		/**< Rule create failed due to invalid action configuration. */
+	PPE_ACL_RET_CREATE_FAIL_INVALID_ID,		/**< Rule create failed due to invalid rule ID. */
 	PPE_ACL_RET_DESTROY_FAIL_INVALID_ID,		/**< Rule destroy failed due to invalid rule ID. */
 } ppe_acl_ret_t;
 
