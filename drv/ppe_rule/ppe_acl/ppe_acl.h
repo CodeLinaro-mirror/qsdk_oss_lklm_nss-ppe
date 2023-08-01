@@ -23,9 +23,10 @@
  * Max number of ACL rules IDs.
  */
 #define PPE_ACL_USER_RULE_ID_MAX 1024		/* Maximum number of user rule ID */
-#define PPE_ACL_POLICER_RULE_ID_BASE (PPE_ACL_USER_RULE_ID_MAX + 1)
-						/* Policer rule ID */
+#define PPE_ACL_GEN_RULE_ID_BASE (PPE_ACL_USER_RULE_ID_MAX + 1)
+						/* General ACL rule ID start */
 #define PPE_ACL_RULE_ID_MAX 2048		/* Maximum number of ACL rule ID */
+#define PPE_ACL_GEN_RULE_ID_MAX 1024 		/* Maximum number of general ACL rule ID */
 
 /*
  * PPE ACL debug macros
@@ -113,6 +114,15 @@ struct ppe_acl {
 };
 
 /*
+ * ppe_acl_gen_rule_id
+ *	General rule ID to keep a record of free and used rule IDs
+ */
+struct ppe_acl_gen_rule_id {
+	ppe_acl_rule_id_t rule_id;		/* Rule ID */
+	bool in_use;				/* Rule ID in-use state */
+};
+
+/*
  * ppe_acl_base
  *	PPE ACL base structure
  */
@@ -128,7 +138,7 @@ struct ppe_acl_base {
 	/*
 	 * Pointer to memory pool for rule table
 	 */
-	struct ppe_acl_rule_id *rule_id_tbl;		/* Memory for ACL rule ID table */
+	struct ppe_acl_gen_rule_id *rule_id_tbl;	/* Memory for ACL rule ID table */
 	struct kref ref;				/* Reference count */
 
 	/*

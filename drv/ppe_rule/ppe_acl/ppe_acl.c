@@ -51,6 +51,50 @@ static inline void ppe_acl_free(struct ppe_acl *acl)
 }
 
 /*
+ * ppe_acl_rule_return_gen_id()
+ *	Return a rule ID to general pool.
+ */
+static void ppe_acl_rule_return_gen_id(ppe_acl_rule_id_t gen_id)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+
+	if ((gen_id < PPE_ACL_GEN_RULE_ID_BASE) || (gen_id > PPE_ACL_RULE_ID_MAX)) {
+		ppe_acl_warn("%p: Invalid gneral rule ID: %d", acl_g, gen_id);
+		return;
+	}
+
+	/*
+	 * Clear the in_use state for rule ID.
+	 */
+	acl_g->rule_id_tbl[gen_id - PPE_ACL_GEN_RULE_ID_BASE].in_use = false;
+	ppe_acl_trace("%p: Return the rule ID to free pool: %d", acl_g, gen_id);
+}
+
+/*
+ * ppe_acl_rule_get_gen_id()
+ *	Find a free rule ID from general pool.
+ */
+static ppe_acl_rule_id_t ppe_acl_rule_get_gen_id(void)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	uint16_t i;
+
+	/*
+	 * Get the first available acl rule ID.
+	 */
+	for (i = 0; i < PPE_ACL_GEN_RULE_ID_MAX; i++) {
+		if (!acl_g->rule_id_tbl[i].in_use) {
+			acl_g->rule_id_tbl[i].in_use = true;
+			return acl_g->rule_id_tbl[i].rule_id;
+		}
+	}
+
+	ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_table_full);
+	ppe_acl_trace("%p: cannot allocate a free rule ID", acl_g);
+	return -1;
+}
+
+/*
  * ppe_acl_rule_find_by_id()
  *	Find a rule corresponding to a rule ID.
  */
@@ -123,6 +167,10 @@ static void ppe_acl_rule_free(struct kref *kref)
 	 * free the acl rule memory.
 	 */
 	ppe_acl_free(acl);
+
+	if (acl->rule_id >= PPE_ACL_GEN_RULE_ID_BASE) {
+		ppe_acl_rule_return_gen_id(acl->rule_id);
+	}
 
 	/*
 	 * Update stats
@@ -2121,10 +2169,12 @@ next_entry:
 /*
  * ppe_acl_rule_flow_policer_destroy()
  *	Destroy ACL rule for flow policer in PPE.
+ *
+ * TODO: remove this.
  */
 ppe_acl_ret_t ppe_acl_rule_flow_policer_destroy(ppe_acl_rule_id_t id)
 {
-	return ppe_acl_rule_destroy(id + PPE_ACL_POLICER_RULE_ID_BASE);
+	return PPE_ACL_RET_DESTROY_FAIL_INVALID_ID;
 }
 
 /*
@@ -2137,6 +2187,7 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	struct ppe_drv_acl_rule_match_one *slice;
 	struct ppe_drv_acl_ctx *ctx = NULL;
 	struct ppe_drv_acl_rule info = {0};
+	ppe_acl_rule_id_t gen_id = -1;
 	struct ppe_acl *acl = NULL;
 	ppe_acl_ret_t ret;
 	uint8_t sc = 0;
@@ -2152,6 +2203,19 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 		ret = PPE_ACL_RET_CREATE_FAIL_OOM;
 		goto fail;
 	}
+
+	gen_id = ppe_acl_rule_get_gen_id();
+	if (gen_id < 0) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_table_full);
+		ppe_acl_warn("%p: cannot allocate a free rule ID", acl_g);
+		ret = PPE_ACL_RET_CREATE_FAIL_RULE_CONFIG;
+		goto fail;
+	}
+
+	/*
+	 * Override user rule_id with general ID for this case.
+	 */
+	rule->rule_id = gen_id;
 
 	/*
 	 * Get a free service code for this ACL rule.
@@ -2234,7 +2298,7 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	 * Store book keeping info.
 	 * We use a base rule ID to avoid conflicting it with user space rule-id.
 	 */
-	acl->rule_id = rule->rule_id + PPE_ACL_POLICER_RULE_ID_BASE;
+	acl->rule_id = rule->rule_id;
 	acl->ctx = ctx;
 	kref_init(&acl->ref_cnt);
 
@@ -2266,24 +2330,17 @@ fail:
 ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 {
 	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
-	struct ppe_drv_acl_ctx *ctx = NULL;
 	bool slice_type[PPE_DRV_ACL_SLICE_TYPE_MAX] = {0};
 	enum ppe_drv_acl_slice_type slice_t;
-	struct ppe_acl *acl = NULL;
+	struct ppe_drv_acl_ctx *ctx = NULL;
 	ppe_acl_rule_match_type_t rule_t;
+	ppe_acl_rule_id_t gen_id = -1;
+	struct ppe_acl *acl = NULL;
 	uint8_t slice_cnt = 0, i;
 	ppe_acl_ret_t ret;
 
 	ppe_acl_info("%p: rule create request: %p", acl_g, rule);
 
-	if (!(rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_NO_RULEID)) {
-		if (rule->rule_id >= PPE_ACL_USER_RULE_ID_MAX) {
-			ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_invalid_id);
-			ppe_acl_warn("%p: Invalid rule ID: %p", acl_g, rule);
-			ret = PPE_ACL_RET_CREATE_FAIL_INVALID_ID;
-			goto fail;
-		}
-	}
 
 	spin_lock_bh(&acl_g->lock);
 	acl = ppe_acl_alloc();
@@ -2292,6 +2349,31 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 		ppe_acl_warn("%p: failed to allocate acl memory: %p", acl_g, rule);
 		ret = PPE_ACL_RET_CREATE_FAIL_OOM;
 		goto fail;
+	}
+
+	/*
+	 * If rule_id is not specified by user, find a general free ID. If specified, validate it.
+	 */
+	if (rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_NO_RULEID) {
+		gen_id = ppe_acl_rule_get_gen_id();
+		if (gen_id < 0) {
+			ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_table_full);
+			ppe_acl_warn("%p: cannot allocate a free rule ID", acl_g);
+			ret = PPE_ACL_RET_CREATE_FAIL_RULE_CONFIG;
+			goto fail;
+		}
+
+		/*
+		 * Override user rule_id with general ID for this case.
+		 */
+		rule->rule_id = gen_id;
+	} else {
+		if (rule->rule_id >= PPE_ACL_USER_RULE_ID_MAX) {
+			ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_invalid_id);
+			ppe_acl_warn("%p: Invalid rule ID: %p", acl_g, rule);
+			ret = PPE_ACL_RET_CREATE_FAIL_INVALID_ID;
+			goto fail;
+		}
 	}
 
 	/*
@@ -2566,6 +2648,13 @@ EXPORT_SYMBOL(ppe_acl_rule_callback_unregister);
  */
 void ppe_acl_deinit(void)
 {
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+
+	if (acl_g->rule_id_tbl) {
+		vfree(acl_g->rule_id_tbl);
+		acl_g->rule_id_tbl = NULL;
+	}
+
 	ppe_drv_acl_flow_unregister_cb();
 
 	ppe_acl_stats_debugfs_exit();
@@ -2578,6 +2667,8 @@ void ppe_acl_deinit(void)
 void ppe_acl_init(struct dentry *d_rule)
 {
 	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl_gen_rule_id *rule_id;
+	int i;
 
 	spin_lock_init(&acl_g->lock);
 
@@ -2585,6 +2676,21 @@ void ppe_acl_init(struct dentry *d_rule)
 	 * Initialize active list
 	 */
 	INIT_LIST_HEAD(&acl_g->active_rules);
+
+	/*
+	 * Rule ID table - used to maitain a free pool of general IDs.
+	 */
+	acl_g->rule_id_tbl = vzalloc(sizeof(struct ppe_acl_gen_rule_id) * PPE_ACL_GEN_RULE_ID_MAX);
+	if (!acl_g->rule_id_tbl) {
+		ppe_acl_warn("%p: failed to allocate ACL rule ID table", acl_g);
+		return;
+	}
+
+	for (i = 0; i < PPE_ACL_GEN_RULE_ID_MAX; i++) {
+		rule_id = &acl_g->rule_id_tbl[i];
+		rule_id->rule_id = PPE_ACL_GEN_RULE_ID_BASE + i;
+		rule_id->in_use = false;
+	}
 
 	ppe_drv_acl_flow_register_cb(ppe_acl_rule_flow_add_cb, ppe_acl_rule_flow_del_cb, NULL);
 
