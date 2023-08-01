@@ -711,6 +711,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 	uint16_t valid_flags = create->valid_flags;
 	uint16_t rule_flags = create->rule_flags;
 	uint32_t sawf_tag;
+	bool is_wanif;
 	struct ppe_drv_comm_stats *comm_stats;
 	struct ppe_drv_port *pp_rx, *pp_tx;
 	struct ppe_drv *p = &ppe_drv_gbl;
@@ -906,8 +907,12 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 
 		/*
 		 * Bridge + VLAN? Make sure both top interfaces are attached to same parent.
+		 * If Interface is set as wanif using "echo eth# > /proc/sys/ppe/bridge_mgr/add_wanif",
+		 * bridge interface is not set as parent of interface.
+		 * So if either of top_if_rx or top_if_tx is wanif, then avoide this check.
 		 */
-		if (rule_flags & PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW) {
+		is_wanif = ((top_if_rx->flags & PPE_DRV_IFACE_FLAG_WAN_IF_VALID) || (top_if_tx->flags & PPE_DRV_IFACE_FLAG_WAN_IF_VALID));
+		if ((rule_flags & PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW) && !is_wanif) {
 			if (!ppe_drv_iface_parent_get(top_if_rx) || !ppe_drv_iface_parent_get(top_if_tx)) {
 				ppe_drv_stats_inc(&comm_stats->v4_create_fail_bridge_noexist);
 				ppe_drv_trace("%p: one of top's parent interface is null: top_rx_if : %d tx_if: %d",
@@ -1049,16 +1054,29 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 
 		/*
 		 * Bridge + VLAN? Make sure both top interfaces are attached to same parent.
+		 * If Interface is set as wanif using "echo eth# > /proc/sys/ppe/bridge_mgr/add_wanif",
+		 * bridge interface is not set as parent of interface.
+		 * So if either of top_if_rx or top_if_tx is wanif, then avoide this check.
 		 */
-		if ((rule_flags & PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW)
-		       && (ppe_drv_v4_conn_flow_ingress_vlan_cnt_get(pcr)
-			|| ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcr))) {
+		is_wanif = ((top_if_rx->flags & PPE_DRV_IFACE_FLAG_WAN_IF_VALID) || (top_if_tx->flags & PPE_DRV_IFACE_FLAG_WAN_IF_VALID));
+		if ((rule_flags & PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW) && !is_wanif) {
 
-			if (ppe_drv_iface_parent_get(top_if_rx) != ppe_drv_iface_parent_get(top_if_tx)) {
-				ppe_drv_stats_inc(&comm_stats->v4_create_fail_vlan_filter);
-				ppe_drv_warn("%p: IF not part of same bridge rx_if: %d tx_if: %d",
+			if (!ppe_drv_iface_parent_get(top_if_rx) || !ppe_drv_iface_parent_get(top_if_tx)) {
+				ppe_drv_stats_inc(&comm_stats->v4_create_fail_bridge_noexist);
+				ppe_drv_trace("%p: one of top's parent interface is null: top_rx_if : %d tx_if: %d",
 						create, top_rule->rx_if, top_rule->tx_if);
+				ppe_drv_trace("top_if_rx_dev: %s top_if_tx_dev: %s top_if_tx_index: %d top_if_rx_index: %d\n", top_if_rx->dev->name,
+						top_if_tx->dev->name, top_if_rx->index, top_if_tx->index);
 				return PPE_DRV_RET_FAILURE_NOT_BRIDGE_SLAVES;
+			}
+
+			if (ppe_drv_v4_conn_flow_ingress_vlan_cnt_get(pcr) || ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcr)) {
+				if (ppe_drv_iface_parent_get(top_if_rx) != ppe_drv_iface_parent_get(top_if_tx)) {
+					ppe_drv_stats_inc(&comm_stats->v4_create_fail_vlan_filter);
+					ppe_drv_warn("%p: IF not part of same bridge rx_if: %d tx_if: %d",
+							create, top_rule->rx_if, top_rule->tx_if);
+					return PPE_DRV_RET_FAILURE_NOT_BRIDGE_SLAVES;
+				}
 			}
 		}
 
