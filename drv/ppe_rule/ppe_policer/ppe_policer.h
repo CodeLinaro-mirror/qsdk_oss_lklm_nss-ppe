@@ -63,15 +63,6 @@ struct ppe_drv_policer_acl;
 struct ppe_drv_policer_port;
 
 /*
- * ppe_acl_policer_flow_rule_tbl
- *	Policer rule id
- */
-struct ppe_acl_policer_flow_rule_tbl {
-	uint32_t rule_id;	/* Rule id */
-	bool in_use;			/* in use or not */
-};
-
-/*
  * struct ppe_policer
  *	Policer structure
  */
@@ -95,7 +86,6 @@ struct ppe_policer_base {
 	struct ppe_policer_stats stats;                     	/* PPE RFS statistics */
 	struct dentry *dentry;					/* Debugfs entry */
 
-	struct ppe_acl_policer_flow_rule_tbl *rule_id;		/* Rule id */
 	struct kref ref;					/* Reference count */
 
 	struct list_head port_active_rules;			/* List of active Policer rules */

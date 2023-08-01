@@ -43,43 +43,6 @@ void ppe_policer_free(struct ppe_policer *pol)
 	kfree(pol);
 }
 
-#ifndef NSS_PPE_RULE_IPQ53XX
-/*
- * ppe_policer_rule_acl_return_free_id()
- *	Return a rule ID to free pool.
- */
-static void ppe_policer_rule_acl_return_free_id(struct ppe_acl_policer_flow_rule_tbl *rule_id)
-{
-	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
-
-	/*
-	 * Clear the in_use state for rule ID.
-	 */
-	g_policer->rule_id[rule_id->rule_id].in_use = false;
-	ppe_policer_warn("%p: Return the acl rule ID to free pool: %d", g_policer, rule_id->rule_id);
-}
-
-/*
- * ppe_policer_rule_acl_get_free_id()
- *	Find a free rule ID.
- */
-static struct ppe_acl_policer_flow_rule_tbl *ppe_policer_rule_acl_get_free_id(void)
-{
-	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
-	uint16_t i;
-
-	for (i = 0; i < PPE_ACL_POLICER_FLOW_RULE_MAX; i++) {
-		if (!g_policer->rule_id[i].in_use) {
-			g_policer->rule_id[i].in_use = true;
-			return &g_policer->rule_id[i];
-		}
-	}
-
-	ppe_policer_warn("%p: cannot allocate a free rule ID", g_policer);
-	return NULL;
-}
-#endif
-
 /*
  * ppe_policer_rule_port_find_by_id()
  *	Find a rule corresponding to a rule ID.
@@ -557,7 +520,6 @@ bool ppe_policer_rule_flow_del_cb(void *app_data, struct ppe_drv_policer_flow *i
 	if (kref_put(&pol->kref_cnt, ppe_policer_acl_rule_free)) {
 		ppe_policer_warn("%p: reference goes down to 0 for pol: %p ID: %d\n",
 				g_policer, pol, info->id);
-		ppe_policer_rule_acl_return_free_id(&g_policer->rule_id[pol->acl_rule_id]);
 	}
 
 	ppe_policer_trace("%p: rule_id: %u ref dec: %u", g_policer, info->id, kref_read(&pol->kref_cnt));
@@ -573,7 +535,6 @@ bool ppe_policer_rule_flow_add_cb(void *app_data, struct ppe_drv_policer_flow *i
 {
 	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
 	struct ppe_acl_rule_flow_policer flow_rule = {0};
-	struct ppe_acl_policer_flow_rule_tbl *acl_id_tbl;
 	struct ppe_policer *pol;
 
 	spin_lock_bh(&g_policer->lock);
@@ -584,14 +545,6 @@ bool ppe_policer_rule_flow_add_cb(void *app_data, struct ppe_drv_policer_flow *i
 		return false;
 	}
 
-	acl_id_tbl = ppe_policer_rule_acl_get_free_id();
-	if (!acl_id_tbl) {
-		ppe_policer_warn("%p: failed to find the acl rule index for flow based policing\n", g_policer);
-		spin_unlock_bh(&g_policer->lock);
-		return false;
-	}
-
-	flow_rule.rule_id = acl_id_tbl->rule_id;
 	flow_rule.hw_policer_idx = ppe_drv_policer_get_policer_id(pol->drv_ctx.acl_ctx);
 	flow_rule.pkt_noedit = info->pkt_noedit;
 
@@ -710,14 +663,7 @@ EXPORT_SYMBOL(ppe_policer_v4_noedit_flow_destroy);
  */
 void ppe_policer_deinit(void)
 {
-	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
 	ppe_policer_stats_debugfs_exit();
-
-	if (g_policer->rule_id) {
-		vfree(g_policer->rule_id);
-		g_policer->rule_id = NULL;
-	}
-
 	ppe_drv_policer_flow_unregister_cb();
 }
 
@@ -728,26 +674,10 @@ void ppe_policer_deinit(void)
 void ppe_policer_init(struct dentry *d_rule)
 {
 	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
-	struct ppe_acl_policer_flow_rule_tbl *rule_id;
-	int i;
 
 	spin_lock_init(&g_policer->lock);
 	INIT_LIST_HEAD(&g_policer->port_active_rules);
 	INIT_LIST_HEAD(&g_policer->acl_active_rules);
-
-	/*
-	 * Rule ID table - used to maitain a free pool of free ACL IDs.
-	*/
-	g_policer->rule_id = vzalloc(sizeof(struct ppe_acl_policer_flow_rule_tbl) * PPE_ACL_POLICER_FLOW_RULE_MAX);
-	if (!g_policer->rule_id) {
-		ppe_policer_warn("%p: failed to allocate ACL rule ID table", g_policer);
-		return;
-	}
-
-	for (i = 0; i < PPE_ACL_POLICER_FLOW_RULE_MAX; i++) {
-		rule_id = &g_policer->rule_id[i];
-		rule_id->in_use = false;
-	}
 
 	ppe_drv_policer_flow_register_cb(ppe_policer_rule_flow_add_cb, ppe_policer_rule_flow_del_cb, NULL);
 	ppe_policer_stats_debugfs_init(d_rule);
