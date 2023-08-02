@@ -272,6 +272,7 @@ ppe_drv_ret_t ppe_drv_dp_set_ppe_offload_enable_flag(struct ppe_drv_iface *iface
 	 */
 	if (!disable) {
 		port->flags |= PPE_DRV_PORT_FLAG_OFFLOAD_ENABLED;
+		if_bm_to_offload |= (1 << (port->port - 1));
 	}
 
 	spin_unlock_bh(&p->lock);
