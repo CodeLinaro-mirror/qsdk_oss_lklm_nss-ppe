@@ -172,6 +172,7 @@ static void ppe_policer_port_rule_free(struct kref *kref)
 	struct ppe_policer_base *p = &gbl_ppe_policer;
 
 	list_del(&pol->list);
+	ppe_drv_port_clear_policer_support(pol->dev);
 
 	ppe_drv_policer_port_destroy(pol->drv_ctx.port_ctx);
 
@@ -357,6 +358,7 @@ static bool ppe_policer_create_port(struct ppe_policer_create_info *info)
 	list_add(&pol->list, &g_policer->port_active_rules);
 	info->ret = PPE_POLICER_SUCCESS;
 	ppe_policer_stats_inc(&g_policer->stats.policer_port_create_req);
+	pol->dev = dev;
 
 	kref_init(&pol->kref_cnt);
 
