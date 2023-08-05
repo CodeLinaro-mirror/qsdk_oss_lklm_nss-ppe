@@ -232,6 +232,12 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 		goto error;
 	}
 
+	if (acl->rule.cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_FLOW_QOS_OVERRIDE) {
+		if ((result = ppe_acl_dump_write(adi, "flow_qos_override", "%s", "true"))) {
+			goto error;
+		}
+	}
+
 	if ((result = ppe_acl_dump_write(adi, "priority", "%d", acl->pri))) {
 		goto error;
 	}

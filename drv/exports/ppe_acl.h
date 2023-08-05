@@ -91,16 +91,17 @@ typedef enum ppe_acl_rule_match_type {
 /*
  * ACL rule flag common
  */
-#define PPE_ACL_RULE_CMN_FLAG_SNAP		0x00000001	/**< Rule common flag for SNAP packets. */
-#define PPE_ACL_RULE_CMN_FLAG_FAKE_MAC		0x00000002	/**< Rule common flag for packets with fake mac header. */
-#define PPE_ACL_RULE_CMN_FLAG_ETHERNET		0x00000004	/**< Rule common flag for ACL match for ethernet packet. */
-#define PPE_ACL_RULE_CMN_FLAG_IPV4		0x00000008	/**< Rule common flag for ACL match for IPv4 packets. */
-#define PPE_ACL_RULE_CMN_FLAG_IPV6		0x00000010	/**< Rule common flag for ACL match for IPv6 packets. */
-#define PPE_ACL_RULE_CMN_FLAG_NON_IP		0x00000020	/**< Rule common flag for ACL match for non-IP packets. */
-#define PPE_ACL_RULE_CMN_FLAG_PRI_EN		0x00000040	/**< Rule common flag to indicate priority configuration. */
-#define PPE_ACL_RULE_CMN_FLAG_POST_RT_EN	0x00000080	/**< Rule common flag to enable match for post routing fields. */
-#define PPE_ACL_RULE_CMN_FLAG_OUTER_HDR_MATCH	0x00000100	/**< Rule common flag to enable match on tunnel outer headers fields. */
-#define PPE_ACL_RULE_CMN_FLAG_NO_RULEID		0x00000200	/**< Rule common flag to indicate rule ID is not passed by caller. */
+#define PPE_ACL_RULE_CMN_FLAG_SNAP			0x00000001	/**< Rule common flag for SNAP packets. */
+#define PPE_ACL_RULE_CMN_FLAG_FAKE_MAC			0x00000002	/**< Rule common flag for packets with fake mac header. */
+#define PPE_ACL_RULE_CMN_FLAG_ETHERNET			0x00000004	/**< Rule common flag for ACL match for ethernet packet. */
+#define PPE_ACL_RULE_CMN_FLAG_IPV4			0x00000008	/**< Rule common flag for ACL match for IPv4 packets. */
+#define PPE_ACL_RULE_CMN_FLAG_IPV6			0x00000010	/**< Rule common flag for ACL match for IPv6 packets. */
+#define PPE_ACL_RULE_CMN_FLAG_NON_IP			0x00000020	/**< Rule common flag for ACL match for non-IP packets. */
+#define PPE_ACL_RULE_CMN_FLAG_PRI_EN			0x00000040	/**< Rule common flag to indicate priority configuration. */
+#define PPE_ACL_RULE_CMN_FLAG_POST_RT_EN		0x00000080	/**< Rule common flag to enable match for post routing fields. */
+#define PPE_ACL_RULE_CMN_FLAG_OUTER_HDR_MATCH		0x00000100	/**< Rule common flag to enable match on tunnel outer headers fields. */
+#define PPE_ACL_RULE_CMN_FLAG_NO_RULEID			0x00000200	/**< Rule common flag to indicate rule ID is not passed by caller. */
+#define PPE_ACL_RULE_CMN_FLAG_FLOW_QOS_OVERRIDE		0x00000400	/**< Rule common flag to override QOS parameters from flow entry. */
 
 /*
  * ACL rule flag general - applicable for each rule separately.

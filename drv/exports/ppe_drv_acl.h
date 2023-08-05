@@ -239,6 +239,7 @@ struct ppe_drv_acl_flow_bind {
  */
 struct ppe_drv_acl_rule_match_cmn {
 	bool post_routing_en;		/**< Post routing enable flag. */
+	uint8_t qos_res_pre;		/**< QOS resolution precedence. */
 };
 
 /*

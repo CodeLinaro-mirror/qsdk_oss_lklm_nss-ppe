@@ -104,17 +104,19 @@ struct ppe_acl {
 	uint8_t sc;
 
 	/*
-	 * Book keeping info for stats and ACL dump.
-	 */
-	bool slice_type[PPE_DRV_ACL_SLICE_TYPE_MAX];
-	uint8_t slice_cnt;
-	struct ppe_acl_rule rule;
-
-	/*
 	 * Registered callback info.
 	 */
 	ppe_acl_rule_process_callback_t cb;	/* Per ACL index registered callback */
 	void *app_data;				/* App data. */
+
+	/*
+	 * Book keeping info for stats and ACL dump.
+	 */
+	uint8_t qos_res_pre;			/* QOS resolution precedence. */
+	uint8_t slice_cnt;			/* Slice counts. */
+	bool slice_type[PPE_DRV_ACL_SLICE_TYPE_MAX];
+						/* Slice types used for this rule. */
+	struct ppe_acl_rule rule;		/* Copy of rule information. */
 };
 
 /*
