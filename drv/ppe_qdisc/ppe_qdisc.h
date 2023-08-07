@@ -240,7 +240,7 @@ static inline int ppe_qdisc_enqueue(struct sk_buff *skb,
 		struct sk_buff **to_free)
 {
 	if (!skb->priority) {
-		struct tcf_proto *tcf;
+		struct tcf_proto *tcf = NULL;
 		struct tcf_result res;
 		if (TC_ACT_UNSPEC != tcf_classify(skb, tcf, &res, false)) {
 			if (!res.class) {
