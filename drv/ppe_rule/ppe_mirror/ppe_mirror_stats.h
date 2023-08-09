@@ -45,7 +45,6 @@ struct ppe_mirror_cmn_stats {
 	 */
 	atomic64_t acl_mapping_add_fail_invalid_rule_id;	/* Invalid rule ID for add */
 	atomic64_t acl_mapping_add_fail_rule_not_found;		/* No ACL rule found for mapping request */
-	atomic64_t acl_mapping_add_fail_cb_reg;			/* Failed to register callback */
 	atomic64_t acl_mapping_add_map_exist;			/* ACL mapping addition failure due to collision */
 	atomic64_t acl_mapping_add_map_nomem;			/* ACL mapping addition failure due to Memory issue */
 	atomic64_t acl_mapping_add_invalid_group_info;		/* ACL mapping addition failure due to Memory issue */
@@ -60,7 +59,7 @@ struct ppe_mirror_cmn_stats {
 	 * Capture core related counts.
 	 */
 	atomic64_t acl_mapping_invalid_capture_core;	/* ACL mapping invalid capture core received. */
-	atomic64_t acl_mapping_fail_en_capture_core;	/* ACL capture core enable failed. */
+	atomic64_t acl_mapping_fail_en_capture_core;	/* ACL capture core en failed. */
 };
 
 /*

@@ -31,6 +31,7 @@
 #define PPE_DRV_ACL_MAX_ROW 64		/**< Number of ACL rows. */
 #define PPE_DRV_ACL_MAX_ACTION 512	/**< Number of ACL actions. */
 #define PPE_DRV_ACL_RULE_CHAIN_MAX 8	/**< Number of maximum ACL slices which can be chained together. */
+#define PPE_DRV_ACL_HW_INDEX_MAX 1024	/**< Number of maximum ACL hw indexes. */
 
 /*
  * Rule flags.
@@ -562,16 +563,20 @@ struct ppe_drv_acl_metadata {
 };
 
 /**
- * ppe_drv_acl_mirror_core_select_cb_t
- *	Function callback type for mirror core selection.
+ * ppe_drv_acl_rule_callback_t
+ *	Function callback type for ACL tagged packet processing.
  *
- * @param[IN] core_id		core id for mirrored packets.
+ * @datatypes
+ * ppe_drv_acl_metadata
+ *
  * @param[IN] app_data		Pointer to void context from caller.
+ * @param[IN] skb		skb pointer.
+ * @param[IN] acl_info		ACL information.
  *
  * @return
  * true for success and false for failure.
  */
-typedef void (*ppe_drv_acl_mirror_core_select_cb_t)(uint8_t core_id, void *app_data);
+typedef bool (*ppe_drv_acl_rule_callback_t)(void *app_data, struct sk_buff *skb, struct ppe_drv_acl_metadata *acl_info);
 
 /**
  * ppe_drv_acl_flow_callback_t
@@ -587,6 +592,18 @@ typedef void (*ppe_drv_acl_mirror_core_select_cb_t)(uint8_t core_id, void *app_d
  * true for success and false for failure.
  */
 typedef bool (*ppe_drv_acl_flow_callback_t)(void *app_data, struct ppe_drv_acl_flow_bind *info);
+
+/**
+ * ppe_drv_acl_mirror_core_select_cb_t
+ *	Function callback type for mirror core selection.
+ *
+ * @param[IN] core_id		core id for mirrored packets.
+ * @param[IN] app_data		Pointer to void context from caller.
+ *
+ * @return
+ * true for success and false for failure.
+ */
+typedef void (*ppe_drv_acl_mirror_core_select_cb_t)(uint8_t core_id, void *app_data);
 
 /*
  * ppe_drv_acl_process_callback_t
@@ -646,8 +663,32 @@ void ppe_drv_acl_get_hw_stats(struct ppe_drv_acl_ctx *ctx, uint64_t *pkts, uint6
 void ppe_drv_acl_hw_info_get(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_acl_hw_info *hw_info);
 
 /**
+ * ppe_drv_acl_rule_unregister_cb
+ *	Callback unregistration for ACL rule process callback.
+ *
+ * @return
+ * void
+ */
+void ppe_drv_acl_rule_unregister_cb(void);
+
+/**
+ * ppe_drv_acl_rule_register_cb
+ *	Register the callback for ACL rule processing.
+ *
+ * @datatypes
+ * ppe_drv_acl_rule_callback_t
+ *
+ * @param[IN] acl_cb		Pointer to acl callback.
+ * @param[IN] app_data		Pointer to void context from caller.
+ *
+ * @return
+ * void.
+ */
+void ppe_drv_acl_rule_register_cb(ppe_drv_acl_rule_callback_t acl_cb, void *app_data);
+
+/**
  * ppe_drv_acl_flow_unregister_cb
- *      Callback unregistration for flow + ACL combination.
+ *	Callback unregistration for flow + ACL combination.
  *
  * @return
  * void
@@ -734,36 +775,6 @@ ppe_drv_ret_t ppe_drv_acl_configure(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 struct ppe_drv_acl_ctx *ppe_drv_acl_alloc(ppe_drv_acl_ipo_t type, uint8_t num_slices, uint16_t pri);
 
 /**
- * ppe_drv_acl_process_skbuff
- *	Process packets with a valid ACL id.
- *
- * @datatypes
- * ppe_drv_acl_metadata
- * sk_buff
- *
- * @param[IN] acl_info		ACL rule related information.
- * @param[IN] skb		skb.
- *
- * @return
- * Status of process operation.
- */
-bool ppe_drv_acl_process_skbuff(struct ppe_drv_acl_metadata *acl_info, struct sk_buff *skb);
-
-/**
- * ppe_drv_acl_get_hw_index
- *	Get hw index for an ACL rule.
- *
- * @datatypes
- * ppe_drv_acl_ctx
- *
- * @param[IN] ctx		ACL driver context.
- *
- * @return
- * Hardware index for the ACL context.
- */
-uint16_t ppe_drv_acl_get_hw_index(struct ppe_drv_acl_ctx *ctx);
-
-/**
  * ppe_drv_acl_enable_mirror_capture_core
  *	Enable capture core for mirrored packets.
  *
@@ -775,59 +786,19 @@ uint16_t ppe_drv_acl_get_hw_index(struct ppe_drv_acl_ctx *ctx);
 bool ppe_drv_acl_enable_mirror_capture_core(uint8_t core_id);
 
 /**
- * ppe_drv_acl_unregister_mirror_cb
- *	Unregister the mirror ACL callback for an ACL hw index.
- *
- * @param[IN] hw_index		Hw index for ACL rule.
- *
- * @return
- * void.
- */
-void ppe_drv_acl_unregister_mirror_cb(uint16_t hw_index);
-
-/**
- * ppe_drv_acl_register_mirror_cb
- *	Register the Mirror ACL callback for an ACL hw index.
+ * ppe_drv_acl_process_skbuff
+ *	Process packets with a valid ACL id.
  *
  * @datatypes
- * ppe_drv_acl_process_callback_t
+ * ppe_drv_acl_metadata
+ * sk_buff
  *
- * @param[IN] ctx				ACL driver context.
- * @param[IN] acl_id				ACL id.
- * @param[IN] mirror_cb				Mirror ACL process callback
- * @param[IN] mirror_app_data			Mirror App data.
- *
- * @return
- * Status of the register API.
- */
-bool ppe_drv_acl_register_mirror_cb(uint16_t hw_index, uint16_t acl_id, ppe_drv_acl_process_callback_t mirror_cb, void *mirror_app_data);
-
-/**
- * ppe_drv_acl_unregister_cb
- *	Unregister the ACL callback for an ACL hw index.
- *
- * @param[IN] hw_index		Hw index for ACL rule.
+ * @param[IN] acl_info		ACL rule related information.
+ * @param[IN] skb		Socket buffer pointer.
  *
  * @return
- * void.
+ * Status of process operation.
  */
-void ppe_drv_acl_unregister_cb(uint16_t hw_index);
-
-/**
- * ppe_drv_acl_register_cb
- *	Register the ACL callback for an ACL hw index.
- *
- * @datatypes
- * ppe_drv_acl_process_callback_t
- *
- * @param[IN] ctx				ACL driver context.
- * @param[IN] acl_id				ACL id.
- * @param[IN] ppe_drv_acl_process_callback_t.	ACL process callback
- * @param[IN] app_data				App data.
- *
- * @return
- * Status of the register API.
- */
-bool ppe_drv_acl_register_cb(uint16_t hw_index, uint16_t acl_id, ppe_drv_acl_process_callback_t cb, void *app_data);
+bool ppe_drv_acl_process_skbuff(struct ppe_drv_acl_metadata *acl_info, struct sk_buff *skb);
 
 #endif

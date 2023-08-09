@@ -991,41 +991,28 @@ EXPORT_SYMBOL(ppe_drv_acl_sc_get);
 bool ppe_drv_acl_process_skbuff(struct ppe_drv_acl_metadata *acl_info, struct sk_buff *skb)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_acl_tbl *acl_tbl;
-	ppe_drv_acl_process_callback_t cb;
-	ppe_drv_acl_process_callback_t mirror_cb;
-	uint16_t cc = acl_info->cpu_code;
-	uint16_t acl_hw_index = acl_info->acl_hw_index;
-	void *app_data, *mirror_app_data;
+	struct ppe_drv_acl *acl = NULL;
+	ppe_drv_acl_rule_callback_t acl_rule_cb = NULL;
+	void *app_data = NULL;
 
-	ppe_drv_assert((cc >= 0) && (cc < PPE_DRV_CC_MAX), "%p: invalid cpu code %u", p, cc);
-	ppe_drv_assert((acl_hw_index >= 0) && (acl_hw_index < PPE_DRV_ACL_HW_INDEX_MAX), "%p: invalid ACL hw index %u", p, acl_hw_index);
+	ppe_drv_assert((acl_info->acl_hw_index >= 0) && (acl_info->acl_hw_index < PPE_DRV_ACL_HW_INDEX_MAX), "%p: invalid ACL hw index %u", p, acl_info->acl_hw_index);
 
 	spin_lock_bh(&p->lock);
-	acl_tbl = &p->acl_tbl[acl_info->acl_hw_index];
-	cb = acl_tbl->cb;
-	mirror_cb = acl_tbl->mirror_cb;
-	app_data = acl_tbl->app_data;
-	mirror_app_data = acl_tbl->mirror_app_data;
-	acl_info->acl_id = acl_tbl->acl_id;
+	acl = p->acl;
+	acl_rule_cb = acl->acl_rule_cb;
+	app_data = acl->acl_rule_app_data;
 	spin_unlock_bh(&p->lock);
 
 	/*
-	 * Check for the specific CPU codes to see if the packet is to be sent out for
-	 * mirror processing.
+	 * Send to packet to PPE Rule module to process
+	 * based on ACL ID.
 	 */
-	if ((cc == PPE_DRV_CC_CPU_CODE_IN_MIRROR + 1) && mirror_cb)
-		return mirror_cb(mirror_app_data, skb, (void*)acl_info);
-
-	/*
-	 * process the general callback into PPE RULE for other ACL based actions.
-	 */
-	if (!cb) {
-		ppe_drv_warn("%p: NO callback is registered for the ACL hw index: %d\n", p, acl_hw_index);
+	if (!acl_rule_cb) {
+		ppe_drv_warn("%p: NO callback is registered to process ACL rules\n", p);
 		return false;
 	}
 
-	return cb(app_data, skb, (void*)acl_info);
+	return acl_rule_cb(app_data, skb, (void*)acl_info);
 }
 EXPORT_SYMBOL(ppe_drv_acl_process_skbuff);
 
@@ -1243,17 +1230,6 @@ void ppe_drv_acl_get_hw_stats(struct ppe_drv_acl_ctx *ctx, uint64_t *pkts, uint6
 EXPORT_SYMBOL(ppe_drv_acl_get_hw_stats);
 
 /*
- * ppe_drv_acl_get_hw_index
- *	Get the hardware index for an ACL rule.
- */
-uint16_t ppe_drv_acl_get_hw_index(struct ppe_drv_acl_ctx *ctx)
-{
-	fal_acl_rule_t *fal_rule = &ctx->fal_rule;
-	return fal_rule->hw_info.hw_rule_id;
-}
-EXPORT_SYMBOL(ppe_drv_acl_get_hw_index);
-
-/*
  * ppe_drv_acl_mirror_core_select_unregister_cb
  *	Callback unregistration for mirror core selection.
  */
@@ -1284,6 +1260,38 @@ void ppe_drv_acl_mirror_core_select_register_cb(ppe_drv_acl_mirror_core_select_c
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_acl_mirror_core_select_register_cb);
+
+/*
+ * ppe_drv_acl_rule_unregister_cb
+ *	Callback unregistration for ACL rule processing.
+ */
+void ppe_drv_acl_rule_unregister_cb()
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+
+	spin_lock_bh(&p->lock);
+	acl->acl_rule_cb = NULL;
+	acl->acl_rule_app_data = NULL;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_rule_unregister_cb);
+
+/*
+ * ppe_drv_acl_rule_register_cb
+ *	Callback registration for ACL rule processing.
+ */
+void ppe_drv_acl_rule_register_cb(ppe_drv_acl_rule_callback_t acl_cb, void *app_data)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+
+	spin_lock_bh(&p->lock);
+	acl->acl_rule_cb = acl_cb;
+	acl->acl_rule_app_data = app_data;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_rule_register_cb);
 
 /*
  * ppe_drv_acl_flow_unregister_cb
@@ -1320,130 +1328,12 @@ void ppe_drv_acl_flow_register_cb(ppe_drv_acl_flow_callback_t add_cb, ppe_drv_ac
 EXPORT_SYMBOL(ppe_drv_acl_flow_register_cb);
 
 /*
- * ppe_drv_acl_unregister_mirror_cb()
- *	Unregister mirror callback for a given ACL hw index.
- */
-void ppe_drv_acl_unregister_mirror_cb(uint16_t hw_index)
-{
-	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_acl_tbl *acl_tbl;
-
-	spin_lock_bh(&p->lock);
-	acl_tbl = &p->acl_tbl[hw_index];
-	ppe_drv_assert(acl_tbl->mirror_cb, "%p: no mirror cb registered for ACL: %u", p, hw_index);
-	acl_tbl->mirror_cb = NULL;
-	acl_tbl->mirror_app_data = NULL;
-	spin_unlock_bh(&p->lock);
-
-	ppe_drv_info("%p: unregistered mirror cb/app_data for ACL:%u", p, hw_index);
-}
-EXPORT_SYMBOL(ppe_drv_acl_unregister_mirror_cb);
-
-/*
- * ppe_drv_acl_unregister_cb()
- *	Unregister callback for a given ACL hw index.
- */
-void ppe_drv_acl_unregister_cb(uint16_t hw_index)
-{
-	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_acl_tbl *acl_tbl;
-
-	spin_lock_bh(&p->lock);
-	acl_tbl = &p->acl_tbl[hw_index];
-	ppe_drv_assert(acl_tbl->cb, "%p: no cb registered for ACL: %u", p, hw_index);
-	acl_tbl->cb = NULL;
-	acl_tbl->app_data = NULL;
-	spin_unlock_bh(&p->lock);
-
-	ppe_drv_info("%p: unregistered cb/app_data for ACL:%u", p, hw_index);
-}
-EXPORT_SYMBOL(ppe_drv_acl_unregister_cb);
-
-/*
- * ppe_drv_acl_register_mirror_cb()
- *	Registers a mirror callback for a given ACL hw index.
- */
-bool ppe_drv_acl_register_mirror_cb(uint16_t hw_index, uint16_t acl_id, ppe_drv_acl_process_callback_t mirror_cb, void *mirror_app_data)
-{
-	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_acl_tbl *acl_tbl;
-
-	ppe_drv_assert(mirror_cb, "%p: cannot register null cb for ACL %u", p, hw_index);
-
-	spin_lock_bh(&p->lock);
-	acl_tbl = &p->acl_tbl[hw_index];
-
-	ppe_drv_assert(!acl_tbl->mirror_cb, "%p: multiple registration for ACL:%u - "
-				"prev cb:%p current cb:%p", p, hw_index, acl_tbl->mirror_cb, mirror_cb);
-	acl_tbl->mirror_cb = mirror_cb;
-	acl_tbl->mirror_app_data = mirror_app_data;
-	acl_tbl->acl_id = acl_id;
-	spin_unlock_bh(&p->lock);
-
-	ppe_drv_info("%p: registered cb:%p app_data:%p for ACL:%u", p, mirror_cb, mirror_app_data, hw_index);
-	return true;
-}
-EXPORT_SYMBOL(ppe_drv_acl_register_mirror_cb);
-
-/*
- * ppe_drv_acl_register_cb()
- *	Registers a callback for a given ACL hw index.
- */
-bool ppe_drv_acl_register_cb(uint16_t hw_index, uint16_t acl_id, ppe_drv_acl_process_callback_t cb, void *app_data)
-{
-	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_acl_tbl *acl_tbl;
-
-	ppe_drv_assert(cb, "%p: cannot register null cb for ACL %u", p, hw_index);
-
-	spin_lock_bh(&p->lock);
-	acl_tbl = &p->acl_tbl[hw_index];
-	ppe_drv_assert(!acl_tbl->cb, "%p: multiple registration for ACL:%u - "
-				"prev cb:%p current cb:%p", p, hw_index, acl_tbl->cb, cb);
-	acl_tbl->cb = cb;
-	acl_tbl->app_data = app_data;
-	acl_tbl->acl_id = acl_id;
-	spin_unlock_bh(&p->lock);
-
-	ppe_drv_info("%p: registered cb:%p app_data:%p for ACL:%u", p, cb, app_data, hw_index);
-	return true;
-}
-EXPORT_SYMBOL(ppe_drv_acl_register_cb);
-
-/*
  * ppe_drv_acl_entries_free()
  *	Free acl instance.
  */
 void ppe_drv_acl_entries_free(struct ppe_drv_acl *acl)
 {
 	vfree(acl);
-}
-
-/*
- * ppe_drv_acl_tbl_entries_free()
- *	Free acl callback instance.
- */
-void ppe_drv_acl_tbl_entries_free(struct ppe_drv_acl_tbl *acl_tbl)
-{
-	vfree(acl_tbl);
-}
-
-/*
- * ppe_drv_acl_cb_entries_alloc()
- *	Allocates and initializes ACL callback table.
- */
-struct ppe_drv_acl_tbl *ppe_drv_acl_tbl_entries_alloc(void)
-{
-	struct ppe_drv *p = &ppe_drv_gbl;
-	struct ppe_drv_acl_tbl *acl_tbl;
-
-	acl_tbl = vzalloc(sizeof(struct ppe_drv_acl_tbl) * PPE_DRV_ACL_HW_INDEX_MAX);
-	if (!acl_tbl) {
-		ppe_drv_warn("%p: Failed to allocate ACL action table entries", p);
-		return NULL;
-	}
-
-	return acl_tbl;
 }
 
 /*

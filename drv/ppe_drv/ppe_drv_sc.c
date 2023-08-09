@@ -16,7 +16,6 @@
 
 #include <fal/fal_servcode.h>
 #include <fal/fal_qm.h>
-
 #include "ppe_drv.h"
 
 #if (PPE_DRV_DEBUG_LEVEL == 3)

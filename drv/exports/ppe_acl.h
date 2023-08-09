@@ -568,39 +568,10 @@ struct ppe_acl_rule {
 ppe_acl_ret_t ppe_acl_rule_flow_policer_destroy(ppe_acl_rule_id_t id);
 
 /**
- * ppe_acl_rule_callback_t
+ * ppe_acl_rule_process_callback_t
  *	External callback to be registered with ACL for certain actions.
  */
-typedef bool (*ppe_acl_rule_callback_t)(void *app_data, void *skb, uint16_t acl_id);
-
-/**
- * ppe_acl_rule_get_and_ref_hw_idx()
- *	Get hardware index corresponding the ACL rule while
- *	taking a reference to the ACL rule.
- *
- * @datatypes
- * ppe_acl_rule_id_t
- *
- * @param[IN] acl_id	ACL rule ID for ref and hw index to be fetched.
- *
- * @return
- * The hw index for ACL id.
- */
-uint16_t ppe_acl_rule_get_and_ref_hw_idx(ppe_acl_rule_id_t acl_id);
-
-/**
- * ppe_acl_rule_get_and_deref_hw_idx()
- *	Get the hardware index and deref the ACL rule.
- *
- * @datatypes
- * ppe_acl_rule_id_t
- *
- * @param[IN] acl_id	ACL rule ID to deref.
- *
- * @return
- * The hw index for ACL id deref.
- */
-uint16_t ppe_acl_rule_get_and_deref_hw_idx(ppe_acl_rule_id_t acl_id);
+typedef bool (*ppe_acl_rule_process_callback_t)(void *app_data, void *skb);
 
 /**
  * ppe_acl_rule_flow_policer_create()
@@ -647,6 +618,48 @@ ppe_acl_ret_t ppe_acl_rule_destroy(ppe_acl_rule_id_t id);
 ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule);
 
 /**
+ * ppe_acl_rule_get_acl_hw_index()
+ *	Get ACL hardware index.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id		ACL rule ID.
+ *
+ * @return
+ * Return the hw index.
+ */
+uint16_t ppe_acl_rule_get_acl_hw_index(ppe_acl_rule_id_t acl_id);
+
+/**
+ * ppe_acl_rule_ref()
+ *	Take a reference on an ACL rule.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id		ACL rule ID.
+ *
+ * @return
+ * True or False.
+ */
+bool ppe_acl_rule_ref(ppe_acl_rule_id_t acl_id);
+
+/**
+ * ppe_acl_rule_deref()
+ *	Dereference on an ACL rule.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id		ACL rule ID.
+ *
+ * @return
+ * True or False.
+ */
+bool ppe_acl_rule_deref(ppe_acl_rule_id_t acl_id);
+
+/**
  * ppe_acl_rule_callback_register()
  *	Register callbacks for ACL rules for certain actions to be taken.
  *
@@ -661,7 +674,7 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule);
  * @return
  * Status of register operation.
  */
-bool ppe_acl_rule_callback_register(ppe_acl_rule_id_t acl_id, ppe_acl_rule_callback_t cb, void *app_data);
+bool ppe_acl_rule_callback_register(ppe_acl_rule_id_t acl_id, ppe_acl_rule_process_callback_t cb, void *app_data);
 
 /**
  * ppe_acl_rule_callback_unregister()

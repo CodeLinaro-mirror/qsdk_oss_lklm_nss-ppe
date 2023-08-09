@@ -197,7 +197,7 @@ static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys)
  * ppe_drv_cc_process_skbuff()
  *	Process skbuff with a non-zero cpu code.
  */
-bool ppe_drv_cc_process_skbuff(uint8_t cc, struct sk_buff *skb)
+bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_buff *skb)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_cc *pcc;
@@ -206,6 +206,7 @@ bool ppe_drv_cc_process_skbuff(uint8_t cc, struct sk_buff *skb)
 	ppe_drv_cc_t exp_code;
 	void *app_data;
 	bool ret = false;
+	uint16_t cc = cc_info->cpu_code;
 
 	ppe_drv_assert((cc > 0) && (cc < PPE_DRV_CC_MAX), "%p: invalid cpu code %u", p, cc);
 
@@ -271,8 +272,9 @@ done:
 	ppe_drv_trace("%p: processing skb:%p cc:%u exp_code: %u cb:%p app:%p",
 			p, skb, cc, exp_code, cb, app_data);
 
+
 	if (cb) {
-		ret = cb(app_data, skb);
+		ret = cb(app_data, skb, (void *)cc_info);
 	}
 
 	return ret;

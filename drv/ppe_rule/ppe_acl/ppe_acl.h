@@ -104,17 +104,17 @@ struct ppe_acl {
 	uint8_t sc;
 
 	/*
-	 * callback information for this acl rule.
-	 */
-	ppe_acl_rule_callback_t cb;		/* callback for this ACL id. */
-	void *app_data;				/* app data to be passed in the cb. */
-
-	/*
 	 * Book keeping info for stats and ACL dump.
 	 */
 	bool slice_type[PPE_DRV_ACL_SLICE_TYPE_MAX];
 	uint8_t slice_cnt;
 	struct ppe_acl_rule rule;
+
+	/*
+	 * Registered callback info.
+	 */
+	ppe_acl_rule_process_callback_t cb;	/* Per ACL index registered callback */
+	void *app_data;				/* App data. */
 };
 
 /*
@@ -124,6 +124,15 @@ struct ppe_acl {
 struct ppe_acl_gen_rule_id {
 	ppe_acl_rule_id_t rule_id;		/* Rule ID */
 	bool in_use;				/* Rule ID in-use state */
+};
+
+/*
+ * ppe_acl_rule_hw_ind_map
+ *	PPE ACL rule to hw index mapping.
+ */
+struct ppe_acl_rule_hw_ind_map {
+	uint16_t hw_index;			/* Hardware ACL index. */
+	struct ppe_acl *acl_rule;		/* ACL rule pointer. */
 };
 
 /*
@@ -143,6 +152,11 @@ struct ppe_acl_base {
 	 * Pointer to memory pool for rule table
 	 */
 	struct ppe_acl_gen_rule_id *rule_id_tbl;	/* Memory for ACL rule ID table */
+
+	/*
+	 * Pointer to acl hardware index mapping table.
+	 */
+	struct ppe_acl_rule_hw_ind_map *acl_hw_map;	/* Memory ACL hw index to ACL ID mapping table */
 	struct kref ref;				/* Reference count */
 
 	/*

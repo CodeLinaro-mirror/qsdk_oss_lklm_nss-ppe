@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -227,19 +227,28 @@ typedef enum ppe_drv_cc_type {
 	PPE_DRV_CC_MAX						/**< Max */
 } ppe_drv_cc_t;
 
-typedef bool (*ppe_drv_cc_callback_t)(void *app_data, struct sk_buff *skb);
+/**
+ * ppe_drv_cc_metadata
+ *	Metadata for CPU codes.
+ */
+struct ppe_drv_cc_metadata {
+	uint16_t cpu_code;			/**< CPU code for the packet */
+	uint16_t acl_hw_index;			/**< Hardware ACL index */
+};
+
+typedef bool (*ppe_drv_cc_callback_t)(void *app_data, struct sk_buff *skb, void *cc_info);
 
 /*
  * ppe_drv_cc_process_skbuff()
  *	Register callback for a specific CPU code
  *
- * @param[IN] cc   CPU code number.
- * @param[IN] skb  Socket buffer with CPU code.
+ * @param[IN] cc_info		CPU code metadata.
+ * @param[IN] skb		Socket buffer with CPU code.
  *
  * @return
  * true if packet is consumed by the API or false if the packet is not consumed.
  */
-extern bool ppe_drv_cc_process_skbuff(uint8_t cc, struct sk_buff *skb);
+extern bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_buff *skb);
 
 /*
  * ppe_drv_cc_unregister_cb()
