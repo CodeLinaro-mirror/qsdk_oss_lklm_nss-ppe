@@ -152,6 +152,7 @@ struct ppe_drv_tun {
 	uint8_t tun_idx;					/**< Tunnel context ID >*/
 	uint8_t xmit_port;					/**< Egress I/O port for tunnel> */
 	atomic_t flow_count;					/**< Number of active flows >*/
+	uint8_t encap_hdr_bitmap;				/**< Bitmap of feilds enabled in encap header control >**/
 };
 
 bool ppe_drv_tun_global_init(struct ppe_drv *p);

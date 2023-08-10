@@ -276,6 +276,7 @@ struct ppe_drv {
 	struct list_head notifier_list_head;	/* List of event notifier operations in PPE */
 	struct ppe_drv_tun_prgm_prsr *pgm;	/* Program Parser entries list */
 	struct ppe_drv_tun_udf *pgm_udf;	/* Program Parser udf entries list */
+	struct ppe_drv_tun_encap_hdr_ctrl *ecap_hdr_ctrl;	/* header control protomap data */
 };
 
 /*

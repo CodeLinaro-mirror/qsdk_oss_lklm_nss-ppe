@@ -799,6 +799,11 @@ fail:
 		p->pgm_udf = NULL;
 	}
 
+	if (p->ecap_hdr_ctrl) {
+		ppe_drv_tun_encap_hdr_ctrl_free(p->ecap_hdr_ctrl);
+		p->ecap_hdr_ctrl = NULL;
+	}
+
 	return -1;
 }
 
@@ -921,6 +926,11 @@ static int ppe_drv_remove(struct platform_device *pdev)
 	if (p->pgm_udf) {
 		ppe_drv_tun_udf_free(p->pgm_udf);
 		p->pgm_udf = NULL;
+	}
+
+	if (p->ecap_hdr_ctrl) {
+		ppe_drv_tun_encap_hdr_ctrl_free(p->ecap_hdr_ctrl);
+		p->ecap_hdr_ctrl = NULL;
 	}
 
 	return 0;

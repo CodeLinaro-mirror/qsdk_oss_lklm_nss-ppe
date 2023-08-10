@@ -75,6 +75,13 @@ static void ppe_drv_tun_free(struct kref *kref)
 	ppe_drv_port_tun_set(ptun->pp, NULL);
 
 	/*
+	 * Reset encap header control settings if configured
+	 */
+	if (ptun->encap_hdr_bitmap) {
+		ppe_drv_tun_encap_hdr_ctrl_reset(ptun->encap_hdr_bitmap);
+	}
+
+	/*
 	 * Release all the tables reserved for this tunnel context
 	 */
 	if (ptun->ptec) {
@@ -1657,6 +1664,13 @@ bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, v
 		goto err_exit;
 	}
 
+	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN) {
+		if (!ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(p, ptun)) {
+			ppe_drv_warn("%p VXLAN: failed to configure encap header control", p);
+			goto err_exit;
+		}
+	}
+
 	ptun->ptec->port = pp;
 
 	ppe_drv_port_tun_set(pp, ptun);
@@ -1831,6 +1845,8 @@ bool ppe_drv_tun_global_init(struct ppe_drv *p)
 		ppe_drv_warn("%p: Tunnel Map-t common configuration failed", p);
 		return false;
 	}
+
+	ppe_drv_tun_encap_hdr_ctrl_init(p);
 
 	spin_unlock_bh(&p->lock);
 	return true;
