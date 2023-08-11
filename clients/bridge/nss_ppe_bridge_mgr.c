@@ -933,6 +933,26 @@ static int nss_ppe_bridge_mgr_wan_intf_del_handler(struct ctl_table *table,
 	return ret;
 }
 
+/*
+ * nss_ppe_bridge_mgr_fdb_handler
+ *	disable/enable the PPE fdb.
+ */
+static int nss_ppe_bridge_mgr_fdb_handler(struct ctl_table *table,
+						int write, void __user *buffer,
+						size_t *lenp, loff_t *ppos)
+{
+	int ret = 0;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (ret)
+		return ret;
+
+	if (!write)
+		return ret;
+
+	return ret;
+}
+
 static struct ctl_table nss_ppe_bridge_mgr_table[] = {
 	{
 		.procname	= "add_wanif",
@@ -947,6 +967,13 @@ static struct ctl_table nss_ppe_bridge_mgr_table[] = {
 		.maxlen         = sizeof(char) * IFNAMSIZ,
 		.mode           = 0644,
 		.proc_handler   = &nss_ppe_bridge_mgr_wan_intf_del_handler,
+	},
+	{
+		.procname	= "fdb_disabled",
+		.data           = &fdb_disabled,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = &nss_ppe_bridge_mgr_fdb_handler,
 	},
 	{ }
 };
