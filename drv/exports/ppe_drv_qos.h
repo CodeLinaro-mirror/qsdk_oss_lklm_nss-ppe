@@ -175,7 +175,7 @@ struct ppe_drv_qos_port {
  * @param[in] dev         Pointer to the associated net device.
  * @param[in] tag         Qos tag.
  */
-typedef int (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32_t tag);
+typedef uint8_t (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32_t tag);
 
 /**
  * ppe_drv_qos_int_pri_callback_unregister

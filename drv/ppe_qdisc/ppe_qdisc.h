@@ -123,7 +123,7 @@ struct ppe_qdisc {
  * ppe_qdisc_int_pri_get()
  *	Returns the INT-PRI value for a given classid.
  */
-int ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid);
+uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid);
 
 /*
  * ppe_qdisc_nla_nest_start()

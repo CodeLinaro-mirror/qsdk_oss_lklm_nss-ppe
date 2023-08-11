@@ -40,7 +40,7 @@
  * ppe_qdisc_def_node_int_pri_get()
  *      Returns the INT-PRI value for the default qdisc.
  */
-static int ppe_qdisc_def_node_int_pri_get(struct net_device *dev)
+static uint8_t ppe_qdisc_def_node_int_pri_get(struct net_device *dev)
 {
 	struct ppe_qdisc *pq_root, *pq_def = NULL;
 	pq_root = qdisc_priv(dev->qdisc);
@@ -67,7 +67,7 @@ static int ppe_qdisc_def_node_int_pri_get(struct net_device *dev)
 	}
 
 	ppe_qdisc_info("%px returning default node pq_def %px and pq_def->int_pri %u", dev, pq_def, pq_def->int_pri);
-	return pq_def->int_pri;
+	return (uint8_t)pq_def->int_pri;
 }
 
 /*
@@ -589,7 +589,7 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
  *
  * Note: Caller should check if Qdisc is PPE Qdisc before invoking it.
  */
-int ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
+uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
 {
 	const struct Qdisc_class_ops *clops = NULL;
 	struct Qdisc *q = NULL;
@@ -650,7 +650,7 @@ int ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
 		int_pri = pq->child->int_pri;
 		spin_unlock_bh(&pq->lock);
 		ppe_qdisc_info("%px:returning leaf node int_pri %u", dev, int_pri);
-		return int_pri;
+		return (uint8_t)int_pri;
 	}
 
 	ppe_qdisc_info("%px:no child qdisc atytached to class:%u, returning default int_pri", dev, classid);
