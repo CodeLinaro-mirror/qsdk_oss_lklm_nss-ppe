@@ -2108,7 +2108,7 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 	pcf = flow->pcf.v4;
 	cn = ppe_drv_v4_conn_flow_conn_get(pcf);
 
-	if (pcf && ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
 		if (!ppe_drv_v4_flow_del(pcf)) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_stats_inc(&comm_stats->v4_destroy_policer_fail);
@@ -2340,7 +2340,7 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_create(struct ppe_drv_v4_rule_create *crea
 		ppe_drv_stats_inc(&comm_stats->v4_create_policer_fail_acl);
 		ppe_drv_warn("%p: failed to combine with ACL, connection object: %p", p, create);
 		kfree(cn);
-		return ret;
+		return PPE_DRV_RET_POLICER_RULE_BIND_FAIL;
 	}
 
 	/*
@@ -2404,14 +2404,16 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_create(struct ppe_drv_v4_rule_create *crea
 			/*
 			 * Destroy the offloaded flow entry
 			 */
-			ppe_drv_v4_flow_del(pcf);
-			pcf->pf = NULL;
+			if (pcf) {
+				ppe_drv_v4_flow_del(pcf);
+				pcf->pf = NULL;
 
-			ppe_drv_stats_inc(&comm_stats->v4_create_policer_fail);
-			ppe_drv_warn("%p: acceleration of return direction failed: %p", p, pcr);
-			ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
-			ppe_drv_v4_conn_flow_flags_clear(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);
-			return ret;
+				ppe_drv_stats_inc(&comm_stats->v4_create_policer_fail);
+				ppe_drv_warn("%p: acceleration of return direction failed: %p", p, pcr);
+				ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
+				ppe_drv_v4_conn_flow_flags_clear(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);
+				return ret;
+			}
 		}
 
 		/*
