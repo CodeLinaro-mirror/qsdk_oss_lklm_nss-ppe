@@ -45,6 +45,7 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_EDIT_REDIR_CORE3",	  /* PPE RFS service code for core3 for Active VP */
 	"PPE_DRV_SC_VP_RPS",			/* PPE RPS service code for VP flow */
 	"PPE_DRV_SC_NOEDIT_ACL_POLICER",	/* PPE policer service code for noedit */
+	"PPE_DRV_SC_L2_TUNNEL_EXCEPTION",	/* Service code to allow decapsulated VXLAN/GRE tunnel exception */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 

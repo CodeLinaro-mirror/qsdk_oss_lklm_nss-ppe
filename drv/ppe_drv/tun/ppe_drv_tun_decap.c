@@ -369,6 +369,8 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 	 * VXLAN IPV6 will allow UDP checksum zero packets only if PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM6_RX is set.
 	 */
 	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN) {
+		ftde.decap_action.service_code_en = true;
+		ftde.decap_action.service_code = PPE_DRV_SC_L2_TUNNEL_EXCEPTION;
 		ftde.decap_action.update_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_UDP_CSUM_ZERO_UPDATE);
 		if (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
 			ftde.decap_action.udp_csum_zero = true;

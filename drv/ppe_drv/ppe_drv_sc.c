@@ -255,6 +255,13 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 
 		break;
 
+	case PPE_DRV_SC_L2_TUNNEL_EXCEPTION:
+		sc_cfg.field_update_bitmap = (1 << FLD_UPDATE_SERVICE_CODE);
+		sc_cfg.bypass_bitmap[1] = (1 << BRIDGING_FWD_BYP);
+		sc_cfg.dest_port_valid = false;
+
+		break;
+
 	case PPE_DRV_SC_FLOW_ACL_FIRST ... PPE_DRV_SC_FLOW_ACL_LAST:
 		/*
 		 * These are primarily used for N-tuple lookup or flow+policer combintation.
@@ -536,6 +543,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_SC_EDIT_REDIR_CORE3, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_VP_RPS, PPE_DRV_SC_VP_RPS, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_ACL_POLICER, PPE_DRV_SC_NOEDIT_ACL_POLICER, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_L2_TUNNEL_EXCEPTION, PPE_DRV_SC_L2_TUNNEL_EXCEPTION, PPE_DRV_PORT_CPU);
 
 	/*
 	 * Initialize FLOW ACL service code

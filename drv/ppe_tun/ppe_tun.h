@@ -17,6 +17,11 @@
 #ifndef _PPE_TUN_H_
 #define _PPE_TUN_H_
 
+#if defined(PPE_TUN_RULE_MODULE_ENABLED)
+#include <ppe_acl.h>
+#include <ppe_drv_sc.h>
+#endif
+
 /*
  * PPE Tunnel debug macros
  */
@@ -127,6 +132,9 @@ struct ppe_tun_priv {
 	struct dentry *dentry;			/* Debugfs entry */
 	struct ppe_tun_accel tun_accel;		/* Enable or disable acceleration per tunnel type */
 	struct ppe_tun_xcpn_mode xcpn_mode;	/* Toggle exception mode */
+#if defined(PPE_TUN_RULE_MODULE_ENABLED)
+	ppe_acl_rule_id_t ppe_tun_l2_tunnel_rule_id;	/* PPE ACL rule-id for L2 Tunnels */
+#endif
 	atomic_t total_free;			/* Number of available tunnel instance*/
 	atomic_t free_pending;			/* Number of tunnel delete pending */
 	atomic_t alloc_fail;			/* Number of tunnel alloc fails */

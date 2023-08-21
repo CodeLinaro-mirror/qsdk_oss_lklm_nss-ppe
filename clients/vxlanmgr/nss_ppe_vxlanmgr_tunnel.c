@@ -204,19 +204,9 @@ static struct notifier_block nss_ppe_vxlanmgr_tunnel_fdb_notifier = {
  */
 static bool nss_ppe_vxlan_src_exception(struct net_device *dev, struct sk_buff *skb)
 {
-	int ret;
+	nss_ppe_vxlanmgr_warn("%px: Dropping the skb for dev:%s", dev, dev->name);
 
-	skb->dev = dev;
-	skb->skb_iif = dev->ifindex;
-	skb->protocol = eth_type_trans(skb, dev);
-	skb_reset_network_header(skb);
-
-	ret = netif_receive_skb(skb);
-	if (ret != NET_RX_SUCCESS) {
-		nss_ppe_vxlanmgr_warn("%p: excpetion packet dropped. err:%d \n", dev, ret);
-	}
-
-	return true;
+	return 0;
 }
 
 /*
