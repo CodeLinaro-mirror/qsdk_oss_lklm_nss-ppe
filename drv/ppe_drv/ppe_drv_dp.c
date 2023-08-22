@@ -247,3 +247,35 @@ ppe_drv_ret_t ppe_drv_dp_init(struct ppe_drv_iface *iface, uint32_t macid)
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_dp_init);
+
+/*
+ * ppe_drv_dp_set_ppe_offload_enable_flag()
+ *	API to set PPE offload enable flag in PPE port
+ */
+ppe_drv_ret_t ppe_drv_dp_set_ppe_offload_enable_flag(struct ppe_drv_iface *iface,
+		bool disable)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *port;
+
+	spin_lock_bh(&p->lock);
+	port = ppe_drv_iface_port_get(iface);
+	if (!port) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: unable to get port from iface\n", iface);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+
+	/*
+	 * Set the OFFLOAD enabled flag in the PPE port if the input
+	 * flag indicates so.
+	 */
+	if (!disable) {
+		port->flags |= PPE_DRV_PORT_FLAG_OFFLOAD_ENABLED;
+		if_bm_to_offload |= (1 << (port->port - 1));
+	}
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_dp_set_ppe_offload_enable_flag);

@@ -101,6 +101,7 @@ struct nss_ppe_bridge_mgr_pvt {
 	struct net_device *wan_netdev;		/* WAN interface netdevice */
 	uint32_t mtu;				/* MTU for bridge */
 	uint8_t dev_addr[ETH_ALEN];		/* MAC address for bridge */
+	atomic64_t bridge_vlan_iface_cnt;		/* Number of VLAN interfaces over bridge */
 };
 
 

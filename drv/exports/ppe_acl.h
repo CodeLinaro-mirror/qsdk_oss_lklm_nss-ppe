@@ -25,6 +25,8 @@
 #include <linux/if_ether.h>
 
 #define PPE_ACL_PRI_NOMINAL 1
+#define PPE_ACL_INVALID_HW_INDEX 0xFFFF
+#define PPE_ACL_HW_INDEX_MAX 1024
 
 /**
  * ACL rule ID
@@ -98,6 +100,7 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_CMN_FLAG_PRI_EN		0x00000040	/**< Rule common flag to indicate priority configuration. */
 #define PPE_ACL_RULE_CMN_FLAG_POST_RT_EN	0x00000080	/**< Rule common flag to enable match for post routing fields. */
 #define PPE_ACL_RULE_CMN_FLAG_OUTER_HDR_MATCH	0x00000100	/**< Rule common flag to enable match on tunnel outer headers fields. */
+#define PPE_ACL_RULE_CMN_FLAG_NO_RULEID		0x00000200	/**< Rule common flag to indicate rule ID is not passed by caller. */
 
 /*
  * ACL rule flag general - applicable for each rule separately.
@@ -267,6 +270,7 @@ typedef enum ppe_acl_ret {
 	PPE_ACL_RET_CREATE_FAIL_RULE_PARSE,		/**< Rule create failed due to rule parse failure. */
 	PPE_ACL_RET_CREATE_FAIL_SC_ALLOC,		/**< Rule create failed due to service code allocation failure. */
 	PPE_ACL_RET_CREATE_FAIL_ACTION_CONFIG,		/**< Rule create failed due to invalid action configuration. */
+	PPE_ACL_RET_CREATE_FAIL_INVALID_ID,		/**< Rule create failed due to invalid rule ID. */
 	PPE_ACL_RET_DESTROY_FAIL_INVALID_ID,		/**< Rule destroy failed due to invalid rule ID. */
 } ppe_acl_ret_t;
 
@@ -500,6 +504,7 @@ struct ppe_acl_rule_flow_policer {
 	 */
 	uint16_t hw_policer_idx;			/**< Policer index to be used for flow + policer combination. */
 	ppe_acl_rule_id_t rule_id;			/**< ACL rule ID associated with flow + policer. */
+	bool pkt_noedit;				/**< Indication if policing is required in packet non-edit mode */
 
 	/*
 	 * Response
@@ -563,6 +568,41 @@ struct ppe_acl_rule {
 ppe_acl_ret_t ppe_acl_rule_flow_policer_destroy(ppe_acl_rule_id_t id);
 
 /**
+ * ppe_acl_rule_callback_t
+ *	External callback to be registered with ACL for certain actions.
+ */
+typedef bool (*ppe_acl_rule_callback_t)(void *app_data, void *skb, uint16_t acl_id);
+
+/**
+ * ppe_acl_rule_get_and_ref_hw_idx()
+ *	Get hardware index corresponding the ACL rule while
+ *	taking a reference to the ACL rule.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id	ACL rule ID for ref and hw index to be fetched.
+ *
+ * @return
+ * The hw index for ACL id.
+ */
+uint16_t ppe_acl_rule_get_and_ref_hw_idx(ppe_acl_rule_id_t acl_id);
+
+/**
+ * ppe_acl_rule_get_and_deref_hw_idx()
+ *	Get the hardware index and deref the ACL rule.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id	ACL rule ID to deref.
+ *
+ * @return
+ * The hw index for ACL id deref.
+ */
+uint16_t ppe_acl_rule_get_and_deref_hw_idx(ppe_acl_rule_id_t acl_id);
+
+/**
  * ppe_acl_rule_flow_policer_create()
  *	Create ACL rule for a flow & policer combination. This is API is used
  *	when user want to enable policer per flow and provide necessary details
@@ -605,5 +645,36 @@ ppe_acl_ret_t ppe_acl_rule_destroy(ppe_acl_rule_id_t id);
  * Status of rule create operation.
  */
 ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule);
+
+/**
+ * ppe_acl_rule_callback_register()
+ *	Register callbacks for ACL rules for certain actions to be taken.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ * ppe_acl_rule_callback_t_cb
+ *
+ * @param[IN] acl_id		ACL rule information.
+ * @param[IN] cb		callback.
+ * @param[IN] app_data		app_data.
+ *
+ * @return
+ * Status of register operation.
+ */
+bool ppe_acl_rule_callback_register(ppe_acl_rule_id_t acl_id, ppe_acl_rule_callback_t cb, void *app_data);
+
+/**
+ * ppe_acl_rule_callback_unregister()
+ *	Unregister callbacks for ACL rules.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id		ACL rule information.
+ *
+ * @return
+ * void.
+ */
+void ppe_acl_rule_callback_unregister(ppe_acl_rule_id_t acl_id);
 
 #endif /* _PPE_ACL_H_ */

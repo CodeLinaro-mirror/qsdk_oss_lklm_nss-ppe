@@ -383,20 +383,55 @@ static bool ppe_drv_flow_v6_vpn_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_
  * ppe_drv_flow_ds_wifi_qos_set()
  *	Sets the WiFi QoS for DS mode
  */
-static void ppe_drv_flow_ds_wifi_qos_set(uint32_t *wifi_qos, uint32_t *msduq_value)
+static void ppe_drv_flow_ds_wifi_qos_set(uint32_t *wifi_qos, uint32_t *msduq_value, bool flow_override_mode)
 {
-	uint8_t tid;
 	bool flow_override;
+	uint8_t tid;
 
 	/*
-	 * In case of DS mode, wifi qos is configured as below:
+	 * In case of DS mode,
+	 *
+	 * For flow override mode, wifi qos is configured as below:
 	 * --------------------------------------------------------------------------------------
 	 * |	Who Classify (2 bits)	|	TID (3 bits)	|	Flow override (1 bit)	|
 	 * --------------------------------------------------------------------------------------
+	 *
+	 * OR
+	 *
+	 * fill wifi_qos[7]=1 to support hlos_tid Override configuration interpretation
+	 * ---------------------------------------------------------------------------------------
+         * |  HLOS_TID override mode(1 bit)  |   (3 bits)   |       TID (3 bits)    |  (1 bit)   |
+         * ---------------------------------------------------------------------------------------
 	 */
-	tid = *msduq_value & PPE_DRV_FLOW_TID_MASK;
-	flow_override = *msduq_value & PPE_DRV_FLOW_FO_MASK;
-	*wifi_qos = (*msduq_value & PPE_DRV_FLOW_WC_MASK) | (tid << PPE_DRV_FLOW_TID_SHIFT) | flow_override;
+
+	if (flow_override_mode) {
+		/*
+		 * In sawf, tid value is mapped from msduq
+		 */
+		tid = *msduq_value & PPE_DRV_FLOW_TID_MASK;
+		flow_override = *msduq_value & PPE_DRV_FLOW_FO_MASK;
+		*wifi_qos = (*msduq_value & PPE_DRV_FLOW_WC_MASK) | (tid << PPE_DRV_FLOW_TID_SHIFT) | flow_override;
+		return;
+	}
+
+	/*
+	 * For scs, msduq is passed as tid.
+	 */
+	*wifi_qos = 0;
+	tid = *msduq_value;
+	*wifi_qos = PPE_DRV_FLOW_DS_HLOS_TID_OVERRIDE_ENABLE | (tid << PPE_DRV_FLOW_TID_SHIFT);
+}
+
+/*
+ * ppe_drv_flow_override_mode_get()
+ * 	Return false for hlos override mode.
+ */
+static bool ppe_drv_flow_override_mode_get(uint32_t *msduq_value)
+{
+	if (*msduq_value <= PPE_DRV_FLOW_HLOS_OVERRIDE_MSDUQ_MAX)
+		return false;
+
+	return true;
 }
 
 /*
@@ -405,6 +440,8 @@ static void ppe_drv_flow_ds_wifi_qos_set(uint32_t *wifi_qos, uint32_t *msduq_val
  */
 static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *wifi_qos, bool *wifi_qos_en)
 {
+	bool flow_override_mode = true;
+
 	/*
 	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
@@ -423,7 +460,15 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 		 */
 		if (!ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID) &&
 				(pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
-			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos);
+			flow_override_mode = ppe_drv_flow_override_mode_get(&pcf->flow_metadata.wifi_qos);
+
+			/*
+			 * Disabling WIFI_QOS flag for hlos tid mode
+			 */
+			if (!flow_override_mode)
+				*wifi_qos_en = false;
+
+			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos, flow_override_mode);
 		}
 
 		ppe_drv_trace("For User type: %u, WiFi_QoS initially: 0x%x and WiFi_QoS configured: 0x%x", pcf->tx_port->user_type, pcf->flow_metadata.wifi_qos, *wifi_qos);
@@ -431,6 +476,22 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 
 	return true;
 }
+
+#ifdef NSS_PPE_IPQ53XX
+/*
+ * ppe_drv_flow_v6_policer_get()
+ *	Find the Policer get associated with a flow
+ */
+static bool ppe_drv_flow_v6_policer_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *policer_index, a_bool_t *policer_valid)
+{
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_POLICER_VALID)) {
+		*policer_index = pcf->policer_hw_id;
+		*policer_valid = true;
+	}
+
+	return true;
+}
+#endif
 
 /*
  * ppe_drv_flow_v6_service_code_get()
@@ -445,7 +506,10 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+	if ((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_POLICER_VALID) ||
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID)) && (pcf->acl_sc != PPE_DRV_SC_NONE)) {
+		sc = pcf->acl_sc;
+	} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
 		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID)) {
 			if (pp->core_mask) {
 				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
@@ -457,13 +521,36 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 			} else {
 				sc = PPE_DRV_SC_VP_RPS;
 			}
+		} else if (ppe_drv_v6_conn_flow_flags_check(pcf,
+					PPE_DRV_V6_CONN_FLAG_FLOW_OFFLOAD_DISABLED)) {
+			if (pp->core_mask) {
+				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+				pp->shadow_core_mask &= ~(1 << next_core);
+				sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+				if (!pp->shadow_core_mask) {
+					pp->shadow_core_mask = pp->core_mask;
+				}
+			} else {
+				ppe_drv_warn("%p: invalid core mask for ds user type", pcf);
+				return false;
+			}
 		}
 	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
-		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-		pp->shadow_core_mask &= ~(1 << next_core);
-		sc = PPE_DRV_CORE2SC_EDIT(next_core);
-		if (!pp->shadow_core_mask) {
-			pp->shadow_core_mask = pp->core_mask;
+		if (ppe_drv_v6_conn_flow_flags_check(pcf,
+					PPE_DRV_V6_CONN_FLAG_FLOW_OFFLOAD_DISABLED)) {
+			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			pp->shadow_core_mask &= ~(1 << next_core);
+			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+			if (!pp->shadow_core_mask) {
+				pp->shadow_core_mask = pp->core_mask;
+			}
+		} else {
+			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			pp->shadow_core_mask &= ~(1 << next_core);
+			sc = PPE_DRV_CORE2SC_EDIT(next_core);
+			if (!pp->shadow_core_mask) {
+				pp->shadow_core_mask = pp->core_mask;
+			}
 		}
 	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) && pp->core_mask) {
 		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
@@ -501,6 +588,16 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, sc);
+			return false;
+		}
+	}
+
+	if ((sc == PPE_DRV_SC_NONE) &&
+	    (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV))) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: service code %d update failed in VLAN over bridge sc %d\n", pcf, service_code,
+				     sc);
 			return false;
 		}
 	}
@@ -637,15 +734,19 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 
 	ppe_drv_trace("%p: flow_tbl[host_idx]: %u", pcf, host->index);
 	flow_cfg.host_addr_type = PPE_DRV_HOST_LAN;
-        flow_cfg.host_addr_index = host->index;
-        flow_cfg.deacclr_en = false;
-        flow_cfg.invalid = !entry_valid;
-
+	flow_cfg.host_addr_index = host->index;
+	flow_cfg.deacclr_en = false;
+	flow_cfg.invalid = !entry_valid;
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
+
 	if (!ppe_drv_flow_v6_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
 		ppe_drv_warn("%p: failed to obtain a valid service code", pcf);
 		return NULL;
 	}
+	ppe_drv_trace("service_code: %d\n", flow_cfg.sevice_code);
+
+	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index,
+		      flow_cfg.sevice_code);
 
 	/*
 	 * Get the tree ID corresponding to flow.
@@ -674,6 +775,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	flow_cfg.flow_qos.wifi_qos_en = wifi_qos_en;
 
 #ifdef NSS_PPE_IPQ53XX
+	if (!ppe_drv_flow_v6_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
+		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
+		return NULL;
+	}
+
 	/*
 	 * Get the Source interface index.
 	 */
@@ -706,7 +812,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	/*
 	 * Set forwarding type
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_ASSIST)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
+		flow_cfg.fwd_type = ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) ?
+					FAL_FLOW_BRIDGE: FAL_FLOW_ROUTE;
+		ppe_drv_trace("%p: Policer enabled flow\n", pcf);
+	} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_ASSIST)) {
 		flow_cfg.fwd_type = ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) ?
 				    FAL_FLOW_BRIDGE: FAL_FLOW_ROUTE;
 		ppe_drv_trace("%p: RFS enabled flow\n", pcf);
@@ -998,6 +1108,8 @@ static bool ppe_drv_flow_v4_vpn_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_
  */
 static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *wifi_qos, bool *wifi_qos_en)
 {
+	bool flow_override_mode = true;
+
 	/*
 	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
@@ -1016,7 +1128,16 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
 		 */
 		if (!ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID) &&
 				(pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
-			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos);
+			flow_override_mode = ppe_drv_flow_override_mode_get(&pcf->flow_metadata.wifi_qos);
+
+			/*
+			 * Disabling WIFI_QOS flag for hlos tid mode
+			 */
+			if (!flow_override_mode)
+				*wifi_qos_en = false;
+
+			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos, flow_override_mode);
+
 		}
 
 		ppe_drv_trace("For User type: %u, WiFi_QoS initially: 0x%x and WiFi_QoS configured: 0x%x", pcf->tx_port->user_type, pcf->flow_metadata.wifi_qos, *wifi_qos);
@@ -1024,6 +1145,22 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
 
 	return true;
 }
+
+#ifdef NSS_PPE_IPQ53XX
+/*
+ * ppe_drv_flow_v4_policer_get()
+ *	Find the Policer get associated with a flow
+ */
+static bool ppe_drv_flow_v4_policer_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *policer_index, a_bool_t *policer_valid)
+{
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_POLICER_VALID)) {
+		*policer_index = pcf->policer_hw_id;
+		*policer_valid = true;
+	}
+
+	return true;
+}
+#endif
 
 /*
  * ppe_drv_flow_v4_service_code_get()
@@ -1038,7 +1175,10 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	/*
 	 * Service code to avoid PPE drop while processing bridge flows between two different VSIs.
 	 */
-	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+	if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_POLICER_VALID) ||
+		ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_ACL_VALID)) && (pcf->acl_sc != PPE_DRV_SC_NONE)) {
+		sc = pcf->acl_sc;
+	} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
 		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID)) {
 			if (pp->core_mask) {
 				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
@@ -1050,13 +1190,36 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 			} else {
 				sc = PPE_DRV_SC_VP_RPS;
 			}
+		} else if (ppe_drv_v4_conn_flow_flags_check(pcf,
+					PPE_DRV_V4_CONN_FLAG_FLOW_OFFLOAD_DISABLED)) {
+			if (pp->core_mask) {
+				next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+				pp->shadow_core_mask &= ~(1 << next_core);
+				sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+				if (!pp->shadow_core_mask) {
+					pp->shadow_core_mask = pp->core_mask;
+				}
+			} else {
+				ppe_drv_warn("%p: invalid core mask for DS user type", pcf);
+				return false;
+			}
 		}
 	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
-		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
-		pp->shadow_core_mask &= ~(1 << next_core);
-		sc = PPE_DRV_CORE2SC_EDIT(next_core);
-		if (!pp->shadow_core_mask) {
-			pp->shadow_core_mask = pp->core_mask;
+		if (ppe_drv_v4_conn_flow_flags_check(pcf,
+					PPE_DRV_V4_CONN_FLAG_FLOW_OFFLOAD_DISABLED)) {
+			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			pp->shadow_core_mask &= ~(1 << next_core);
+			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
+			if (!pp->shadow_core_mask) {
+				pp->shadow_core_mask = pp->core_mask;
+			}
+		} else {
+			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			pp->shadow_core_mask &= ~(1 << next_core);
+			sc = PPE_DRV_CORE2SC_EDIT(next_core);
+			if (!pp->shadow_core_mask) {
+				pp->shadow_core_mask = pp->core_mask;
+			}
 		}
 	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_PASSIVE_VP) && pp->core_mask) {
 		next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
@@ -1094,6 +1257,16 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, sc);
+			return false;
+		}
+	}
+
+	if ((sc == PPE_DRV_SC_NONE) &&
+	    (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_BRIDGE_VLAN_NETDEV))) {
+		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: service code %d update failed in VLAN over bridge sc %d\n", pcf, service_code,
+				     sc);
 			return false;
 		}
 	}
@@ -1268,18 +1441,19 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		return NULL;
 	}
 
-	ppe_drv_trace("%p: flow_tbl[host_idx]: %u", pcf, host->index);
 	flow_cfg.host_addr_type = PPE_DRV_HOST_LAN;
-        flow_cfg.host_addr_index = host->index;
-        flow_cfg.deacclr_en = false;
-        flow_cfg.invalid = !entry_valid;
-
+	flow_cfg.host_addr_index = host->index;
+	flow_cfg.deacclr_en = false;
+	flow_cfg.invalid = !entry_valid;
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
+
 	if (!ppe_drv_flow_v4_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
 		ppe_drv_warn("%p: failed to obtain a valid service code", pcf);
 		return NULL;
 	}
+	ppe_drv_trace("service_code: %d\n", flow_cfg.sevice_code);
 
+	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index, flow_cfg.sevice_code);
 	/*
 	 * Get the tree ID corresponding to flow.
 	 */
@@ -1307,6 +1481,11 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	flow_cfg.flow_qos.wifi_qos_en = wifi_qos_en;
 
 #ifdef NSS_PPE_IPQ53XX
+	if (!ppe_drv_flow_v4_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
+		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
+		return NULL;
+	}
+
 	/*
 	 * Get the Source interface index.
 	 */
@@ -1339,7 +1518,11 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	/*
 	 * Set forwarding type
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
+		flow_cfg.fwd_type = ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) ?
+				    FAL_FLOW_BRIDGE: FAL_FLOW_ROUTE;
+		ppe_drv_trace("%p: Policer enabled flow\n", pcf);
+	} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST)) {
 		flow_cfg.fwd_type = ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) ?
 				    FAL_FLOW_BRIDGE: FAL_FLOW_ROUTE;
 		ppe_drv_trace("%p: RFS enabled flow\n", pcf);

@@ -62,6 +62,8 @@
 #define PPE_DRV_V6_RULE_FLAG_DS_FLOW			0x0080	/**< Rule creation for DS flow */
 #define PPE_DRV_V6_RULE_FLAG_VP_FLOW			0x0100	/**< Rule creation for VP flow */
 #define PPE_DRV_V6_RULE_FLAG_SRC_INTERFACE_CHECK	0x0200	/**< Rule creation for source interface check */
+#define PPE_DRV_V6_RULE_TO_BRIDGE_VLAN_NETDEV		0x0400  /**< VLAN over bridge in egress direction */
+#define PPE_DRV_V6_RULE_FROM_BRIDGE_VLAN_NETDEV		0x0800  /**< VLAN over bridge in ingress direction */
 
 /*
  * v6 valid flags
@@ -231,6 +233,34 @@ ppe_drv_ret_t ppe_drv_v6_rfs_destroy(struct ppe_drv_v6_rule_destroy *destroy);
  * Status of the create operation.
  */
 ppe_drv_ret_t ppe_drv_v6_rfs_create(struct ppe_drv_v6_rule_create *create);
+
+/**
+ * ppe_drv_v6_policer_flow_create
+ *	Creates IPv6 policer rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v6_policer_create
+ *
+ * @param[in] create   Pointer to the NSS PPE IPv6 create rule message.
+ *
+ * @return
+ * Status of the create operation.
+ */
+ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *create);
+
+/**
+ * ppe_drv_v6_policer_flow_destroy
+ *	Destroy IPv6 policer rule in PPE.
+ *
+ * @datatypes
+ * ppe_drv_v6_policer_destroy
+ *
+ * @param[in] destroy   Pointer to the NSS PPE IPv6 destroy rule message.
+ *
+ * @return
+ * Status of the destroy operation.
+ */
+ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *destroy);
 
 /**
  * ppe_drv_v6_destroy

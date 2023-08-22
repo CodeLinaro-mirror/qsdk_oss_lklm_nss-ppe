@@ -125,6 +125,21 @@ ppe_drv_ret_t ppe_drv_dp_set_mirr_analysis_port(struct ppe_drv_iface *iface,
 ppe_drv_ret_t ppe_drv_dp_get_mirr_analysis_port(
 		ppe_drv_dp_mirror_direction_t direction, uint8_t *port_num);
 
+/**
+ * ppe_drv_dp_set_ppe_offload_enable_flag
+ *	API to set PPE offload enable flag in PPE port
+ *
+ * @datatypes
+ * ppe_drv_iface
+ *
+ * @param[in] iface         Pointer to the PPE interface.
+ * @param[in] disable       True if PPE offload is disbled, otherwise false
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_dp_set_ppe_offload_enable_flag(struct ppe_drv_iface *iface,
+				bool disable);
 /** @} */ /* end_addtogroup ppe_drv_dp_subsystem */
 
 #endif /* _PPE_DRV_DP_H_ */

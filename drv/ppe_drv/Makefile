@@ -6,6 +6,10 @@ ifeq ($(SoC),$(filter $(SoC),ipq53xx))
 ccflags-y += -DNSS_PPE_IPQ53XX
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq95xx))
+ccflags-y += -DNSS_PPE_IPQ95XX
+endif
+
 ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx))
 ccflags-y += -DPPE_DRV_FLOW_IG_MAC_WAR
 endif
@@ -24,10 +28,12 @@ qca-nss-ppe-objs += ppe_drv_iface.o
 qca-nss-ppe-objs += ppe_drv_lag.o
 qca-nss-ppe-objs += ppe_drv_l3_if.o
 qca-nss-ppe-objs += ppe_drv_nexthop.o
+qca-nss-ppe-objs += ppe_drv_policer.o
 qca-nss-ppe-objs += ppe_drv_port.o
 qca-nss-ppe-objs += ppe_drv_pppoe.o
 qca-nss-ppe-objs += ppe_drv_pppoe_session.o
 qca-nss-ppe-objs += ppe_drv_pub_ip.o
+qca-nss-ppe-objs += ppe_drv_qos.o
 qca-nss-ppe-objs += ppe_drv_sc.o
 qca-nss-ppe-objs += ppe_drv_stats.o
 qca-nss-ppe-objs += ppe_drv_vlan.o

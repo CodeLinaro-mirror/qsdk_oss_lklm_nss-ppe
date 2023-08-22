@@ -55,6 +55,12 @@
 #define PPE_DRV_VALID_FLAG_RETURN_POLICER	0x02	/**< Policer is enabled in return direction. */
 
 /*
+ * PPE QOS VALID FLAGS
+ */
+#define PPE_DRV_VALID_FLAG_FLOW_PPE_QOS		0x01	/**< PPE QOS is enabled in flow direction. */
+#define PPE_DRV_VALID_FLAG_RETURN_PPE_QOS	0x02	/**< PPE QOS is enabled in return direction. */
+
+/*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
  */
@@ -72,7 +78,7 @@ enum ppe_drv_ip_type {
 typedef enum ppe_drv_sawf_sc_type {
 	PPE_DRV_SAWF_SC_NONE = 0,	/**< Invalid service class. */
 	PPE_DRV_SAWF_SC_START,		/**< SAWF service class start. */
-	PPE_DRV_SAWF_SC_END = 127,	/**< SAWF service class end. */
+	PPE_DRV_SAWF_SC_END = 128,	/**< SAWF service class end. */
 	PPE_DRV_SAWF_SC_MAX,		/**< Maximum number of SAWF service classes */
 } ppe_drv_sawf_sc_t;
 
@@ -170,6 +176,10 @@ struct ppe_drv_vlan_rule {
 struct ppe_drv_qos_rule {
 	uint32_t flow_qos_tag;		/**< QoS tag associated with this rule for the flow direction. */
 	uint32_t return_qos_tag;	/**< QoS tag associated with this rule for the return direction. */
+	uint8_t flow_int_pri;		/**< PPE INT_PRI corresponding to flow_qos_tag when PPE Qdisc is configured. */
+	uint8_t return_int_pri;		/**< PPE INT_PRI corresponding to return_qos_tag when PPE Qdisc is configured. */
+	uint8_t qos_valid_flags;	/**< FLAGS to identify PPE QOS. */
+	uint8_t reserved[1];		/**< Reserved; padding for alignment. */
 };
 
 /**
@@ -246,6 +256,7 @@ typedef enum ppe_drv_acl_policer_rule_type {
  */
 struct ppe_drv_acl_policer_rule {
 	ppe_drv_acl_policer_rule_t type;	/**< Whether ACL or Policer rule? */
+	bool pkt_noedit;			/**< Is packet edit required. */
 	union {
 		struct {
 			uint8_t flags;			/**< Valid flag. */
@@ -316,6 +327,9 @@ struct ppe_drv_notifier_ops {
  */
 typedef enum ppe_drv_ret {
 	PPE_DRV_RET_SUCCESS = 0,			/**< Success */
+	PPE_DRV_POLICER_CREATE_FAIL,			/**< Create Fail */
+	PPE_DRV_POLICER_DESTROY_FAIL,			/**< Destroy Fail */
+	PPE_DRV_POLICER_DESTROY_SUCCESS,		/**< Destroy success */
 	PPE_DRV_RET_IFACE_INVALID,			/**< Failure due to Invalid PPE interface */
 	PPE_DRV_RET_FAILURE_NOT_SUPPORTED,		/**< Failure due to unsupported feature */
 	PPE_DRV_RET_FAILURE_NO_RESOURCE,		/**< Failure due to out of resource */
@@ -369,9 +383,9 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_ADD_FDB_FAIL,			/**< Failed to add new fdb entry */
 	PPE_DRV_RET_SET_FDB_AGEING_TIME_FAIL,		/**< Failed to set Ageing time */
 	PPE_DRV_RET_SET_MIRROR_FAIL,			/**<Failed to set Mirror interface */
-	PPE_DRV_RET_SET_MIRROR_IN_FAIL,		/**< Failed to set Mirror ingress */
-	PPE_DRV_RET_SET_MIRROR_EG_FAIL,		/**< Failed to set Mirror egress */
-	PPE_DRV_RET_FLUSH_FDB_BY_PORT_FAIL,	/**< Failed to flush FDB by port */
+	PPE_DRV_RET_SET_MIRROR_IN_FAIL,			/**< Failed to set Mirror ingress */
+	PPE_DRV_RET_SET_MIRROR_EG_FAIL,			/**< Failed to set Mirror egress */
+	PPE_DRV_RET_FLUSH_FDB_BY_PORT_FAIL,		/**< Failed to flush FDB by port */
 	PPE_DRV_RET_FLUSH_FDB_FAIL,			/**< Failed to flush all FDB */
 	PPE_DRV_RET_SET_MIRROR_ANALYSIS_FAIL,	/**< Failed to set Mirror analysis port */
 	PPE_DRV_RET_GET_MIRROR_ANALYSIS_FAIL,	/**< Failed to get Mirror analysis port */
@@ -380,6 +394,10 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_ACL_RULE_INVALID,			/**< ACL rule invalid */
 	PPE_DRV_RET_ACL_RULE_ADD_FAIL,			/**< Failed to add ACL rule */
 	PPE_DRV_RET_ACL_RULE_BIND_FAIL,			/**< Failed to bind ACL rule to src */
+	PPE_DRV_RET_QOS_QUEUE_CFG_FAIL,			/**< QoS queue configuration failed. */
+	PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL,		/**< QoS scheduler configuration failed. */
+	PPE_DRV_RET_QOS_SHAPER_CFG_FAIL,		/**< QoS shaper configuration failed. */
+	PPE_DRV_RET_QOS_PORT_CFG_FAIL			/**< QoS port configuration failed. */
 } ppe_drv_ret_t;
 
 /**

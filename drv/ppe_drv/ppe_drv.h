@@ -26,6 +26,7 @@
 #include "ppe_drv_iface.h"
 #include "ppe_drv_l3_if.h"
 #include "ppe_drv_nexthop.h"
+#include "ppe_drv_policer.h"
 #include "ppe_drv_port.h"
 #include "ppe_drv_pppoe.h"
 #include "ppe_drv_pub_ip.h"
@@ -176,11 +177,12 @@
  */
 #define PPE_DRV_MIRR_INVAL_PORT 0xF
 
-#define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3f
 #if defined(NSS_PPE_IPQ53XX)
-#define PPE_DRV_PORT_OFFLOAD_DEF_VAL		0x3
+#define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3
+#elif defined(NSS_PPE_IPQ95XX)
+#define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3f
 #else
-#define PPE_DRV_PORT_OFFLOAD_DEF_VAL		0x3f
+#define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0xff
 #endif
 
 /*
@@ -233,6 +235,7 @@ struct ppe_drv {
 	struct ppe_drv_l3_if *l3_if;			/* Memory for PPE L3_IF shadow table */
 	struct ppe_drv_pppoe *pppoe;			/* Memory for PPE PPPoe table */
 	struct ppe_drv_queue *queue;			/* Memory for PPE queue table */
+	struct ppe_drv_policer_ctx *pol_ctx;		/* Policer global context */
 	struct ppe_drv_tun_encap *ptun_ec;	/* PPE EG tunnel/translate control entries */
 	struct ppe_drv_tun_decap *ptun_dc;	/* PPE tunnel decap control entries */
 	struct ppe_drv_tun_l3_if *ptun_l3_if;	/* PPE tunnel L3 interface info */
@@ -241,6 +244,7 @@ struct ppe_drv {
 	struct ppe_drv_tun_decap_xlate_rule *decap_xlate_rules; 	/* PPE Tunnel decap xlate rules */
 	struct ppe_drv_sc *sc;				/* Memory for PPE Service Code table */
 	struct ppe_drv_cc *cc;				/* Memory for PPE CPU Code table */
+	struct ppe_drv_acl_tbl *acl_tbl;		/* Memory for PPE ACL based actions table */
 	struct ppe_drv_acl *acl;			/* Memory for PPE ACL entries */
 	struct dentry *dentry;				/* Debugfs entry */
 	struct dentry *stats_dentry;				/* Debugfs entry */
@@ -249,6 +253,7 @@ struct ppe_drv {
 	void *ipv4_stats_sync_data;				/* Argument for above callback: ipv4_stats_sync_cb */
 	ppe_drv_v6_sync_callback_t ipv6_stats_sync_cb;		/* Callback to call to sync ipv6 statistics */
 	void *ipv6_stats_sync_data;				/* Argument for above callback: ipv6_stats_sync_cb */
+	ppe_drv_qos_int_pri_callback_t int_pri_get_cb;		/* Callback to call to get INT-PRI value */
 	struct list_head nh_active;			/* List of active nexthops */
 	struct list_head nh_free;			/* List of free nexthops */
 	struct kref ref;				/* Reference count */
@@ -260,7 +265,6 @@ struct ppe_drv {
 	struct list_head conn_v6;			/* List of v6 connection in PPE */
 	struct list_head conn_tun_v4;		/* List of v4 tunnel connection in PPE */
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
-
 	struct ppe_drv_fse_ops *fse_ops;        /* Wi-Fi FSE block operations */
 	struct kref fse_ops_ref;		/* FSE Reference count */
 	bool fse_enable;			/* FSE enabled */

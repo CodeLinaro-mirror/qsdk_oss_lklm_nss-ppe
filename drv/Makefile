@@ -18,5 +18,8 @@ endif
 ifneq ($(ppe-rule),)
 obj-m += ppe_rule/
 endif
+ifneq ($(ppe-qdisc),)
+obj-m += ppe_qdisc/
+endif
 
 obj ?= .

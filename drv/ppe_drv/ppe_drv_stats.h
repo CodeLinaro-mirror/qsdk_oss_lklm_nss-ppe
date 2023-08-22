@@ -86,6 +86,8 @@ struct ppe_drv_gen_stats {
 	atomic64_t fail_my_mac_full;		/* Create req fail due to MAC table full */
 	atomic64_t fail_ingress_untag_vlan_add;	/* Ingress untag vlan translation addition failed */
 	atomic64_t fail_ingress_untag_vlan_del;	/* Ingress untag vlan translation deletion failed */
+	atomic64_t fail_ingress_vlan_over_bridge_add;	/* Ingress VLAN over brige add rule failed */
+	atomic64_t fail_ingress_vlan_over_bridge_del;	/* Ingress VLAN over brige delete rule failed */
 };
 
 /*
@@ -133,6 +135,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_destroy_fse_success;		/* No of v4 FSE rule destroy failure */
 	atomic64_t v4_destroy_fse_fail;		/* No of v4 FSE rule destroy failure */
 	atomic64_t v4_create_offload_disabled;		/* No of v4 request where offload is disabled */
+	atomic64_t v4_create_fail_offload_disabled;	/* No of v4 create request where offload is disabled */
 
 	atomic64_t v4_create_fail_acl;		/* No of v4 create failure due to ACL linking */
 	atomic64_t v4_destroy_fail_acl;		/* No of v4 delete failure due to ACL unlinking */
@@ -177,6 +180,8 @@ struct ppe_drv_comm_stats {
 
 	atomic64_t v6_create_fail_acl;		/* No of v6 create failure due to ACL linking */
 	atomic64_t v6_destroy_fail_acl;		/* No of v6 delete failure due to ACL unlinking */
+
+	atomic64_t v6_create_fail_offload_disabled;	/* No of v6 create request where offload is disabled */
 };
 
 /*
@@ -220,6 +225,23 @@ struct ppe_drv_stats_acl {
 };
 
 /*
+ * ppe_drv_stats_policer
+ *	Message structure for policer stats.
+ */
+struct ppe_drv_stats_policer {
+	atomic64_t fail_acl_policer_full;			/* Policer table full */
+	atomic64_t fail_port_policer_full;			/* Policer table full */
+	atomic64_t fail_hw_port_policer_destroy_cfg;	/* Fail to reset port policer config */
+	atomic64_t fail_hw_acl_policer_destroy_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t fail_hw_port_policer_create_cfg;	/* Fail to reset port policer config */
+	atomic64_t fail_hw_acl_policer_create_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t success_hw_port_policer_destroy_cfg;	/* Fail to reset port policer config */
+	atomic64_t success_hw_acl_policer_destroy_cfg;	/* Fail to reset ACL policer config */
+	atomic64_t success_hw_port_policer_create_cfg;	/* Fail to reset port policer config */
+	atomic64_t success_hw_acl_policer_create_cfg;	/* Fail to reset ACL policer config */
+};
+
+/*
  * ppe_drv_stats
  *	Message structure for ppe stats
  */
@@ -229,6 +251,7 @@ struct ppe_drv_stats {
 	struct ppe_drv_stats_sc	sc_stats[PPE_DRV_SC_CNT_MAX];		/* Per service-code stats */
 	struct ppe_drv_stats_sawf_sc sawf_sc_stats[PPE_DRV_SAWF_SC_MAX];	/* Per service-class stats */
 	struct ppe_drv_stats_acl acl_stats;
+	struct ppe_drv_stats_policer policer_stats;
 };
 
 /*

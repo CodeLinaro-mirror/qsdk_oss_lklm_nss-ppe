@@ -92,20 +92,6 @@ enum ppe_drv_port_qos_res_pre {
 };
 
 /**
- * ppe_drv_port_is_flow_offload_enabled
- *	API to check whether given netdevice is enabled for PPE offload or not
- *
- * @datatypes
- * net_device
- *
- * @param[in] dev   Netdevice where offload needs to be checked.
- *
- * @return
- * Status of the offload decision
- */
-bool ppe_drv_port_is_flow_offload_enabled(struct net_device *dev);
-
-/**
  * ppe_drv_port_get_vp_phys_dev
  *	Get physical dev attached to VP.
  *
@@ -169,6 +155,37 @@ bool ppe_drv_port_xcpn_mode_set(uint16_t vp_num, uint8_t action);
  * True if the hw stats are copied, false otherwise.
  */
 bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_stats);
+
+/*
+ * ppe_drv_port_clear_policer_support
+ *	Clear Policer enabled on Port.
+ *
+ * @param[in] dev  Netdevie.
+ *
+ * @return
+ */
+void ppe_drv_port_clear_policer_support(struct net_device *dev);
+
+/*
+ * ppe_drv_port_set_policer_support
+ *	Set Policer enabled on Port.
+ *
+ * @param[in] dev  Netdevie.
+ *
+ * @return
+ */
+void ppe_drv_port_set_policer_support(struct net_device *dev);
+
+/*
+ * ppe_drv_port_check_policer_support
+ *	Is Policer enabled on Port.
+ *
+ * @param[in] dev  Netdevie.
+ *
+ * @return
+ * True or False.
+ */
+bool ppe_drv_port_check_policer_support(struct net_device *dev);
 
 /*
  * ppe_drv_port_check_rfs_support

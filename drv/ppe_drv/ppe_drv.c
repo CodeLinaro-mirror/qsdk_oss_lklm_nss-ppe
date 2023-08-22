@@ -36,7 +36,7 @@ static bool ipfrag_2tuple_hash = true;
 module_param(ipfrag_2tuple_hash, bool, 0644);
 MODULE_PARM_DESC(ipfrag_2tuple_hash, "RSS hash for IP fragments based on SIP & DIP");
 
-uint32_t if_bm_to_offload = PPE_DRV_PORT_OFFLOAD_DEF_VAL;
+uint32_t if_bm_to_offload;
 
 /*
  * Define the filename to be used for assertions.
@@ -650,6 +650,18 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
+	p->pol_ctx = ppe_drv_policer_entries_alloc();
+	if (!p->pol_ctx) {
+		ppe_drv_warn("%p: failed to allocate global policer context", p);
+		goto fail;
+	}
+
+	p->acl_tbl = ppe_drv_acl_tbl_entries_alloc();
+	if (!p->acl_tbl) {
+		ppe_drv_warn("%p: failed to allocate ACL callback entries", p);
+		goto fail;
+	}
+
 	/*
 	 * Take a reference
 	 */
@@ -699,9 +711,19 @@ fail:
 		p->ptun_l3_if = NULL;
 	}
 
+	if (p->pol_ctx) {
+		ppe_drv_policer_entries_free(p->pol_ctx);
+		p->pol_ctx = NULL;
+	}
+
 	if (p->acl) {
 		ppe_drv_acl_entries_free(p->acl);
 		p->acl = NULL;
+	}
+
+	if (p->acl_tbl) {
+		ppe_drv_acl_tbl_entries_free(p->acl_tbl);
+		p->acl_tbl = NULL;
 	}
 
 	if (p->pub_ip) {
@@ -862,6 +884,16 @@ static int ppe_drv_remove(struct platform_device *pdev)
 		p->acl = NULL;
 	}
 
+	if (p->acl_tbl) {
+		ppe_drv_acl_tbl_entries_free(p->acl_tbl);
+		p->acl_tbl = NULL;
+	}
+
+	if (p->pol_ctx) {
+		ppe_drv_policer_entries_free(p->pol_ctx);
+		p->pol_ctx = NULL;
+	}
+
 	ppe_drv_tun_vxlan_deconfigure(p);
 
 	if (p->fse_ops) {
@@ -988,6 +1020,34 @@ void ppe_drv_notifier_ops_unregister(struct ppe_drv_notifier_ops *notifier_ops)
 EXPORT_SYMBOL(ppe_drv_notifier_ops_unregister);
 
 /*
+ * ppe_drv_set_ppe_if_bm_to_port()
+ *	API to set the OFFLOAD flag in the port from the interface bitmask
+ */
+static void ppe_drv_set_ppe_if_bm_to_port(void)
+{
+	struct ppe_drv_port *drv_port = NULL;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	unsigned int if_bit_count = __builtin_popcount(PPE_DRV_PORT_OFFLOAD_MAX_VAL);
+	uint32_t i;
+
+	spin_lock_bh(&p->lock);
+	for (i = 1; i <= if_bit_count; i++) {
+		drv_port = ppe_drv_port_from_port_num(i);
+		if (!drv_port) {
+			ppe_drv_warn("failed in getting drv port from %d port\n", i);
+			continue;
+		}
+
+		if (if_bm_to_offload & (1 << (i - 1))) {
+			drv_port->flags |= PPE_DRV_PORT_FLAG_OFFLOAD_ENABLED;
+		} else {
+			drv_port->flags &= ~PPE_DRV_PORT_FLAG_OFFLOAD_ENABLED;
+		}
+	}
+	spin_unlock_bh(&p->lock);
+}
+
+/*
  * ppe_drv_if_bm_to_offload_handler()
  *	API to configure the interface bitmask where the offload is enabled
  */
@@ -995,6 +1055,12 @@ static int ppe_drv_if_bm_to_offload_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret;
+	uint32_t current_value;
+
+	/*
+	 * Take the current value
+	 */
+	current_value = if_bm_to_offload;
 
 	ret = proc_dointvec(table, write, buffer, lenp, ppos);
 
@@ -1006,8 +1072,10 @@ static int ppe_drv_if_bm_to_offload_handler(struct ctl_table *table, int write,
 		ppe_drv_warn("Incorrect value of offload bitmask. Setting it to"
 				" default value. Value: %0x, if_bm_to_offload: %0x\n",
 				if_bm_to_offload, PPE_DRV_PORT_OFFLOAD_MAX_VAL);
-		if_bm_to_offload = PPE_DRV_PORT_OFFLOAD_DEF_VAL;
+		if_bm_to_offload = current_value;
 	}
+
+	ppe_drv_set_ppe_if_bm_to_port();
 
 	ppe_drv_warn("PPE DRV interface bitmask to offload is %0x\n", if_bm_to_offload);
 	return ret;

@@ -18,6 +18,7 @@
 #include <linux/netdevice.h>
 #include <ppe_drv_public.h>
 #include <ppe_drv_acl.h>
+#include "../ppe_policer/ppe_policer.h"
 #include "ppe_acl.h"
 
 /*
@@ -47,6 +48,50 @@ static inline struct ppe_acl *ppe_acl_alloc(void)
 static inline void ppe_acl_free(struct ppe_acl *acl)
 {
 	kfree(acl);
+}
+
+/*
+ * ppe_acl_rule_return_gen_id()
+ *	Return a rule ID to general pool.
+ */
+static void ppe_acl_rule_return_gen_id(ppe_acl_rule_id_t gen_id)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+
+	if ((gen_id < PPE_ACL_GEN_RULE_ID_BASE) || (gen_id > PPE_ACL_RULE_ID_MAX)) {
+		ppe_acl_warn("%p: Invalid gneral rule ID: %d", acl_g, gen_id);
+		return;
+	}
+
+	/*
+	 * Clear the in_use state for rule ID.
+	 */
+	acl_g->rule_id_tbl[gen_id - PPE_ACL_GEN_RULE_ID_BASE].in_use = false;
+	ppe_acl_trace("%p: Return the rule ID to free pool: %d", acl_g, gen_id);
+}
+
+/*
+ * ppe_acl_rule_get_gen_id()
+ *	Find a free rule ID from general pool.
+ */
+static ppe_acl_rule_id_t ppe_acl_rule_get_gen_id(void)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	uint16_t i;
+
+	/*
+	 * Get the first available acl rule ID.
+	 */
+	for (i = 0; i < PPE_ACL_GEN_RULE_ID_MAX; i++) {
+		if (!acl_g->rule_id_tbl[i].in_use) {
+			acl_g->rule_id_tbl[i].in_use = true;
+			return acl_g->rule_id_tbl[i].rule_id;
+		}
+	}
+
+	ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_table_full);
+	ppe_acl_trace("%p: cannot allocate a free rule ID", acl_g);
+	return -1;
 }
 
 /*
@@ -123,10 +168,156 @@ static void ppe_acl_rule_free(struct kref *kref)
 	 */
 	ppe_acl_free(acl);
 
+	if (acl->rule_id >= PPE_ACL_GEN_RULE_ID_BASE) {
+		ppe_acl_rule_return_gen_id(acl->rule_id);
+	}
+
 	/*
 	 * Update stats
 	 */
 	ppe_acl_stats_inc(&acl_g->stats.cmn.acl_free_req);
+}
+
+/*
+ * ppe_acl_rule_get_and_ref_hw_idx()
+ *	Get the hardware ACL index corresponding the ACL rule and
+ *	take a reference of the ACL rule.
+ */
+uint16_t ppe_acl_rule_get_and_ref_hw_idx(ppe_acl_rule_id_t acl_id)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *acl = NULL;
+	struct ppe_drv_acl_ctx *ctx = NULL;
+	uint16_t hw_index = PPE_ACL_INVALID_HW_INDEX;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return hw_index;
+	}
+
+	spin_lock_bh(&acl_g->lock);
+
+	/*
+	 * Get the ACL rule for the ACL ID.
+	 */
+	acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!acl) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_flow_add_invalid_id);
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("No ACL rule present for id %d\n", acl_id);
+		return hw_index;
+	}
+
+	/*
+	 * Get the hardware index from the ACL rule context.
+	 * The same is stored inside the ACL context while creating the rule.
+	 */
+	ctx = acl->ctx;
+	hw_index = ppe_drv_acl_get_hw_index(ctx);
+
+	/*
+	 * Take the reference of the ACL rule.
+	 * Defer in deref ACL rule call.
+	 * It is the callers responsibility to deref if this API is used
+	 * to take the reference.
+	 */
+	kref_get(&acl->ref_cnt);
+	spin_unlock_bh(&acl_g->lock);
+
+	return hw_index;
+}
+EXPORT_SYMBOL(ppe_acl_rule_get_and_ref_hw_idx);
+
+/*
+ * ppe_acl_rule_get_and_deref_hw_idx()
+ *     Deref the ACL rule.
+ */
+uint16_t ppe_acl_rule_get_and_deref_hw_idx(ppe_acl_rule_id_t acl_id) {
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *acl = NULL;
+	struct ppe_drv_acl_ctx *ctx = NULL;
+	uint16_t hw_index = PPE_ACL_INVALID_HW_INDEX;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return hw_index;
+	}
+
+	spin_lock_bh(&acl_g->lock);
+
+	/*
+	 * Get the ACL rule for the ACL ID.
+	 */
+	acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!acl) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_flow_add_invalid_id);
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("No ACL rule present for id %d\n", acl_id);
+		return hw_index;
+	}
+
+	/*
+	 * Get the hardware index from the ACL rule context.
+	 * The same is stored inside the ACL context while creating the rule.
+	 */
+	ctx = acl->ctx;
+	hw_index = ppe_drv_acl_get_hw_index(ctx);
+
+	/*
+	 * Defer the ACL reference taken while getting the hw index.
+	 */
+	if (kref_put(&acl->ref_cnt, ppe_acl_rule_free)) {
+		ppe_acl_trace("%p: reference goes down to 0 for acl: %p ID: %d\n",
+				acl_g, acl, acl_id);
+	}
+
+	spin_unlock_bh(&acl_g->lock);
+
+	return hw_index;
+}
+EXPORT_SYMBOL(ppe_acl_rule_get_and_deref_hw_idx);
+
+/*
+ * ppe_acl_rule_process_skb()
+ *	Process the packet based on ACL rule.
+ */
+bool ppe_acl_rule_process_skb(void *appdata, struct sk_buff *skb, void *info)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *acl;
+	struct ppe_drv_acl_metadata *acl_info =  (struct ppe_drv_acl_metadata *)info;
+	uint16_t acl_id = acl_info->acl_id;
+	ppe_acl_rule_callback_t cb;
+	void *app_data;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return false;
+	}
+
+	spin_lock_bh(&acl_g->lock);
+	acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!acl) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_flow_add_invalid_id);
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("%p: failed to find the rule for ID: %d", acl_g, acl_id);
+		return false;
+	}
+
+	cb = acl->cb;
+	app_data = acl->app_data;
+	if (!cb) {
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("%p: No callback registered for ACL id: %d", acl_g, acl_id);
+		return false;
+	}
+
+	spin_unlock_bh(&acl_g->lock);
+
+	return cb(app_data, (void *)skb, acl_id);
 }
 
 /*
@@ -1305,17 +1496,13 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 	}
 
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_POLICER_EN) {
-		/*
-		 *
-		 * TODO enable this with policer patch.
-		 *
-		 * acl_action->policer_index = ppe_policer_id_to_hwidx(r_action->policer_id);
-		 * if (acl_action->policer_index < 0) {
-		 * 	ppe_acl_warn("%p: no valid hw policer index for id: %d",
-		 * 	r_action, r_action->policer_id);
-		 * 	return false;
-		 * }
-		 */
+		acl_action->policer_index = ppe_policer_id_to_hwidx(r_action->policer_id);
+		if (acl_action->policer_index < 0) {
+			ppe_acl_warn("%p: no valid hw policer index for id: %d",
+				r_action, r_action->policer_id);
+			return false;
+		}
+
 		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_POLICER_INDEX;
 	}
 
@@ -1982,10 +2169,12 @@ next_entry:
 /*
  * ppe_acl_rule_flow_policer_destroy()
  *	Destroy ACL rule for flow policer in PPE.
+ *
+ * TODO: remove this.
  */
 ppe_acl_ret_t ppe_acl_rule_flow_policer_destroy(ppe_acl_rule_id_t id)
 {
-	return ppe_acl_rule_destroy(id + PPE_ACL_POLICER_RULE_ID_BASE);
+	return PPE_ACL_RET_DESTROY_FAIL_INVALID_ID;
 }
 
 /*
@@ -1998,6 +2187,7 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	struct ppe_drv_acl_rule_match_one *slice;
 	struct ppe_drv_acl_ctx *ctx = NULL;
 	struct ppe_drv_acl_rule info = {0};
+	ppe_acl_rule_id_t gen_id = -1;
 	struct ppe_acl *acl = NULL;
 	ppe_acl_ret_t ret;
 	uint8_t sc = 0;
@@ -2013,6 +2203,19 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 		ret = PPE_ACL_RET_CREATE_FAIL_OOM;
 		goto fail;
 	}
+
+	gen_id = ppe_acl_rule_get_gen_id();
+	if (gen_id < 0) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_table_full);
+		ppe_acl_warn("%p: cannot allocate a free rule ID", acl_g);
+		ret = PPE_ACL_RET_CREATE_FAIL_RULE_CONFIG;
+		goto fail;
+	}
+
+	/*
+	 * Override user rule_id with general ID for this case.
+	 */
+	rule->rule_id = gen_id;
 
 	/*
 	 * Get a free service code for this ACL rule.
@@ -2060,6 +2263,11 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	info.action.policer_index = rule->hw_policer_idx;
 	info.action.flags |= PPE_DRV_ACL_ACTION_FLAG_POLICER_INDEX;
 
+	if (rule->pkt_noedit) {
+		info.action.flags |= PPE_DRV_ACL_ACTION_FLAG_SC;
+		info.action.service_code = PPE_DRV_SC_NOEDIT_ACL_POLICER;
+	}
+
 	if (ppe_drv_acl_configure(ctx, &info) != PPE_DRV_RET_SUCCESS) {
 		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_config);
 		ppe_acl_warn("%p: failed to configure ACL rule: %p", acl_g, ctx);
@@ -2090,7 +2298,7 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	 * Store book keeping info.
 	 * We use a base rule ID to avoid conflicting it with user space rule-id.
 	 */
-	acl->rule_id = rule->rule_id + PPE_ACL_POLICER_RULE_ID_BASE;
+	acl->rule_id = rule->rule_id;
 	acl->ctx = ctx;
 	kref_init(&acl->ref_cnt);
 
@@ -2122,15 +2330,17 @@ fail:
 ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 {
 	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
-	struct ppe_drv_acl_ctx *ctx = NULL;
 	bool slice_type[PPE_DRV_ACL_SLICE_TYPE_MAX] = {0};
 	enum ppe_drv_acl_slice_type slice_t;
-	struct ppe_acl *acl = NULL;
+	struct ppe_drv_acl_ctx *ctx = NULL;
 	ppe_acl_rule_match_type_t rule_t;
+	ppe_acl_rule_id_t gen_id = -1;
+	struct ppe_acl *acl = NULL;
 	uint8_t slice_cnt = 0, i;
 	ppe_acl_ret_t ret;
 
 	ppe_acl_info("%p: rule create request: %p", acl_g, rule);
+
 
 	spin_lock_bh(&acl_g->lock);
 	acl = ppe_acl_alloc();
@@ -2139,6 +2349,31 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 		ppe_acl_warn("%p: failed to allocate acl memory: %p", acl_g, rule);
 		ret = PPE_ACL_RET_CREATE_FAIL_OOM;
 		goto fail;
+	}
+
+	/*
+	 * If rule_id is not specified by user, find a general free ID. If specified, validate it.
+	 */
+	if (rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_NO_RULEID) {
+		gen_id = ppe_acl_rule_get_gen_id();
+		if (gen_id < 0) {
+			ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_table_full);
+			ppe_acl_warn("%p: cannot allocate a free rule ID", acl_g);
+			ret = PPE_ACL_RET_CREATE_FAIL_RULE_CONFIG;
+			goto fail;
+		}
+
+		/*
+		 * Override user rule_id with general ID for this case.
+		 */
+		rule->rule_id = gen_id;
+	} else {
+		if (rule->rule_id >= PPE_ACL_USER_RULE_ID_MAX) {
+			ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_invalid_id);
+			ppe_acl_warn("%p: Invalid rule ID: %p", acl_g, rule);
+			ret = PPE_ACL_RET_CREATE_FAIL_INVALID_ID;
+			goto fail;
+		}
 	}
 
 	/*
@@ -2301,11 +2536,125 @@ fail:
 EXPORT_SYMBOL(ppe_acl_rule_create);
 
 /*
+ * ppe_acl_rule_callback_register()
+ *	Register PPE ACL callback for ACL rule module.
+ */
+bool ppe_acl_rule_callback_register(ppe_acl_rule_id_t acl_id, ppe_acl_rule_callback_t cb, void *appdata)
+{
+	uint16_t hw_index;
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *ppe_acl = NULL;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return false;
+	}
+
+	ppe_acl_assert(cb, "%p: cannot register null cb for ACL id %u", p, acl_id);
+
+	/*
+	 * Get the hardware index for the ACL ID and take the
+	 * reference for the ACL rule.
+	 */
+	hw_index = ppe_acl_rule_get_and_ref_hw_idx(acl_id);
+	if (hw_index == PPE_ACL_INVALID_HW_INDEX) {
+		ppe_acl_warn("Invalid Hardware index for ACL ID %d", acl_id);
+		return false;
+	}
+
+	/*
+	 * Store the external callback into the ACL rule.
+	 * So that later we can invoke the same based on the ACL id
+	 * received from driver.
+	 */
+	spin_lock_bh(&acl_g->lock);
+	ppe_acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!ppe_acl) {
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+		ppe_acl_warn("ACL rule not found for ID %d\n", acl_id);
+		return false;
+	}
+
+	ppe_acl_assert(!ppe_acl->cb, "%p: multiple registration for acl id:%u - "
+				"prev cb:%p current cb:%p", acl_g, acl_id, ppe_acl->cb, cb);
+
+	ppe_acl->cb = cb;
+	ppe_acl->app_data = appdata;
+	spin_unlock_bh(&acl_g->lock);
+
+	if (!ppe_drv_acl_register_cb(hw_index, acl_id, ppe_acl_rule_process_skb, appdata)) {
+		ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_acl_rule_callback_register);
+
+/*
+ * ppe_acl_rule_callback_unregister()
+ *	Unregister the acl rule callback.
+ */
+void ppe_acl_rule_callback_unregister(ppe_acl_rule_id_t acl_id)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *ppe_acl = NULL;
+	uint16_t hw_index;
+
+	if (acl_id < 0 || acl_id >= PPE_ACL_RULE_ID_MAX) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.rule_id_invalid);
+		ppe_acl_warn("%p: Invalid rule ID: %d", acl_g, acl_id);
+		return;
+	}
+
+	/*
+	 * Get the hardware index and deref the ACL rule taken at the time of
+	 * registering the callback.
+	 */
+	hw_index = ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+	if (hw_index == PPE_ACL_INVALID_HW_INDEX) {
+		ppe_acl_warn("Invalid Hardware index for ACL ID %d", acl_id);
+		return;
+	}
+
+	/*
+	 * Get the ACL rule to deregister the callback.
+	 */
+	spin_lock_bh(&acl_g->lock);
+	ppe_acl = ppe_acl_rule_find_by_id(acl_id);
+	if (!ppe_acl) {
+		spin_unlock_bh(&acl_g->lock);
+		ppe_acl_warn("ACL rule not found for ID %d\n", acl_id);
+		ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+		return;
+	}
+
+	ppe_acl->cb = NULL;
+	ppe_acl->app_data = NULL;
+	spin_unlock_bh(&acl_g->lock);
+
+	/*
+	 * Unregister the callback with PPE Driver.
+	 */
+	ppe_drv_acl_unregister_cb(hw_index);
+}
+EXPORT_SYMBOL(ppe_acl_rule_callback_unregister);
+
+/*
  * ppe_acl_deinit()
  *	ACL deinit API
  */
 void ppe_acl_deinit(void)
 {
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+
+	if (acl_g->rule_id_tbl) {
+		vfree(acl_g->rule_id_tbl);
+		acl_g->rule_id_tbl = NULL;
+	}
+
 	ppe_drv_acl_flow_unregister_cb();
 
 	ppe_acl_stats_debugfs_exit();
@@ -2318,6 +2667,8 @@ void ppe_acl_deinit(void)
 void ppe_acl_init(struct dentry *d_rule)
 {
 	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl_gen_rule_id *rule_id;
+	int i;
 
 	spin_lock_init(&acl_g->lock);
 
@@ -2325,6 +2676,21 @@ void ppe_acl_init(struct dentry *d_rule)
 	 * Initialize active list
 	 */
 	INIT_LIST_HEAD(&acl_g->active_rules);
+
+	/*
+	 * Rule ID table - used to maitain a free pool of general IDs.
+	 */
+	acl_g->rule_id_tbl = vzalloc(sizeof(struct ppe_acl_gen_rule_id) * PPE_ACL_GEN_RULE_ID_MAX);
+	if (!acl_g->rule_id_tbl) {
+		ppe_acl_warn("%p: failed to allocate ACL rule ID table", acl_g);
+		return;
+	}
+
+	for (i = 0; i < PPE_ACL_GEN_RULE_ID_MAX; i++) {
+		rule_id = &acl_g->rule_id_tbl[i];
+		rule_id->rule_id = PPE_ACL_GEN_RULE_ID_BASE + i;
+		rule_id->in_use = false;
+	}
 
 	ppe_drv_acl_flow_register_cb(ppe_acl_rule_flow_add_cb, ppe_acl_rule_flow_del_cb, NULL);
 
