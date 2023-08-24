@@ -378,7 +378,7 @@ struct ppe_qdisc *ppe_prio_band_qdisc_get(struct Qdisc *sch, u32 classid)
 	struct ppe_prio_sched_data *q = qdisc_priv(sch);
 	unsigned long band = TC_H_MIN(classid);
 
-	if (!band) {
+	if (!band || (band > TCA_PPEPRIO_MAX_BANDS)) {
 		ppe_qdisc_warning("%x ppeprio invalid band", sch->handle);
 		return NULL;
 	}
