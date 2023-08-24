@@ -26,6 +26,7 @@
 #include <fal/fal_ip.h>
 #include <fal/fal_init.h>
 #include <fal/fal_qm.h>
+#include <fal/fal_fdb.h>
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
 
@@ -1195,6 +1196,34 @@ static struct ctl_table ppe_drv_root[] = {
 	},
 	{}
 };
+
+/*
+ * ppe_drv_mht_port_from_fdb()
+ *	Get the port id corresponding to the destination
+ *	mac address and vid
+ */
+int32_t ppe_drv_mht_port_from_fdb(uint8_t *dmac, uint16_t vid)
+{
+	fal_fdb_entry_t entry = {0};
+	sw_error_t err = SW_OK;
+	entry.fid = vid;
+	entry.port.id = 0;
+	entry.type = SW_ENTRY;
+
+	memcpy(&entry.addr, dmac, ETH_ALEN);
+
+	err = fal_fdb_entry_search(PPE_DRV_MHT_SWITCH_ID, &entry);
+	if (err != SW_OK) {
+		return -1;
+	}
+
+	if (entry.port.id > 0) {
+		return ffs(entry.port.id) - 1;
+	}
+
+	return -1;
+}
+EXPORT_SYMBOL(ppe_drv_mht_port_from_fdb);
 
 /*
  * ppe_drv_module_init()

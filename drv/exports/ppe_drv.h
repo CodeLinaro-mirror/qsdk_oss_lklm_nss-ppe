@@ -44,6 +44,14 @@
 #define PPE_DRV_INT_PRI_MIN 0
 #define PPE_DRV_INT_PRI_MAX 15
 
+#define PPE_DRV_MHT_SWITCH_ID	1			/**< MHT switch ID */
+
+/*
+ * PPE Assist feature flags
+ */
+#define PPE_DRV_ASSIST_FEATURE_RFS      0x00000001      /* PPE Assist feature to configure RFS */
+#define PPE_DRV_ASSIST_FEATURE_PRIORITY 0x00000002      /* PPE Assist feature to configure Priority */
+
 #define PPE_DRV_SERVICE_CLASS_IS_VALID(sc)	((sc >= PPE_DRV_SAWF_SC_START) && (sc <= PPE_DRV_SAWF_SC_END))
 
 /*
@@ -524,4 +532,10 @@ extern void ppe_drv_notifier_ops_unregister(struct ppe_drv_notifier_ops *notifie
  * true or false
  */
 bool ppe_drv_is_mht_dev(struct net_device *dev);
+/*
+ * ppe_drv_mht_port_from_fdb()
+ *	Get the port id corresponding to the destination
+ *	mac address and vid
+ */
+int32_t ppe_drv_mht_port_from_fdb(uint8_t *dmac, uint16_t vid);
 #endif /* _PPE_DRV_H_ */
