@@ -168,7 +168,7 @@ static int nss_ppenl_policer_ops_create_rule(struct sk_buff *skb, struct genl_in
 	}
 
 	nl_policer_rule = nss_ppenl_get_data(resp);
-	nl_policer_rule->config.ret = create.ret;
+	nl_policer_rule->config.ret = pt;
 	nss_ppenl_ucast_resp(resp);
 	return 0;
 }
