@@ -929,6 +929,10 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 			encap_cfg.tunnel_offset += PPPOE_SES_HLEN;
 		}
 
+		if (!(th->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM_TX)) {
+			encap_cfg.l4_checksum_en = true;
+		}
+
 		/*
 		 * L2TP inner packet payload in PPP can be either ipv4 or ipv6.
 		 * Based on the payload type. PPP header within L2TP frame must be updated.
