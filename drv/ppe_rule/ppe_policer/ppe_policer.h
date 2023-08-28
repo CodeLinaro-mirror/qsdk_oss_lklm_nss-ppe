@@ -78,6 +78,7 @@ struct ppe_acl_policer_flow_rule_tbl {
 struct ppe_policer {
 	struct list_head list;				/* List of active Policer rules */
 	struct kref kref_cnt;				/* Reference count */
+	struct net_device *dev;				/* Device associated with port policer */
 	uint32_t rule_id;				/* Associated Policer rule id for ACL/FLOW policer */
 	uint32_t acl_rule_id;				/* ACL rule id for Policer + FLOW case */
 	union {
