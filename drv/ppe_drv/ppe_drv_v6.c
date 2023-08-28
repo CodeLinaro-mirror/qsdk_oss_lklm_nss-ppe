@@ -553,28 +553,28 @@ ppe_drv_ret_t ppe_drv_v6_policer_conn_fill(struct ppe_drv_v6_rule_create *create
 	 */
 	if_rx = ppe_drv_iface_get_by_idx(conn->rx_if);
 	if (!if_rx) {
-		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_invalid_rx_if);
+		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_invalid_rx_if);
 		ppe_drv_warn("%p: No PPE interface corresponding to rx_if: %d", create, conn->rx_if);
 		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
 	}
 
 	pp_rx = ppe_drv_iface_port_get(if_rx);
 	if (!pp_rx) {
-		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_invalid_rx_port);
+		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_invalid_rx_port);
 		ppe_drv_warn("%p: Invalid Rx IF: %d", create, conn->rx_if);
 		return PPE_DRV_RET_FAILURE_IFACE_PORT_MAP;
 	}
 
 	if_tx = ppe_drv_iface_get_by_idx(conn->tx_if);
 	if (!if_tx) {
-		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_invalid_tx_if);
+		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_invalid_tx_if);
 		ppe_drv_warn("%p: No PPE interface corresponding to tx_if: %d", create, conn->tx_if);
 		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
 	}
 
 	pp_tx = ppe_drv_iface_port_get(if_tx);
 	if (!pp_tx) {
-		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_invalid_tx_port);
+		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_invalid_tx_port);
 		ppe_drv_warn("%p: Invalid Tx IF: %d", create, conn->tx_if);
 		return PPE_DRV_RET_FAILURE_IFACE_PORT_MAP;
 	}
@@ -1993,7 +1993,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *de
 	/*
 	 * Update stats
 	 */
-	ppe_drv_stats_inc(&comm_stats->v4_destroy_rfs_req);
+	ppe_drv_stats_inc(&comm_stats->v6_destroy_policer_req);
 
 	/*
 	 * Get flow table entry.
@@ -2002,7 +2002,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *de
 	flow = ppe_drv_flow_v6_get(&destroy->tuple);
 	if (!flow) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_stats_inc(&comm_stats->v4_destroy_rfs_conn_not_found);
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_policer_conn_not_found);
 		ppe_drv_warn("%p: flow entry not found", p);
 		return PPE_DRV_RET_FAILURE_DESTROY_NO_CONN;
 	}
@@ -2013,7 +2013,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *de
 	if (pcf && ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
 		if (!ppe_drv_v6_flow_del(pcf)) {
 			spin_unlock_bh(&p->lock);
-			ppe_drv_stats_inc(&comm_stats->v4_destroy_rfs_fail);
+			ppe_drv_stats_inc(&comm_stats->v6_destroy_policer_fail);
 			ppe_drv_warn("%p: deletion of flow failed: %p", p, pcf);
 			return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
 		}
@@ -2032,7 +2032,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *de
 	if (pcr && ppe_drv_v6_conn_flow_flags_check(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
 		if (!ppe_drv_v6_flow_del(pcr)) {
 			spin_unlock_bh(&p->lock);
-			ppe_drv_stats_inc(&comm_stats->v4_destroy_fail);
+			ppe_drv_stats_inc(&comm_stats->v6_destroy_policer_fail);
 			ppe_drv_warn("%p: deletion of return flow failed: %p", p, pcr);
 			return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
 		}
@@ -2049,7 +2049,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *de
 	 * Check if this flow is combined with ACL for n-tuple lookup.
 	 */
 	if (!ppe_drv_v6_unbind_acl_policer(cn)) {
-		ppe_drv_stats_inc(&comm_stats->v4_destroy_fail_acl);
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_policer_fail_acl);
 		ppe_drv_warn("%p: failed to unlink with ACL, destroy object: %p", p, destroy);
 	}
 
@@ -2081,14 +2081,14 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 	/*
 	 * Update stats
 	 */
-	ppe_drv_stats_inc(&comm_stats->v4_create_rfs_req);
+	ppe_drv_stats_inc(&comm_stats->v6_create_policer_req);
 
 	/*
 	 * Allocate a new connection entry
 	 */
 	cn = ppe_drv_v6_conn_alloc();
 	if (!cn) {
-		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_mem);
+		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_mem);
 		ppe_drv_warn("%p: failed to allocate connection memory: %p", p, create);
 		return PPE_DRV_RET_FAILURE_CREATE_OOM;
 	}
@@ -2097,7 +2097,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 	 * Check if this flow is combined with ACL for n-tuple lookup.
 	 */
 	if (!ppe_drv_v6_bind_acl_policer(create, cn)) {
-		ppe_drv_stats_inc(&comm_stats->v4_create_fail_acl);
+		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_acl);
 		ppe_drv_warn("%p: failed to combine with ACL, connection object: %p", p, create);
 		kfree(cn);
 		return ret;
@@ -2112,7 +2112,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 	top_if.tx_if = create->top_rule.tx_if;
 	ret = ppe_drv_v6_policer_conn_fill(create, &top_if, cn, PPE_DRV_CONN_TYPE_FLOW);
 	if (ret != PPE_DRV_RET_SUCCESS) {
-		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_conn);
+		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_conn);
 		ppe_drv_warn("%p: failed to fill connection object: %p", p, create);
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
@@ -2123,7 +2123,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 	 * Ensure either direction flow is not already offloaded by us.
 	 */
 	if (ppe_drv_v6_flow_check(&cn->pcf) || ppe_drv_v6_flow_check(&cn->pcr)) {
-		ppe_drv_stats_inc(&comm_stats->v4_create_rfs_fail_collision);
+		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_collision);
 		ppe_drv_warn("%p: create collision detected: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
 		ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
@@ -2141,7 +2141,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 		ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);
 		pcf->pf = ppe_drv_v6_flow_add(pcf);
 		if (!pcf->pf) {
-			ppe_drv_stats_inc(&comm_stats->v6_create_rfs_fail);
+			ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail);
 			ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
 			ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
 			ppe_drv_iface_deref_internal(pcf->eg_port_if);
@@ -2166,7 +2166,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 			ppe_drv_v6_flow_del(pcf);
 			pcf->pf = NULL;
 
-			ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+			ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail);
 			ppe_drv_warn("%p: acceleration of return direction failed: %p", p, pcr);
 			ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
 			ppe_drv_v6_conn_flow_flags_clear(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);

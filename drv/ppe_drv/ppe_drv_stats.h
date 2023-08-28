@@ -130,6 +130,23 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_create_rfs_fail_invalid_tx_port;	/* No of v4 RFS create failure due to invalid Tx Port */
 	atomic64_t v4_create_rfs_noedit_flow;		/* No of v4 request for non edit rfs mode */
 
+	atomic64_t v4_create_policer_req;		/* No of v4 Policer create requests */
+	atomic64_t v4_create_policer_fail;		/* No of v4 Policer create failure */
+	atomic64_t v4_create_policer_fail_acl;		/* No of v4 Policer create failure due to bind issue */
+	atomic64_t v4_destroy_policer_req;		/* No of v4 Policer delete requests */
+	atomic64_t v4_destroy_policer_fail;		/* No of v4 Policer delete failure */
+	atomic64_t v4_destroy_policer_fail_acl;		/* No of v4 Policer destroy failure due to unbind issue */
+	atomic64_t v4_destroy_policer_conn_not_found;	/* No of v4 Policer delete failure due to connection not found */
+	atomic64_t v4_create_policer_fail_mem;			/* No of v4 Policer create failure due to OOM */
+	atomic64_t v4_create_policer_fail_conn;			/* No of v4 Policer create failure due to invalid parameters */
+	atomic64_t v4_create_policer_fail_collision;		/* No of v4 Policer create failure due to connection already exist */
+	atomic64_t v4_unknown_policer_interface;		/* No of v4 Policer create failure due to invalid IF */
+	atomic64_t v4_create_policer_noedit_flow;		/* No of v4 request for non edit policer mode */
+	atomic64_t v4_create_policer_fail_invalid_rx_if;	/* No of v4 Policer create failure due to invalid Rx IF */
+	atomic64_t v4_create_policer_fail_invalid_tx_if;	/* No of v4 Policer create failure due to invalid Tx IF */
+	atomic64_t v4_create_policer_fail_invalid_rx_port;	/* No of v4 Policer create failure due to invalid Rx Port */
+	atomic64_t v4_create_policer_fail_invalid_tx_port;	/* No of v4 Policer create failure due to invalid Tx Port */
+
 	atomic64_t v4_create_fse_success;		/* No of v4 FSE rule create failure */
 	atomic64_t v4_create_fse_fail;		/* No of v4 FSE rule create failure */
 	atomic64_t v4_destroy_fse_success;		/* No of v4 FSE rule destroy failure */
@@ -171,6 +188,23 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_rfs_fail_invalid_rx_port;	/* No of v6 RFS create failure due to invalid Rx Port */
 	atomic64_t v6_create_rfs_fail_invalid_tx_port;	/* No of v6 RFS create failure due to invalid Tx Port */
 	atomic64_t v6_create_rfs_noedit_flow;		/* No of v6 request for non edit rfs mode */
+
+	atomic64_t v6_create_policer_req;		/* No of v6 Policer create requests */
+	atomic64_t v6_create_policer_fail;		/* No of v6 Policer create failure */
+	atomic64_t v6_create_policer_fail_acl;		/* No of v6 Policer create failure due to bind issue */
+	atomic64_t v6_destroy_policer_req;		/* No of v6 Policer delete requests */
+	atomic64_t v6_destroy_policer_fail;		/* No of v6 Policer delete failure */
+	atomic64_t v6_destroy_policer_fail_acl;		/* No of v6 Policer destroy failure due to unbind issue */
+	atomic64_t v6_destroy_policer_conn_not_found;	/* No of v6 Policer delete failure due to connection not found */
+	atomic64_t v6_create_policer_fail_mem;			/* No of v6 Policer create failure due to OOM */
+	atomic64_t v6_create_policer_fail_conn;			/* No of v6 Policer create failure due to invalid parameters */
+	atomic64_t v6_create_policer_fail_collision;		/* No of v6 Policer create failure due to connection already exist */
+	atomic64_t v6_unknown_policer_interface;		/* No of v6 Policer create failure due to invalid IF */
+	atomic64_t v6_create_policer_noedit_flow;		/* No of v6 request for non edit Policer mode */
+	atomic64_t v6_create_policer_fail_invalid_rx_if;	/* No of v6 Policer create failure due to invalid Rx IF */
+	atomic64_t v6_create_policer_fail_invalid_tx_if;	/* No of v6 Policer create failure due to invalid Tx IF */
+	atomic64_t v6_create_policer_fail_invalid_rx_port;	/* No of v6 Policer create failure due to invalid Rx Port */
+	atomic64_t v6_create_policer_fail_invalid_tx_port;	/* No of v6 Policer create failure due to invalid Tx Port */
 
 	atomic64_t v6_create_fse_success;		/* No of v6 FSE rule create failure */
 	atomic64_t v6_create_fse_fail;		/* No of v6 FSE rule create failure */

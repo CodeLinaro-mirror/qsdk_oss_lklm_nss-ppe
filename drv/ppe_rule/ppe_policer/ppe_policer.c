@@ -255,7 +255,7 @@ ppe_policer_ret_t ppe_policer_destroy(struct ppe_policer_destroy_info *destroy)
 	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
 
 	/* Port Policer */
-	if (destroy->policer_type) {
+	if (destroy->policer_type == PPE_POLICER_TYPE_PORT) {
 		spin_lock_bh(&g_policer->lock);
 		if (!ppe_policer_port_destroy(destroy)) {
 			spin_unlock_bh(&g_policer->lock);
@@ -298,12 +298,7 @@ static bool ppe_policer_create_port(struct ppe_policer_create_info *info)
 
 	if (ppe_drv_port_check_policer_support(dev)) {
 		ppe_policer_warn("%p: Policer already configured for dev(%s)\n", info, info->name);
-		return false;
-	}
-
-	port_info->dev = dev_get_by_name(&init_net, info->name);
-	if (!port_info->dev) {
-		ppe_policer_warn("%p: failed to find valid src for dev %s\n", info, port_info->dev->name);
+		dev_put(dev);
 		return false;
 	}
 
@@ -311,9 +306,11 @@ static bool ppe_policer_create_port(struct ppe_policer_create_info *info)
 	if (!pol) {
 		ppe_policer_stats_inc(&g_policer->stats.acl_create_fail_oom);
 		ppe_policer_warn("%p: failed to allocate acl memory: %p", g_policer, info);
+		dev_put(dev);
 		return PPE_POLICER_PORT_RET_CREATE_FAIL_OOM;
 	}
 
+	port_info->dev = dev;
 	port_info->meter_en = cinfo->meter_enable;
 	port_info->colour_mode = cinfo->colour_aware;
 	port_info->coupling_flag = cinfo->couple_enable;
@@ -352,6 +349,7 @@ static bool ppe_policer_create_port(struct ppe_policer_create_info *info)
 	if (!pol->drv_ctx.port_ctx) {
 		ppe_policer_stats_inc(&g_policer->stats.create_port_policer_failed);
 		ppe_policer_warn("Unable to create port policer in HW for dev\n");
+		dev_put(dev);
 		ppe_policer_free(pol);
 		return false;
 	}
@@ -363,6 +361,7 @@ static bool ppe_policer_create_port(struct ppe_policer_create_info *info)
 	kref_init(&pol->kref_cnt);
 
 	ppe_drv_port_set_policer_support(dev);
+	dev_put(dev);
 
 	ppe_policer_stats_inc(&g_policer->stats.create_port_policer_success);
 	ppe_policer_trace("Created PORT policer successfully\n");
@@ -437,6 +436,8 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 		return false;
 	}
 
+	ppe_drv_policer_user2hw_id_map(pol->drv_ctx.acl_ctx, info->rule_id);
+
 	list_add(&pol->list, &g_policer->acl_active_rules);
 
 	info->ret = PPE_POLICER_SUCCESS;
@@ -485,7 +486,7 @@ ppe_policer_ret_t ppe_policer_create(struct ppe_policer_create_info *create)
 	/*
 	 * Port Policer
 	 */
-	if (create->policer_type) {
+	if (create->policer_type == PPE_POLICER_TYPE_PORT) {
 		spin_lock_bh(&g_policer->lock);
 		if (!ppe_policer_create_port(create)) {
 			spin_unlock_bh(&g_policer->lock);

@@ -242,6 +242,21 @@ uint16_t ppe_drv_policer_get_port_id(struct ppe_drv_policer_port *ctx)
 EXPORT_SYMBOL(ppe_drv_policer_get_port_id);
 
 /*
+ * ppe_drv_policer_user2hw_id_map()
+ *	User to HW mapping configuration
+ */
+void ppe_drv_policer_user2hw_id_map(struct ppe_drv_policer_acl *acl_ctx, int index)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_policer_ctx *ctx = p->pol_ctx;
+
+	spin_lock_bh(&p->lock);
+	ctx->user2hw_map[index] = acl_ctx->acl_index;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_policer_user2hw_id_map);
+
+/*
  * ppe_drv_policer_user2hw_id()
  *	Get policer HW index from user policer context
  */

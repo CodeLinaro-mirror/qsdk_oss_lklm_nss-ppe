@@ -44,6 +44,7 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_EDIT_REDIR_CORE2",	  /* PPE RFS service code for core2 for Active VP */
 	"PPE_DRV_SC_EDIT_REDIR_CORE3",	  /* PPE RFS service code for core3 for Active VP */
 	"PPE_DRV_SC_VP_RPS",			/* PPE RPS service code for VP flow */
+	"PPE_DRV_SC_NOEDIT_ACL_POLICER",	/* PPE policer service code for noedit */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 
@@ -142,6 +143,23 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_create_rfs_fail_invalid_tx_port",	/* No of v4 RFS create failure due to invalid Tx Port */
 	"v4_create_rfs_noedit_rule",	/* No of v4 rfs non edit rule create */
 
+	"v4_create_policer_req",			/* No of v4 Policer create requests */
+	"v4_create_policer_fail",			/* No of v4 Policer create failure */
+	"v4_create_policer_fail_acl",			/* No of v4 Policer create failure due to bind issue */
+	"v4_destroy_policer_req",			/* No of v4 Policer delete requests */
+	"v4_destroy_policer_fail",			/* No of v4 Policer delete failure */
+	"v4_destroy_policer_fail_acl",			/* No of v4 Policer delete failure due to unbind issue */
+	"v4_destroy_policer_conn_not_found",		/* No of v4 Policer delete failure due to connection not found */
+	"v4_create_policer_fail_mem",			/* No of v4 Policer create failure due to OOM */
+	"v4_create_policer_fail_conn",			/* No of v4 Policer create failure due to invalid parameters */
+	"v4_create_policer_fail_collision",		/* No of v4 Policer create failure due to connection already exist */
+	"v4_unknown_policer_interface",			/* No of v4 Policer create failure due to invalid IF */
+	"v4_create_policer_noedit_rule",		/* No of v4 Policer non edit rule create */
+	"v4_create_policer_fail_invalid_rx_if",		/* No of v4 Policer create failure due to invalid Rx IF */
+	"v4_create_policer_fail_invalid_tx_if",		/* No of v4 Policer create failure due to invalid Tx IF */
+	"v4_create_policer_fail_invalid_rx_port",	/* No of v4 Policer create failure due to invalid Rx Port */
+	"v4_create_policer_fail_invalid_tx_port",	/* No of v4 Policer create failure due to invalid Tx Port */
+
 	"v4_create_fse_success",			/* No of v4 Wi-Fi FSE rule create failure */
 	"v4_create_fse_fail",			/* No of v4 Wi-Fi FSE rule create failure */
 	"v4_destroy_fse_success",			/* No of v4 Wi-Fi FSE rule delete failure */
@@ -183,6 +201,23 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_rfs_fail_invalid_rx_port",	/* No of v6 RFS create failure due to invalid Rx Port */
 	"v6_create_rfs_fail_invalid_tx_port",	/* No of v6 RFS create failure due to invalid Tx Port */
 	"v6_create_rfs_noedit_rule",	/* No of v6 rfs non edit rule create */
+
+	"v6_create_policer_req",			/* No of v6 Policer create requests */
+	"v6_create_policer_fail",			/* No of v6 Policer create failure */
+	"v6_create_policer_fail_acl",			/* No of v6 Policer create failure due to bind issue */
+	"v6_destroy_policer_req",			/* No of v6 Policer delete requests */
+	"v6_destroy_policer_fail",			/* No of v6 Policer delete failure */
+	"v6_destroy_policer_fail_acl",			/* No of v6 Policer delete failure due to unbind issue */
+	"v6_destroy_policer_conn_not_found",		/* No of v6 Policer delete failure due to connection not found */
+	"v6_create_policer_fail_mem",			/* No of v6 Policer create failure due to OOM */
+	"v6_create_policer_fail_conn",			/* No of v6 Policer create failure due to invalid parameters */
+	"v6_create_policer_fail_collision",		/* No of v6 Policer create failure due to connection already exist */
+	"v6_unknown_policer_interface",			/* No of v6 Policer create failure due to invalid IF */
+	"v6_create_policer_noedit_rule",		/* No of v6 Policer non edit rule create */
+	"v6_create_policer_fail_invalid_rx_if",		/* No of v6 Policer create failure due to invalid Rx IF */
+	"v6_create_policer_fail_invalid_tx_if",		/* No of v6 Policer create failure due to invalid Tx IF */
+	"v6_create_policer_fail_invalid_rx_port",	/* No of v6 Policer create failure due to invalid Rx Port */
+	"v6_create_policer_fail_invalid_tx_port",	/* No of v6 Policer create failure due to invalid Tx Port */
 
 	"v6_create_fse_success",			/* No of v4 Wi-Fi FSE rule create failure */
 	"v6_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
@@ -236,6 +271,23 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_create_rfs_fail_invalid_rx_port",	/* No of v4 RFS create failure due to invalid Rx Port */
 	"v4_tun_create_rfs_fail_invalid_tx_port",	/* No of v4 RFS create failure due to invalid Tx Port */
 
+	"v4_tun_create_policer_req",			/* No of v4 Policer create requests */
+	"v4_tun_create_policer_fail",			/* No of v4 Policer create failure */
+	"v4_tun_create_policer_fail_acl",		/* No of v4 Policer create failure due to ACL bind */
+	"v4_tun_destroy_policer_req",			/* No of v4 Policer delete requests */
+	"v4_tun_destroy_policer_fail",			/* No of v4 Policer delete failure */
+	"v4_tun_destroy_policer_fail_acl",			/* No of v4 Policer delete failure due to unbind issue */
+	"v4_tun_destroy_policer_conn_not_found",		/* No of v4 Policer delete failure due to connection not found */
+	"v4_tun_create_policer_fail_mem",			/* No of v4 Policer create failure due to OOM */
+	"v4_tun_create_policer_fail_conn",			/* No of v4 Policer create failure due to invalid parameters */
+	"v4_tun_create_policer_fail_collision",		/* No of v4 Policer create failure due to connection already exist */
+	"v4_tun_unknown_policer_interface",			/* No of v4 Policer create failure due to invalid IF */
+	"v4_tun_create_policer_noedit_rule",		/* No of v4 Policer non edit rule create */
+	"v4_tun_create_policer_fail_invalid_rx_if",		/* No of v4 Policer create failure due to invalid Rx IF */
+	"v4_tun_create_policer_fail_invalid_tx_if",		/* No of v4 Policer create failure due to invalid Tx IF */
+	"v4_tun_create_policer_fail_invalid_rx_port",	/* No of v4 Policer create failure due to invalid Rx Port */
+	"v4_tun_create_policer_fail_invalid_tx_port",	/* No of v4 Policer create failure due to invalid Tx Port */
+
 	"v4_tun_create_fse_success",			/* No of v6 Wi-Fi FSE rule create failure */
 	"v4_tun_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
 	"v4_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
@@ -282,6 +334,23 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_destroy_fse_success",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v6_tun_destroy_fse_fail",			/* No of v6 Wi-Fi FSE rule delete failure */
 	"v6_create_offload_disabled",		/* No of v6 rules where offload is disabled */
+
+	"v6_tun_create_policer_req",			/* No of v6 Policer create requests */
+	"v6_tun_create_policer_fail",			/* No of v6 Policer create failure */
+	"v6_tun_create_policer_fail_acl",		/* No of v6 Policer create failure due to acl bind issue */
+	"v6_tun_destroy_policer_req",			/* No of v6 Policer delete requests */
+	"v6_tun_destroy_policer_fail",			/* No of v6 Policer delete failure */
+	"v6_tun_destroy_policer_fail_acl",			/* No of v6 Policer delete failure due to unbind issue */
+	"v6_tun_destroy_policer_conn_not_found",		/* No of v6 Policer delete failure due to connection not found */
+	"v6_tun_create_policer_fail_mem",			/* No of v6 Policer create failure due to OOM */
+	"v6_tun_create_policer_fail_conn",			/* No of v6 Policer create failure due to invalid parameters */
+	"v6_tun_create_policer_fail_collision",		/* No of v6 Policer create failure due to connection already exist */
+	"v6_tun_unknown_policer_interface",			/* No of v6 Policer create failure due to invalid IF */
+	"v6_tun_create_policer_noedit_rule",		/* No of v6 Policer non edit rule create */
+	"v6_tun_create_policer_fail_invalid_rx_if",		/* No of v6 Policer create failure due to invalid Rx IF */
+	"v6_tun_create_policer_fail_invalid_tx_if",		/* No of v6 Policer create failure due to invalid Tx IF */
+	"v6_tun_create_policer_fail_invalid_rx_port",	/* No of v6 Policer create failure due to invalid Rx Port */
+	"v6_tun_create_policer_fail_invalid_tx_port",	/* No of v6 Policer create failure due to invalid Tx Port */
 
 	"v6_tun_create_fail_acl",		/* No of v6 create failure due to ACL linking */
 	"v6_tun_destroy_fail_acl",		/* No of v6 delete failure due to ACL unlinking */
@@ -373,7 +442,7 @@ static int ppe_drv_stats_policer_show(struct seq_file *m, void __attribute__((un
 	memcpy(policer_stats, &p->stats.policer_stats, sizeof(struct ppe_drv_stats_policer));
 	spin_unlock_bh(&p->lock);
 
-	seq_puts(m, "\nPPE ACL stats:\n\n");
+	seq_puts(m, "\nPPE policer stats:\n\n");
 	stats_shadow = policer_stats;
 	for (i = 0; i < sizeof(struct ppe_drv_stats_policer) / sizeof(uint64_t); i++) {
 		seq_printf(m, "\t\t [%s]:  %llu\n", ppe_drv_stats_policer_str[i], stats_shadow[i]);
@@ -463,7 +532,7 @@ static int ppe_drv_conn_stats_sc_show(struct seq_file *m, void __attribute__((un
 
 	seq_puts(m, "\nPPE_sc_stats:\n\n");
 	stats_shadow = (uint64_t *)sc_stats;
-	for (i = 0; i <= PPE_DRV_SC_VP_RPS; i++) {
+	for (i = 0; i <= PPE_DRV_SC_NOEDIT_ACL_POLICER; i++) {
 		uint64_t stats1 = *stats_shadow++;
 		uint64_t stats2 = *stats_shadow++;
 		uint64_t stats3 = *stats_shadow++;
