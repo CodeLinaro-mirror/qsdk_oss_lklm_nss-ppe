@@ -54,6 +54,7 @@ typedef enum ppe_mirror_ret {
 
 	/** Capture Core */
 	PPE_MIRROR_RET_INVALID_CAPTURE_CORE,			/**< Invalid capture core request. */
+	PPE_MIRROR_RET_FAIL_EN_CAPTURE_CORE,			/**< Failed to enable capture core. */
 } ppe_mirror_ret_t;
 
 /**

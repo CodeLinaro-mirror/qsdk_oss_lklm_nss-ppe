@@ -89,7 +89,9 @@ struct ppe_drv_acl {
 	struct ppe_drv_acl_sc acl_sc[PPE_DRV_SC_FLOW_ACL_MAX];	/* List of service codes for flow/policer binding. */
 	ppe_drv_acl_flow_callback_t flow_add_cb;		/* Flow add callback when flow needs to be attached with ACL. */
 	ppe_drv_acl_flow_callback_t flow_del_cb;		/* Flow delete callback when flow needs to detached from ACL. */
-	void *flow_app_data;
+	void *flow_app_data;					/* Flow callback app data. */
+	ppe_drv_acl_mirror_core_select_cb_t mirror_core_cb;	/* DP callback to select core for mirrored packets. */
+	void *mirror_core_app_data;				/* Mirror core selection callback app data. */
 };
 
 /*

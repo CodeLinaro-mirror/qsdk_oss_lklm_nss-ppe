@@ -399,6 +399,10 @@ static int32_t ppe_mirror_test_parse_cmd(char *cmd)
 		return PPE_MIRROR_TEST_CMD_UNMAP_ACL;
 	}
 
+	if (!strcmp(cmd, "capture_core")) {
+		return PPE_MIRROR_TEST_CMD_ENABLE_CORE;
+	}
+
 	printk("Invalid string:%s in command\n", cmd);
 	return PPE_MIRROR_TEST_CMD_UNKNOWN;
 }
@@ -444,6 +448,40 @@ bool ppe_mirror_test_parse_unmap_cmd(char *buffer)
 }
 
 /*
+ * ppe_mirror_test_parse_core_select_cmd()
+ *	Parse core select command.
+ */
+bool ppe_mirror_test_parse_core_select_cmd(char *buffer)
+{
+	char *param, *value;
+	uint16_t core_id;
+	ppe_mirror_ret_t ret;
+
+	param = ppe_mirror_test_read_value(&buffer, &value, "=");
+	if (!param || !value)
+		return false;
+
+	if (strcmp(param, "core_id")) {
+		printk("Invalid param %s in core select command, valid param is: core_id\n", param);
+		return false;
+	}
+
+	ppe_mirror_test_convert_char_to_u16(value, &core_id);
+
+	/*
+	 * Here call the mirror module core selection API.
+	 */
+	ret = ppe_mirror_enable_capture_core((uint8_t)core_id);
+
+	if (ret != PPE_MIRROR_RET_SUCCESS) {
+		printk("Failed to select the core ret %d\n", ret);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_mirror_test_destroy_dev()
  *	Destroy the test group.
  */
@@ -485,6 +523,9 @@ bool ppe_mirror_test_destroy_dev(char *buffer)
 	 * if yes, do not allow to delete them.
 	 */
 	group_id = ppe_mirror_test_group_get_group_id(group_dev);
+
+	if (group_id == PPE_MIRROR_TEST_INVALID_GROUP_ID)
+		return false;
 
 	for (i = 0; i < PPE_MIRROR_TEST_ACL_MAX; i++) {
 		if (ppe_mirror_test_acl_arr[i] == group_id) {
@@ -668,8 +709,19 @@ static int ppe_mirror_test_config_params(struct ctl_table *ctl, int write, void 
 		break;
 	}
 
+	case PPE_MIRROR_TEST_CMD_ENABLE_CORE:
+	{
+		if (!ppe_mirror_test_parse_core_select_cmd(buffer)) {
+			printk("Error in parsing core select cmd\n");
+			goto err;
+		}
+
+		printk("Core selected successfully\n");
+		break;
+	}
+
 	default:
-		printk("Invalid input in command, Valid are : create, destroy, map, unmap\n");
+		printk("Invalid input in command, Valid are : create, destroy, map, unmap, capture_core\n");
 	}
 
 err:
@@ -720,6 +772,37 @@ struct ctl_table_header *ppe_mirror_test_procfs_register(void)
 }
 
 /*
+ * ppe_mirror_test_cleanup()
+ *	Unmap the exsisting mappings and destroy
+ *	net devices created by the test module.
+ */
+void ppe_mirror_test_cleanup(void)
+{
+	uint16_t i, j;
+	struct net_device *dev;
+
+	for (i = 0; i < 8; i++) {
+		if (!ppe_mirror_test_group[i].is_valid)
+			continue;
+
+		dev = ppe_mirror_test_group[i].dev;
+
+		/*
+		 * Delete all mappings on this group dev.
+		 */
+		for (j = 0; j < PPE_MIRROR_TEST_ACL_MAX; j++) {
+			if (ppe_mirror_test_acl_arr[j] == i) {
+				printk("Deleting the mapping for dev %s ACL %d\n", dev->name, j);
+				ppe_mirror_acl_mapping_delete(j);
+				ppe_mirror_test_acl_arr[j] = PPE_MIRROR_TEST_INVALID_GROUP_ID;
+			}
+		}
+
+		ppe_mirror_test_dev_destroy(dev);
+	}
+}
+
+/*
  * ppe_mirror_test_procfs_unregister()
  *	Unregister the procfs entry.
  */
@@ -760,6 +843,11 @@ module_init(ppe_mirror_test_module_init);
  */
 static void __exit ppe_mirror_test_module_exit(void)
 {
+	/*
+	 * Cleanup the mirror mappings and destroy the net devices
+	 * before unloading the module.
+	 */
+	ppe_mirror_test_cleanup();
         ppe_mirror_test_procfs_unregister(ppe_mirror_test_procfs_header);
         printk("PPE-TEST module unloaded");
 }

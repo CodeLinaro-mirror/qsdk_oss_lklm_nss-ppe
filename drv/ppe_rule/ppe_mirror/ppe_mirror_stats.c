@@ -50,7 +50,10 @@ static const char *ppe_mirror_stats_cmn_str[] = {
 	"mirror_acl_mapping_del_fail_rule_not_found",	/* ACL mapping delete fail rule not found. */
 	"mirror_acl_mapping_del_fail_map_not_found",	/* ACL mapping delete fail mapping not found. */
 	"mirror_acl_mapping_del_fail_group_not_found",	/* ACL mapping delete fail group not found. */
+	"mirror_acl_process_mapping_invalid",		/* ACL mapping not found for mirrored packets. */
+	"mirror_acl_process_group_invalid",		/* ACL group info not found for mirrored packets. */
 	"mirror_acl_mapping_invalid_capture_core",	/* ACL mapppng invalid capture core selection. */
+	"mirror_acl_mapping_fail_en_capture_core",	/* ACL mapping failed to enable capture core. */
 };
 
 /*
@@ -145,6 +148,8 @@ static int ppe_mirror_acl_stats_show(struct seq_file *m, void __attribute__((unu
 		if (shadow_mapping->is_valid) {
 			seq_printf(m, "\t\tACL id : %u\n", shadow_mapping->acl_rule_id);
 			seq_printf(m, "\t\t\tIs mapping valid : %d\n", shadow_mapping->is_valid);
+			seq_printf(m, "\t\t\tGroup Dev : %s\n", shadow_mapping->group_info->group_dev->name);
+			seq_printf(m, "\t\t\tGroup Dev ifindex : %d\n", shadow_mapping->group_info->group_dev->ifindex);
 
 			mirror_stats_shadow = (uint64_t *)(&shadow_mapping->acl_stats);
 			seq_printf(m, "\n\t\t\t Mirrored packets ACL stats:\n");
