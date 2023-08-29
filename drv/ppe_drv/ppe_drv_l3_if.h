@@ -77,5 +77,7 @@ struct ppe_drv_l3_if *ppe_drv_l3_if_alloc(enum ppe_drv_l3_if_type type);
 struct ppe_drv_l3_if *ppe_drv_l3_if_ref(struct ppe_drv_l3_if *l3_if);
 bool ppe_drv_l3_if_deref(struct ppe_drv_l3_if *l3_if);
 
+bool ppe_drv_l3_if_disable_ttl_dec(struct ppe_drv_l3_if *l3_if, bool disable_ttl_dec);
+
 void ppe_drv_l3_if_entries_free(struct ppe_drv_l3_if *l3_if);
 struct ppe_drv_l3_if *ppe_drv_l3_if_entries_alloc(void);

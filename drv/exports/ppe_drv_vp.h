@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -54,11 +54,12 @@ ppe_drv_ret_t ppe_drv_vp_deinit(struct ppe_drv_iface *iface);
  * @param[in] core_mask Core mask to be used for RFS.
  * @param[in] usr_type PPE VP user type.
  * @param[in] net_dev_type to indicate the netdev type of VP.
+ * @param[in] disable_ttl_dec to bypass TTL decrement.
  *
  * @return
  * Status of the initialization operation.
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type);
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type, bool disable_ttl_dec);
 
 /** @} */ /* end_addtogroup ppe_drv_vp_subsystem */
 
