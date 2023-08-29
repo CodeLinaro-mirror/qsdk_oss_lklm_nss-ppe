@@ -18,6 +18,7 @@
 #include <ppe_drv_public.h>
 #include <ppe_acl.h>
 #include "ppe_acl_stats.h"
+#include "ppe_acl_dump.h"
 
 /*
  * Max number of ACL rules IDs.
@@ -109,8 +110,11 @@ struct ppe_acl {
 	void *app_data;				/* app data to be passed in the cb. */
 
 	/*
-	 * TODO: Other book keeping info for stats and ACL dump.
+	 * Book keeping info for stats and ACL dump.
 	 */
+	bool slice_type[PPE_DRV_ACL_SLICE_TYPE_MAX];
+	uint8_t slice_cnt;
+	struct ppe_acl_rule rule;
 };
 
 /*
@@ -145,6 +149,11 @@ struct ppe_acl_base {
 	 * Active list of ACL rules
 	 */
 	struct list_head active_rules;			/* List of active ACL rules */
+
+	/*
+	 * Device ID for ACL dump character device.
+	 */
+	int acl_dump_major_id;
 };
 
 extern struct ppe_acl_base ppe_acl_gbl;

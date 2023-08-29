@@ -99,8 +99,8 @@ static int16_t ppe_drv_acl_list_id_get(ppe_drv_acl_ipo_t type)
 	}
 
 	for (id = list_id_start; id <= list_id_end; id++) {
-		if (acl->list_id[id] == PPE_DRV_ACL_LIST_ID_FREE) {
-			acl->list_id[id] = PPE_DRV_ACL_LIST_ID_USED;
+		if (acl->list_id[id].list_id_state == PPE_DRV_ACL_LIST_ID_FREE) {
+			acl->list_id[id].list_id_state = PPE_DRV_ACL_LIST_ID_USED;
 			return id;
 		}
 	}
@@ -116,7 +116,8 @@ static void ppe_drv_acl_list_id_return(int16_t id)
 {
 	struct ppe_drv_acl *acl = ppe_drv_gbl.acl;
 
-	acl->list_id[id] = PPE_DRV_ACL_LIST_ID_FREE;
+	acl->list_id[id].ctx = NULL;
+	acl->list_id[id].list_id_state = PPE_DRV_ACL_LIST_ID_FREE;
 }
 
 /*
@@ -890,6 +891,49 @@ static void ppe_drv_acl_src_get(struct ppe_drv_acl_rule *info, fal_acl_bind_obj_
 }
 
 /*
+ * ppe_drv_acl_stats_update()
+ *	Update hardware match counters.
+ */
+void ppe_drv_acl_stats_update(struct ppe_drv_acl_ctx *ctx)
+{
+	sw_error_t err;
+	uint32_t delta_pkts;
+	uint32_t delta_bytes;
+	fal_entry_counter_t acl_cntrs = {0};
+
+	ppe_drv_trace("%p: updating acl stats", ctx);
+
+	err = fal_acl_counter_get(PPE_DRV_SWITCH_ID, ctx->fal_rule.hw_info.hw_rule_id, &acl_cntrs);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to get stats for acl rule id: %u",
+				ctx, ctx->fal_rule.hw_info.hw_rule_id);
+		return;
+	}
+
+	/*
+	 * PPE stats are not clear on read, so we need to calculate the delta
+	 * between the latest counters and previously read counters.
+	 */
+	delta_pkts = PPE_DRV_ACL_PKT_CNTR_ROLLOVER(acl_cntrs.matched_pkts - ctx->pre_cntrs.matched_pkts);
+	delta_bytes = PPE_DRV_ACL_BYTE_CNTR_ROLLOVER(acl_cntrs.matched_bytes - ctx->pre_cntrs.matched_bytes);
+
+	/*
+	 * Update hardware stats packet and byte counters
+	 */
+	ppe_drv_acl_stats_add(ctx, delta_pkts, delta_bytes);
+
+	/*
+	 * Store current stats for next iteration.
+	 */
+	ctx->pre_cntrs.matched_pkts = acl_cntrs.matched_pkts;
+	ctx->pre_cntrs.matched_bytes = acl_cntrs.matched_bytes;
+
+	ppe_drv_trace("%p: updating stats for acl [index:%u] - curr pkt:%u byte:%llu",
+			ctx, ctx->fal_rule.hw_info.hw_rule_id,
+			acl_cntrs.matched_pkts, acl_cntrs.matched_bytes);
+}
+
+/*
  * ppe_drv_acl_sc_return()
  *	Return a flow ACL sc.
  */
@@ -984,6 +1028,22 @@ bool ppe_drv_acl_process_skbuff(struct ppe_drv_acl_metadata *acl_info, struct sk
 	return cb(app_data, skb, (void*)acl_info);
 }
 EXPORT_SYMBOL(ppe_drv_acl_process_skbuff);
+
+/*
+ * ppe_drv_acl_hw_info_get()
+ *	Return hardware rule information for an ACL rule.
+ */
+void ppe_drv_acl_hw_info_get(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_acl_hw_info *hw_info)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	hw_info->hw_rule_id = ctx->fal_rule.hw_info.hw_rule_id;
+	hw_info->hw_list_id = ctx->fal_rule.hw_info.hw_list_id;
+	hw_info->hw_num_slices = ctx->fal_rule.hw_info.hw_list_id;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_hw_info_get);
 
 /*
  * ppe_drv_acl_configure()
@@ -1144,6 +1204,7 @@ struct ppe_drv_acl_ctx *ppe_drv_acl_alloc(ppe_drv_acl_ipo_t type, uint8_t num_sl
 	ctx->list_id = list_id;
 	ctx->req_slices = num_slices;
 	ctx->total_slices = ppe_drv_acl_get_total_slices(num_slices);
+	acl->list_id[list_id].ctx = ctx;
 	spin_unlock_bh(&p->lock);
 	ppe_drv_info("%p: acl rule allocated ctx: %p, list_id: %d, num_slices: %d, pri: %d, type: %d",
 			acl, ctx, list_id, num_slices, pri, type);
@@ -1165,6 +1226,21 @@ fail:
 	return NULL;
 }
 EXPORT_SYMBOL(ppe_drv_acl_alloc);
+
+/*
+ * ppe_drv_acl_get_hw_stats
+ *	Get the hardware stats for an ACL rule.
+ */
+void ppe_drv_acl_get_hw_stats(struct ppe_drv_acl_ctx *ctx, uint64_t *pkts, uint64_t *bytes)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	*pkts = atomic64_read(&ctx->total_pkts);
+	*bytes = atomic64_read(&ctx->total_bytes);
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_get_hw_stats);
 
 /*
  * ppe_drv_acl_get_hw_index
@@ -1391,7 +1467,7 @@ struct ppe_drv_acl *ppe_drv_acl_entries_alloc(void)
 	 * Initialize list_id.
 	 */
 	for (id = 0; id < PPE_DRV_ACL_LIST_ID_MAX; id++) {
-		acl->list_id[id] = PPE_DRV_ACL_LIST_ID_FREE;
+		acl->list_id[id].list_id_state = PPE_DRV_ACL_LIST_ID_FREE;
 	}
 
 	/*
