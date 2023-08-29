@@ -39,6 +39,7 @@ struct ppe_drv_vp_info {
 	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
 	uint32_t usr_type;		/**< VP user type */
 	uint32_t net_dev_type;		/**< VP netdev type */
+	bool disable_ttl_dec;		/**< Disable TTL decrement operation in PPE VP */
 };
 
 /**

@@ -25,6 +25,8 @@
 #include <linux/module.h>
 #include <ppe_drv_port.h>
 
+#define PPE_VP_FLAG_DISABLE_TTL_DEC	0x1	/**< Set = TTL Decrement disabled, clear = TTL Decrement enabled */
+
 /**
  * @addtogroup ppe_vp_public_subsystem
  * @{
@@ -136,6 +138,7 @@ struct ppe_vp_ai {
 	ppe_vp_stats_callback_t stats_cb;
 					/**< VP src callback */
 	uint32_t xmit_port;		/**< Physical port number */
+	uint32_t flags;			/**< PPE VP flags */
 	uint8_t queue_num;		/**< Queue number */
 	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
 	ppe_vp_status_t status;		/**< VP return status */

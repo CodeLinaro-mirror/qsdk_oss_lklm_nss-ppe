@@ -346,6 +346,7 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	info.xmit_port = vpai->xmit_port;
 	info.net_dev_type = vpai->net_dev_type;
 	info.usr_type = vpai->usr_type;
+	info.disable_ttl_dec = !!(vpai->flags & PPE_VP_FLAG_DISABLE_TTL_DEC);
 
 	/*
 	 * Initialize the virtual port in PPE.
