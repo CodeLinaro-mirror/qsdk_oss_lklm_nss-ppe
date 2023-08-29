@@ -473,7 +473,7 @@ static int nss_ppe_lag_changemtu_event(struct netdev_notifier_info *info)
 	ret = ppe_drv_iface_mtu_set(entry->iface, bond_dev->mtu);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		nss_ppe_lag_warn("%px: failed to set mtu, error = %d \n", bond_dev, ret);
-		return NOTIFY_DONE;
+		return NOTIFY_BAD;
 	}
 
 	spin_lock(&nss_ppe_lag_spinlock);

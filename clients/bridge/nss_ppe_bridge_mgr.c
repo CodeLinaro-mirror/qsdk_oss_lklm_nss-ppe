@@ -561,7 +561,7 @@ static int nss_ppe_bridge_mgr_changemtu_event(struct netdev_notifier_info *info)
 	ret = ppe_drv_iface_mtu_set(b_pvt->iface, dev->mtu);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		nss_ppe_bridge_mgr_warn("%px: failed to set mtu, error = %d \n", dev, ret);
-		return NOTIFY_DONE;
+		return NOTIFY_BAD;
 	}
 
 	spin_lock(&br_mgr_ctx.lock);
