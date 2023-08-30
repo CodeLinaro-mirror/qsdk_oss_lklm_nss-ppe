@@ -1169,6 +1169,7 @@ struct ppe_drv_acl_ctx *ppe_drv_acl_alloc(ppe_drv_acl_ipo_t type, uint8_t num_sl
 	}
 
 	spin_lock_bh(&p->lock);
+nxt_list:
 	list_id = ppe_drv_acl_list_id_get(type);
 	if (list_id < 0) {
 		ppe_drv_stats_inc(&p->stats.acl_stats.list_id_full);
@@ -1178,10 +1179,28 @@ struct ppe_drv_acl_ctx *ppe_drv_acl_alloc(ppe_drv_acl_ipo_t type, uint8_t num_sl
 
 	error = fal_acl_list_creat(PPE_DRV_SWITCH_ID, list_id, pri);
 	if (error != SW_OK) {
+		/*
+		 * If this list id is already used by other sub system, mark it
+		 * as reserved and try next one.
+		 *
+		 * The ones marked as RESERVED are permanently marked as reserved,
+		 * this is expected to go away once all the subsystems move to NSS
+		 * acl model.
+		 *
+		 * TODO: print the reserved LIST IDs through debugfs.
+		 */
+		if (error == SW_ALREADY_EXIST) {
+			ppe_drv_warn("%p: list ID: %d already in use!\n", acl, list_id);
+			acl->list_id[list_id].list_id_state = PPE_DRV_ACL_LIST_ID_RESERVED;
+			goto nxt_list;
+		}
+
+		/*
+		 * for other errors, flag the failure.
+		 */
 		ppe_drv_stats_inc(&p->stats.acl_stats.list_create_fail);
 		ppe_drv_warn("List creation failed for list_id: %d, pri: %d with error: %d\n",
 				list_id, pri, error);
-		ppe_drv_acl_list_id_return(list_id);
 		goto fail;
 	}
 
