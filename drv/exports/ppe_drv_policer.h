@@ -177,9 +177,9 @@ struct ppe_drv_policer_rule_create_port_info {
 	bool meter_mode;		/**< 0 - RFC2698, 1 - Rest RFC */
 	bool meter_unit;		/**< 0 - byte based, 1 - packet based */
 	uint8_t token_unit;		/**< 0 - bits 1 - frame */
-	uint16_t cbs;			/**< Committed burst size */
+	uint32_t cbs;			/**< Committed burst size */
 	uint32_t cir;			/**< Commiitted Information rate */
-	uint16_t ebs;			/**< Exceeded burst size */
+	uint32_t ebs;			/**< Exceeded burst size */
 	uint32_t eir;			/**< Exceeded Information rate */
 
 	struct ppe_drv_policer_rule_create_action action; /* Action for traffic */

@@ -374,8 +374,8 @@ struct ppe_drv_policer_port *ppe_drv_policer_port_create(struct ppe_drv_policer_
 	pol_cfg.meter_unit = pinfo->meter_unit; 	/* 0 - byte based; 1 - packet based */
 
 	if (pinfo->meter_unit == 0) {
-		pol_cfg.cir = (pinfo->cir * 8) / 1000;		/* kbits for byte based */
-		pol_cfg.eir = (pinfo->eir * 8) / 1000;		/* kbits for byte based */
+		pol_cfg.cir = (pinfo->cir / 1000) * 8;		/* kbits for byte based */
+		pol_cfg.eir = (pinfo->eir / 1000) * 8;		/* kbits for byte based */
 	} else if (pinfo->meter_unit == 1) {
 		pol_cfg.cir = pinfo->cir;
 		pol_cfg.eir = pinfo->eir;

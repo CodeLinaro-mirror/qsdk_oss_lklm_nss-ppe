@@ -101,7 +101,7 @@ struct ppe_policer_action_info {
  */
 struct ppe_policer_config {
 	uint32_t committed_rate;			/**< Packets per second or bits per second */
-	uint16_t committed_burst_size;			/**< Bytes */
+	uint32_t committed_burst_size;			/**< Bytes */
 	uint32_t peak_rate;				/**< Packets per second or bits per second */
 	uint32_t peak_burst_size;			/**< bytes */
 	uint32_t action_flags;				/**< Action flags */
