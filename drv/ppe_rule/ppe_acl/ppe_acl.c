@@ -1512,6 +1512,11 @@ static bool ppe_acl_rule_cmn_fill(struct ppe_acl *acl, struct ppe_acl_rule *rule
 			? rule->cmn.pri : PPE_ACL_PRI_NOMINAL;
 	acl->ipo = !!(rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_OUTER_HDR_MATCH)
 			? PPE_DRV_ACL_PREIPO : PPE_DRV_ACL_IPO;
+	info->cmn.qos_res_pre = !!(acl->ipo == PPE_DRV_ACL_PREIPO)
+			? PPE_DRV_PORT_QOS_RES_PREC_4 : PPE_DRV_PORT_QOS_RES_PREC_5;
+	info->cmn.qos_res_pre = !!(rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_FLOW_QOS_OVERRIDE)
+			? PPE_DRV_PORT_QOS_RES_PREC_7 : info->cmn.qos_res_pre;
+	acl->qos_res_pre = info->cmn.qos_res_pre;
 
 	ppe_acl_info("%p: cmn_flags: 0x%x setting post_routing: %d, pri: %d \n",
 			acl, rule->cmn.cmn_flags, info->cmn.post_routing_en, acl->pri);

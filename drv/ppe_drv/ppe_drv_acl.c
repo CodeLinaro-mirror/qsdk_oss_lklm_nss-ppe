@@ -686,6 +686,7 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 	 * Fill the common fields.
 	 */
 	fal_rule->post_routing = info->cmn.post_routing_en;
+	fal_rule->qos_res_prec = info->cmn.qos_res_pre;
 
 	return true;
 }
