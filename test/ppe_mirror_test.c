@@ -788,7 +788,7 @@ void ppe_mirror_test_cleanup(void)
 		dev = ppe_mirror_test_group[i].dev;
 
 		/*
-		 * Delete all mappings on this group dev.
+		 * Delete all the mappings on this group dev.
 		 */
 		for (j = 0; j < PPE_MIRROR_TEST_ACL_MAX; j++) {
 			if (ppe_mirror_test_acl_arr[j] == i) {
@@ -844,12 +844,12 @@ module_init(ppe_mirror_test_module_init);
 static void __exit ppe_mirror_test_module_exit(void)
 {
 	/*
-	 * Cleanup the mirror mappings and destroy the net devices
+	 * Cleanup the mirror mappings and destroy the netdevices
 	 * before unloading the module.
 	 */
 	ppe_mirror_test_cleanup();
-        ppe_mirror_test_procfs_unregister(ppe_mirror_test_procfs_header);
-        printk("PPE-TEST module unloaded");
+	ppe_mirror_test_procfs_unregister(ppe_mirror_test_procfs_header);
+	printk("PPE-TEST module unloaded");
 }
 module_exit(ppe_mirror_test_module_exit);
 

@@ -244,7 +244,6 @@ struct ppe_drv {
 	struct ppe_drv_tun_decap_xlate_rule *decap_xlate_rules; 	/* PPE Tunnel decap xlate rules */
 	struct ppe_drv_sc *sc;				/* Memory for PPE Service Code table */
 	struct ppe_drv_cc *cc;				/* Memory for PPE CPU Code table */
-	struct ppe_drv_acl_tbl *acl_tbl;		/* Memory for PPE ACL based actions table */
 	struct ppe_drv_acl *acl;			/* Memory for PPE ACL entries */
 	struct dentry *dentry;				/* Debugfs entry */
 	struct dentry *stats_dentry;				/* Debugfs entry */

@@ -28,6 +28,7 @@ struct ppe_acl_stats_cmn {
 	atomic64_t acl_destroy_req;			/* ACL destroy requests. */
 	atomic64_t acl_free_req;			/* ACL rule free. */
 	atomic64_t rule_id_invalid;			/* ACL rule ID invalid. */
+	atomic64_t acl_hw_index_invalid;		/* ACL hardware index invalid. */
 	atomic64_t rule_not_found;			/* ACL rule not found based on rule ID. */
 	atomic64_t acl_flow_add_invalid_id;		/* ACL flow add rule ID invalid. */
 	atomic64_t acl_flow_add_invalid_sc;		/* ACL flow add rule SC invalid. */

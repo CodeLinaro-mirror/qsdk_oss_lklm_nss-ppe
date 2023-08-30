@@ -42,7 +42,6 @@ static const char *ppe_mirror_stats_cmn_str[] = {
 	"mirror_acl_active_mapping_count",		/* ACL active mapping cound. */
 	"mirror_acl_mapping_add_fail_invalid_rule_id",	/* ACL mapping add fail invalid rule ID. */
 	"mirror_acl_mapping_add_fail_rule_not_found",	/* ACL mapping add fail rule not found. */
-	"mirror_acl_mapping_add_fail_cb_reg",		/* ACL mapping add fail cb reg. */
 	"mirror_acl_mapping_add_map_exist",		/* ACL mapping add fail mapping exists. */
 	"mirror_acl_mapping_add_map_nomem",		/* ACL mapping add fail no memory. */
 	"mirror_acl_mapping_add_invalid_group_info",	/* ACL mapping add fail group invalid. */
@@ -132,18 +131,18 @@ static int ppe_mirror_acl_stats_show(struct seq_file *m, void __attribute__((unu
 	uint64_t *mirror_stats_shadow;
 	int idx, i;
 
-	mirror_mapping = (struct ppe_mirror_acl_map *)kmalloc(sizeof(struct ppe_mirror_acl_map) * PPE_MIRROR_ACL_RULE_MAX, GFP_KERNEL);
+	mirror_mapping = (struct ppe_mirror_acl_map *)kmalloc(sizeof(struct ppe_mirror_acl_map) * PPE_MIRROR_ACL_HW_INDEX_MAX, GFP_KERNEL);
 	if (!mirror_mapping) {
 		ppe_mirror_warn("Error in allocating ACL stats\n");
 		return -ENOMEM;
 	}
 
 	spin_lock_bh(&mirror_g->lock);
-	memcpy(mirror_mapping, &mirror_g->mirror_mapping, sizeof(struct ppe_mirror_acl_map) * PPE_MIRROR_ACL_RULE_MAX);
+	memcpy(mirror_mapping, &mirror_g->mirror_mapping, sizeof(struct ppe_mirror_acl_map) * PPE_MIRROR_ACL_HW_INDEX_MAX);
 	spin_unlock_bh(&mirror_g->lock);
 
 	seq_puts(m, "\nPPE MIRROR ACL stats:\n\n");
-	for (idx = 0; idx < PPE_MIRROR_ACL_RULE_MAX; idx++) {
+	for (idx = 0; idx < PPE_MIRROR_ACL_HW_INDEX_MAX; idx++) {
 		struct ppe_mirror_acl_map *shadow_mapping = (struct ppe_mirror_acl_map *)(mirror_mapping + idx);
 		if (shadow_mapping->is_valid) {
 			seq_printf(m, "\t\tACL id : %u\n", shadow_mapping->acl_rule_id);

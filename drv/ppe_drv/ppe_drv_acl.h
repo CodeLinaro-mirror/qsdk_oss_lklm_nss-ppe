@@ -36,7 +36,8 @@
  */
 #define PPE_DRV_ACL_RULE_ID 1
 #define PPE_DRV_ACL_RULE_NR 1
-#define PPE_DRV_ACL_HW_INDEX_MAX 1024
+
+#define PPE_DRV_ACL_INVALID_HW_INDEX 0xFFFF
 
 /*
  * ACL stats update macros.
@@ -117,23 +118,11 @@ struct ppe_drv_acl {
 	struct ppe_drv_acl_sc acl_sc[PPE_DRV_SC_FLOW_ACL_MAX];	/* List of service codes for flow/policer binding. */
 	ppe_drv_acl_flow_callback_t flow_add_cb;		/* Flow add callback when flow needs to be attached with ACL. */
 	ppe_drv_acl_flow_callback_t flow_del_cb;		/* Flow delete callback when flow needs to detached from ACL. */
-	void *flow_app_data;					/* Flow callback app data. */
+	ppe_drv_acl_rule_callback_t acl_rule_cb;		/* ACL rule callback to process the packet tagged with ACL ID. */
 	ppe_drv_acl_mirror_core_select_cb_t mirror_core_cb;	/* DP callback to select core for mirrored packets. */
+	void *flow_app_data;					/* Flow callback app data. */
+	void *acl_rule_app_data;				/* ACL rule callback app data. */
 	void *mirror_core_app_data;				/* Mirror core selection callback app data. */
-};
-
-/*
- * ppe_drv_acl_tbl
- *	PPE drv ACL based actions framework
- *	TODO: move it to the PPE RULE module.
- */
-struct ppe_drv_acl_tbl {
-	uint16_t hw_index;				/* Hardware ACL index */
-	uint16_t acl_id;				/* Software ACL id */
-	void *app_data;					/* App data */
-	void *mirror_app_data;				/* Mirror callback App data */
-	ppe_drv_acl_process_callback_t cb;		/* Per ACL index registered callback */
-	ppe_drv_acl_process_callback_t mirror_cb;	/* Per ACL mirrored registered callback */
 };
 
 /*
@@ -151,6 +140,4 @@ static inline void ppe_drv_acl_stats_add(struct ppe_drv_acl_ctx *ctx, uint32_t p
  */
 void ppe_drv_acl_stats_update(struct ppe_drv_acl_ctx *ctx);
 void ppe_drv_acl_entries_free(struct ppe_drv_acl *acl);
-void ppe_drv_acl_tbl_entries_free(struct ppe_drv_acl_tbl *acl_tbl);
 struct ppe_drv_acl *ppe_drv_acl_entries_alloc(void);
-struct ppe_drv_acl_tbl *ppe_drv_acl_tbl_entries_alloc(void);

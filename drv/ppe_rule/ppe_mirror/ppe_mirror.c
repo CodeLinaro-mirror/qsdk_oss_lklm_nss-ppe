@@ -31,15 +31,16 @@ struct ppe_mirror gbl_ppe_mirror = {0};
 bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 {
 	struct ppe_mirror *mirror_g = &gbl_ppe_mirror;
-	struct ppe_drv_acl_metadata *acl_info = (struct ppe_drv_acl_metadata *)info;
+	struct ppe_drv_cc_metadata *cc_info = (struct ppe_drv_cc_metadata *)info;
 	struct ppe_mirror_acl_map *mirror_mapping = NULL;
 	struct ppe_mirror_group_info *group_info = NULL;
 	struct ppe_mirror_acl_stats *acl_stats, *acl_group_stats = NULL;
-	uint16_t acl_id = acl_info->acl_id;
+	uint16_t hw_index = cc_info->acl_hw_index;
+	uint16_t acl_id;
 	ppe_mirror_capture_callback_t cb = NULL;
 
 	spin_lock_bh(&mirror_g->lock);
-	mirror_mapping = &mirror_g->mirror_mapping[acl_id];
+	mirror_mapping = &mirror_g->mirror_mapping[hw_index];
 
 	/*
 	 * Check if ACL mirror mapping is valid or not.
@@ -47,18 +48,19 @@ bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 	if (!mirror_mapping->is_valid) {
 		spin_unlock_bh(&mirror_g->lock);
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mirror_process_mapping_invalid);
-		ppe_mirror_warn("%p: Mirror mapping is not valid for ACL id %d\n", mirror_g, acl_id);
+		ppe_mirror_warn("%p: Mirror mapping is not valid for hw index %d\n", mirror_g, hw_index);
 		return false;
 	}
 
 	/*
 	 * Get the group information from the mapping.
 	 */
+	acl_id = mirror_mapping->acl_rule_id;
 	group_info = mirror_mapping->group_info;
 	if (!group_info) {
 		spin_unlock_bh(&mirror_g->lock);
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mirror_process_group_invalid);
-		ppe_mirror_warn("%p: ACL id is not associated with a group %d\n", mirror_g, acl_id);
+		ppe_mirror_warn("%p: ACL id is not associated with a group %d hw index %d\n", mirror_g, acl_id, hw_index);
 		return false;
 	}
 
@@ -69,7 +71,7 @@ bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 	cb = group_info->cb;
 	if (!cb) {
 		spin_unlock_bh(&mirror_g->lock);
-		ppe_mirror_warn("%p: Callback is not associated with a group %d\n", mirror_g, acl_id);
+		ppe_mirror_warn("%p: Callback is not associated with a group %d hw index %d\n", mirror_g, acl_id, hw_index);
 		return false;
 	}
 
@@ -124,8 +126,8 @@ static inline struct ppe_mirror_group_info *ppe_mirror_group_alloc(void)
  *	Create one if it does not exists.
  */
 ppe_mirror_ret_t ppe_mirror_get_group_info_for_acl(struct ppe_mirror *mirror_g,
-							struct ppe_mirror_acl_mapping_info *map_info,
-							struct ppe_mirror_group_info **group_info)
+						   struct ppe_mirror_acl_mapping_info *map_info,
+						   struct ppe_mirror_group_info **group_info)
 {
 	struct ppe_mirror_group_info *cur_group = NULL;
 	uint16_t acl_id = map_info->acl_id;
@@ -189,7 +191,7 @@ create_group:
  * ppe_mirror_acl_destroy_mapping_table()
  *	Destroy mapping table for an ACL index.
  */
-static ppe_mirror_ret_t ppe_mirror_destroy_mapping_tbl(uint16_t acl_id)
+static ppe_mirror_ret_t ppe_mirror_destroy_mapping_tbl(uint16_t hw_index)
 {
 	struct ppe_mirror *mirror_g = &gbl_ppe_mirror;
 	struct ppe_mirror_acl_map *mirror_map = NULL;
@@ -201,10 +203,10 @@ static ppe_mirror_ret_t ppe_mirror_destroy_mapping_tbl(uint16_t acl_id)
 	/*
 	 * Check if this ACL rule has a valid mapping or not.
 	 */
-	mirror_map = &mirror_g->mirror_mapping[acl_id];
+	mirror_map = &mirror_g->mirror_mapping[hw_index];
 	if (!mirror_map->is_valid) {
 		spin_unlock_bh(&mirror_g->lock);
-		ppe_mirror_warn("%p: Mirror mapping is not valid for ACL index %d\n", mirror_g, acl_id);
+		ppe_mirror_warn("%p: Mirror mapping is not valid for hw index %d\n", mirror_g, hw_index);
 		ret = PPE_MIRROR_RET_DELETE_FAIL_MAPPING_NOT_FOUND;
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_del_fail_map_not_found);
 		goto fail;
@@ -217,7 +219,7 @@ static ppe_mirror_ret_t ppe_mirror_destroy_mapping_tbl(uint16_t acl_id)
 	group_info = mirror_map->group_info;
 	if (!group_info) {
 		spin_unlock_bh(&mirror_g->lock);
-		ppe_mirror_warn("%p:No mirror group found for ACL index %d\n", mirror_g, acl_id);
+		ppe_mirror_warn("%p:No mirror group found for hw index %d\n", mirror_g, hw_index);
 		ret = PPE_MIRROR_RET_DELETE_FAIL_GROUP_NOT_FOUND;
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_del_fail_group_not_found);
 		goto fail;
@@ -242,7 +244,7 @@ static ppe_mirror_ret_t ppe_mirror_destroy_mapping_tbl(uint16_t acl_id)
 	mirror_map->is_valid = false;
 
 	spin_unlock_bh(&mirror_g->lock);
-	ppe_mirror_info("%p:Released the mirror mapping for ACL index %d\n", mirror_g, acl_id);
+	ppe_mirror_info("%p:Released the mirror mapping for hw_index %d\n", mirror_g, hw_index);
 	return PPE_MIRROR_RET_SUCCESS;
 
 fail:
@@ -253,7 +255,7 @@ fail:
  * ppe_mirror_acl_configure_mapping_table()
  *	Configure mapping table for an ACL ID.
  */
-static ppe_mirror_ret_t ppe_mirror_configure_mapping_tbl(struct ppe_mirror_acl_mapping_info *map_info)
+static ppe_mirror_ret_t ppe_mirror_configure_mapping_tbl(struct ppe_mirror_acl_mapping_info *map_info, uint16_t hw_index)
 {
 	struct ppe_mirror *mirror_g = &gbl_ppe_mirror;
 	struct ppe_mirror_acl_map *mirror_map = NULL;
@@ -266,10 +268,10 @@ static ppe_mirror_ret_t ppe_mirror_configure_mapping_tbl(struct ppe_mirror_acl_m
 	/*
 	 * Check if this ACL rule has a valid mapping or not.
 	 */
-	mirror_map = &mirror_g->mirror_mapping[acl_id];
+	mirror_map = &mirror_g->mirror_mapping[hw_index];
 	if (mirror_map->is_valid) {
 		spin_unlock_bh(&mirror_g->lock);
-		ppe_mirror_warn("%p: Mirror mapping is already valid for ACL index %d\n", mirror_g, acl_id);
+		ppe_mirror_warn("%p: Mirror mapping is already valid for ACL index %d hw index %d\n", mirror_g, acl_id, hw_index);
 		ret = PPE_MIRROR_RET_ADD_FAIL_MAPPING_EXIST;
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_add_map_exist);
 		goto fail;
@@ -283,7 +285,7 @@ static ppe_mirror_ret_t ppe_mirror_configure_mapping_tbl(struct ppe_mirror_acl_m
 	ret = ppe_mirror_get_group_info_for_acl(mirror_g, map_info, &group_info);
 	if (ret != PPE_MIRROR_RET_SUCCESS) {
 		spin_unlock_bh(&mirror_g->lock);
-		ppe_mirror_warn("%p: Failed to get group info for ACL %d ret %d\n", mirror_g, acl_id, ret);
+		ppe_mirror_warn("%p: Failed to get group info for ACL %d hw index %d ret %d\n", mirror_g, acl_id, hw_index, ret);
 		goto fail;
 	}
 
@@ -297,7 +299,7 @@ static ppe_mirror_ret_t ppe_mirror_configure_mapping_tbl(struct ppe_mirror_acl_m
 
 	spin_unlock_bh(&mirror_g->lock);
 
-	ppe_mirror_info("%p:Establish the mirror mapping for ACL index %d\n", mirror_g, acl_id);
+	ppe_mirror_info("%p:Establish the mirror mapping for ACL index %d hw index %d\n", mirror_g, acl_id, hw_index);
 	return PPE_MIRROR_RET_SUCCESS;
 
 fail:
@@ -328,19 +330,9 @@ ppe_mirror_ret_t ppe_mirror_acl_mapping_delete(uint16_t acl_id)
 	}
 
 	/*
-	 * Destroy the mirror mapping for the ACL index.
+	 * Get the Hardware index and destroy the mirror mapping for the that index.
 	 */
-	ret = ppe_mirror_destroy_mapping_tbl(acl_id);
-	if (ret != PPE_MIRROR_RET_SUCCESS) {
-		ppe_mirror_warn("%p: Failed to destroy mapping table ACL id %d ret %d\n", mirror_g, acl_id, ret);
-		goto fail;
-	}
-
-	/*
-	 * Get the hardware index for the ACL id and dereference the
-	 * ACL rule.
-	 */
-	hw_index = ppe_acl_rule_get_and_deref_hw_idx(acl_id);
+	hw_index = ppe_acl_rule_get_acl_hw_index(acl_id);
 	if (hw_index == PPE_ACL_INVALID_HW_INDEX) {
 		ppe_mirror_warn("%p: Invalid hw index for ACL rule delete %d", mirror_g, acl_id);
 		ret = PPE_MIRROR_RET_DELETE_FAIL_MAPPING_INVALID_ACL_RULE;
@@ -348,12 +340,18 @@ ppe_mirror_ret_t ppe_mirror_acl_mapping_delete(uint16_t acl_id)
 		goto fail;
 	}
 
-	/*
-	 * Unregister the callback for the ACL index.
-	 */
-	ppe_drv_acl_unregister_mirror_cb(hw_index);
+	ret = ppe_mirror_destroy_mapping_tbl(hw_index);
+	if (ret != PPE_MIRROR_RET_SUCCESS) {
+		ppe_mirror_warn("%p: Failed to destroy mapping table ACL id %d hw index %d ret %d\n", mirror_g, acl_id, hw_index, ret);
+		goto fail;
+	}
 
-	ppe_mirror_info("%p: Mapping deleted succesfully for ACL rule %d\n", mirror_g, acl_id);
+	/*
+	 * Deref the ACL rule.
+	 */
+	ppe_acl_rule_deref(acl_id);
+
+	ppe_mirror_info("%p: Mapping deleted succesfully for ACL rule %d hw index %d\n", mirror_g, acl_id, hw_index);
 	ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_del_success);
 	ppe_mirror_stats_dec(&mirror_g->stats.acl_mapping_count);
 	return PPE_MIRROR_RET_SUCCESS;
@@ -384,50 +382,48 @@ ppe_mirror_ret_t ppe_mirror_acl_mapping_add(struct ppe_mirror_acl_mapping_info *
 		ppe_mirror_warn("%p: Invalid rule id received for ACL rule mapping %d", mirror_g, mapping_info->acl_id);
 		ret = PPE_MIRROR_RET_ADD_FAIL_MAPPING_INVALID_ACL_ID;
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_add_fail_invalid_rule_id);
-		goto fail3;
+		goto fail2;
 	}
 
 	/*
-	 * Get the hardware index for the ACL id and take one reference for the
-	 * ACL rule.
+	 * Get the hardware index for the ACL id.
 	 */
-	hw_index = ppe_acl_rule_get_and_ref_hw_idx(acl_id);
+	hw_index = ppe_acl_rule_get_acl_hw_index(acl_id);
 	if (hw_index == PPE_ACL_INVALID_HW_INDEX) {
 		ppe_mirror_warn("%p: ACL Rule not found for ACL rule mapping %d", mirror_g, mapping_info->acl_id);
 		ret = PPE_MIRROR_RET_ADD_FAIL_MAPPING_INVALID_ACL_RULE;
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_add_fail_rule_not_found);
-		goto fail3;
+		goto fail2;
+	}
+
+	/*
+	 * ref : while mapping an ACL rule.
+	 * deref : while unmapping an ACL rule.
+	 */
+	if (!ppe_acl_rule_ref(acl_id)) {
+		ppe_mirror_warn("%p: ACL Rule not found for ACL rule mapping %d", mirror_g, mapping_info->acl_id);
+		ret = PPE_MIRROR_RET_ADD_FAIL_MAPPING_INVALID_ACL_RULE;
+		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_add_fail_rule_not_found);
+		goto fail2;
 	}
 
 	/*
 	 * Establish the mirror mapping for this ACL ID.
 	 */
-	ret = ppe_mirror_configure_mapping_tbl(mapping_info);
+	ret = ppe_mirror_configure_mapping_tbl(mapping_info, hw_index);
 	if (ret != PPE_MIRROR_RET_SUCCESS) {
 		ppe_mirror_warn("%p: Failed to configure mapping table ACL id %d ret %d\n", mirror_g, acl_id, ret);
-		goto fail2;
-	}
-
-	/*
-	 * Register the callback for the ACL index.
-	 */
-	if (!ppe_drv_acl_register_mirror_cb(hw_index, acl_id, ppe_mirror_process_skb, NULL)) {
-		ppe_mirror_warn("%p: Failed to register callback for ACL id %d\n", mirror_g, acl_id);
-		ret = PPE_MIRROR_RET_ADD_FAIL_MAPPING_CB_REG;
-		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_add_fail_cb_reg);
 		goto fail1;
 	}
 
-	ppe_mirror_info("%p: Mapping added succesfully for ACL rule %d\n", mirror_g, acl_id);
+	ppe_mirror_info("%p: Mapping added succesfully for ACL rule %d hw index %d\n", mirror_g, acl_id, hw_index);
 	ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_add_success);
 	ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_count);
 	return PPE_MIRROR_RET_SUCCESS;
 
 fail1:
-	ppe_mirror_destroy_mapping_tbl(acl_id);
+	ppe_acl_rule_deref(acl_id);
 fail2:
-	ppe_acl_rule_get_and_deref_hw_idx(acl_id);
-fail3:
 	ppe_mirror_warn("%p: Failed to add a mapping for an ACL rule %d Ret %d\n", mirror_g, acl_id, ret);
 	return ret;
 }
@@ -466,6 +462,12 @@ EXPORT_SYMBOL(ppe_mirror_enable_capture_core);
 void ppe_mirror_deinit(void)
 {
 	ppe_mirror_stats_debugfs_exit();
+
+	/*
+	 * Unregister CPU code callbacks for ingress and egress mirrored packets.
+	 */
+	ppe_drv_cc_unregister_cb(PPE_DRV_CC_CPU_CODE_EG_MIRROR);
+	ppe_drv_cc_unregister_cb(PPE_DRV_CC_CPU_CODE_IN_MIRROR);
 }
 
 /*
@@ -481,6 +483,12 @@ void ppe_mirror_init(struct dentry *d_rule)
 	 * Initialize active group list
 	 */
 	INIT_LIST_HEAD(&mirror_g->active_mirror_groups);
+
+	/*
+	 * Register CPU code callbacks for ingress and egress mirrored packets.
+	 */
+	ppe_drv_cc_register_cb(PPE_DRV_CC_CPU_CODE_EG_MIRROR, ppe_mirror_process_skb, NULL);
+	ppe_drv_cc_register_cb(PPE_DRV_CC_CPU_CODE_IN_MIRROR, ppe_mirror_process_skb, NULL);
 
 	/*
 	 * Create debugfs directories/files.

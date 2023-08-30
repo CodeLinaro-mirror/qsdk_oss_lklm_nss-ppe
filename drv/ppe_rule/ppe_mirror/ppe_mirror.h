@@ -58,8 +58,9 @@
 #endif
 #endif
 
-#define PPE_MIRROR_ACL_RULE_MAX	2048
-#define PPE_MIRROR_CAPTURE_CORE_MAX 4
+#define PPE_MIRROR_ACL_RULE_MAX		2048
+#define PPE_MIRROR_ACL_HW_INDEX_MAX	1024
+#define PPE_MIRROR_CAPTURE_CORE_MAX	NR_CPUS
 
 /*
  * ppe_mirror_group_info
@@ -91,7 +92,7 @@ struct ppe_mirror_acl_map {
  */
 struct ppe_mirror {
 	spinlock_t lock;							/* PPE Mirror lock */
-	struct ppe_mirror_acl_map mirror_mapping[PPE_MIRROR_ACL_RULE_MAX];	/* PPE Mirror map to ACL index */
+	struct ppe_mirror_acl_map mirror_mapping[PPE_MIRROR_ACL_HW_INDEX_MAX];	/* PPE Mirror map to ACL hardware index */
 	struct ppe_mirror_cmn_stats stats;					/* PPE Mirror Common statistics */
 	struct dentry *dentry;							/* Debugfs root entry */
 	struct list_head active_mirror_groups;					/* List for active mirror groups */

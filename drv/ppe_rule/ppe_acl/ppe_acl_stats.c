@@ -27,6 +27,7 @@ static const char *ppe_acl_stats_cmn_str[] = {
 	"acl_destroy_req",			/* ACL destroy requests. */
 	"acl_free_req",				/* ACL rule free. */
 	"rule_id_invalid",			/* ACL rule ID invalid. */
+	"hw_index_invalid",			/* ACL rule Hardware index invalid. */
 	"rule_not_found", 			/* ACL rule not found based on rule ID. */
         "acl_flow_add_invalid_id",		/* ACL flow add rule ID invalid. */
 	"acl_flow_add_invalid_sc",		/* ACL flow add rule SC invalid. */
