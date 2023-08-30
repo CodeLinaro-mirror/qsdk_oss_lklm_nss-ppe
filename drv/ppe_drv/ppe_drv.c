@@ -58,6 +58,35 @@ int ppe_drv_get_vxlan_dport(void)
 }
 
 /*
+ * ppe_drv_is_mht_dev()
+ *	API to get MHT switch interface flag
+ */
+bool ppe_drv_is_mht_dev(struct net_device *dev)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_iface *iface = NULL;
+
+	spin_lock_bh(&p->lock);
+	iface = ppe_drv_iface_get_by_dev_internal(dev);
+	if (!iface) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: No valid PPE interface for dev", dev);
+		return false;
+	}
+
+	/*
+	 * Get the MHT switch flag on the interface.
+	 */
+	if (!(iface->flags & PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID)) {
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+	spin_unlock_bh(&p->lock);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_is_mht_dev);
+
+/*
  * ppe_drv_hw_stats_sync()
  *	Sync PPE HW stats
  */
