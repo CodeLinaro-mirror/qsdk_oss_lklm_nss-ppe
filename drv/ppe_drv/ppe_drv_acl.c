@@ -852,6 +852,11 @@ static bool ppe_drv_acl_action_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 		ppe_drv_trace("%p: action mirroring", ctx);
 	}
 
+	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_METADATA_EN) {
+		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_METADATA_EN);
+		ppe_drv_trace("%p: ACL metadata mirroring", ctx);
+	}
+
 	return true;
 }
 

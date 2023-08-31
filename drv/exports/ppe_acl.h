@@ -102,6 +102,7 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_CMN_FLAG_OUTER_HDR_MATCH		0x00000100	/**< Rule common flag to enable match on tunnel outer headers fields. */
 #define PPE_ACL_RULE_CMN_FLAG_NO_RULEID			0x00000200	/**< Rule common flag to indicate rule ID is not passed by caller. */
 #define PPE_ACL_RULE_CMN_FLAG_FLOW_QOS_OVERRIDE		0x00000400	/**< Rule common flag to override QOS parameters from flow entry. */
+#define PPE_ACL_RULE_CMN_FLAG_METADATA_EN		0x00000800	/**< Rule common flag to indicate METADATA ENABLE in ACL rule. */
 
 /*
  * ACL rule flag general - applicable for each rule separately.

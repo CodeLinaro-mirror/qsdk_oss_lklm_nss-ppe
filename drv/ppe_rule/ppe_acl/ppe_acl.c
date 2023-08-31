@@ -1518,6 +1518,11 @@ static bool ppe_acl_rule_cmn_fill(struct ppe_acl *acl, struct ppe_acl_rule *rule
 			? PPE_DRV_PORT_QOS_RES_PREC_7 : info->cmn.qos_res_pre;
 	acl->qos_res_pre = info->cmn.qos_res_pre;
 
+
+	if (rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_METADATA_EN) {
+		info->action.flags |= PPE_DRV_ACL_ACTION_FLAG_METADATA_EN;
+	}
+
 	ppe_acl_info("%p: cmn_flags: 0x%x setting post_routing: %d, pri: %d \n",
 			acl, rule->cmn.cmn_flags, info->cmn.post_routing_en, acl->pri);
 	return true;

@@ -108,6 +108,7 @@
 #define PPE_DRV_ACL_ACTION_FLAG_STAG_FMT_TAGGED	0x00020000	/**< ACL action for S-tag format change. */
 #define PPE_DRV_ACL_ACTION_FLAG_CTAG_FMT_TAGGED	0x00040000	/**< ACL action for C-tag format change. */
 #define PPE_DRV_ACL_ACTION_FLAG_MIRROR_EN	0x00080000	/**< ACL action for mirroring. */
+#define PPE_DRV_ACL_ACTION_FLAG_METADATA_EN	0x00100000	/**< ACL action with Metadata enable. */
 
 struct ppe_drv_acl_ctx;
 
