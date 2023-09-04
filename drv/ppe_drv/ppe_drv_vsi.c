@@ -480,7 +480,7 @@ struct ppe_drv_vsi *ppe_drv_vsi_alloc(enum ppe_drv_vsi_type type)
 	 * Enable learning
 	 */
 	addr_cfg.lrn_en = 1;
-	addr_cfg.action = FAL_MAC_RDT_TO_CPU;
+	addr_cfg.action = FAL_MAC_FRWRD;
 	if (fal_vsi_newaddr_lrn_set(PPE_DRV_SWITCH_ID, vsi->index, &addr_cfg) != SW_OK) {
 		ppe_drv_l3_if_deref(l3_if);
 		ppe_drv_vsi_deref(vsi);
