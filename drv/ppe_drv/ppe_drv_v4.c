@@ -2803,6 +2803,7 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	if (ppe_drv_fse_interface_check(pcf)) {
 		if (!ppe_drv_v4_fse_flow_configure(create, pcf, pcr)) {
 			ppe_drv_stats_inc(&comm_stats->v4_create_fse_fail);
+			ret = PPE_DRV_RET_FAILURE_FLOW_CONFIGURE_FAIL;
 			ppe_drv_warn("%p: FSE flow table programming failed\n", p);
 			goto fail;
 		}
