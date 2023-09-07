@@ -397,10 +397,10 @@ ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, st
 
 	if (ppe_drv_iface_l3_if_get(top_rx_iface)) {
 		ppe_drv_trace("%p: Using top rx iface's l3 if for dev: %s\n", top_rx_iface, top_rx_iface->dev->name);
-		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, top_rx_iface);
+		ppe_drv_v4_conn_flow_in_l3_if_set_and_ref(pcf, top_rx_iface);
 	} else {
 		ppe_drv_trace("%p: Using port's l3 if for dev: %s\n", top_rx_iface, top_rx_iface->dev->name);
-		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, if_rx);
+		ppe_drv_v4_conn_flow_in_l3_if_set_and_ref(pcf, if_rx);
 	}
 
 	/*
@@ -497,10 +497,10 @@ ppe_drv_ret_t ppe_drv_v4_policer_conn_fill(struct ppe_drv_v4_rule_create *create
 
 	if (ppe_drv_iface_l3_if_get(top_rx_iface)) {
 		ppe_drv_trace("%p: Using top rx iface's l3 if for dev: %s\n", top_rx_iface, top_rx_iface->dev->name);
-		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, top_rx_iface);
+		ppe_drv_v4_conn_flow_in_l3_if_set_and_ref(pcf, top_rx_iface);
 	} else {
 		ppe_drv_trace("%p: Using port's l3 if for dev: %s\n", top_rx_iface, top_rx_iface->dev->name);
-		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, if_rx);
+		ppe_drv_v4_conn_flow_in_l3_if_set_and_ref(pcf, if_rx);
 	}
 
 	/*
@@ -673,7 +673,7 @@ static bool ppe_drv_v4_conn_flow_igmac_del(struct ppe_drv_v4_conn_flow *pcf)
 	 * If no ingress L3_IF, no mac address deletion needed.
 	 */
 	in_l3_if = ppe_drv_v4_conn_flow_in_l3_if_get(pcf);
-	if (!in_l3_if) {
+	if (!in_l3_if || !in_l3_if->l3) {
 		return true;
 	}
 
@@ -1126,6 +1126,11 @@ void ppe_drv_v4_if_walk_release(struct ppe_drv_v4_conn_flow *pcf)
 		ppe_drv_iface_deref_internal(pcf->in_port_if);
 		pcf->in_port_if = NULL;
 	}
+
+	if (pcf->in_l3_if) {
+		ppe_drv_iface_deref_internal(pcf->in_l3_if);
+		pcf->in_l3_if = NULL;
+	}
 }
 
 /*
@@ -1286,10 +1291,10 @@ bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_
 	 */
 	if ((top_rx_iface) && (ppe_drv_iface_l3_if_get(top_rx_iface))) {
 		ppe_drv_trace("Using top rx iface's l3 if");
-		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, top_rx_iface);
+		ppe_drv_v4_conn_flow_in_l3_if_set_and_ref(pcf, top_rx_iface);
 	} else {
 		ppe_drv_trace("Using port's l3 if");
-		ppe_drv_v4_conn_flow_in_l3_if_set(pcf, rx_port_if);
+		ppe_drv_v4_conn_flow_in_l3_if_set_and_ref(pcf, rx_port_if);
 	}
 
 	return true;
@@ -2042,6 +2047,11 @@ ppe_drv_ret_t ppe_drv_v4_rfs_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 		pcf->eg_port_if = NULL;
 	}
 
+	if (pcf->in_l3_if) {
+		ppe_drv_iface_deref_internal(pcf->in_l3_if);
+		pcf->in_l3_if = NULL;
+	}
+
 	spin_unlock_bh(&p->lock);
 
 	/*
@@ -2100,6 +2110,11 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 			ppe_drv_iface_deref_internal(pcf->eg_port_if);
 			pcf->eg_port_if = NULL;
 		}
+
+		if (pcf->in_l3_if) {
+			ppe_drv_iface_deref_internal(pcf->in_l3_if);
+			pcf->in_l3_if = NULL;
+		}
 	}
 
 	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
@@ -2118,6 +2133,11 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 		if (pcr->eg_port_if) {
 			ppe_drv_iface_deref_internal(pcr->eg_port_if);
 			pcr->eg_port_if = NULL;
+		}
+
+		if (pcr->in_l3_if) {
+			ppe_drv_iface_deref_internal(pcr->in_l3_if);
+			pcr->in_l3_if = NULL;
 		}
 	}
 
@@ -2338,6 +2358,7 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_create(struct ppe_drv_v4_rule_create *crea
 		ppe_drv_warn("%p: create collision detected: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
 		ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
+		ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
 		return ret;
@@ -2355,6 +2376,7 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_create(struct ppe_drv_v4_rule_create *crea
 			ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
 			ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
 			ppe_drv_iface_deref_internal(pcf->eg_port_if);
+			ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
 			spin_unlock_bh(&p->lock);
 			kfree(cn);
 			ppe_drv_v4_conn_flow_flags_clear(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);
@@ -2454,6 +2476,7 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 		ppe_drv_warn("%p: create collision detected: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
 		ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
+		ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
 		return ret;
@@ -2471,6 +2494,7 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
 		ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
 		ppe_drv_iface_deref_internal(pcf->eg_port_if);
+		ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
 		ppe_drv_v4_conn_flow_flags_clear(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_ASSIST);
