@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -81,7 +81,8 @@ typedef enum nss_dtlsmgr_status {
 	NSS_DTLSMGR_INVALID_VERSION,	/**< Invalid DTLS version. */
 	NSS_DTLSMGR_INVALID_ALGO,	/**< Invalid algorithm. */
 	NSS_DTLSMGR_INVALID_KEYLEN,	/**< Invalid key length for cipher/auth. */
-	NSS_DTLSMGR_FAIL_VP_ALLOC	/**< Failed to alloca VP for dtls. */
+	NSS_DTLSMGR_FAIL_VP_ALLOC,	/**< Failed to alloca VP for dtls. */
+	NSS_DTLSMGR_FAIL_VP_FREE	/**< Failed to free VP for dtls. */
 } nss_dtlsmgr_status_t;
 
 /**
