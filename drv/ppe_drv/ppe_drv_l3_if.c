@@ -500,6 +500,32 @@ void ppe_drv_l3_if_dmac_check_set(struct ppe_drv_l3_if *l3_if, bool enable)
 }
 
 /*
+ * ppe_drv_l3_if_disable_ttl_dec()
+ *	Disables the TTL decrementing operation on the L3 interface.
+ */
+bool ppe_drv_l3_if_disable_ttl_dec(struct ppe_drv_l3_if *l3_if, bool disable_ttl_dec)
+{
+	fal_intf_entry_t in_l3_if_cfg = {0};
+	sw_error_t err;
+
+	err = fal_ip_intf_get(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &in_l3_if_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: L3_IF interface query failed for l3_if index: %u err: %d\n", l3_if, l3_if->l3_if_index, err);
+		return false;
+	}
+
+	in_l3_if_cfg.ttl_dec_bypass_en = disable_ttl_dec;
+
+	err = fal_ip_intf_set(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &in_l3_if_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: L3_IF configuration failed(%d)\n", l3_if, PPE_DRV_L3_IF_TYPE_PORT);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_l3_if_alloc()
  *	Allocates a free L3 interface and takes a reference.
  */

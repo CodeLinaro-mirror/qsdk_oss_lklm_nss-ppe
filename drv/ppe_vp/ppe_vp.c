@@ -291,6 +291,7 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 	struct ppe_drv_iface *ppe_iface;
 	enum ppe_drv_iface_type ppe_type;
 	int32_t pp_num;
+	bool disable_ttl_dec;
 	ppe_drv_ret_t ret;
 
 	if (!netdev) {
@@ -339,10 +340,12 @@ ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vpai)
 		return -1;
 	}
 
+	disable_ttl_dec = !!(vpai->flags & PPE_VP_FLAG_DISABLE_TTL_DEC);
+
 	/*
 	 * Initialize the virtual port in PPE.
 	 */
-	ret = ppe_drv_vp_init(ppe_iface, vpai->core_mask, vpai->usr_type, vpai->net_dev_type);
+	ret = ppe_drv_vp_init(ppe_iface, vpai->core_mask, vpai->usr_type, vpai->net_dev_type, disable_ttl_dec);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_vp_warn("%px: netdev: %px, ppe iface %px PPE VP initialization failed, Err code %d", pvb, netdev, ppe_iface, ret);
 		vpai->status = PPE_VP_STATUS_VP_INIT_FAIL;

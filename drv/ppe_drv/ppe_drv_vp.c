@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -60,7 +60,7 @@ EXPORT_SYMBOL(ppe_drv_vp_deinit);
  * ppe_drv_vp_init()
  *	Initialize API exposed to VP driver
  */
-ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type)
+ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, uint8_t usr_type, uint8_t net_dev_type, bool disable_ttl_dec)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
@@ -101,6 +101,16 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, uint8_t core_mask, ui
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: unable to get a valid l3_if of type(%d)\n", iface, PPE_DRV_L3_IF_TYPE_PORT);
 		return PPE_DRV_RET_L3_IF_ALLOC_FAIL;
+	}
+
+	/*
+	 * Disable TTL decrementing if the disable flag is set.
+	 */
+	if (!ppe_drv_l3_if_disable_ttl_dec(l3_if, disable_ttl_dec)) {
+		ppe_drv_port_deref(port);
+		ppe_drv_l3_if_deref(l3_if);
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_L3_IF_TTL_DEC_BYPASS_FAIL;
 	}
 
 	/*
