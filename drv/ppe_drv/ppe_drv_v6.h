@@ -656,11 +656,12 @@ static inline void ppe_drv_v6_conn_flow_in_port_if_set(struct ppe_drv_v6_conn_fl
 }
 
 /*
- * ppe_drv_v6_conn_flow_in_l3_if_set()
- *	Sets ingress L3_IF interface.
+ * ppe_drv_v6_conn_flow_in_l3_if_set_and_ref()
+ *	Sets ingress L3_IF interface and take ref on iface.
  */
-static inline void ppe_drv_v6_conn_flow_in_l3_if_set(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_iface *in_l3_if)
+static inline void ppe_drv_v6_conn_flow_in_l3_if_set_and_ref(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_iface *in_l3_if)
 {
+	kref_get(&in_l3_if->ref);
         pcf->in_l3_if = in_l3_if;
 }
 
