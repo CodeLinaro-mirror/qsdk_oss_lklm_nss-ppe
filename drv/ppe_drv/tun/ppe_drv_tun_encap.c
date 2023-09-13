@@ -323,6 +323,52 @@ static bool ppe_drv_tun_encap_hdr_ctrl_proto_map_configured(struct ppe_drv_tun_e
 }
 
 /*
+ * ppe_drv_tun_encap_header_ctrl_udp_sport_enabled
+ *	check if udp sport settings are configured in encap header control
+ */
+static bool ppe_drv_tun_encap_header_ctrl_udp_sport_enabled(struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl)
+{
+	if (kref_read(&hdr_ctrl->udp_sport_base_ref) || kref_read(&hdr_ctrl->udp_sport_mask_ref) ) {
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_free
+ *	free encap header control entry
+ */
+void ppe_drv_tun_encap_hdr_ctrl_free(struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl)
+{
+	kfree(hdr_ctrl);
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_init
+ *	initialize encap header control register
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_init(struct ppe_drv *p)
+{
+	fal_tunnel_encap_header_ctrl_t header_ctrl = {0};
+	sw_error_t err;
+
+	p->ecap_hdr_ctrl = kzalloc(sizeof(struct ppe_drv_tun_encap_hdr_ctrl), GFP_ATOMIC);
+	if (!p->ecap_hdr_ctrl) {
+		ppe_drv_warn("%p: failed to allocate encap header control entry", p);
+		return NULL;
+	}
+
+	err = fal_tunnel_encap_header_ctrl_set(PPE_DRV_SWITCH_ID, &header_ctrl);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to configure encap header control err: %d", p, err);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_tun_encap_hdr_ctrl_vxlan_configure
  *	configure encap header control for vxlan tunnel
  */
@@ -358,34 +404,40 @@ bool ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(struct ppe_drv *p, struct ppe_dr
 }
 
 /*
- * ppe_drv_tun_encap_hdr_ctrl_free
- *	free encap header control entry
+ * ppe_drv_tun_encap_hdr_ctrl_l2tp_configure
+ *	configure encap header control for l2tp tunnel
  */
-void ppe_drv_tun_encap_hdr_ctrl_free(struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl)
+bool ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(struct ppe_drv *p, struct ppe_drv_tun *tun)
 {
-	kfree(hdr_ctrl);
-}
+	struct ppe_drv_tun_encap_header_ctrl hdr_ctrl = {0};
 
-/*
- * ppe_drv_tun_encap_hdr_ctrl_init
- *	initialize encap header control register
- */
-bool ppe_drv_tun_encap_hdr_ctrl_init(struct ppe_drv *p)
-{
-	fal_tunnel_encap_header_ctrl_t header_ctrl = {0};
-	sw_error_t err;
-
-	p->ecap_hdr_ctrl = kzalloc(sizeof(struct ppe_drv_tun_encap_hdr_ctrl), GFP_ATOMIC);
-	if (!p->ecap_hdr_ctrl) {
-		ppe_drv_warn("%p: failed to allocate encap header control entry", p);
-		return NULL;
-	}
-
-	err = fal_tunnel_encap_header_ctrl_set(PPE_DRV_SWITCH_ID, &header_ctrl);
-	if (err != SW_OK) {
-		ppe_drv_warn("%p: failed to configure encap header control err: %d", p, err);
+	/*
+	 * Check if any tunnel is offloaded with udp source port update configuration set.
+	 * If so l2tp tunnel should not be offloaded to PPE as the source port gets overwritten
+	 */
+	if (ppe_drv_tun_encap_header_ctrl_udp_sport_enabled(p->ecap_hdr_ctrl)) {
 		return false;
 	}
+
+	/*
+	 * Configure header control global register to update PPP protocol
+	 * for IPv4 packet proto_map_data[1] is used and for IPv6 proto_map_data[3] is used
+	 */
+	hdr_ctrl.ipv4_proto_map_data = PPP_IP;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP);
+	hdr_ctrl.ipv6_proto_map_data = PPP_IPV6;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP);
+
+	if (!ppe_drv_tun_encap_hdr_ctrl_set(hdr_ctrl)) {
+		ppe_drv_warn("%p encap header control set failed", p);
+		return false;
+	}
+
+	/*
+	 * Set encap header control bitmap in tunnel structure.
+	 */
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP);
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP);
 
 	return true;
 }
@@ -692,8 +744,36 @@ static void ppe_drv_tun_encap_hdr_set(struct ppe_drv_tun_encap *ptec,
 		tun_hdr += sizeof(vxh);
 		tun_len += sizeof(vxh);
 		l4_offset_valid = true;
-	}
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
+		struct udphdr udph;
+		struct ppe_drv_tun_encap_l2tp_hdr l2tphdr;
+		struct ppe_drv_tun_encap_ppp_hdr ppphdr;
 
+		memset(&udph, 0, sizeof(struct udphdr));
+		memset(&l2tphdr, 0, sizeof(struct ppe_drv_tun_encap_l2tp_hdr));
+		memset(&ppphdr, 0, sizeof(struct ppe_drv_tun_encap_ppp_hdr));
+
+		udph.source = th->tun.l2tp.sport;
+		udph.dest = th->tun.l2tp.dport;
+		memcpy((void *)tun_hdr, (void *)&udph, sizeof(udph));
+		tun_hdr += sizeof(udph);
+		tun_len += sizeof(udph);
+
+		l2tphdr.flags = htons(PPE_DRV_TUN_L2TP_V2_PACKET_TYPE);
+		l2tphdr.tunnel_id = htons(th->tun.l2tp.peer_tunnel_id);
+		l2tphdr.session_id = htons(th->tun.l2tp.peer_session_id);
+		memcpy((void *)tun_hdr, (void *)&l2tphdr, sizeof(struct ppe_drv_tun_encap_l2tp_hdr));
+		tun_hdr += sizeof(struct ppe_drv_tun_encap_l2tp_hdr);
+		tun_len += sizeof(struct ppe_drv_tun_encap_l2tp_hdr);
+
+		ppphdr.address = PPE_DRV_TUN_L2TP_PPP_ADDRESS;
+		ppphdr.control = PPE_DRV_TUN_L2TP_PPP_CONTROL;
+		memcpy((void *)tun_hdr, (void *)&ppphdr, sizeof(struct ppe_drv_tun_encap_ppp_hdr));
+
+		tun_hdr += sizeof(struct ppe_drv_tun_encap_ppp_hdr);
+		tun_len += sizeof(struct ppe_drv_tun_encap_ppp_hdr);
+		l4_offset_valid = true;
+	}
 
 	ptec->tun_len = tun_len;
 	ptec->l3_offset = l3_offset;
@@ -746,6 +826,7 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 {
 	sw_error_t err;
 	fal_tunnel_encap_cfg_t encap_cfg = {0};
+	fal_tunnel_encap_rule_t encap_rule = {0};
 
 	/*
 	 * Update the tunnel encapsulation header
@@ -827,6 +908,55 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 		encap_cfg.l4_checksum_en = true;
 		encap_cfg.payload_inner_type = FAL_TUNNEL_INNER_TRANSPORT;
 
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
+		/*
+		 * 0:Non;1:TCP;2:UDP;3:UDP-Lite;4:Reserved (ICMP);5:GRE;
+		 */
+		encap_cfg.l4_proto = FAL_TUNNEL_ENCAP_L4_PROTO_UDP;
+		encap_cfg.payload_inner_type = FAL_TUNNEL_INNER_IP;
+		encap_cfg. encap_target = FAL_TUNNEL_ENCAP_TARGET_TUNNEL_INFO;
+		encap_cfg.tunnel_offset = PPE_DRV_TUN_ENCAP_L2TP_TUN_OFFSET;
+
+		/*
+		 * Tunnel Offset must be configured accordingly if there are any additional
+		 * vlan or PPPoE headers
+		 */
+		if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_SVLAN_VALID) {
+			encap_cfg.tunnel_offset += sizeof(struct vlan_hdr) * 2;
+		} else if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_CVLAN_VALID) {
+			encap_cfg.tunnel_offset += sizeof(struct vlan_hdr);
+		} else if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
+			encap_cfg.tunnel_offset += PPPOE_SES_HLEN;
+		}
+
+		/*
+		 * L2TP inner packet payload in PPP can be either ipv4 or ipv6.
+		 * Based on the payload type. PPP header within L2TP frame must be updated.
+		 * To update the PPP protocol feild based on the inner payload EG edit rules are configured
+		 * src1_sel = FAL_TUNNEL_RULE_SRC1_FROM_HEADER_DATA, Start header parsing from SRC1 header data
+		 * src1_start points to start of encap header parsing i.e 20(ETH HDR)+14(IP HDR)+8(UDP HDR) = 42 Bytes
+		 * If there are any additional vlan/PPPoe headers the src1_start will be adjusted accordingly by adding the
+		 * header size to offset (CVLAN = 4bytes, SVAL = 4+4 bytes, PPPoE = 8 Bytes)
+		 * src3_entry is used to update the protocol  feild src_start would be from end of UDP header
+		 * src_width is width to be updated which is 8 bits.
+		 * dest_pos should point to the PPP protocol field. The position must be offset from Least significant bit
+		 * of the selected 16 bytes data in src1.
+		 * des_pos = (16Bytes - 8 Bytes (L2TP header) - 2Bytes(PPP address + PPP control)) = 6Bytes (48 bits)
+		 */
+		encap_rule.src1_sel = FAL_TUNNEL_RULE_SRC1_FROM_HEADER_DATA;
+		encap_rule.src1_start = encap_cfg.tunnel_offset;
+		encap_rule.src2_sel = FAL_TUNNEL_RULE_SRC2_ZERO_DATA;
+		encap_rule.src3_sel = FAL_TUNNEL_RULE_SRC3_PROTO_MAP1;
+		encap_rule.src3_entry[0].enable = true;
+		encap_rule.src3_entry[0].src_start = PPE_DRV_TUN_ENCAP_L2TP_SRC_START;
+		encap_rule.src3_entry[0].src_width = PPE_DRV_TUN_ENCAP_L2TP_SRC_WIDTH;
+		encap_rule.src3_entry[0].dest_pos = PPE_DRV_TUN_ENCAP_L2TP_DEST_POS;
+
+		err = fal_tunnel_encap_rule_entry_set(PPE_DRV_SWITCH_ID, ptec->rule_id, &encap_rule);
+		if(err != SW_OK) {
+			ppe_drv_warn("%p: fal_tunnel_encap_rule_entry_set failed %d\n", ptec, err);
+			return false;
+		}
 	}
 
 	if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {

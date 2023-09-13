@@ -21,6 +21,14 @@
 #define PPE_DRV_TUN_DECAP_MAP_ENTRY_PAIR_MAX    2
 #define PPE_DRV_TUN_DECAP_INVALID_IDX           0xFFFF
 
+#define PPE_DRV_TUN_DECAP_L2TP_UDF_MASK 0xffff	/* Common 16 Bit UDF feild Mask used for L2TP tunnel */
+#define PPE_DRV_TUN_DECAP_L2TP_TUNNEL_ID_OFFSET 10 /* Tunnel ID offset from start of UDP header */
+#define PPE_DRV_TUN_DECAP_L2TP_SESSION_ID_OFFSET 12 /* Session  ID offset from start of UDP Header */
+#define PPE_DRV_TUN_DECAP_L2TP_PKT_TYPE_OFFSET 0 /* L2TP offset from end of UDP header */
+#define PPE_DRV_TUN_DECAP_L2TP_PPP_ADDR_OFFSET 6 /* PPP Address field offset from end of UDP header */
+#define PPE_DRV_TUN_DECAP_L2TP_PPP_CTRL_OFFSET 8 /* PPP Control field offset from end of UDP header */
+#define PPE_DRV_TUN_DECAP_L2TP_PROTOCOL_MASK 0xffffffff /* Protocol mask for L2TP program entry config */
+
 /*
  * ppe_drv_tun_decap
  *	tun decap module

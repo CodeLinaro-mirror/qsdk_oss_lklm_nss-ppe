@@ -35,6 +35,13 @@ static void ppe_drv_tun_prgm_prsr_entry_free(struct kref *kref)
 		}
 		break;
 
+	case PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2:
+		if (!ppe_drv_tun_prgm_prsr_l2tp_deconfigure(pgm)){
+			ppe_drv_warn("%p: error deleting tunnel progamable parser entry for type: %d, mode %d",
+					pgm, pgm->parser_idx, pgm->ctx.mode);
+		}
+		break;
+
 	default:
 		ppe_drv_warn("%p: unknown programable parser mode %d", pgm, pgm->ctx.mode);
 		break;
@@ -281,6 +288,30 @@ bool ppe_drv_tun_prgm_prsr_prgm_udf_configure(uint8_t parser_idx, struct ppe_drv
 bool ppe_drv_tun_prgm_prsr_configured(struct ppe_drv_tun_prgm_prsr *pgm)
 {
 	return ((kref_read(&pgm->ref) > 1) ?  true : false);
+}
+
+/*
+ * ppe_drv_tun_prgm_prsr_type_configured
+ *	Check if the program parser is already configured
+ */
+bool ppe_drv_tun_prgm_prsr_type_allocated(enum ppe_drv_tun_prgm_prsr_mode prsr_mode)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_tun_prgm_prsr *pgm = p->pgm;
+	int i;
+
+	if (prsr_mode == PPE_DRV_TUN_PROGRAM_MODE_NONE) {
+		ppe_drv_trace("%p: invalid parser type search\n", p);
+		return false;
+	}
+
+	for (i = 0; i < PPE_DRV_TUN_PRGM_PRSR_MAX; i++) {
+		if (pgm[i].ctx.mode == prsr_mode) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /*

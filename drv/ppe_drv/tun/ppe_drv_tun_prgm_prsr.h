@@ -18,7 +18,9 @@
 
 #include <fal/fal_tunnel_program.h>
 #include "ppe_drv_tun_udf.h"
+#include "ppe_drv_tun_l2tp.h"
 #include "ppe_drv_tun_prgm_prsr_gre.h"
+
 /*
  *  Get Tunnel Type from Program Parser entry type
  */
@@ -64,8 +66,8 @@
  */
 enum ppe_drv_tun_prgm_prsr_mode {
 	PPE_DRV_TUN_PROGRAM_MODE_NONE,	/* Program parser not configured*/
-	PPE_DRV_TUN_PROGRAM_MODE_GRE,	/* Program parser mode GRE */
-	PPE_DRV_TUN_PROGRAM_MODE_L2TP,	/* Program parser mode L2TP */
+	PPE_DRV_TUN_PROGRAM_MODE_GRE,		/* Program parser mode GRE */
+	PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2,	/* Program parser mode L2TP */
 };
 
 /*
@@ -277,4 +279,7 @@ void ppe_drv_tun_prgm_prsr_ref(struct ppe_drv_tun_prgm_prsr *pgm);
 bool ppe_drv_tun_prgm_prsr_configure(struct ppe_drv_tun_prgm_prsr_cfg *prsr_cfg, struct ppe_drv_tun_prgm_prsr_decap_key *key, uint8_t parser_idx);
 bool ppe_drv_tun_prgm_prsr_prgm_udf_fill(fal_tunnel_program_udf_t *pgm_udf, struct ppe_drv_tun_prgm_prsr_prgm_udf *udf);
 bool ppe_drv_tun_prgm_prsr_deconfigure(struct ppe_drv_tun_prgm_prsr_cfg *prsr_cfg, uint8_t parser_idx);
+bool ppe_drv_tun_prgm_prsr_type_allocated(enum ppe_drv_tun_prgm_prsr_mode prsr_mode);
+bool ppe_drv_tun_prgm_prsr_prgm_udf_deconfigure(uint8_t parser_idx, struct ppe_drv_tun_prgm_prsr_prgm_udf *udf);
+bool ppe_drv_tun_prgm_prsr_prgm_udf_configure(uint8_t parser_idx, struct ppe_drv_tun_prgm_prsr_prgm_udf *udf);
 #endif /* _PPE_DRV_TUN_PRGM_PRSR_H_ */

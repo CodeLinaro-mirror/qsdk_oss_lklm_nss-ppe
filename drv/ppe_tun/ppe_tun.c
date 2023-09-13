@@ -21,7 +21,6 @@
 #include <linux/netdevice.h>
 
 #include <ppe_drv_port.h>
-#include <ppe_vp_public.h>
 #include <ppe_drv_tun_cmn_ctx.h>
 #include <ppe_drv_tun_public.h>
 #include <asm/cmpxchg.h>
@@ -64,6 +63,13 @@ static bool ppe_tun_allow_accel(enum ppe_drv_tun_cmn_ctx_type type)
 		ppe_tun_warn("%p: PPE mapt acceleration is not enabled", ptp);
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2:
+		if (ptp->tun_accel.ppe_tun_l2tp_accel) {
+			return true;
+		}
+		ppe_tun_warn("%p: PPE l2tp acceleration is not enabled", ptp);
+		break;
+
 	default:
 		break;
 	}
@@ -78,18 +84,37 @@ static bool ppe_tun_allow_accel(enum ppe_drv_tun_cmn_ctx_type type)
  */
 bool ppe_tun_set_tun_data(struct ppe_tun *tun, ppe_tun_data *tun_data)
 {
-	if (!tun->tun_data) {
+	ppe_tun_data *tunnel_data = tun->tun_data;
+
+	if (!tunnel_data) {
 		ppe_tun_trace("%p: tunnel info not allocated for tunnel", tun);
 		return false;
 	}
 
-	/*
-	 * Place holder logic to copy the tun info. The main logic to check the tunnel
-	 * type and assign the correct values is added in l2tp core gerrit which is the
-	 * first user of this framework.
-	 */
-	memcpy(tun->tun_data, tun_data, sizeof(*tun->tun_data));
-	return true;
+	if (tun->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
+		tunnel_data->l2tp_info.session_id = tun_data->l2tp_info.session_id;
+		tunnel_data->l2tp_info.tunnel_id = tun_data->l2tp_info.tunnel_id;
+		return true;
+	}
+
+	ppe_tun_warn("%p: invalid tunnel type %d to set tunnel info", ptp, tun->type);
+	return false;
+}
+
+/*
+ * ppe_tun_set_tun_data()
+ *	allocate tunnel data memory
+ */
+ppe_tun_data *ppe_tun_alloc_tun_data(void)
+{
+	ppe_tun_data *tun_data;
+
+	tun_data = kzalloc(sizeof(ppe_tun_data), GFP_ATOMIC);
+	if (!tun_data) {
+		ppe_tun_trace("%p: ppe tun data allocation failed\n", ptp);
+	}
+
+	return tun_data;
 }
 
 /*
@@ -558,6 +583,10 @@ bool ppe_tun_conf_accel(enum ppe_drv_tun_cmn_ctx_type type, bool action)
 		ptp->tun_accel.ppe_tun_mapt_accel = action;
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2:
+		ptp->tun_accel.ppe_tun_l2tp_accel = action;
+		break;
+
 	default:
 		ppe_tun_info("%p: Tunnel type %u is invalid", ptp, type);
 		return false;
@@ -685,6 +714,14 @@ uint8_t ppe_tun_xcpn_mode_get(enum ppe_drv_tun_cmn_ctx_type type)
 		action = ptp->xcpn_mode.ipip6;
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2:
+		/*
+		 * exception mode is PPE_TUN_XCPN_MODE_1 by default
+		 * for L2TP
+		 */
+		action = ptp->xcpn_mode.l2tp;
+		break;
+
 	default:
 		ppe_tun_info("Tunnel type %u is invalid or doesn't support xcpn mode.", type);
 
@@ -731,7 +768,8 @@ bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type)
 	 */
 	if ((type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN)) {
 		vpai.type = PPE_VP_TYPE_HW_L2TUN;
-	} else if ((type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT)) {
+	} else if ((type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) ||
+					(type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2)) {
 		vpai.type = PPE_VP_TYPE_HW_L3TUN;
 	} else {
 		ppe_tun_warn("%p: tunnel type %u is invalid", dev, type);
@@ -783,6 +821,16 @@ bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type)
 	tun->type = type;
 	tun->vp_num = vp_num;
 	tun->idx = idx;
+
+	if (type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
+		tun->tun_data = ppe_tun_alloc_tun_data();
+		if (!tun->tun_data) {
+			spin_unlock_bh(&ptp->lock);
+			ppe_vp_free(vp_num);
+			kfree(tun);
+			return false;
+		}
+	}
 
 	kref_init(&tun->ref);
 
@@ -881,6 +929,75 @@ bool ppe_tun_decap_enable(struct net_device *dev)
 	return ret;
 }
 EXPORT_SYMBOL(ppe_tun_decap_enable);
+
+/*
+ * ppe_tun_l2tp_port_set()
+ *      Set L2TP source and destination  port
+ */
+bool ppe_tun_l2tp_port_set(uint16_t sport, uint16_t dport)
+{
+	ppe_tun_trace("Set L2TP sport: %u, dport: %u", sport, dport);
+	return ppe_drv_tun_l2tp_port_set(sport, dport);
+}
+EXPORT_SYMBOL(ppe_tun_l2tp_port_set);
+
+/*
+ * ppe_tun_l2tp_port_get()
+ *      get L2TP source and destination port
+ */
+bool ppe_tun_l2tp_port_get(uint16_t *sport, uint16_t *dport)
+{
+	return ppe_drv_tun_l2tp_port_get(sport, dport);
+}
+EXPORT_SYMBOL(ppe_tun_l2tp_port_get);
+
+/*
+ * ppe_tun_l2tp_read()
+ *	l2tp read handler
+ */
+static ssize_t ppe_tun_l2tp_read(struct file *f, char *buf, size_t count, loff_t *offset)
+{
+	int len;
+	char lbuf[24];
+
+	len = snprintf(lbuf, sizeof(lbuf), "l2tp accel %s\n", (ptp->tun_accel.ppe_tun_l2tp_accel) ? ("enabled") : ("disabled"));
+
+	return simple_read_from_buffer(buf, count, offset, lbuf, len);
+}
+
+/*
+ * ppe_tun_l2tp_write()
+ *	l2tp write handler
+ */
+static ssize_t ppe_tun_l2tp_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
+{
+	ssize_t size;
+	char data[16];
+	bool res;
+	int status;
+
+	size = simple_write_to_buffer(data, sizeof(data), offset, buffer, len);
+	if (size < 0) {
+		ppe_tun_warn("%p: Error reading the input for l2tp configuration", ptp);
+		return size;
+	}
+
+	status = kstrtobool(data, &res);
+	if (status) {
+		ppe_tun_warn("%p: Error reading the input for l2tp configuration", ptp);
+		return status;
+	}
+
+	ppe_tun_conf_accel(PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2, res);
+
+	return len;
+}
+
+const struct file_operations ppe_tun_l2tp_file_fops = {
+	.owner = THIS_MODULE,
+	.write = ppe_tun_l2tp_write,
+	.read = ppe_tun_l2tp_read,
+};
 
 /*
  * ppe_tun_gretap_read()
@@ -1232,6 +1349,55 @@ const struct file_operations ppe_tun_ipip6_xcpn_file_fops = {
 };
 
 /*
+ * ppe_tun_xcpn_l2tp_read()
+ *	l2tp xcpn read handler
+ */
+static ssize_t ppe_tun_xcpn_l2tp_read(struct file *f, char *buf, size_t count, loff_t *offset)
+{
+	int len;
+	char lbuf[24];
+	uint8_t xcpn_mode = ptp->xcpn_mode.l2tp;
+
+	len = snprintf(lbuf, sizeof(lbuf), "L2TP xcpn mode %u \n", xcpn_mode);
+
+	return simple_read_from_buffer(buf, count, offset, lbuf, len);
+}
+
+/*
+ * ppe_tun_xcpn_l2tp_write()
+ *	l2tp xcpn write handler
+ */
+static ssize_t ppe_tun_xcpn_l2tp_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
+{
+	ssize_t size;
+	char data[16];
+	bool res;
+	int status;
+
+	size = simple_write_to_buffer(data, sizeof(data), offset, buffer, len);
+	if (size < 0) {
+		ppe_tun_warn("%p: Error reading the input for l2tp configuration", ptp);
+		return size;
+	}
+
+	status = kstrtobool(data, &res);
+	if (status) {
+		ppe_tun_warn("%p: Error reading the input for l2tp configuration", ptp);
+		return status;
+	}
+
+	ptp->xcpn_mode.l2tp = (uint8_t) res;
+
+	return len;
+}
+
+const struct file_operations ppe_tun_l2tp_xcpn_file_fops = {
+	.owner = THIS_MODULE,
+	.write = ppe_tun_xcpn_l2tp_write,
+	.read = ppe_tun_xcpn_l2tp_read,
+};
+
+/*
  * ppe_tun_module_init()
  *	module init for ppe tunnel driver
  */
@@ -1258,9 +1424,11 @@ static int __init ppe_tun_module_init(void)
 	ptp->tun_accel.ppe_tun_vxlan_accel = true;
 	ptp->tun_accel.ppe_tun_ipip6_accel = true;
 	ptp->tun_accel.ppe_tun_mapt_accel = true;
+	ptp->tun_accel.ppe_tun_l2tp_accel = true;
 
 	ptp->xcpn_mode.gretap = PPE_TUN_XCPN_MODE_1;
 	ptp->xcpn_mode.ipip6 = PPE_TUN_XCPN_MODE_1;
+	ptp->xcpn_mode.l2tp = PPE_TUN_XCPN_MODE_1;
 
 
 	atomic_set(&ptp->total_free, PPE_TUN_MAX);
@@ -1304,6 +1472,9 @@ static int __init ppe_tun_module_init(void)
 	if (!debugfs_create_file("mapt", 0644, dir, NULL, &ppe_tun_mapt_file_fops)) {
 		ppe_tun_warn("Failed to create debugfs entry for mapt");
 	}
+	if (!debugfs_create_file("l2tp", 0644, dir, NULL, &ppe_tun_l2tp_file_fops)) {
+		ppe_tun_warn("Failed to create debugfs entry for l2tp");
+	}
 
 	dir = debugfs_create_dir("xcpn_mode", ptp->dentry);
 	if (!dir) {
@@ -1318,7 +1489,11 @@ static int __init ppe_tun_module_init(void)
 		ppe_tun_warn("Failed to create debugfs entry for gretap");
 	}
 	if (!debugfs_create_file("ipip6", 0644, dir, NULL, &ppe_tun_ipip6_xcpn_file_fops)) {
-		ppe_tun_warn("Failed to create debugfs entry for ipip6");
+		ppe_tun_warn("failed to create debugfs entry for ipip6");
+	}
+
+	if (!debugfs_create_file("l2tp", 0644, dir, NULL, &ppe_tun_l2tp_xcpn_file_fops)) {
+		ppe_tun_warn("failed to create debugfs entry for l2tp");
 	}
 
 /*

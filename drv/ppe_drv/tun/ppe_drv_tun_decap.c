@@ -161,6 +161,53 @@ static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 }
 
 /*
+ * ppe_drv_tun_decap_l2tp_check_n_set
+ *	Validate L2TP header parameters and fill TL_TBL entry data.
+ */
+static bool ppe_drv_tun_decap_l2tp_check_n_set(struct ppe_drv_tun_decap *ptdc,
+				struct ppe_drv_tun_cmn_ctx *pth, fal_tunnel_rule_t *decap_entry)
+{
+	struct ppe_drv_tun_prgm_prsr *pgm;
+
+	/*
+	 * Configure PPE in Programable parser mode for L2TP acceleration
+	 */
+	pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2);
+	if (!pgm) {
+		ppe_drv_warn("%p: Error getting programable parser for L2TP tunnel\n", pth);
+		return false;
+	}
+
+	ptdc->pgm_prsr = pgm;
+
+	if (!ppe_drv_tun_l2tp_prgm_prsr_configure(pgm)) {
+		ppe_drv_warn("%p: L2TP tunnel configuration failed\n", pth);
+		ppe_drv_tun_prgm_prsr_deref(pgm);
+		ptdc->pgm_prsr = NULL;
+		return false;
+	}
+
+	decap_entry->tunnel_type = PPE_DRV_TUN_GET_TUNNEL_TYPE_FROM_PGM_TYPE(pgm->parser_idx);
+	ppe_drv_trace("%p: Configure L2TP with Tunnel Parser : %d\n", pth, decap_entry->tunnel_type);
+
+	decap_entry->l4_proto = IPPROTO_UDP;
+	decap_entry->dport = ntohs((uint16_t)pth->tun.l2tp.sport);
+	decap_entry->sport = ntohs((uint16_t)pth->tun.l2tp.dport);
+	decap_entry->key_bmp |= (PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_DPORT_EN) |PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_SPORT_EN));
+
+	/*
+	 * Configure the tunnel id and session id to be matched against udf offsets
+	 */
+	decap_entry->udf0 = (uint16_t)pth->tun.l2tp.tunnel_id;
+	decap_entry->udf1 = (uint16_t)pth->tun.l2tp.session_id;
+	decap_entry->key_bmp |= (PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_UDF0_EN) |PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_UDF1_EN));
+
+	ppe_drv_trace("%p: decap_entry: l2_proto = %d, dport = %d, sport = %d, tunnel_id = %d, session_id = %d\n",pth, decap_entry->l4_proto, decap_entry->dport, decap_entry->sport, decap_entry->udf0, decap_entry->udf1);
+
+	return true;
+}
+
+/*
  * ppe_drv_tun_decap_vxlan_check_n_set
  *	Validate VxLAN header parameters and fill TL_TBL entry data.
  */
@@ -370,6 +417,13 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 	} else if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6) {
 		ftde.decap_rule.tunnel_type = FAL_TUNNEL_TYPE_IPV4_OVER_IPV6;
 		ftde.decap_rule.l4_proto = IPPROTO_IPIP;
+	} else if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
+		if (!ppe_drv_tun_decap_l2tp_check_n_set(ptdc, pth, &ftde.decap_rule)) {
+			ppe_drv_trace("%p: GRE header validation failed", pp);
+			return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		}
+		ftde.decap_action.udp_csum_zero = true;
+		ftde.decap_action.update_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_UDP_CSUM_ZERO_UPDATE);
 	} else {
 		/*
 		 * MAPT cases are not expected to use these tables only other
