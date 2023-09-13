@@ -120,6 +120,16 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_inf
 	}
 
 	/*
+	 * Disable TTL decrementing if the disable flag is set.
+	 */
+	if (!ppe_drv_l3_if_disable_ttl_dec(l3_if, info->disable_ttl_dec)) {
+		ppe_drv_port_deref(port);
+		ppe_drv_l3_if_deref(l3_if);
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_L3_IF_TTL_DEC_BYPASS_FAIL;
+	}
+
+	/*
 	 * Attach l3_if to port
 	 */
 	if (!ppe_drv_port_l3_if_attach(port, l3_if)) {

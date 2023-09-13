@@ -286,6 +286,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_PORT_ALLOC_FAIL,			/**< Port allocation fails */
 	PPE_DRV_RET_L3_IF_ALLOC_FAIL,			/**< L3_IF allocation fails */
 	PPE_DRV_RET_L3_IF_PORT_ATTACH_FAIL,		/**< L3_IF PORT attach fails */
+	PPE_DRV_RET_L3_IF_TTL_DEC_BYPASS_FAIL,		/**< L3_IF TTL decrement bypass fails */
 	PPE_DRV_RET_VSI_ALLOC_FAIL,			/**< VSI allocation fails */
 	PPE_DRV_RET_MAC_ADDR_CLEAR_CFG_FAIL,		/**< Mac address clear configuration fails */
 	PPE_DRV_RET_MAC_ADDR_SET_CFG_FAIL,		/**< Mac address set configuration fails */
