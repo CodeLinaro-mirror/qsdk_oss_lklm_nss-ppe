@@ -23,7 +23,6 @@
 #include <ppe_drv/ppe_drv.h>
 #include "ppe_drv_tun.h"
 #include <fal_vxlan.h>
-#include <fal/fal_tunnel_program.h>
 
 /*
  * ppe_drv_tun_decap_deconfigure
@@ -58,6 +57,10 @@ static void ppe_drv_tun_decap_free(struct kref *kref)
 	 */
 	if (ptdc->tl_index == PPE_DRV_TUN_DECAP_INVALID_IDX) {
 		return;
+	}
+
+	if (ptdc->pgm_prsr) {
+		ppe_drv_tun_prgm_prsr_deref(ptdc->pgm_prsr);
 	}
 
 	ppe_drv_tun_decap_deconfigure(ptdc);
@@ -107,26 +110,51 @@ struct ppe_drv_tun_decap *ppe_drv_tun_decap_ref(struct ppe_drv_tun_decap *ptdc)
 static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 				struct ppe_drv_tun_cmn_ctx *pth, fal_tunnel_rule_t *decap_entry)
 {
-
-	if (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
-		decap_entry->tunnel_type = FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV4;
-	} else {
-		decap_entry->tunnel_type = FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV6;
-	}
+	struct ppe_drv_tun_prgm_prsr *pgm = NULL;
 
 	decap_entry->l4_proto = IPPROTO_GRE;
 
 	if (pth->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_R_KEY) {
 		uint32_t gre_key = pth->tun.gre.remote_key;
 
+		if (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
+			decap_entry->tunnel_type = FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV4;
+		} else {
+			decap_entry->tunnel_type = FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV6;
+		}
+
 		decap_entry->tunnel_info = htonl(gre_key);
 		decap_entry->key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_TLINFO_EN);
 		ppe_drv_trace("%p: GRE remote Key: %d", pth, gre_key);
 	} else {
 		/*
-		 * Configure PPE in PROGRAM5 mode for GRETAP without key accelration
+		 * Configure PPE in Programable parser mode for GRETAP without key acceleration.
+		 * Lock is accquired for every succesful program parser entry allocated.
 		 */
-		decap_entry->tunnel_type = FAL_TUNNEL_TYPE_PROGRAM5;
+		pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_GRE);
+		if (!pgm) {
+			ppe_drv_warn("%p: Error getting programable parser for GRE\n", pth);
+			return false;
+		}
+
+		ptdc->pgm_prsr = pgm;
+
+		/*
+		 * Configure the program parser instance to match gre tunnel without
+		 * key. If the program parser instance is already configured then this function
+		 * would simply exit.
+		 * If the tunnel configuration fails then release the reference taken on the
+		 * program parser instance.
+		 */
+		if (!ppe_drv_tun_prgm_prsr_gre_configure(pgm)) {
+			ppe_drv_tun_prgm_prsr_deref(pgm);
+			ptdc->pgm_prsr = NULL;
+			ppe_drv_warn("%p: GRE tunnel configuration failed\n", pth);
+			return false;
+		}
+
+		decap_entry->tunnel_type = PPE_DRV_TUN_GET_TUNNEL_TYPE_FROM_PGM_TYPE(pgm->parser_idx);
+		ppe_drv_trace("%p: Configure GRE with Tunnel Parser : %d\n", pth, decap_entry->tunnel_type);
 	}
 
 	return true;
