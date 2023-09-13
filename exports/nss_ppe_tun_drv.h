@@ -21,23 +21,21 @@
 #ifndef _NSS_PPE_TUN_DRV_H_
 #define _NSS_PPE_TUN_DRV_H_
 #include <ppe_drv_tun_cmn_ctx.h>
-
-typedef bool(*ppe_tun_exception_method_t)(struct net_device *dev, struct sk_buff *skb);
+#include <ppe_vp_public.h>
+#include <ppe_tun.h>
 
 /**
  * ppe_tun_configure()
  *	Configure tunnel tunnel
  *
- * @param[in] dev	netdevice structure
- * @param[in] tun_hdr	tunnel header structure
- * @param[in] src_cb	source exception handler
- * @param[in] dest_cb	destination exception handler
+ * @param[in] dev      netdevice structure
+ * @param[in] tun_hdr  tunnel header structure
+ * @param[in] tun_cb   tunnel callback structure
  *
  * @return
  * Status of the configuration.
  */
-bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr, ppe_tun_exception_method_t src_cb,
-		       ppe_tun_exception_method_t dest_cb);
+bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr,  struct ppe_tun_excp *tun_cb);
 
 /**
  * ppe_tun_deactivate()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -46,10 +46,36 @@ static bool nss_gretap_stats_dentry_create(struct net_device *dev);
 static bool nss_gretap_stats_dentry_free(struct net_device *dev);
 
 /*
+ * nss_ppe_gretap_dev_stats_update()
+ *	Update gretap dev statistics
+ */
+static bool nss_ppe_gretap_dev_stats_update(struct net_device *dev, ppe_tun_hw_stats *stats, ppe_tun_data *tun_data)
+{
+	struct pcpu_sw_netstats *tstats;
+
+	if (!dev) {
+		return false;
+	}
+
+	tstats = this_cpu_ptr(dev->tstats);
+	u64_stats_update_begin(&tstats->syncp);
+	tstats->tx_bytes += stats->tx_byte_cnt;
+	tstats->tx_packets += stats->tx_pkt_cnt;
+	tstats->rx_bytes += stats->rx_byte_cnt;
+	tstats->rx_packets += stats->rx_pkt_cnt;
+	u64_stats_update_end(&tstats->syncp);
+
+	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);
+	atomic_long_add(stats->rx_drop_pkt_cnt, &dev->rx_dropped);
+
+	return true;
+}
+
+/*
  * nss_ppe_gretap_src_exception()
  *	handle the source VP exception
  */
-static bool nss_ppe_gretap_src_exception(struct net_device *dev, struct sk_buff *skb)
+static bool nss_ppe_gretap_src_exception(struct net_device *dev, struct sk_buff *skb, ppe_tun_data *tun_data)
 {
 	int ret;
 
@@ -212,6 +238,7 @@ static int nss_ppe_gretap_dev_event(struct notifier_block  *nb,
 	struct net_device *netdev = netdev_notifier_info_to_dev(info);
 	bool status;
 	struct ppe_drv_tun_cmn_ctx *tun_hdr;
+	struct ppe_tun_excp *tun_cb = NULL;
 
 	/*
 	 * Proceed to handle event only if it GRE netdevice
@@ -258,11 +285,24 @@ static int nss_ppe_gretap_dev_event(struct notifier_block  *nb,
 			break;
 		}
 
-		if (!(ppe_tun_configure(netdev, tun_hdr, nss_ppe_gretap_src_exception, NULL))) {
+		tun_cb = kzalloc(sizeof(struct ppe_tun_excp), GFP_ATOMIC);
+
+		if (!tun_cb) {
+			nss_ppe_gretap_warning("%px: memory allocation for tunnel callback failed for device %s\n", netdev, netdev->name);
+
+			kfree(tun_hdr);
+			break;
+		}
+
+		tun_cb->src_excp_method = nss_ppe_gretap_src_exception;
+		tun_cb->stats_update_method = nss_ppe_gretap_dev_stats_update;
+
+		if (!(ppe_tun_configure(netdev, tun_hdr, tun_cb))) {
 			nss_ppe_gretap_trace("%px: Not able to create tunnel for dev: %s\n", netdev, netdev->name);
 		}
 
 		kfree(tun_hdr);
+		kfree(tun_cb);
 		break;
 
 	case NETDEV_DOWN:

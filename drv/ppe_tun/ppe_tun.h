@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,7 @@
 #include <ppe_acl.h>
 #include <ppe_drv_sc.h>
 #endif
+#include <ppe_tun.h>
 
 /*
  * PPE Tunnel debug macros
@@ -81,9 +82,6 @@ enum ppe_tun_state {
 
 enum xcpn_mode {PPE_TUN_XCPN_MODE_0, PPE_TUN_XCPN_MODE_1};
 
-typedef bool(*ppe_tun_exception_method_t)(struct net_device *dev, struct sk_buff *skb);
-typedef void (*ppe_tun_stats_callback_t)(struct net_device *dev, struct ppe_drv_tun_cmn_ctx_stats *);
-
 /*
  * ppe_tun_accel
  *	Enable / Disable acceleration for tunnel type
@@ -116,10 +114,12 @@ struct ppe_tun {
 	enum ppe_drv_tun_cmn_ctx_type type;	/* Tunnel type */
 	struct net_device *dev;			/* Tunnel netdev */
 	struct net_device *phys_dev;		/* Physical dev attached to VP */
-	ppe_tun_exception_method_t src_cb;	/* Callback for exception packets with src VP */
-	ppe_tun_exception_method_t dest_cb;	/* Callback for exception packets with dest VP */
+	ppe_tun_exception_method_t src_excp;	/* Callback for exception packets with src VP */
+	ppe_tun_exception_method_t dest_excp;	/* Callback for exception packets with dest VP */
 	atomic64_t exception_packet;		/* Number of exception packets seen by tunnel */
 	atomic64_t exception_bytes;		/* Total exception bytes total */
+	ppe_tun_stats_method_t stats_excp;	/* Callback for updating tunnel statistics */
+	ppe_tun_data *tun_data;		/* Tunnel specific data from client */
 };
 
 /*
