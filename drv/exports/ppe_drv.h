@@ -204,8 +204,10 @@ struct ppe_drv_top_if_rule {
  *	Service class related information.
  */
 struct ppe_drv_service_class_rule {
-	uint32_t flow_mark;		/**< Service class information in flow direction. */
-	uint32_t return_mark;		/**< Service class information in return direction. */
+	uint32_t flow_mark;		/**< SAWF metadata information in flow direction. */
+	uint32_t return_mark;		/**< SAWF metadata information in return direction. */
+	uint8_t flow_service_class;	/**< Service class id in flow direction. */
+	uint8_t return_service_class;	/**< Service class id in return direction. */
 };
 
 /*

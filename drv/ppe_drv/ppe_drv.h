@@ -141,8 +141,6 @@
 #define PPE_DRV_SAWF_PEER_ID_MASK			0x3ff
 #define PPE_DRV_SAWF_MSDUQ_MASK				0x3f
 #define PPE_DRV_SAWF_TAG_GET(x)				(x >> PPE_DRV_SAWF_TAG_SHIFT)
-#define PPE_DRV_SAWF_SERVICE_CLASS_GET(x)		((x >> PPE_DRV_SAWF_SERVICE_CLASS_SHIFT) & \
-							PPE_DRV_SAWF_SERVICE_CLASS_MASK)
 #define PPE_DRV_SAWF_PEER_ID_GET(x)			((x >> PPE_DRV_SAWF_PEER_ID_SHIFT) & \
 							PPE_DRV_SAWF_PEER_ID_MASK)
 #define PPE_DRV_SAWF_MSDUQ_GET(x)			(x & PPE_DRV_SAWF_MSDUQ_MASK)
@@ -297,6 +295,26 @@ static inline ppe_drv_tree_id_type_t ppe_drv_tree_id_type_get(struct ppe_drv_flo
 {
 	return flow_metadata->tree_id_data.type;
 }
+
+/*
+ * ppe_drv_sawf_metadata
+ *	SAWF information from create rule
+ */
+struct ppe_drv_sawf_metadata {
+	uint32_t sawf_mark;	/* SAWF mark from create rule. */
+	uint8_t service_class;	/* SAWF service class from create rule. */
+};
+
+/*
+ * ppe_drv_flow_cookie_metadata
+ *	Flow Cookie information from the create rule
+ */
+struct ppe_drv_flow_cookie_metadata {
+	union {
+		uint32_t mark;				/* Mark value for tree id type none from create rule message */
+		struct ppe_drv_sawf_metadata sawf;	/* SAWF metadata from create rule message */
+	}type;
+};
 
 void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv ppe_drv_gbl;
