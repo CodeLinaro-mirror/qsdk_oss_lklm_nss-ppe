@@ -24,6 +24,373 @@
 #include "ppe_drv_tun.h"
 
 /*
+ * ppe_drv_tun_encap_hdr_ctrl_entry_free
+ *	 clear header ctrl protomap instance
+ */
+void ppe_drv_tun_encap_hdr_ctrl_entry_free(struct kref *kref)
+{
+	sw_error_t err;
+	fal_tunnel_encap_header_ctrl_t header_ctrl = {0};
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl = p->ecap_hdr_ctrl;
+
+	err = fal_tunnel_encap_header_ctrl_get(PPE_DRV_SWITCH_ID, &header_ctrl);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Unable to get header control configuration: %d", p, err);
+		return;
+	}
+
+	/*
+	 * Reset data to zero if ref count is zero. This will ensure the value is cleared while updating
+	 * header ctrl data in "ppe_drv_tun_encap_hdr_ctrl_reset" function
+	 */
+	hdr_ctrl->udp_sport_base = (!kref_read(&hdr_ctrl->udp_sport_base_ref)) ? 0 : header_ctrl.udp_sport_base;
+	hdr_ctrl->udp_sport_mask = (!kref_read(&hdr_ctrl->udp_sport_mask_ref)) ? 0 : header_ctrl.udp_sport_mask;
+	hdr_ctrl->ipv4_addr_map_data = (!kref_read(&hdr_ctrl->ipv4_addr_map_ref)) ? 0 : header_ctrl.proto_map_data[0];
+	hdr_ctrl->ipv4_proto_map_data = (!kref_read(&hdr_ctrl->ipv4_proto_map_ref)) ? 0 : header_ctrl.proto_map_data[1];
+	hdr_ctrl->ipv6_addr_map_data = (!kref_read(&hdr_ctrl->ipv6_addr_map_ref)) ? 0 : header_ctrl.proto_map_data[2];
+	hdr_ctrl->ipv6_proto_map_data = (!kref_read(&hdr_ctrl->ipv6_proto_map_ref)) ? 0 : header_ctrl.proto_map_data[3];
+
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_ref
+ *	free reference for header ctrl protomap instance
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_deref(struct kref *kref)
+{
+	struct ppe_drv *p __maybe_unused = &ppe_drv_gbl;
+	ppe_drv_assert(kref_read(kref), "%p: ref count under run for encap header ctrl", p);
+
+	if (kref_put(kref, ppe_drv_tun_encap_hdr_ctrl_entry_free)) {
+		ppe_drv_trace("%p: reference count is 0 for header ctrl ", p);
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_ref
+ *	Get reference for header ctrl protomap instance
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_ref(struct kref *kref)
+{
+	kref_get(kref);
+	ppe_drv_assert(kref_read(ref), "%p: ref count rollover for encap header ctrl", &ppe_drv_gbl);
+
+	return true;
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_reset
+ *	Reset global encap header control register value
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_reset(uint8_t flags)
+{
+	fal_tunnel_encap_header_ctrl_t header_ctrl = {0};
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl_orig_cfg = p->ecap_hdr_ctrl;
+	uint8_t hdr_ctrl_flag = 0;
+	sw_error_t err;
+
+	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_ID_SEED;
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
+		header_ctrl.ipv4_id_seed = 0;
+	}
+
+	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_DF_SET;
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
+		header_ctrl.ipv4_df_set = 0;
+	}
+
+	/*
+	 * udp source port configurations and proto map configurations are dereferenced when reset
+	 * request is received. It will be reset to zero once all the references are released
+	 *
+	 */
+	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_BASE;
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->udp_sport_base_ref);
+		header_ctrl.udp_sport_base = hdr_ctrl_orig_cfg->udp_sport_base;
+	}
+
+	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_MASK;
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->udp_sport_mask_ref);
+		header_ctrl.udp_sport_mask = hdr_ctrl_orig_cfg->udp_sport_mask;
+	}
+
+	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_ADR_MAP;
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv4_addr_map_ref);
+		header_ctrl.proto_map_data[0] = hdr_ctrl_orig_cfg->ipv4_addr_map_data;
+	}
+
+	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP;
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv4_proto_map_ref);
+		header_ctrl.proto_map_data[1] = hdr_ctrl_orig_cfg->ipv4_proto_map_data;
+	}
+
+	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_ADR_MAP;
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv6_addr_map_ref);
+		header_ctrl.proto_map_data[2] = hdr_ctrl_orig_cfg->ipv6_addr_map_data;
+	}
+
+	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP;
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv6_proto_map_ref);
+		header_ctrl.proto_map_data[3] = hdr_ctrl_orig_cfg->ipv6_proto_map_data;
+	}
+
+	err = fal_tunnel_encap_header_ctrl_set(PPE_DRV_SWITCH_ID, &header_ctrl);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to configure encap header control err: %d", p, err);
+		return false;
+	}
+	return true;
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_set
+ *	set global encap header control register value
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctrl)
+{
+	fal_tunnel_encap_header_ctrl_t header_ctrl = {0};
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl_orig_cfg = p->ecap_hdr_ctrl;
+	bool ipv4_addr_ref = false, ipv4_proto_ref = false,  ipv6_addr_ref = false, ipv6_proto_ref = false;
+	bool udp_sport_base_ref = false, udp_sport_mask_ref = false;
+	sw_error_t err;
+
+	err = fal_tunnel_encap_header_ctrl_get(PPE_DRV_SWITCH_ID, &header_ctrl);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Unable to get header control configuration: %d", p, err);
+		return false;
+	}
+
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_ID_SEED)) {
+		header_ctrl.ipv4_id_seed = hdr_ctrl.ipv4_id_seed;
+	}
+
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_DF_SET)) {
+		header_ctrl.ipv4_df_set = hdr_ctrl.ipv4_df_set;
+	}
+
+	/*
+	 * If udp source port data or protomap data are to be configured for the first time then the value is updated
+	 * and a reference is taken. For subsequent set references are incremented if the value matches the value configured
+	 * already. This ensures the header control feilds are used for a single tunnel type.
+	 * If the already configured values doesnt match with the value to be set the function returns error.
+	 */
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_BASE)) {
+		if (header_ctrl.udp_sport_base == hdr_ctrl.udp_sport_base) {
+			ppe_drv_tun_encap_hdr_ctrl_ref(&hdr_ctrl_orig_cfg->udp_sport_base_ref);
+			udp_sport_base_ref = true;
+		} else if (!kref_read(&hdr_ctrl_orig_cfg->udp_sport_base_ref)) {
+			header_ctrl.udp_sport_base = hdr_ctrl.udp_sport_base;
+			kref_init(&hdr_ctrl_orig_cfg->udp_sport_base_ref);
+			udp_sport_base_ref = true;
+		} else {
+			ppe_drv_trace("%p: header control udp sport base already configured", p);
+			goto err_false;
+		}
+	}
+
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_MASK)) {
+		if (header_ctrl.udp_sport_mask == hdr_ctrl.udp_sport_mask) {
+			ppe_drv_tun_encap_hdr_ctrl_ref(&hdr_ctrl_orig_cfg->udp_sport_mask_ref);
+			udp_sport_mask_ref = true;
+		} else if (!kref_read(&hdr_ctrl_orig_cfg->udp_sport_mask_ref)) {
+			header_ctrl.udp_sport_mask = hdr_ctrl.udp_sport_mask;
+			kref_init(&hdr_ctrl_orig_cfg->udp_sport_mask_ref);
+			udp_sport_mask_ref = true;
+		} else {
+			ppe_drv_trace("%p: header control udp sport mask already configured", p);
+			goto err_false;
+		}
+	}
+
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_ADR_MAP)) {
+		if (header_ctrl.proto_map_data[0] == hdr_ctrl.ipv4_addr_map_data) {
+			ppe_drv_tun_encap_hdr_ctrl_ref(&hdr_ctrl_orig_cfg->ipv4_addr_map_ref);
+			ipv4_addr_ref = true;
+		} else if (!kref_read(&hdr_ctrl_orig_cfg->ipv4_addr_map_ref)) {
+			header_ctrl.proto_map_data[0] = hdr_ctrl.ipv4_addr_map_data;
+			kref_init(&hdr_ctrl_orig_cfg->ipv4_addr_map_ref);
+			ipv4_addr_ref = true;
+		} else {
+			ppe_drv_trace("%p: header control ipv4 addr map data already configured", p);
+			goto err_false;
+		}
+	}
+
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP)) {
+		if (header_ctrl.proto_map_data[1] == hdr_ctrl.ipv4_proto_map_data) {
+			ppe_drv_tun_encap_hdr_ctrl_ref(&hdr_ctrl_orig_cfg->ipv4_proto_map_ref);
+			ipv4_proto_ref = true;
+		} else if (!kref_read(&hdr_ctrl_orig_cfg->ipv4_proto_map_ref)) {
+			header_ctrl.proto_map_data[1] = hdr_ctrl.ipv4_proto_map_data;
+			kref_init(&hdr_ctrl_orig_cfg->ipv4_proto_map_ref);
+			ipv4_proto_ref = true;
+		} else {
+			ppe_drv_warn("%p: header control ipv4 proto map data already configured", p);
+			goto err_false;
+		}
+	}
+
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_ADR_MAP)) {
+		if (header_ctrl.proto_map_data[2] == hdr_ctrl.ipv6_addr_map_data) {
+			ppe_drv_tun_encap_hdr_ctrl_ref(&hdr_ctrl_orig_cfg->ipv6_addr_map_ref);
+			ipv6_addr_ref = true;
+		} else if (!kref_read(&hdr_ctrl_orig_cfg->ipv6_addr_map_ref)) {
+			header_ctrl.proto_map_data[2] = hdr_ctrl.ipv6_addr_map_data;
+			kref_init(&hdr_ctrl_orig_cfg->ipv6_addr_map_ref);
+			ipv6_addr_ref = true;
+		} else {
+			ppe_drv_trace("%p: header control ipv6 addr map data already configured", p);
+			goto err_false;
+		}
+	}
+
+	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP)) {
+		if (header_ctrl.proto_map_data[3] == hdr_ctrl.ipv6_proto_map_data) {
+			ppe_drv_tun_encap_hdr_ctrl_ref(&hdr_ctrl_orig_cfg->ipv6_proto_map_ref);
+			ipv6_proto_ref = true;
+		} else if (!kref_read(&hdr_ctrl_orig_cfg->ipv6_proto_map_ref)) {
+			header_ctrl.proto_map_data[3] = hdr_ctrl.ipv6_proto_map_data;
+			kref_init(&hdr_ctrl_orig_cfg->ipv6_proto_map_ref);
+			ipv6_proto_ref = true;
+		} else {
+			ppe_drv_trace("%p: header control ipv6 proto map data already configured", p);
+			goto err_false;
+		}
+	}
+
+	err = fal_tunnel_encap_header_ctrl_set(PPE_DRV_SWITCH_ID, &header_ctrl);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to configure encap header control err: %d", p, err);
+		return false;
+	}
+
+	return true;
+
+err_false:
+	if (ipv4_addr_ref) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv4_addr_map_ref);
+	}
+
+	if (ipv4_proto_ref) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv4_proto_map_ref);
+	}
+
+	if (ipv6_addr_ref) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv6_addr_map_ref);
+	}
+
+	if (ipv6_proto_ref) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv6_proto_map_ref);
+	}
+
+	if (udp_sport_base_ref) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->udp_sport_base_ref);
+	}
+
+	if (udp_sport_mask_ref) {
+		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->udp_sport_mask_ref);
+	}
+
+	return false;
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_proto_map_configured
+ *	check if proto map data settings are configured in encap header control
+ */
+static bool ppe_drv_tun_encap_hdr_ctrl_proto_map_configured(struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl)
+{
+
+	if (kref_read(&hdr_ctrl->ipv4_addr_map_ref) || kref_read(&hdr_ctrl->ipv4_proto_map_ref) ||
+			kref_read(&hdr_ctrl->ipv6_addr_map_ref) ||
+			kref_read(&hdr_ctrl->ipv6_proto_map_ref)) {
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_vxlan_configure
+ *	configure encap header control for vxlan tunnel
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(struct ppe_drv *p, struct ppe_drv_tun *tun)
+{
+	struct ppe_drv_tun_encap_header_ctrl hdr_ctrl = {0};
+
+	/*
+	 * check if the header control is configured already and  used by other tunnels
+	 * for protomap  configuration. If its already configured exit
+	 */
+	if (ppe_drv_tun_encap_hdr_ctrl_proto_map_configured(p->ecap_hdr_ctrl)) {
+		return false;
+	}
+
+	hdr_ctrl.udp_sport_base = FAL_TUNNEL_UDP_ENTROPY_SPORT_BASE;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_BASE);
+	hdr_ctrl.udp_sport_mask = FAL_TUNNEL_UDP_ENTROPY_SPORT_MASK;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_MASK);
+
+	if (!ppe_drv_tun_encap_hdr_ctrl_set(hdr_ctrl)) {
+		ppe_drv_warn("%p encap header control set failed", p);
+		return false;
+	}
+
+	/*
+	 * Set the encap header control bitmap in tunnel structure
+	 */
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_BASE);
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_MASK);
+
+	return true;
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_free
+ *	free encap header control entry
+ */
+void ppe_drv_tun_encap_hdr_ctrl_free(struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl)
+{
+	kfree(hdr_ctrl);
+}
+
+/*
+ * ppe_drv_tun_encap_hdr_ctrl_init
+ *	initialize encap header control register
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_init(struct ppe_drv *p)
+{
+	fal_tunnel_encap_header_ctrl_t header_ctrl = {0};
+	sw_error_t err;
+
+	p->ecap_hdr_ctrl = kzalloc(sizeof(struct ppe_drv_tun_encap_hdr_ctrl), GFP_ATOMIC);
+	if (!p->ecap_hdr_ctrl) {
+		ppe_drv_warn("%p: failed to allocate encap header control entry", p);
+		return NULL;
+	}
+
+	err = fal_tunnel_encap_header_ctrl_set(PPE_DRV_SWITCH_ID, &header_ctrl);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to configure encap header control err: %d", p, err);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_tun_encap_dump
  *	Dump contents of EG_TUN_CTRL table instance
  */
@@ -379,7 +746,6 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 {
 	sw_error_t err;
 	fal_tunnel_encap_cfg_t encap_cfg = {0};
-	fal_tunnel_encap_header_ctrl_t header_ctrl = {0};
 
 	/*
 	 * Update the tunnel encapsulation header
@@ -447,17 +813,9 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 		encap_cfg.l4_proto = FAL_TUNNEL_ENCAP_L4_PROTO_UDP; /* 0:Non;1:TCP;2:UDP;3:UDP-Lite;4:Reserved (ICMP);5:GRE; */
 		encap_cfg.sport_entry_en = 1;  /* TODO: FAL API should be entropy */
 		encap_cfg.payload_inner_type = FAL_TUNNEL_INNER_ETHERNET;
-		header_ctrl.udp_sport_base = FAL_TUNNEL_UDP_ENTROPY_SPORT_BASE;
-		header_ctrl.udp_sport_mask = FAL_TUNNEL_UDP_ENTROPY_SPORT_MASK;
 
 		if (!(th->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM_TX)) {
 			encap_cfg.l4_checksum_en = true;
-		}
-
-		err = fal_tunnel_encap_header_ctrl_set(0, &header_ctrl);
-		if (err != SW_OK) {
-			ppe_drv_warn("%p VXLAN: failed to configure encap header err: %d", ptec, err);
-			return false;
 		}
 
 	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP) {
