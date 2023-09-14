@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -767,6 +767,8 @@ EXPORT_SYMBOL(nss_dtlsmgr_session_create);
 nss_dtlsmgr_status_t nss_dtlsmgr_session_destroy(struct net_device *dev)
 {
 	struct nss_dtlsmgr_ctx *ctx = netdev_priv(dev);
+	ppe_vp_status_t vp_status;
+
 	NSS_DTLSMGR_VERIFY_MAGIC(ctx);
 
 	/*
@@ -777,6 +779,16 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_destroy(struct net_device *dev)
 
 	nss_dtlsmgr_trace("%px: destroying encap(%u) and decap(%u) sessions",
 			  ctx, ctx->encap.ifnum, ctx->decap.ifnum);
+
+	/*
+	 * Free the VP interface associated with the tunnel.
+	 */
+	vp_status = ppe_vp_free(ctx->vp_num);
+	if (vp_status != PPE_VP_STATUS_SUCCESS) {
+		nss_dtlsmgr_warn("%px: VP Number %d: Failed to free the associated VP for dev: %s\n",
+			dev, ctx->vp_num, dev->name);
+		return NSS_DTLSMGR_FAIL_VP_FREE;
+	}
 
 	if (!nss_dtlsmgr_ctx_deconfigure(ctx, &ctx->encap)) {
 		nss_dtlsmgr_warn("%px: unable to deconfigure encap", ctx);

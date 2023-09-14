@@ -3814,6 +3814,15 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	}
 
 	/*
+	 * Destroy DTLS node if there is one associated to this tunnel
+	 */
+	if (t->capwap_rule.dtls_inner_if_num) {
+		if (nss_dtlsmgr_session_destroy(t->dtls_dev) != NSS_DTLSMGR_OK) {
+			nss_capwapmgr_warn("%px: failed to destroy DTLS session", t->dtls_dev);
+		}
+	}
+
+	/*
 	 * Update the state flag to say the tunnel is unconfigured.
 	 */
 	t->tunnel_state &= ~NSS_CAPWAPMGR_TUNNEL_STATE_CONFIGURED;
