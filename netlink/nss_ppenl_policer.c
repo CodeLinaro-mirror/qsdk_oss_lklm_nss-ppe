@@ -115,7 +115,7 @@ static int nss_ppenl_policer_ops_create_rule(struct sk_buff *skb, struct genl_in
 	create.policer_type = nl_policer_rule->config.is_port_policer;
 	create.rule_id = nl_policer_rule->config.policer_id;
 	create.config.committed_rate = nl_policer_rule->config.committed_rate;
-	create.config.committed_burst_size = nl_policer_rule->config.committed_brust_size;
+	create.config.committed_burst_size = nl_policer_rule->config.committed_burst_size;
 	create.config.peak_rate = nl_policer_rule->config.peak_rate;
 	create.config.peak_burst_size = nl_policer_rule->config.peak_burst_size;
 	if (create.policer_type) {

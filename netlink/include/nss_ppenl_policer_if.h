@@ -38,7 +38,7 @@ struct nss_ppenl_policer_action_info {
 };
 
 /*
- * @breif Policer config
+ * @brief Policer config
  */
 struct nss_ppenl_policer_config {
 	int policer_id;	/* user given policer id */
@@ -46,7 +46,7 @@ struct nss_ppenl_policer_config {
 	bool meter_mode;	/* 0 for RFC 2698, 1 for RFC 2697, 4115 */
 	bool meter_unit;	/* 0 for byte based, 1 for frame based */
 	int committed_rate;	/* committed information rate */
-	int committed_brust_size;	/* CBS, committed burst size */
+	int committed_burst_size;	/* CBS, committed burst size */
 	int peak_rate;	/* EIR, expected information rate */
 	int peak_burst_size;	/* EBS, expected burst size */
 	char dev[IFNAMSIZ];	/* dev name for port policer */
