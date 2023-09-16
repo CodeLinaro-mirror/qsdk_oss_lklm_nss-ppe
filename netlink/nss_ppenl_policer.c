@@ -103,6 +103,7 @@ static int nss_ppenl_policer_ops_create_rule(struct sk_buff *skb, struct genl_in
 	nl_cm = nss_ppenl_get_msg(&nss_ppenl_policer_family, info, NSS_PPE_POLICER_CREATE_RULE_MSG);
 	if (!nl_cm) {
 		nss_ppenl_info("unable to extract rule create data\n");
+		nss_ppenl_ucast_resp(skb);
 		return -EINVAL;
 	}
 
@@ -157,6 +158,7 @@ static int nss_ppenl_policer_ops_create_rule(struct sk_buff *skb, struct genl_in
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
 		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
 		return error;
 	}
 
