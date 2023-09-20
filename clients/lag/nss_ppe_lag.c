@@ -38,6 +38,8 @@
 		pr_warn("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 #define nss_ppe_lag_info(s, ...) \
 		pr_notice("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
+#define nss_ppe_lag_trace(s, ...) \
+		pr_debug("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 #else /* CONFIG_DYNAMIC_DEBUG */
 /*
  * Statically compile messages at different levels
@@ -54,6 +56,13 @@
 #else
 #define nss_ppe_lag_info(s, ...) \
 		pr_notice("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
+#endif
+
+#if (NSS_PPE_LAG_MGR_DEBUG_LEVEL < 4)
+#define nss_ppe_lag_trace(s, ...)
+#else
+#define nss_ppe_lag_trace(s, ...) \
+                pr_info("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
@@ -123,12 +132,12 @@ static int nss_ppe_lag_update_slave(struct netdev_notifier_info *info)
 	struct netdev_notifier_changeupper_info *cu_info = (struct netdev_notifier_changeupper_info *)info;
 
 	if (!cu_info->upper_dev) {
-		nss_ppe_lag_warn("%px: Upper dev not present for dev: %s\n", info, slave_dev->name);
+		nss_ppe_lag_trace("%px: Upper dev not present for dev: %s\n", info, slave_dev->name);
 		return NOTIFY_DONE;
 	}
 
 	if (!netif_is_bond_master(cu_info->upper_dev)) {
-		nss_ppe_lag_warn("%px: Upper dev is not LAG for dev: %s\n", info, slave_dev->name);
+		nss_ppe_lag_trace("%px: Upper dev is not LAG for dev: %s\n", info, slave_dev->name);
 		return NOTIFY_DONE;
 	}
 

@@ -215,7 +215,6 @@ struct ppe_vp *ppe_vp_base_alloc_vp(uint8_t port_num)
 	rcu_assign_pointer(pvt->vp_allocator[vp_idx], vp);
 	pvt->active_vp++;
 	spin_unlock_bh(&pvb->lock);
-	synchronize_rcu();
 
 	ppe_vp_info("%px: Successfully allocate VP %px at port num %u (idx %u)", pvb, vp, port_num, vp_idx);
 	return vp;
