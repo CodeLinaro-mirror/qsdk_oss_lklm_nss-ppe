@@ -8,6 +8,14 @@ ifeq ($(PPE_RULE_IPQ53XX), y)
 ccflags-y += -DNSS_PPE_RULE_IPQ53XX
 endif
 
+ifeq ($(PPE_LOWMEM_PROFILE_16M), y)
+ccflags-y += -DNSS_PPE_LOWMEM_PROFILE_16M
+endif
+
+ifeq ($(PPE_LOWMEM_PROFILE_256M), y)
+ccflags-y += -DNSS_PPE_LOWMEM_PROFILE_256M
+endif
+
 obj-m += qca-nss-ppe-rule.o
 qca-nss-ppe-rule-objs := ppe_rule.o
 
@@ -17,6 +25,8 @@ qca-nss-ppe-rule-objs += ppe_rfs/ppe_rfs_stats.o
 ccflags-y += -DPPE_RFS_DEBUG_LEVEL=3
 endif
 
+ifndef PPE_LOWMEM_PROFILE_16M
+ifndef PPE_LOWMEM_PROFILE_256M
 ifeq ($(PPE_POLICER_ENABLED), y)
 qca-nss-ppe-rule-objs += ppe_policer/ppe_policer.o
 qca-nss-ppe-rule-objs += ppe_policer/ppe_policer_stats.o
@@ -40,4 +50,6 @@ ifeq ($(PPE_PRIORITY_ENABLED), y)
 qca-nss-ppe-rule-objs += ppe_priority/ppe_priority.o
 qca-nss-ppe-rule-objs += ppe_priority/ppe_priority_stats.o
 ccflags-y += -DPPE_PRIORITY_DEBUG_LEVEL=3
+endif
+endif
 endif
