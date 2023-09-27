@@ -32,12 +32,17 @@ static bool ppe_drv_v6_bind_acl_policer(struct ppe_drv_v6_rule_create *create, s
 	struct ppe_drv_policer_ctx *ctx = p->pol_ctx;
 	struct ppe_drv_policer_flow policer_info = {0};
 
-	if (!(create->valid_flags & PPE_DRV_V6_VALID_FLAG_ACL_POLICER) || (!acl->flow_add_cb && !ctx->flow_add_cb)) {
+	if (!(create->valid_flags & PPE_DRV_V6_VALID_FLAG_ACL_POLICER)) {
 		return true;
 	}
 
 	switch (ap_rule->type) {
 		case PPE_DRV_RULE_TYPE_FLOW_ACL:
+			if (!acl->flow_add_cb) {
+				ppe_drv_trace("%p: No callback registered for acl:%p\n", p, acl);
+				return true;
+			}
+
 			if (ap_rule->rule_id.acl.flags & PPE_DRV_VALID_FLAG_FLOW_ACL) {
 				info.id = ap_rule->rule_id.acl.flow_acl_id;
 				if (!acl->flow_add_cb(acl->flow_app_data, &info)) {
@@ -71,6 +76,11 @@ static bool ppe_drv_v6_bind_acl_policer(struct ppe_drv_v6_rule_create *create, s
 			break;
 
 		case PPE_DRV_RULE_TYPE_FLOW_POLICER:
+			if (!ctx->flow_add_cb) {
+				ppe_drv_trace("%p: No callback registered for policer:%p\n", p, ctx);
+				return true;
+			}
+
 			if (ap_rule->rule_id.policer.flags & PPE_DRV_VALID_FLAG_FLOW_POLICER) {
 				policer_info.id = ap_rule->rule_id.policer.flow_policer_id;
 				if (ap_rule->pkt_noedit) {

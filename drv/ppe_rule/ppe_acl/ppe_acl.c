@@ -163,14 +163,14 @@ static void ppe_acl_rule_free(struct kref *kref)
 	 */
 	ppe_acl_info("%p: ACL rule freed: %u", acl, acl->rule_id);
 
+	if (acl->rule_id >= PPE_ACL_GEN_RULE_ID_BASE) {
+		ppe_acl_rule_return_gen_id(acl->rule_id);
+	}
+
 	/*
 	 * free the acl rule memory.
 	 */
 	ppe_acl_free(acl);
-
-	if (acl->rule_id >= PPE_ACL_GEN_RULE_ID_BASE) {
-		ppe_acl_rule_return_gen_id(acl->rule_id);
-	}
 
 	/*
 	 * Update stats
