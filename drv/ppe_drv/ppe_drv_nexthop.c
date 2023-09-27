@@ -520,8 +520,8 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 			fal_nh.type = FAL_NEXTHOP_VP;
 			fal_nh.port = pp->port;
 
-			ppe_drv_trace("%p: fdb learning disable on vsi:%u out_vlan %d in_vlan %d dev %s\n", pcf,
-				      vsi->index, out_vlan, in_vlan, pp->dev->name);
+			ppe_drv_trace("%p: fdb learning disable for dev %s out_vlan %d in_vlan %d\n", pcf,
+				      pp->dev->name, out_vlan, in_vlan);
 
 			if (out_vlan != PPE_DRV_VLAN_NOT_CONFIGURED) {
 				ppe_drv_trace("%p: fdb learning disable configuring STAG:%u", pcf, out_vlan);
@@ -908,8 +908,8 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 			fal_nh.type = FAL_NEXTHOP_VP;
 			fal_nh.port = pp->port;
 
-			ppe_drv_trace("%p: fdb learning disable on vsi:%u out_vlan %d in_vlan %d dev %s\n", pcf,
-				      vsi->index, out_vlan, in_vlan, pp->dev->name);
+			ppe_drv_trace("%p: fdb learning disable for dev %s out_vlan %d in_vlan %d\n", pcf,
+				      pp->dev->name, out_vlan, in_vlan);
 
 			if (out_vlan != PPE_DRV_VLAN_NOT_CONFIGURED) {
 				ppe_drv_trace("%p: fdb learning disable configuring STAG:%u", pcf, out_vlan);
