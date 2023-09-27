@@ -274,6 +274,6 @@ struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx);
  */
 bool ppe_drv_iface_check_flow_offload_enabled(ppe_drv_iface_t rx_if,
 				ppe_drv_iface_t tx_if);
-/** @} */ /* end_addtogroup ppe_drv_iface_subsystem */
 
+/** @} */ /* end_addtogroup ppe_drv_iface_subsystem */
 #endif /* _PPE_DRV_IFACE_H_ */

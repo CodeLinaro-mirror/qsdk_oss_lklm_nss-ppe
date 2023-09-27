@@ -64,11 +64,13 @@ ppe_drv_ret_t ppe_drv_dp_deinit(struct ppe_drv_iface *iface);
  *
  * @param[in] iface   Pointer to the PPE interface for bridge.
  * @param[in] macid   MAC ID of the port.
+ * @param[in] mht_dev MHT SWT device ports mapping flag.
  *
  * @return
  * Status of the operation.
  */
-ppe_drv_ret_t ppe_drv_dp_init(struct ppe_drv_iface *iface, uint32_t macid);
+ppe_drv_ret_t ppe_drv_dp_init(struct ppe_drv_iface *iface, uint32_t macid,
+				bool mht_dev);
 
 /**
  * ppe_drv_dp_set_mirror_if
