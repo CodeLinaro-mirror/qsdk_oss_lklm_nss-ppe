@@ -347,6 +347,11 @@ struct ppe_drv_policer_port *ppe_drv_policer_port_create(struct ppe_drv_policer_
 		return false;
 	}
 
+	if (!PPE_DRV_PHY_PORT_CHK(port_id)) {
+		ppe_drv_warn("Invalid Physical_port: %d\n", port_id);
+		return false;
+	}
+
 	spin_lock_bh(&p->lock);
 
 	/*

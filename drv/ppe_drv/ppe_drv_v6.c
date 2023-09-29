@@ -2052,7 +2052,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_destroy(struct ppe_drv_v6_rule_destroy *de
 	pcf = flow->pcf.v6;
 	cn = ppe_drv_v6_conn_flow_conn_get(pcf);
 
-	if (pcf && ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
 		if (!ppe_drv_v6_flow_del(pcf)) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_stats_inc(&comm_stats->v6_destroy_policer_fail);
@@ -2152,7 +2152,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_acl);
 		ppe_drv_warn("%p: failed to combine with ACL, connection object: %p", p, create);
 		kfree(cn);
-		return ret;
+		return PPE_DRV_RET_POLICER_RULE_BIND_FAIL;
 	}
 
 	/*

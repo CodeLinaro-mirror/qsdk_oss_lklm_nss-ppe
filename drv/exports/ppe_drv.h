@@ -399,6 +399,9 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL,		/**< QoS scheduler configuration failed. */
 	PPE_DRV_RET_QOS_SHAPER_CFG_FAIL,		/**< QoS shaper configuration failed. */
 	PPE_DRV_RET_QOS_PORT_CFG_FAIL,			/**< QoS port configuration failed. */
+	PPE_DRV_RET_POLICER_RULE_BIND_FAIL,		/**< Failed to bind Policer rule */
+	PPE_DRV_RET_BASE_DEV_NOT_FOUND,			/**< Base Device not found */
+	PPE_DRV_RET_BASE_PORT_NOT_FOUND,		/**< Base Port not found */
 	PPE_DRV_RET_FAILURE_FLOW_CONFIGURE_FAIL,	/**< Failure due to FSE flow configuration failed */
 } ppe_drv_ret_t;
 
