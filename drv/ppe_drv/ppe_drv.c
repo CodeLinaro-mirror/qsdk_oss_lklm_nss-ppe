@@ -318,6 +318,13 @@ EXPORT_SYMBOL(ppe_drv_fse_feature_disable);
  */
 void ppe_drv_core2queue_mapping(uint8_t core, uint8_t queue_id)
 {
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	if (core >= NR_CPUS) {
+		ppe_drv_warn("%p: invalid core-id: %d", p, core);
+		return;
+	}
+
 	ppe_drv_trace("%d: queue mapping called for core(%d)\n", queue_id, core);
 
 	switch(core) {
@@ -339,9 +346,29 @@ void ppe_drv_core2queue_mapping(uint8_t core, uint8_t queue_id)
 		break;
 	default:
 		ppe_drv_warn("%d Invalid core(%d)\n", queue_id, core);
+		return;
 	}
+
+	p->core2queue[core] = queue_id;
 }
 EXPORT_SYMBOL(ppe_drv_core2queue_mapping);
+
+/*
+ * ppe_drv_queue_from_core()
+ *	Get base queue for a specific core.
+ */
+int16_t ppe_drv_queue_from_core(uint8_t core)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	if (core >= NR_CPUS) {
+		ppe_drv_warn("%p: invalid core-id: %d", p, core);
+		return -1;
+	}
+
+	return p->core2queue[core];
+}
+EXPORT_SYMBOL(ppe_drv_queue_from_core);
 
 /*
  * ppe_drv_l3_route_ctrl_init()

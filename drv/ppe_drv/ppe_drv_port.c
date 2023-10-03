@@ -1364,6 +1364,13 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 		profile = PPE_DRV_REDIR_PROFILE_ID;
 	}
 
+	/*
+	 * If port based redirection is enabled, disable RPS for the port
+	 */
+	if (ppe_drv_port_flags_check(pp, PPE_DRV_PORT_FLAG_REDIR_ENABLED)) {
+		profile = PPE_DRV_REDIR_PROFILE_ID;
+	}
+
 	ppe_drv_info("user type: %d, profile: %d\n", pp->user_type, profile);
 
 	/*

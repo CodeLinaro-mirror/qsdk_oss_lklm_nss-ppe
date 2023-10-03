@@ -26,6 +26,7 @@
 #include <ppe_drv_port.h>
 
 #define PPE_VP_FLAG_DISABLE_TTL_DEC	0x1	/**< Set = TTL Decrement disabled, clear = TTL Decrement enabled */
+#define PPE_VP_FLAG_REDIR_ENABLE	0x2	/**< When set, the packets destined to VP are redirect to VP queue without RPS */
 
 /**
  * @addtogroup ppe_vp_public_subsystem

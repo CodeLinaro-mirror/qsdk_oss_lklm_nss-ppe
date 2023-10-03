@@ -40,6 +40,7 @@ struct ppe_drv_vp_info {
 	uint32_t usr_type;		/**< VP user type */
 	uint32_t net_dev_type;		/**< VP netdev type */
 	bool disable_ttl_dec;		/**< Disable TTL decrement operation in PPE VP */
+	bool redir_en;			/**< Enable redirection to VP queue without RPS */
 };
 
 /**

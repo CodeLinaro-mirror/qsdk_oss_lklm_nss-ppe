@@ -423,6 +423,17 @@ typedef enum ppe_drv_ret {
 struct dentry *ppe_drv_get_dentry(void);
 
 /**
+ * ppe_drv_queue_from_core
+ *	Provide queue for a specific core.
+ *
+ * @param[in] core core_id.
+ *
+ * @return
+ * queue-ID for a specific core or -1 for incorrect core ID.
+ */
+int16_t ppe_drv_queue_from_core(uint8_t core);
+
+/**
  * ppe_drv_core2queue_mapping
  *	Provide core to queue mapping.
  *
