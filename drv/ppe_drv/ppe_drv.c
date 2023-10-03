@@ -29,6 +29,8 @@
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
 
+#define PPE_DRV_STATIC_DBG_LEVEL_STR_LEN 8
+
 /*
  * Module parameter to enable/disable 2-tuple RSS hash for IP fragments.
  */
@@ -37,6 +39,8 @@ module_param(ipfrag_2tuple_hash, bool, 0644);
 MODULE_PARM_DESC(ipfrag_2tuple_hash, "RSS hash for IP fragments based on SIP & DIP");
 
 uint32_t if_bm_to_offload;
+uint32_t static_dbg_level = 0;
+static char static_dbg_level_str[PPE_DRV_STATIC_DBG_LEVEL_STR_LEN];
 uint8_t ppe_drv_redir_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7};
 
 /*
@@ -1178,6 +1182,51 @@ static int ppe_drv_if_bm_to_offload_handler(struct ctl_table *table, int write,
 }
 
 /*
+ * ppe_drv_static_dbg_level_handler()
+ *	Set static debug level for ppe-driver.
+ */
+static int ppe_drv_static_dbg_level_handler(struct ctl_table *table,
+					int write, void __user *buffer,
+					size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	char *level_str;
+	enum ppe_drv_static_dbg_level dbg_level;
+
+	/*
+	 * Find the string, return an error if not found
+	 */
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret || !write) {
+		return ret;
+	}
+
+	level_str = static_dbg_level_str;
+	printk("dbg_level: %s", level_str);
+
+	if (!strcmp(level_str, "warn")) {
+		dbg_level = PPE_DRV_STATIC_DBG_LEVEL_WARN;
+	} else if (!strcmp(level_str, "info")) {
+		dbg_level = PPE_DRV_STATIC_DBG_LEVEL_INFO;
+	} else if (!strcmp(level_str, "trace")) {
+		dbg_level = PPE_DRV_STATIC_DBG_LEVEL_TRACE;
+	} else if (!strcmp(level_str, "none")) {
+		dbg_level = PPE_DRV_STATIC_DBG_LEVEL_NONE;
+	} else {
+		printk("Usage: echo '[warn|info|trace|none]' > /proc/sys/ppe/ppe_drv/static_dbg_level\n");
+		return -EINVAL;
+	}
+
+	if (dbg_level >= PPE_DRV_DEBUG_LEVEL) {
+		printk("debug level: %d not compiled in: %d\n", dbg_level, PPE_DRV_DEBUG_LEVEL);
+		return -EINVAL;
+	}
+
+	static_dbg_level = dbg_level;
+	return ret;
+}
+
+/*
  * ppe_drv_sub
  *	PPE DRV sub directory
  */
@@ -1188,6 +1237,13 @@ static struct ctl_table ppe_drv_sub[] = {
 		.maxlen		=	sizeof(int),
 		.mode		=	0644,
 		.proc_handler	=	ppe_drv_if_bm_to_offload_handler
+	},
+	{
+		.procname	=	"static_dbg_level",
+		.data		=	&static_dbg_level_str,
+		.maxlen		=	sizeof(char) * PPE_DRV_STATIC_DBG_LEVEL_STR_LEN,
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_static_dbg_level_handler
 	},
 	{}
 };

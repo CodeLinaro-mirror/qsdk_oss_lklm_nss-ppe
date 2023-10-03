@@ -38,6 +38,19 @@
 #include "ppe_drv_flow_dump.h"
 #include "ppe_drv_if_map.h"
 
+extern uint32_t static_dbg_level;
+
+/*
+ * ppe_drv_static_dbg_level
+ *	PPE static debug level
+ */
+enum ppe_drv_static_dbg_level {
+	PPE_DRV_STATIC_DBG_LEVEL_NONE,
+	PPE_DRV_STATIC_DBG_LEVEL_WARN,
+	PPE_DRV_STATIC_DBG_LEVEL_INFO,
+	PPE_DRV_STATIC_DBG_LEVEL_TRACE,
+};
+
 /*
  * PPE debug macros
  */
@@ -62,19 +75,25 @@
 #if (PPE_DRV_DEBUG_LEVEL < 2)
 #define ppe_drv_warn(s, ...)
 #else
-#define ppe_drv_warn(s, ...) pr_warn("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define ppe_drv_warn(s, ...) \
+	if (static_dbg_level >= PPE_DRV_STATIC_DBG_LEVEL_WARN) \
+		pr_warn("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if (PPE_DRV_DEBUG_LEVEL < 3)
 #define ppe_drv_info(s, ...)
 #else
-#define ppe_drv_info(s, ...) pr_notice("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define ppe_drv_info(s, ...) \
+	if (static_dbg_level >= PPE_DRV_STATIC_DBG_LEVEL_INFO) \
+		pr_notice("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if (PPE_DRV_DEBUG_LEVEL < 4)
 #define ppe_drv_trace(s, ...)
 #else
-#define ppe_drv_trace(s, ...) pr_info("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define ppe_drv_trace(s, ...) \
+	if (static_dbg_level >= PPE_DRV_STATIC_DBG_LEVEL_TRACE) \
+		pr_info("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #endif
 #endif
 
