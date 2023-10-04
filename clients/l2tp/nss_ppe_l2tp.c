@@ -168,11 +168,7 @@ static bool nss_ppe_l2tp_dev_parse_param(struct net_device *netdev, struct ppe_d
 
 	sock_hold(tunnel->sock);
 	inet = inet_sk(tunnel->sock);
-	if (!tunnel->sock->sk_no_check_tx) {
-		sock_put(tunnel->sock);
-		nss_ppe_l2tp_warning("PPE doesnt support tunnel UDP checksum setting\n");
-		goto fail;
-	}
+
 
 	if (tunnel->sock->sk_protocol != IPPROTO_UDP) {
 		sock_put(tunnel->sock);
@@ -211,6 +207,9 @@ static bool nss_ppe_l2tp_dev_parse_param(struct net_device *netdev, struct ppe_d
 	 */
 	tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_TTL;
 	tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP;
+	if (tunnel->sock->sk_no_check_tx) {
+		tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM_TX;
+	}
 
 	if (!ppe_tun_l2tp_port_get(&sport, &dport)) {
 		nss_ppe_l2tp_warning("Connot get port configurations from ppe tun\n");
