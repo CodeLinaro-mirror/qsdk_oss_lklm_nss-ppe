@@ -726,6 +726,15 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 			if (ppe_drv_vlan_add_untag_ingress_rule(pp, pp->active_l3_if)) {
 				pp->ingress_untag_vlan = true;
 			}
+
+			/*
+			 * Detach l3_if for ports with active vlan if it was attached earlier.
+			 * This is added to handle a case where l3_if is set if parent ethX interface
+			 * was deleted from bridge.
+			 */
+			if (pp->active_l3_if_attached) {
+				ppe_drv_port_l3_if_detach(pp, pp->active_l3_if);
+			}
 		}
 
 		break;

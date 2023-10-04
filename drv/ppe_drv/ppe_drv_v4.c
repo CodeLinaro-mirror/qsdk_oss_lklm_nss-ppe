@@ -2446,16 +2446,11 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	 */
 	ppe_drv_v4_if_walk_release(pcr);
 
-/*
- * TODO: Remove the following check when Tunnel mapt support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	if (ppe_drv_tun_mapt_port_tun_get(pcf->tx_port, pcf->rx_port)) {
 		if (!ppe_drv_tun_detach_mapt_v4_to_v6(cn)) {
 			ppe_drv_trace("%p: mapt v4 to v6 detach failed", p);
 		}
 	}
-#endif
 
 	/*
 	 * Delete connection entry from the active connection list.
@@ -3140,16 +3135,11 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	pcf->conn = cn;
 	pcr->conn = cn;
 
-/*
- * TODO: Remove the following check when Tunnel mapt support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	if (ppe_drv_tun_mapt_port_tun_get(pcf->tx_port, pcf->rx_port)) {
 		if (!ppe_drv_tun_attach_mapt_v4_to_v6(cn)) {
 			ppe_drv_trace("%p: mapt attach v4 to v6 failed", p);
 		}
 	}
-#endif
 
 	/*
 	 * We maintain reference per connection on main ppe context.

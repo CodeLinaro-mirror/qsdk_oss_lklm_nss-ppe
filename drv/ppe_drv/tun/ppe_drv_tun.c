@@ -18,13 +18,8 @@
 #include <net/vxlan.h>
 #include <linux/in.h>
 #include <linux/version.h>
-/*
- *  TODO: Remove the following check when Tunnel Mapt support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 #include <nat46/nat46-core.h>
 #include <nat46/nat46-netdev.h>
-#endif
 
 #include <fal/fal_ip.h>
 #include <fal_tunnel.h>
@@ -653,10 +648,6 @@ bool ppe_drv_tun_detach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn)
 }
 
 /*
- * TODO: Remove the following check when Tunnel Mapt support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-/*
  *  ppe_drv_tun_attach_mapt_v4_to_v6
  *	Attach mapt v4 flow with v6 outer tunnel context
  */
@@ -828,7 +819,6 @@ static bool ppe_drv_tun_mapt_translate_v6_to_v4(bool is_flow_dir, struct net_dev
 
 	return true;
 }
-#endif
 
 /*
  *  ppe_drv_tun_detach_mapt_v6_to_v4
@@ -864,25 +854,16 @@ static bool ppe_drv_tun_detach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6
 		}
 		is_flow_dir = false;
 	}
-/*
- * TODO: Remove the following check when Tunnel Mapt support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	if (!ppe_drv_tun_mapt_translate_v6_to_v4(is_flow_dir, netdev, conn_tun_v6, &pcf_v4, &pcr_v4)) {
 		ppe_drv_trace("%p: cant find pcf v4 corresponding to pcf v6 \n", pp);
 		return false;
 	}
-#endif
 	ppe_drv_flow_v4_detach_mapt_v6_conn(pcf_v4);
 	ppe_drv_flow_v4_detach_mapt_v6_conn(pcr_v4);
 
 	return true;
 }
 
-/*
- * TODO: Remove the following check when Tunnel Mapt support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 /*
  *  ppe_drv_tun_attach_mapt_v6_to_v4
  *	Attach mapt v6 tunnel context with v4 inner flow
@@ -936,7 +917,6 @@ bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6)
 
 	return true;
 }
-#endif
 
 /*
  *  ppe_drv_tun_v6_conn_tun_del
@@ -1582,14 +1562,9 @@ skip_tunnel_activation:
 		if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
 			ppe_drv_v6_conn_flags_set(cn_v6, PPE_DRV_V6_CONN_FLAG_TYPE_MAPT);
 
-/*
- * TODO: Remove the following check when Tunnel Mapt support is added for PPE
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 			if (!ppe_drv_tun_attach_mapt_v6_to_v4(cn_v6)) {
 				ppe_drv_trace("%p: MAP-T v6 to v4 attach failed", ptun);
 			}
-#endif
 		}
 	} else if (cn_v4) {
 		list_add(&cn_v4->list, &p->conn_tun_v4);

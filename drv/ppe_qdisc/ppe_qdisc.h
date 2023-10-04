@@ -18,6 +18,7 @@
 #ifndef _PPE_QDISC_H_
 #define _PPE_QDISC_H_
 
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <net/pkt_sched.h>
@@ -109,7 +110,11 @@ struct ppe_qdisc {
 	uint32_t int_pri;		/* INT PRI value */
 	ppe_drv_qos_level_t level;	/* Level at which qdisc is configured */
 	struct ppe_drv_qos_res res;	/* PPE Qdisc scheduler and shaper resources */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	struct gnet_stats_basic_packed bstats;	/* Basic class statistics */
+#else
+	struct gnet_stats_basic_sync bstats;
+#endif
 	struct gnet_stats_queue qstats;	/* Qstats for use by classes */
 	refcount_t refcnt;		/* Reference count for class use */
 	spinlock_t lock;		/* Lock to protect the nss qdisc structure */
@@ -242,7 +247,12 @@ static inline int ppe_qdisc_enqueue(struct sk_buff *skb,
 	if (!skb->priority) {
 		struct tcf_proto *tcf = NULL;
 		struct tcf_result res;
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		if (TC_ACT_UNSPEC != tcf_classify(skb, tcf, &res, false)) {
+#else
+		if (TC_ACT_UNSPEC != tcf_classify(skb, NULL, tcf, &res, false)) {
+#endif
 			if (!res.class) {
 				skb->priority = res.classid;
 			}
@@ -274,11 +284,19 @@ static inline struct Qdisc *ppe_qdisc_replace(struct Qdisc *sch,
  * ppe_qdisc_gnet_stats_copy_basic()
  *  Wrapper around gnet_stats_copy_basic()
  */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 static inline int ppe_qdisc_gnet_stats_copy_basic(struct Qdisc *sch, struct gnet_dump *d,
 		struct gnet_stats_basic_packed *b)
 {
 	return gnet_stats_copy_basic(qdisc_root_sleeping_running(sch), d, NULL, b);
 }
+#else
+static inline int ppe_qdisc_gnet_stats_copy_basic(struct Qdisc *sch, struct gnet_dump *d,
+		struct gnet_stats_basic_sync *b)
+{
+	return gnet_stats_copy_basic(d, NULL, b, true);
+}
+#endif
 
 /*
  * ppe_qdisc_gnet_stats_copy_queue()

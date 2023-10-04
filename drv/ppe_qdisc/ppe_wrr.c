@@ -336,7 +336,12 @@ failure:
  * ppe_wrr_delete_class()
  * 	Detaches a class from operation, but does not destroy it.
  */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 static int ppe_wrr_delete_class(struct Qdisc *sch, unsigned long arg)
+#else
+static int ppe_wrr_delete_class(struct Qdisc *sch, unsigned long arg,
+		struct netlink_ext_ack *extack)
+#endif
 {
 	struct ppe_wrr_sched_data *q = qdisc_priv(sch);
 	struct ppe_wrr_class_data *cl = (struct ppe_wrr_class_data *)arg;

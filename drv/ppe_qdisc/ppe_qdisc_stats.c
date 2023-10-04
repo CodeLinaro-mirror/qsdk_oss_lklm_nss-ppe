@@ -118,13 +118,23 @@ void ppe_qdisc_stats_update_parent(struct ppe_qdisc *pq, struct ppe_drv_qos_q_st
 	while (!(pq->flags & PPE_QDISC_FLAG_NODE_ROOT)) {
 		spin_lock_bh(&pq->lock);
 		if (pq->flags & PPE_QDISC_FLAG_NODE_CLASS) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 			pq->bstats.packets += delta->tx_pkts;
 			pq->bstats.bytes += delta->tx_bytes;
+#else
+			u64_stats_add(&pq->bstats.packets, delta->tx_pkts);
+			u64_stats_add(&pq->bstats.bytes, delta->tx_bytes);
+#endif
 			pq->qstats.drops += delta->drop_pkts;
 		} else {
 			qdisc = pq->qdisc;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 			qdisc->bstats.packets += delta->tx_pkts;
 			qdisc->bstats.bytes += delta->tx_bytes;
+#else
+			u64_stats_add(&qdisc->bstats.packets, delta->tx_pkts);
+			u64_stats_add(&qdisc->bstats.bytes, delta->tx_bytes);
+#endif
 			qdisc->qstats.drops += delta->drop_pkts;
 		}
 		spin_unlock_bh(&pq->lock);
@@ -137,8 +147,13 @@ void ppe_qdisc_stats_update_parent(struct ppe_qdisc *pq, struct ppe_drv_qos_q_st
 	 */
 	rqdisc = pq->qdisc;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	rqdisc->bstats.packets += delta->tx_pkts;
 	rqdisc->bstats.bytes += delta->tx_bytes;
+#else
+	u64_stats_add(&rqdisc->bstats.packets, delta->tx_pkts);
+	u64_stats_add(&rqdisc->bstats.bytes, delta->tx_bytes);
+#endif
 	rqdisc->qstats.drops += delta->drop_pkts;
 	spin_unlock_bh(&pq->lock);
 
@@ -174,16 +189,28 @@ static void ppe_qdisc_stats_get_node(struct ppe_qdisc *pqr)
 	list_for_each_entry(cursor, &pqr->stats_wq->q_list_head, q_list_element) {
 		if (cursor != NULL) {
 			spin_lock_bh(&cursor->lock);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 			prev_stats->tx_pkts = cursor->qdisc->bstats.packets;
 			prev_stats->tx_bytes = cursor->qdisc->bstats.bytes;
+#else
+			prev_stats->tx_pkts =
+				u64_stats_read(&cursor->qdisc->bstats.packets);
+			prev_stats->tx_bytes =
+				u64_stats_read(&cursor->qdisc->bstats.bytes);
+#endif
 			prev_stats->drop_pkts = cursor->qdisc->qstats.drops;
 			is_red = (cursor->type == PPE_QDISC_NODE_TYPE_RED) ? true : false;
 			/*
 			 * Getting statistics from PPE
 			 */
 			ppe_drv_qos_queue_stats_get(cursor->res.q.ucast_qid, is_red, cur_stats);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 			cursor->qdisc->bstats.packets = cur_stats->tx_pkts;
 			cursor->qdisc->bstats.bytes = cur_stats->tx_bytes;
+#else
+			u64_stats_set(&cursor->qdisc->bstats.packets, cur_stats->tx_pkts);
+			u64_stats_set(&cursor->qdisc->bstats.bytes, cur_stats->tx_bytes);
+#endif
 			cursor->qdisc->qstats.drops = cur_stats->drop_pkts;
 			spin_unlock_bh(&cursor->lock);
 
