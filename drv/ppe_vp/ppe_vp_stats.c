@@ -20,7 +20,7 @@
 #include <ppe_drv_iface.h>
 #include "ppe_vp_base.h"
 
-#define RX_STATS_COUNT		6
+#define RX_STATS_COUNT		7
 #define TX_STATS_COUNT		4
 
 extern struct ppe_vp_base vp_base;
@@ -44,7 +44,8 @@ static const char *ppe_vp_stats_rx_str[] = {
 	"Rx exceptioned packets",		/* Total exceptioned VP packets */
 	"Rx exceptioned bytes",			/* Total exceptioned VP bytes */
 	"Rx errors",				/* Total rx errors */
-	"Rx drops"				/* Total rx drops */
+	"Rx drops",				/* Total rx drops */
+	"Rx dev not up"				/* Received packets before dev IFF_UP */
 };
 
 static const char *ppe_vp_stats_tx_str[] = {
@@ -242,6 +243,7 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 				rx_aggr[3] += rx_stats.rx_excp_bytes;
 				rx_aggr[4] += rx_stats.rx_errors;
 				rx_aggr[5] += rx_stats.rx_drops;
+				rx_aggr[6] += rx_stats.rx_dev_not_up;
 
 				tx_pcpu_stats = per_cpu_ptr(vp_stats->tx_stats, i);
 

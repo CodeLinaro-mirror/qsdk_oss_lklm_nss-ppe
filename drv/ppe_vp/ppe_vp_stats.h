@@ -54,6 +54,7 @@ struct ppe_vp_rx_stats {
 	uint64_t rx_excp_bytes;		/* Total exceptioned VP bytes */
 	uint64_t rx_errors;			/* Total rx errors */
 	uint64_t rx_drops;			/* Total rx drops */
+	uint64_t rx_dev_not_up;			/* Received packets before dev IFF_UP */
 	struct u64_stats_sync syncp;		/* Stats sync status */
 };
 
