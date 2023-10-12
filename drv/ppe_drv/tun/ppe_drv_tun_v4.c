@@ -433,8 +433,10 @@ ppe_drv_ret_t ppe_drv_v4_tun_del_ce_notify(struct ppe_drv_v4_rule_destroy *destr
 
 	spin_unlock_bh(&p->lock);
 
+	ppe_drv_stats_inc(&comm_stats->v4_destroy_req);
 	status = del_cb(vp_num, destroy);
 	if (status != true) {
+		ppe_drv_stats_inc(&comm_stats->v4_destroy_fail);
 		return PPE_DRV_RET_FAILURE_TUN_CE_DEL_FAILURE;
 	}
 
