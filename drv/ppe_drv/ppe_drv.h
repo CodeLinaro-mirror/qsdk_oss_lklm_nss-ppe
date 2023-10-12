@@ -324,6 +324,14 @@ struct ppe_drv_sawf_metadata {
 };
 
 /*
+ * ppe_drv_scs_metadata
+ *      SCS information from create rule
+ */
+struct ppe_drv_scs_metadata {
+	uint32_t scs_mark;	/* SCS mark from create rule. */
+};
+
+/*
  * ppe_drv_flow_cookie_metadata
  *	Flow Cookie information from the create rule
  */
@@ -331,6 +339,7 @@ struct ppe_drv_flow_cookie_metadata {
 	union {
 		uint32_t mark;				/* Mark value for tree id type none from create rule message */
 		struct ppe_drv_sawf_metadata sawf;	/* SAWF metadata from create rule message */
+		struct ppe_drv_scs_metadata scs;	/* SCS metadata from create rule message */
 	}type;
 };
 
