@@ -722,7 +722,8 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	struct ppe_drv_stats_sawf_sc *sawf_sc_stats;
 	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 	fal_flow_entry_t flow_cfg = {0};
-	uint32_t match_dest_ip[4];
+	uint32_t match_dest_ip[4] = {0};
+	struct in6_addr network_dest_ip = {0};
 	uint32_t match_protocol = ppe_drv_v6_conn_flow_match_protocol_get(pcf);
 	uint8_t vlan_hdr_cnt = ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf);
 	uint8_t service_class;
@@ -752,6 +753,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	}
 
 	ppe_drv_v6_conn_flow_match_dest_ip_get(pcf, &match_dest_ip[0]);
+
+	/*
+	 * Change the destination ip to network byte order
+	 */
+	PPE_DRV_IPV6_TO_IN6(network_dest_ip, match_dest_ip)
 
 	ppe_drv_trace("%p: flow_tbl[host_idx]: %u", pcf, host->index);
 	flow_cfg.host_addr_type = PPE_DRV_HOST_LAN;
@@ -847,7 +853,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 		 */
 		flow_cfg.fwd_type = FAL_FLOW_RDT_TO_CPU;
 		ppe_drv_trace("%p: flow_tbl[fwd_type]: Priority Assist: %u", pcf, FAL_FLOW_FORWARD);
-	} else if (ipv6_addr_is_multicast((struct in6_addr *)match_dest_ip)) {
+	} else if (ipv6_addr_is_multicast(&network_dest_ip)) {
 		/*
 		 * Multicast flow
 		 */
@@ -970,7 +976,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	 * of all the interfaces, since PPE also check MTU for each destination interface
 	 * and exception the packet (without cloning) if MTU check fail for any interface.
 	 */
-	xmit_mtu = ipv6_addr_is_multicast((struct in6_addr *)match_dest_ip) ? ppe_drv_v6_conn_flow_mc_min_mtu_get(pcf)
+	xmit_mtu = ipv6_addr_is_multicast(&network_dest_ip) ? ppe_drv_v6_conn_flow_mc_min_mtu_get(pcf)
 		: ppe_drv_v6_conn_flow_xmit_interface_mtu_get(pcf);
 	if (xmit_mtu > PPE_DRV_PORT_JUMBO_MAX) {
 		ppe_drv_trace("%p: xmit_mtu: %d is larger, restricting to max: %d", pcf, xmit_mtu, PPE_DRV_PORT_JUMBO_MAX);
