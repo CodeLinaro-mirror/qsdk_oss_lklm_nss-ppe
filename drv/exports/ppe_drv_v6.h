@@ -75,7 +75,7 @@
 #define PPE_DRV_V6_VALID_FLAG_DSCP_MARKING	0x0010  /**< DSCP fields are valid. */
 #define PPE_DRV_V6_VALID_FLAG_SAWF		0x0020  /**< SAWF fields are valid. */
 #define PPE_DRV_V6_VALID_FLAG_ACL_POLICER	0x0040  /**< ACL/Policer fields are valid. */
-
+#define PPE_DRV_V6_VALID_FLAG_WIFI_TID		0x0080	/**< HLOS TID fields are valid. */
 
 #define PPE_DRV_V6_MAX_CONN_COUNT               1024
 
