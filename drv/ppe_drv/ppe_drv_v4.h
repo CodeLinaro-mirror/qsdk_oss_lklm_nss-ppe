@@ -41,7 +41,7 @@
 					/* Inline IPSec flow */
 #define PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST 0x00000100
 					/* Flow needs PPE assistance for RFS */
-#define PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_SAWF 0x00000200
+#define PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_WIFI_INFO 0x00000200
 					/* Flow metadata will be used for SAWF */
 #define PPE_DRV_V4_CONN_FLOW_FLAG_FSE 0x00000400
                                         /* Flow is also pushed to FSE HW in Wifi */

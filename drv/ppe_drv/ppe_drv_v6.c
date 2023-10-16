@@ -504,6 +504,11 @@ static inline void ppe_drv_v6_conn_flow_metadata_set(struct ppe_drv_v6_conn_flow
 		pcf->flow_metadata.tree_id_data.info.sawf_metadata.peer_id = PPE_DRV_SAWF_PEER_ID_GET(fc_metadata->type.sawf.sawf_mark);
 		return;
 
+	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+                pcf->flow_metadata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_WIFI_TID;
+		pcf->flow_metadata.wifi_qos = fc_metadata->type.mark;
+		return;
+
 	default:
 		ppe_drv_trace("Invalid tree_id type : (%u)", tree_id_type);
 		return;
@@ -880,21 +885,6 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID);
 		}
 
-		/*
-		 * Check if SAWF info is valid in this direction and if the
-		 * interface is a wifi VP.
-		 */
-		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
-					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
-			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->flow_mark);
-			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
-				fc_metadata.type.sawf.sawf_mark = sawf_rule->flow_mark;
-				fc_metadata.type.sawf.service_class = sawf_rule->flow_service_class;
-				ppe_drv_v6_conn_flow_metadata_set(pcf, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
-				ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_SAWF);
-			}
-		}
-
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
 			qos_rule->flow_qos_tag = (qos_rule->flow_qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_rule->flow_qos_tag;
 
@@ -905,6 +895,33 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			}
 
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
+		}
+
+		/*
+                 * Check if HLOS TID info is valid in this direction and if the
+                 * interface is a wifi VP.
+                 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_WIFI_TID) &&
+				(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			fc_metadata.type.mark = qos_rule->flow_qos_tag;
+			ppe_drv_v6_conn_flow_metadata_set(pcf, &fc_metadata, PPE_DRV_TREE_ID_TYPE_WIFI_TID);
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+		}
+
+		/*
+		 * Check if SAWF info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
+					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->flow_mark);
+			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
+				memset(&fc_metadata, 0, sizeof(fc_metadata));
+				fc_metadata.type.sawf.sawf_mark = sawf_rule->flow_mark;
+				fc_metadata.type.sawf.service_class = sawf_rule->flow_service_class;
+				ppe_drv_v6_conn_flow_metadata_set(pcf, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
+				ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+			}
 		}
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
@@ -1016,21 +1033,6 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID);
 		}
 
-		/*
-		 * Check if SAWF info is valid in this direction and if the
-		 * interface is a wifi VP.
-		 */
-		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
-				(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
-			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->return_mark);
-			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
-				fc_metadata.type.sawf.sawf_mark = sawf_rule->return_mark;
-				fc_metadata.type.sawf.service_class = sawf_rule->return_service_class;
-				ppe_drv_v6_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
-				ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_SAWF);
-			}
-		}
-
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
 			qos_rule->return_qos_tag = (qos_rule->return_qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_rule->return_qos_tag;
 
@@ -1041,6 +1043,33 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			}
 
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
+		}
+
+		/*
+		 * Check if HLOS TID info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_WIFI_TID) &&
+				(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			fc_metadata.type.mark = qos_rule->return_qos_tag;
+			ppe_drv_v6_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_WIFI_TID);
+			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+		}
+
+		/*
+		 * Check if SAWF info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
+				(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->return_mark);
+			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
+				memset(&fc_metadata, 0, sizeof(fc_metadata));
+				fc_metadata.type.sawf.sawf_mark = sawf_rule->return_mark;
+				fc_metadata.type.sawf.service_class = sawf_rule->return_service_class;
+				ppe_drv_v6_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
+				ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+			}
 		}
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
