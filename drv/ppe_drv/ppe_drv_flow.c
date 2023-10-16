@@ -352,6 +352,10 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32
 		PPE_DRV_TREE_ID_PEER_ID_SET(tree_id, tree_id_data->info.sawf_metadata.peer_id);
 		return true;
 
+	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
+		return true;
+
 	default:
 		ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
 		return false;
@@ -437,7 +441,7 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 	/*
 	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_SAWF)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO)) {
 		/*
 		 * MSDUQ representation in wifi_qos field is:
 		 * --------------------------------------------------------------------------------------
@@ -450,7 +454,7 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 		/*
 		 * In case of DS mode, rearrange the MSDUQ representation in wifi qos field to be aligned with TCL descriptor.
 		 */
-		if (!ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID) &&
+		if (!ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID) &&
 				(pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
 			flow_override_mode = ppe_drv_flow_override_mode_get(&pcf->flow_metadata.wifi_qos);
 
@@ -461,6 +465,7 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint3
 				*wifi_qos_en = false;
 
 			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos, flow_override_mode);
+			ppe_drv_trace("WiFi_QoS configured in DS descriptor is: 0x%x\n", *wifi_qos);
 		}
 
 		ppe_drv_trace("For User type: %u, WiFi_QoS initially: 0x%x and WiFi_QoS configured: 0x%x", pcf->tx_port->user_type, pcf->flow_metadata.wifi_qos, *wifi_qos);
@@ -1081,6 +1086,10 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32
 		PPE_DRV_TREE_ID_PEER_ID_SET(tree_id, tree_id_data->info.sawf_metadata.peer_id);
 		return true;
 
+	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
+		return true;
+
 	default:
 		ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
 		return false;
@@ -1111,7 +1120,7 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
 	/*
 	 * If SAWF metadata is valid, set 6 bit MSDUQ in wifi_qos field (bits 0-5).
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_SAWF)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_WIFI_INFO)) {
 		/*
 		 * MSDUQ representation in wifi_qos field is:
 		 * --------------------------------------------------------------------------------------
@@ -1135,7 +1144,7 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint3
 				*wifi_qos_en = false;
 
 			ppe_drv_flow_ds_wifi_qos_set(wifi_qos, &pcf->flow_metadata.wifi_qos, flow_override_mode);
-
+			ppe_drv_trace("WiFi_QoS configured in DS descriptor is: 0x%x\n", *wifi_qos);
 		}
 
 		ppe_drv_trace("For User type: %u, WiFi_QoS initially: 0x%x and WiFi_QoS configured: 0x%x", pcf->tx_port->user_type, pcf->flow_metadata.wifi_qos, *wifi_qos);
