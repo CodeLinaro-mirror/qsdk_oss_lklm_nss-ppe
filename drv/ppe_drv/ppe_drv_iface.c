@@ -525,23 +525,25 @@ ppe_drv_ret_t ppe_drv_iface_eip_set(struct ppe_drv_iface *iface, ppe_drv_eip_ser
 		/*
 		 * Mark virtual port as inline IPsec ports
 		 */
+		queue_id = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_EIP197);
 		ppe_drv_port_flags_set(vp, PPE_DRV_PORT_FLAG_IIPSEC);
+
+		/*
+		 * Map VP queues to EIP port.
+		 */
+		if ((queue_id < 0) || !ppe_drv_port_ucast_queue_set(vp, queue_id)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: failed to set queue for the port: %u", iface, vp->port);
+			return PPE_DRV_RET_QUEUE_CFG_FAIL;
+		}
+
+		break;
+	case PPE_DRV_EIP_SERVICE_NONINLINE:
 		break;
 	default:
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: unsupported EIP service type: %u", iface, type);
 		return PPE_DRV_RET_INVALID_EIP_SERVICE;
-	}
-
-	/*
-	 * Map VP queues to EIP port.
-	 * TODO: Update this after rebasing it on queue mapping patch.
-	 */
-	queue_id = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_EIP197);
-	if ((queue_id < 0) || !ppe_drv_port_ucast_queue_set(vp, queue_id)) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: failed to set queue for the port: %u", iface, vp->port);
-		return PPE_DRV_RET_QUEUE_CFG_FAIL;
 	}
 
 	/*

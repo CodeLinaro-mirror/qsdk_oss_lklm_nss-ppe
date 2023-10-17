@@ -266,6 +266,7 @@ struct ppe_drv {
 	/*
 	 * Pointer to memory pool for different PPE tables
 	 */
+	uint8_t core2queue[NR_CPUS];			/* Core to queue mapping */
 	struct ppe_drv_iface *iface;			/* Memory for PPE interface shadow table */
 	struct ppe_drv_flow *flow;			/* Memory for PPE Flow table */
 	struct ppe_drv_host *host;			/* Memory for PPE Host table */

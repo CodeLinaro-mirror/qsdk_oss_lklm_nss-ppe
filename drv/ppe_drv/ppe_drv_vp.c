@@ -140,6 +140,10 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_inf
 		return PPE_DRV_RET_L3_IF_PORT_ATTACH_FAIL;
 	}
 
+	if (info->redir_en) {
+		ppe_drv_port_flags_set(port, PPE_DRV_PORT_FLAG_REDIR_ENABLED);
+	}
+
 	port->port_l3_if = l3_if;
 	port->core_mask = port->shadow_core_mask = info->core_mask;
 	port->user_type = info->usr_type;
