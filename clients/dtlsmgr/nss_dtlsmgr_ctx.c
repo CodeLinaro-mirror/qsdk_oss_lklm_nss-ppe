@@ -610,7 +610,7 @@ struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
 	struct ppe_vp_ai vpai;
 	int32_t encap_ifnum;
 	int32_t decap_ifnum;
-	ppe_vp_num_t vp_num;
+	ppe_vp_num_t vp_num_decap;
 	int error;
 
 	if (!atomic_read(&drv->is_configured)) {
@@ -645,6 +645,7 @@ struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
 
 	ctx = netdev_priv(dev);
 	ctx->dev = dev;
+	ctx->vp_num_encap = cfg->vp_num_encap;
 	rwlock_init(&ctx->lock);
 
 	NSS_DTLSMGR_SET_MAGIC(ctx, NSS_DTLSMGR_CTX_MAGIC);
@@ -698,8 +699,8 @@ struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
 	/*
 	 * Allocate a PPE VP
 	 */
-	vp_num = ppe_vp_alloc(dev, &vpai);
-	if (vp_num == -1) {
+	vp_num_decap = ppe_vp_alloc(dev, &vpai);
+	if (vp_num_decap == -1) {
 		nss_dtlsmgr_warn("%px: VP alloc failed", dev);
 		goto unregister;
 	}
@@ -709,18 +710,18 @@ struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
 	/*
 	 * Update the VP->pnode mapping.
 	 */
-	status = nss_dtlsmgr_update_vp_num(&ctx->encap, encap_ifnum, vp_num);
+	status = nss_dtlsmgr_update_vp_num(&ctx->encap, encap_ifnum, ctx->vp_num_encap);
 	if (status != NSS_TX_SUCCESS) {
-		nss_dtlsmgr_warn("%px: %d VP number update failed %d", ctx, vp_num, status);
+		nss_dtlsmgr_warn("%px: %d VP number update failed %d", ctx, ctx->vp_num_encap, status);
 		goto unregister;
 	}
 
 	/*
 	 * Update the VP->pnode mapping.
 	 */
-	status = nss_dtlsmgr_update_vp_num(&ctx->decap, decap_ifnum, vp_num);
+	status = nss_dtlsmgr_update_vp_num(&ctx->decap, decap_ifnum, vp_num_decap);
 	if (status != NSS_TX_SUCCESS) {
-		nss_dtlsmgr_warn("%px: %d VP number update failed %d", ctx, vp_num, status);
+		nss_dtlsmgr_warn("%px: %d VP number update failed %d", ctx, vp_num_decap, status);
 		goto unregister;
 	}
 
@@ -734,13 +735,13 @@ struct net_device *nss_dtlsmgr_session_create(struct nss_dtlsmgr_config *cfg)
 	/*
 	 * Save the vp number.
 	 */
-	ctx->vp_num = vp_num;
+	ctx->vp_num_decap = vp_num_decap;
 
 	return dev;
 
 unregister:
 	unregister_netdev(dev);
-	ppe_vp_free(vp_num);
+	ppe_vp_free(vp_num_decap);
 
 destroy_decap:
 	nss_dtlsmgr_ctx_deconfigure(ctx, &ctx->decap);
@@ -783,10 +784,10 @@ nss_dtlsmgr_status_t nss_dtlsmgr_session_destroy(struct net_device *dev)
 	/*
 	 * Free the VP interface associated with the tunnel.
 	 */
-	vp_status = ppe_vp_free(ctx->vp_num);
+	vp_status = ppe_vp_free(ctx->vp_num_decap);
 	if (vp_status != PPE_VP_STATUS_SUCCESS) {
 		nss_dtlsmgr_warn("%px: VP Number %d: Failed to free the associated VP for dev: %s\n",
-			dev, ctx->vp_num, dev->name);
+			dev, ctx->vp_num_decap, dev->name);
 		return NSS_DTLSMGR_FAIL_VP_FREE;
 	}
 

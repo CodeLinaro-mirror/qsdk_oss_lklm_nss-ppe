@@ -66,12 +66,14 @@ struct nss_capwapmgr_response {
  */
 struct nss_capwapmgr_tunnel {
 	struct net_device *dtls_dev;		/**< DTLS netdevice */
-	struct net_device *internal_dev;	/**< Internal device for VP allocation. */
+	struct net_device *internal_dev_encap;	/**< Internal device for UL VP allocation. */
+	struct net_device *internal_dev_decap;	/**< Internal device for DL VP allocation. */
 	uint32_t if_num_inner;			/**< Interface number of the INNER CAPWAP node. */
 	uint32_t if_num_outer;			/**< Interface number of the OUTER CAPWAP node. */
 	uint32_t tunnel_state;			/**< Tunnel state. */
 	uint16_t type_flags;			/**< Tunnel Type to determine header size. */
-	ppe_vp_num_t vp_num;			/**< VP number associated with the tunnel. */
+	ppe_vp_num_t vp_num_encap;		/**< UL VP number associated with the tunnel. */
+	ppe_vp_num_t vp_num_decap;		/**< DL VP number associated with the tunnel. */
 	uint8_t tunnel_id;			/**< TrustSec Tx tunnel id. */
 	union {
 		struct nss_ipv4_create v4;	/**< IPv4 rule structure. */
@@ -129,8 +131,12 @@ typedef enum {
 	NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE,		/**< Destroy IP rule failed. */
 	NSS_CAPWAPMGR_FAILURE_CAPWAP_DESTROY_RULE,	/**< Destroy capwap rule failed. */
 	NSS_CAPWAPMGR_FAILURE_INVALID_TYPE_FLAG,	/**< Invalid type. */
-	NSS_CAPWAPMGR_FAILRUE_INTERNAL_NETDEV_ALLOC_FAILED,	/**< Internal Netdevice alloc failed. */
-	NSS_CAPWAPMGR_FAILURE_VP_ALLOC,			/**< PPE VP alloc failed. */
+	NSS_CAPWAPMGR_FAILRUE_INTERNAL_DECAP_NETDEV_ALLOC_FAILED,
+							/**< Internal DL netdevice alloc failed. */
+	NSS_CAPWAPMGR_FAILRUE_INTERNAL_ENCAP_NETDEV_ALLOC_FAILED,
+  							/**< Internal UL netdevice alloc failed. */
+	NSS_CAPWAPMGR_FAILURE_DECAP_VP_ALLOC,		/**< DL PPE VP alloc failed. */
+	NSS_CAPWAPMGR_FAILURE_ENCAP_VP_ALLOC,		/**< UL PPE VP alloc failed. */
 	NSS_CAPWAPMGR_FAILURE_VP_FREE,			/**<PPE VP free failed. */
 	NSS_CAPWAPMGR_FAILURE_VP_MTU_SET,		/**< PPE VP MTU set failed. */
 	NSS_CAPWAPMGR_FAILURE_UPDATE_VP_NUM,	/**< Update VP number failed. */
@@ -148,12 +154,12 @@ typedef enum {
 	NSS_CAPWAPMGR_FAILURE_DSCP_RULE_DELETE_FAILED,	/**< DSCP rule delete failed. */
 	NSS_CAPWAPMGR_FAILURE_CONFIG_TRUSTSEC_RX,	/**< Failed to configure trustsec receive node. */
 	NSS_CAPWAPMGR_FAILURE_BIND_ACL_RULE,		/**< Failed to bind the acl to the physical port. */
-	NSS_CAPWAPMGR_FAILURE_TRUSTSEC_BIND_VPORT,	/**< Failed to bind the virtual port to the physical port. */
-	NSS_CAPWAPMGR_FAILURE_TRUSTSEC_UNBIND_VPORT,	/**< Failed to unbind the virtual port from the physical port. */
+	NSS_CAPWAPMGR_FAILURE_BIND_VPORT,		/**< Failed to bind the virtual port to the physical port. */
+	NSS_CAPWAPMGR_FAILURE_UNBIND_VPORT,		/**< Failed to unbind the virtual port from the physical port. */
 	NSS_CAPWAPMGR_FAILURE_TRUSTSEC_RULE_EXISTS,	/**< TrustSec rule already exists. */
-	NSS_CAPWAPMGR_FAILURE_TRUSTSEC_PORT_GET,	/**< Failed to get the physical port associated to the virtual port. */
-	NSS_CAPWAPMGR_FAILURE_TRUSTSEC_TUNNEL_ID_SET,	/**< Failed to set TrustSec tunnel id. */
-	NSS_CAPWAPMGR_FAILURE_TRUSTSEC_TUNNEL_ID_GET,	/**< Failed to get the tunnel id associated to the TrustSec tunnel. */
+	NSS_CAPWAPMGR_FAILURE_TX_PORT_GET,		/**< Failed to get the physical port associated to the UL virtual port. */
+	NSS_CAPWAPMGR_FAILURE_TUNNEL_ID_SET,		/**< Failed to set UL tunnel id. */
+	NSS_CAPWAPMGR_FAILURE_TUNNEL_ID_GET,		/**< Failed to get the tunnel id associated to the UL virtual port. */
 	NSS_CAPWAPMGR_FAILURE_TUNNEL_ENCAP_ENTRY_ADD,	/**< Failed to add tunnel encap entry. */
 	NSS_CAPWAPMGR_FAILURE_TUNNEL_ENCAP_ENTRY_GET,	/**< Failed to get tunnel encap entry. */
 	NSS_CAPWAPMGR_FAILURE_TUNNEL_ENCAP_ENTRY_DELETE,	/**< Failed to delete tunnel encap entry. */

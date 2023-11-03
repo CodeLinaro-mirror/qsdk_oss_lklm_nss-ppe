@@ -24,6 +24,8 @@
 #ifndef _NSS_DTLSMGR_H_
 #define _NSS_DTLSMGR_H_
 
+#include <ppe_vp_public.h>
+
 /**
  * NSS DTLS manager flags
  */
@@ -266,6 +268,8 @@ struct nss_dtlsmgr_config {
 
 	struct nss_dtlsmgr_encap_config encap;		/**< Encap data. */
 	struct nss_dtlsmgr_decap_config decap;		/**< Decap data. */
+
+	ppe_vp_num_t vp_num_encap;			/**< UL VP number. */
 };
 
 #endif /* __KERNEL__ */
