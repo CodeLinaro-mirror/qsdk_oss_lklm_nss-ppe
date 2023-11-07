@@ -30,6 +30,7 @@
 #include "tun/ppe_drv_tun.h"
 
 uint32_t if_bm_to_offload = PPE_DRV_PORT_OFFLOAD_DEF_VAL;
+bool disable_port_mtu_check = true;
 
 /*
  * Define the filename to be used for assertions.
@@ -531,6 +532,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->toggled_v4 = false;
 	p->toggled_v6 = false;
 	p->tun_toggled = false;
+	p->disable_port_mtu_check = true;
 	p->fse_ops = NULL;
 	p->fse_enable = false;
         p->is_wifi_fse_up = false;
@@ -826,6 +828,29 @@ static int ppe_drv_if_bm_to_offload_handler(struct ctl_table *table, int write,
 }
 
 /*
+ * ppe_drv_disable_port_mtu_check_handler()
+ * 	Set disable port mtu config
+ */
+static int ppe_drv_disable_port_mtu_check_handler(struct ctl_table *table,
+						int write, void __user *buffer,
+						size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	p->disable_port_mtu_check = disable_port_mtu_check;
+
+	ppe_drv_info("Updating disable_port_mtu_check flag as %d\n", p->disable_port_mtu_check);
+	return ret;
+}
+
+/*
  * ppe_drv_sub
  *	PPE DRV sub directory
  */
@@ -836,6 +861,13 @@ static struct ctl_table ppe_drv_sub[] = {
 		.maxlen		=	sizeof(int),
 		.mode		=	0644,
 		.proc_handler	=	ppe_drv_if_bm_to_offload_handler
+	},
+	{
+		.procname       =       "disable_port_mtu_check",
+		.data           =       &disable_port_mtu_check,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       ppe_drv_disable_port_mtu_check_handler
 	},
 	{}
 };

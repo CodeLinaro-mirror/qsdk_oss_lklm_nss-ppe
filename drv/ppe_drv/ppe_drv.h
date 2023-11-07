@@ -230,6 +230,7 @@ struct ppe_drv {
 	bool toggled_v4;			/* Toggled bit for v4 sync during a particular iteration */
 	bool toggled_v6;			/* Toggled bit for v6 sync during a particular iteration */
 	bool tun_toggled;		        /* Tunnel specific Toggled bit for sync during a particular iteration*/
+	bool disable_port_mtu_check;		/* Flag to disable MTU check for all the ports */
 };
 
 void ppe_drv_fse_ops_free(struct kref *kref);
