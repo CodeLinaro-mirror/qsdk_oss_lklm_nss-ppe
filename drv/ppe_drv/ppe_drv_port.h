@@ -110,6 +110,7 @@ bool ppe_drv_port_mtu_mru_set(struct ppe_drv_port *pp, uint16_t mtu, uint16_t mr
 void ppe_drv_port_mtu_mru_clear(struct ppe_drv_port *pp);
 bool ppe_drv_port_mtu_cfg_update(struct ppe_drv_port *pp, uint16_t extra_hdr_len);
 bool ppe_drv_port_mtu_mru_disable(struct ppe_drv_port *pp);
+bool ppe_drv_port_mtu_disable(struct ppe_drv_port *pp);
 
 struct ppe_drv_vsi *ppe_drv_port_find_vlan_vsi(struct ppe_drv_port *pp, uint32_t in_vlan, uint32_t out_vlan);
 struct ppe_drv_vsi *ppe_drv_port_find_bridge_vsi(struct ppe_drv_port *pp);

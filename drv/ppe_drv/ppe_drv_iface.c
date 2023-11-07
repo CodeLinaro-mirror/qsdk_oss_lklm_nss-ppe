@@ -727,6 +727,10 @@ ppe_drv_ret_t ppe_drv_iface_mtu_set(struct ppe_drv_iface *iface, uint16_t mtu)
 			break;
 		}
 
+		if (p->disable_port_mtu_check) {
+			ppe_drv_info("Disabling MTU for port %d\n", port->port);
+			ppe_drv_port_mtu_disable(port);
+		}
 		break;
 	}
 

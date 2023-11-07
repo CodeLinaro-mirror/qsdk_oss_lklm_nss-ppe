@@ -322,6 +322,7 @@ struct ppe_drv {
 	struct ppe_drv_tun_encap_hdr_ctrl *ecap_hdr_ctrl;	/* header control protomap data */
 	uint16_t l2tp_sport;				/* L2TP Source port */
 	uint16_t l2tp_dport;				/* L2TP Destination port */
+	bool disable_port_mtu_check;			/* Flag to disable MTU check for all the ports */
 };
 
 /*

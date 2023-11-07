@@ -1516,6 +1516,27 @@ bool ppe_drv_port_pp_mtu_cfg(struct ppe_drv_port *pp, bool enable)
 }
 
 /*
+ * ppe_drv_port_mtu_disable()
+ *	Disable port MTU check in PPE
+ */
+bool ppe_drv_port_mtu_disable(struct ppe_drv_port *pp)
+{
+	sw_error_t err;
+	fal_mtu_ctrl_t mtu_ctrl = {0};
+
+	mtu_ctrl.mtu_size = PPE_DRV_PORT_JUMBO_MAX;
+	mtu_ctrl.action = FAL_MAC_FRWRD;
+	err = fal_port_mtu_set(PPE_DRV_SWITCH_ID, pp->port, &mtu_ctrl);
+
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: unable to configure port mtu: %u", pp, PPE_DRV_PORT_JUMBO_MAX);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_port_mtu_mru_disable()
  *	Disable port MTU and MRU check n PPE.
  */

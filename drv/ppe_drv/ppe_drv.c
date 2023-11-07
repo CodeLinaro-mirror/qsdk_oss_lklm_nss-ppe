@@ -40,6 +40,7 @@ module_param(ipfrag_2tuple_hash, bool, 0644);
 MODULE_PARM_DESC(ipfrag_2tuple_hash, "RSS hash for IP fragments based on SIP & DIP");
 
 uint32_t if_bm_to_offload;
+bool disable_port_mtu_check = true;
 uint32_t static_dbg_level = 0;
 static char static_dbg_level_str[PPE_DRV_STATIC_DBG_LEVEL_STR_LEN];
 uint8_t ppe_drv_redir_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7};
@@ -718,6 +719,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->toggled_v6 = false;
 	p->tun_toggled_v4 = false;
 	p->tun_toggled_v6 = false;
+	p->disable_port_mtu_check = true;
 	p->fse_ops = NULL;
 	p->fse_enable = false;
         p->is_wifi_fse_up = false;
@@ -1239,6 +1241,29 @@ static int ppe_drv_if_bm_to_offload_handler(struct ctl_table *table, int write,
 }
 
 /*
+ * ppe_drv_disable_port_mtu_check_handler()
+ * 	Set disable port mtu config
+ */
+static int ppe_drv_disable_port_mtu_check_handler(struct ctl_table *table,
+						int write, void __user *buffer,
+						size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	p->disable_port_mtu_check = disable_port_mtu_check;
+
+	ppe_drv_info("Updating disable_port_mtu_check flag as %d\n", p->disable_port_mtu_check);
+	return ret;
+}
+
+/*
  * ppe_drv_static_dbg_level_handler()
  *	Set static debug level for ppe-driver.
  */
@@ -1301,6 +1326,13 @@ static struct ctl_table ppe_drv_sub[] = {
 		.maxlen		=	sizeof(char) * PPE_DRV_STATIC_DBG_LEVEL_STR_LEN,
 		.mode		=	0644,
 		.proc_handler	=	ppe_drv_static_dbg_level_handler
+	},
+	{
+		.procname       =       "disable_port_mtu_check",
+		.data           =       &disable_port_mtu_check,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       ppe_drv_disable_port_mtu_check_handler
 	},
 	{}
 };
