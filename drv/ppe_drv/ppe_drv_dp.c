@@ -205,7 +205,8 @@ EXPORT_SYMBOL(ppe_drv_dp_deinit);
  * ppe_drv_dp_init()
  *	Initialize a physical port.
  */
-ppe_drv_ret_t ppe_drv_dp_init(struct ppe_drv_iface *iface, uint32_t macid)
+ppe_drv_ret_t ppe_drv_dp_init(struct ppe_drv_iface *iface, uint32_t macid,
+				bool mht_dev)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
@@ -242,6 +243,12 @@ ppe_drv_ret_t ppe_drv_dp_init(struct ppe_drv_iface *iface, uint32_t macid)
 
 	ppe_drv_iface_port_set(iface, port);
 	ppe_drv_iface_l3_if_set(iface, l3_if);
+
+	/*
+	 * If MHT device is set, configure iface with mht flag.
+	 */
+	if (mht_dev)
+		iface->flags |= PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID;
 
 	spin_unlock_bh(&p->lock);
 

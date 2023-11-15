@@ -529,4 +529,18 @@ extern void ppe_drv_notifier_ops_register(struct ppe_drv_notifier_ops *notifier_
  * none.
  */
 extern void ppe_drv_notifier_ops_unregister(struct ppe_drv_notifier_ops *notifier_ops);
+
+/**
+ * ppe_drv_is_mht_dev
+ *	Check the ppe iface MHT switch port flag.
+ *
+ * @datatypes
+ * net_device
+ *
+ * @param[in] dev	netdevice pointer.
+ *
+ * @return
+ * true or false
+ */
+bool ppe_drv_is_mht_dev(struct net_device *dev);
 #endif /* _PPE_DRV_H_ */
