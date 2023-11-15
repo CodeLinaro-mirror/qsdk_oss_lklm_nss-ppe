@@ -44,6 +44,8 @@
 #define PPE_DRV_INT_PRI_MIN 0
 #define PPE_DRV_INT_PRI_MAX 15
 
+#define PPE_DRV_MHT_SWITCH_ID	1			/**< MHT switch ID */
+
 /*
  * PPE Assist feature flags
  */
@@ -543,4 +545,11 @@ extern void ppe_drv_notifier_ops_unregister(struct ppe_drv_notifier_ops *notifie
  * true or false
  */
 bool ppe_drv_is_mht_dev(struct net_device *dev);
+
+/*
+ * ppe_drv_mht_port_from_fdb()
+ *	Get the port id corresponding to the destination
+ *	mac address and vid
+ */
+int32_t ppe_drv_mht_port_from_fdb(uint8_t *dmac, uint16_t vid);
 #endif /* _PPE_DRV_H_ */
