@@ -1105,6 +1105,12 @@ bool ppe_drv_iface_check_flow_offload_enabled(ppe_drv_iface_t rx_if,
 		}
 	}
 
+	if ((if_tx->flags & PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID) ||
+			(if_rx->flags & PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID)) {
+			ppe_drv_trace("%p: Either tx or rx interface has mht switch\n", p);
+			goto offload_disabled;
+		}
+
 offload_enabled:
 	spin_unlock_bh(&p->lock);
 	return true;
