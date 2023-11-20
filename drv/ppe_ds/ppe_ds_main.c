@@ -64,7 +64,11 @@ unsigned int reo2ppe_txcmpl_num_desc = 16384;
 module_param(reo2ppe_txcmpl_num_desc, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(reo2ppe_txcmpl_num_desc, "REO2PPE Tx complete ring descriptor count");
 
+#if defined(NSS_PPE_IPQ53XX)
+unsigned int rxfill_low_threshold = 1024;
+#else
 unsigned int rxfill_low_threshold = 256;
+#endif
 module_param(rxfill_low_threshold, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(rxfill_low_threshold, "RxFill low threshold value");
 
