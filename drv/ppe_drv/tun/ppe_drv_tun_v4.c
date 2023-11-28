@@ -185,8 +185,8 @@ bool ppe_drv_v4_l2tp_tunnel(uint8_t protocol, uint32_t flow_ident, uint32_t retu
 	struct ppe_drv *p = &ppe_drv_gbl;
 
 	if ((protocol == IPPROTO_UDP) &&
-		(((flow_ident == p->l2tp_sport) && (return_ident == p->l2tp_dport)) ||
-		 ((flow_ident == p->l2tp_dport) && (return_ident == p->l2tp_sport)))) {
+		(((flow_ident == p->tun_gbl.tun_l2tp.l2tp_sport) && (return_ident == p->tun_gbl.tun_l2tp.l2tp_dport)) ||
+		 ((flow_ident == p->tun_gbl.tun_l2tp.l2tp_dport) && (return_ident == p->tun_gbl.tun_l2tp.l2tp_sport)))) {
 		return true;
 	}
 

@@ -236,6 +236,24 @@ enum ppe_drv_entry_valid {
 };
 
 /*
+ * ppe_drv_tun_l2tp
+ *	l2tp tunnel specific global data
+ */
+struct ppe_drv_tun_l2tp {
+	uint16_t l2tp_sport;				/* L2TP Source port */
+	uint16_t l2tp_dport;				/* L2TP Destination port */
+	struct ppe_drv_tun_encap_xlate_rule *l2tp_encap_rule; 	/* PPE L2TP EG translate rule entry */
+};
+
+/*
+ * ppe_drv_tun_gbl
+ *	PPE tunnel specific global context in ppe drv
+ */
+struct ppe_drv_tun_gbl {
+	struct ppe_drv_tun_l2tp tun_l2tp;
+};
+
+/*
  * ppe_drv
  *	PPE DRV base structure
  */
@@ -320,9 +338,8 @@ struct ppe_drv {
 	struct ppe_drv_tun_prgm_prsr *pgm;	/* Program Parser entries list */
 	struct ppe_drv_tun_udf *pgm_udf;	/* Program Parser udf entries list */
 	struct ppe_drv_tun_encap_hdr_ctrl *ecap_hdr_ctrl;	/* header control protomap data */
-	uint16_t l2tp_sport;				/* L2TP Source port */
-	uint16_t l2tp_dport;				/* L2TP Destination port */
 	bool disable_port_mtu_check;			/* Flag to disable MTU check for all the ports */
+	struct ppe_drv_tun_gbl tun_gbl;		/* ppe tunnel global context */
 };
 
 /*

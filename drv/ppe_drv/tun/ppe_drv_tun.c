@@ -72,6 +72,7 @@ static struct ppe_drv_tun *ppe_drv_tun_ref(struct ppe_drv_tun *ptun)
 static void ppe_drv_tun_free(struct kref *kref)
 {
 	struct ppe_drv_tun *ptun = container_of(kref, struct ppe_drv_tun, ref);
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	ppe_drv_port_tun_set(ptun->pp, NULL);
 
@@ -95,6 +96,10 @@ static void ppe_drv_tun_free(struct kref *kref)
 
 	if (ptun->ptecxr) {
 		ppe_drv_tun_encap_xlate_rule_deref(ptun->ptecxr);
+	}
+
+	if (p->tun_gbl.tun_l2tp.l2tp_encap_rule && (!(kref_read(&p->tun_gbl.tun_l2tp.l2tp_encap_rule->ref)))) {
+		p->tun_gbl.tun_l2tp.l2tp_encap_rule = NULL;
 	}
 
 	if (ptun->ptdcxr[PPE_DRV_TUN_DECAP_REMOTE_ENTRY]) {
@@ -1665,15 +1670,24 @@ bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, v
 	}
 
 	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
-		/*
-		 * Alloc encap EG table entry for L2TP
-		 */
-		ptun->ptecxr = ppe_drv_tun_encap_xlate_rule_alloc(p);
-		if (!ptun->ptecxr) {
-			ppe_drv_warn("%p: couldn't get encap rule entry index", ptun);
-			goto err_exit;
+		if (p->tun_gbl.tun_l2tp.l2tp_encap_rule == NULL) {
+			/*
+			 * Alloc encap EG table entry for L2TP
+			 * Alloc is called for first instance of l2tp tunnel only.
+			 */
+			 p->tun_gbl.tun_l2tp.l2tp_encap_rule = ppe_drv_tun_encap_xlate_rule_alloc(p);
+			 if (p->tun_gbl.tun_l2tp.l2tp_encap_rule == NULL) {
+				ppe_drv_warn("%p: couldn't get encap rule entry index for l2tp", p);
+				goto err_exit;
+			}
+		} else {
+			/*
+			 * Take ref on encap rule instance if another L2TP tunnel is already active.
+			 */
+			ppe_drv_tun_encap_xlate_rule_ref(p->tun_gbl.tun_l2tp.l2tp_encap_rule);
 		}
 
+		ptun->ptecxr = p->tun_gbl.tun_l2tp.l2tp_encap_rule;
 		rule_id = ppe_drv_tun_encap_xlate_rule_get_index(ptun->ptecxr);
 		ppe_drv_tun_encap_set_rule_id(ptun->ptec, rule_id);
 
