@@ -201,11 +201,7 @@ static bool nss_ppe_l2tp_dev_parse_param(struct net_device *netdev, struct ppe_d
 	tun_hdr->l3.daddr[0] = inet->inet_daddr;
 	tun_hdr->l3.proto = IPPROTO_UDP;
 	tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_IPV4;
-
-	/*
-	 * Inherit TTL from inner packet
-	 */
-	tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_TTL;
+	tun_hdr->l3.ttl = l2tp_gbl.outer_ttl;
 
 	if (tunnel->sock->sk_no_check_tx) {
 		tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM_TX;
@@ -508,7 +504,7 @@ static bool nss_l2tp_stats_dentry_free(struct net_device *dev)
 
 /*
  * nss_ppe_l2tp_port_write()
- * Update UDP port values used for L2TP
+ * 	Update UDP port values used for L2TP
  */
 static ssize_t nss_ppe_l2tp_port_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
 {
@@ -543,7 +539,7 @@ static ssize_t nss_ppe_l2tp_port_write(struct file *f, const char *buffer, size_
 
 /*
  * nss_ppe_l2tp_port_read()
- * Get UDP port values used for L2TP
+ * 	Get UDP port values used for L2TP
  */
 static ssize_t nss_ppe_l2tp_port_read(struct file *f, char *buf, size_t count, loff_t *offset)
 {
@@ -566,6 +562,62 @@ static const struct file_operations nss_ppe_l2tp_port_ops = {
 	.owner = THIS_MODULE,
 	.write = nss_ppe_l2tp_port_write,
 	.read = nss_ppe_l2tp_port_read,
+};
+
+/*
+ * nss_ppe_l2tp_ttl_write()
+ * Update ttl values used for L2TP
+ */
+static ssize_t nss_ppe_l2tp_ttl_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
+{
+	ssize_t size;
+	char data[50];
+	int ret, ttl;
+
+	size = simple_write_to_buffer(data, sizeof(data), offset, buffer, len);
+	if (size < 0) {
+		nss_ppe_l2tp_trace("Error reading the input for l2tp outer ttl configuration");
+		return size;
+	}
+
+	ret = sscanf(data, "%d", &ttl);
+	if (ret != 1) {
+		printk("syntax error: please provide input in \"<value>\" format\n");
+		return -EINVAL;
+	}
+
+	if (ttl < 0 || ttl > 255) {
+		printk("Invalid l2tp ttl configuration\n");
+		return -EINVAL;
+	}
+
+	l2tp_gbl.outer_ttl = ttl;
+
+	return len;
+}
+
+/*
+ * nss_ppe_l2tp_ttl_read()
+ * Get ttl value used for L2TP
+ */
+static ssize_t nss_ppe_l2tp_ttl_read(struct file *f, char *buf, size_t count, loff_t *offset)
+{
+	int len;
+	char lbuf[50];
+
+	len = snprintf(lbuf, sizeof(lbuf), "outer TTL set = %d\n", l2tp_gbl.outer_ttl);
+
+	return simple_read_from_buffer(buf, count, offset, lbuf, len);
+}
+
+/*
+ * nss_ppe_l2tp_port_ops
+ *	File operations for l2tp tunnel port setting
+ */
+static const struct file_operations nss_ppe_l2tp_ttl_ops = {
+	.owner = THIS_MODULE,
+	.write = nss_ppe_l2tp_ttl_write,
+	.read = nss_ppe_l2tp_ttl_read,
 };
 
 /*
@@ -616,6 +668,13 @@ static bool nss_ppe_l2tp_dentry_init(void)
 		return false;
 	}
 
+	dentry = debugfs_create_file("l2tp_outer_ttl", 0644, l2tp_gbl.l2tp_dentry, NULL, &nss_ppe_l2tp_ttl_ops);
+	if (!dentry) {
+		debugfs_remove_recursive(l2tp_gbl.l2tp_dentry);
+		nss_ppe_l2tp_warning("l2tp ttl configuration file entry could not be created\n");
+		return false;
+	}
+
 	return true;
 }
 
@@ -639,6 +698,8 @@ int __init nss_ppe_l2tp_init_module(void)
 		nss_ppe_l2tp_trace("Failed to initialize debugfs\n");
 		return -1;
 	}
+
+	l2tp_gbl.outer_ttl = NSS_PPE_L2TP_DEFAULT_TTL;
 	register_netdevice_notifier(&nss_ppe_l2tp_notifier);
 	nss_ppe_l2tp_trace("l2tp PPE driver registered\n");
 
