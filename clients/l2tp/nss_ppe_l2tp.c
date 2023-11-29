@@ -203,10 +203,10 @@ static bool nss_ppe_l2tp_dev_parse_param(struct net_device *netdev, struct ppe_d
 	tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_IPV4;
 
 	/*
-	 * Inherit TTL and DSCP from inner packet
+	 * Inherit TTL from inner packet
 	 */
 	tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_TTL;
-	tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP;
+
 	if (tunnel->sock->sk_no_check_tx) {
 		tun_hdr->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM_TX;
 	}
