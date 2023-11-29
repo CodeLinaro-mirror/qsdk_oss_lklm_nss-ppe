@@ -13,5 +13,6 @@ obj-$(mapt-mgr)+= mapt/
 obj-$(capwap-mgr)+= capwapmgr/
 obj-$(dtls-mgr)+= dtlsmgr/
 obj-$(l2tp-mgr)+= l2tp/
+obj-$(pvxlan-mgr)+= pvxlanmgr/
 
 obj ?= .

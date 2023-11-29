@@ -2320,7 +2320,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 	 	*/
 		vp_num_decap = ppe_vp_alloc(internal_dev_decap, &vpai);
 		if (vp_num_decap == -1) {
-			nss_capwapmgr_warn("%px: VP alloc failed", dev);
+			nss_capwapmgr_warn("%px: Decap VP alloc failed", dev);
 			free_netdev(internal_dev_decap);
 			return NSS_CAPWAPMGR_FAILURE_DECAP_VP_ALLOC;
 		}
@@ -2331,8 +2331,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 	 */
 	vpai.queue_num = 0;
 	vp_num_encap = ppe_vp_alloc(internal_dev_encap, &vpai);
-	if (vp_num_decap == -1) {
-		nss_capwapmgr_warn("%px: VP alloc failed", dev);
+	if (vp_num_encap == -1) {
+		nss_capwapmgr_warn("%px: Encap VP alloc failed", dev);
 		free_netdev(internal_dev_encap);
 		status = NSS_CAPWAPMGR_FAILURE_ENCAP_VP_ALLOC;
 		goto fail;
