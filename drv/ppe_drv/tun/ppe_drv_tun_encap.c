@@ -925,7 +925,9 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 			encap_cfg.tunnel_offset += sizeof(struct vlan_hdr) * 2;
 		} else if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_CVLAN_VALID) {
 			encap_cfg.tunnel_offset += sizeof(struct vlan_hdr);
-		} else if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
+		}
+
+		if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
 			encap_cfg.tunnel_offset += PPPOE_SES_HLEN;
 		}
 
