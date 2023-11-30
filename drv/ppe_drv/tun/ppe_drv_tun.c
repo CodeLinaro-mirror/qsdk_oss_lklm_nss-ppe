@@ -371,7 +371,7 @@ bool ppe_drv_tun_port_encap_disable(struct ppe_drv_port *pp)
 	/*
 	 * Ensure that VP Check enable is true
 	 */
-	ppe_drv_assert(vp_state.check_en == true, "%p: VP state check is not enabled on port %d",
+	ppe_drv_assert(vp_state.check_en == A_TRUE, "%p: VP state check is not enabled on port %d",
 						pp, pp->port);
 
 	vp_state.eg_data_valid = false;
@@ -492,7 +492,7 @@ bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port)
 	/*
 	 * Ensure that VP Check enable is true
 	 */
-	ppe_drv_assert(vp_state.check_en == true, "%p: VP state check is not enabled on port %d",
+	ppe_drv_assert(vp_state.check_en == A_TRUE, "%p: VP state check is not enabled on port %d",
 						pp, pp->port);
 
 	/*

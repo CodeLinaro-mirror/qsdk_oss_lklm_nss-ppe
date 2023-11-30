@@ -26,7 +26,7 @@ bool ppe_drv_tun_prgm_prsr_gre_deconfigure(struct ppe_drv_tun_prgm_prsr *pgm_psr
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 
-	ppe_drv_assert((pgm_psr->ctx.type == PPE_DRV_TUN_PROGRAM_MODE_GRE), "program mode not GRE for program type : %d", pgm_psr->parser_idx);
+	ppe_drv_assert((pgm_psr->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRE), "program mode not GRE for program type : %d", pgm_psr->parser_idx);
 
 	if (!ppe_drv_tun_prgm_prsr_deconfigure(&pgm_psr->ctx.prsr_cfg, pgm_psr->parser_idx)) {
 		ppe_drv_warn("%p: program entry delete failed for GRE Tunnel", p);
@@ -46,7 +46,7 @@ bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_p
 	struct ppe_drv_tun_prgm_prsr_cfg *cfg = &program_parser->ctx.prsr_cfg;
 	struct ppe_drv_tun_prgm_prsr_decap_key *key = &program_parser->ctx.key;
 
-	ppe_drv_assert((program_parser->ctx.type == PPE_DRV_TUN_PROGRAM_MODE_GRE), "program mode not GRE for program type : %d", parser_idx);
+	ppe_drv_assert((program_parser->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRE), "program mode not GRE for program type : %d", parser_idx);
 
 	if (ppe_drv_tun_prgm_prsr_configured(program_parser)) {
 		ppe_drv_trace("%p: Tunnel Programable Parser is already configured for GRE", p);

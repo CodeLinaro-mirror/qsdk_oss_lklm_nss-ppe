@@ -76,7 +76,7 @@ void ppe_drv_tun_prgm_prsr_ref(struct ppe_drv_tun_prgm_prsr *pgm)
 {
 	kref_get(&pgm->ref);
 
-	ppe_drv_assert(kref_read(&pgm->ref), "%p: ref count rollover for program type:%d", pgm, pgm->program->type);
+	ppe_drv_assert(kref_read(&pgm->ref), "%p: ref count rollover for program type:%d", pgm, pgm->parser_idx);
 	ppe_drv_trace("%p: mode: %u ref inc:%u", pgm, pgm->ctx.mode, kref_read(&pgm->ref));
 }
 

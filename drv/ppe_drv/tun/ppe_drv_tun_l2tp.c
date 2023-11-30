@@ -27,7 +27,7 @@ bool ppe_drv_tun_prgm_prsr_l2tp_deconfigure(struct ppe_drv_tun_prgm_prsr *progra
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun_prgm_prsr_l2tp *l2tp_data =  &program->ctx.data.l2tp;
 
-	ppe_drv_assert((program_parser->ctx.type == PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2), "program mode not L2TP for program type : %d", program_type);
+	ppe_drv_assert((program->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2), "program mode not L2TP for program type : %d", program->parser_idx);
 
 	if (!ppe_drv_tun_prgm_prsr_deconfigure(&program->ctx.prsr_cfg, program->parser_idx)) {
 		ppe_drv_warn("%p: program entry delete failed for L2TP Tunnel", p);
@@ -73,7 +73,7 @@ bool ppe_drv_tun_l2tp_prgm_prsr_configure(struct ppe_drv_tun_prgm_prsr *program)
 	struct ppe_drv_tun_prgm_prsr_prgm_udf *ipv6_udf = &l2tp_data->ipv6_udf;
 	struct ppe_drv_tun_udf_profile udf_pf = {0};
 
-	ppe_drv_assert((program_parser->ctx.type == PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2), "program mode not L2TP for program type : %d", program_type);
+	ppe_drv_assert((program->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2), "program mode not L2TP for program type : %d", program_type);
 
 	if (ppe_drv_tun_prgm_prsr_configured(program)) {
 		/*

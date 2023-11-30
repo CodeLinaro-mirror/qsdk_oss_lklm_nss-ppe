@@ -77,7 +77,7 @@ bool ppe_drv_tun_encap_hdr_ctrl_deref(struct kref *kref)
 bool ppe_drv_tun_encap_hdr_ctrl_ref(struct kref *kref)
 {
 	kref_get(kref);
-	ppe_drv_assert(kref_read(ref), "%p: ref count rollover for encap header ctrl", &ppe_drv_gbl);
+	ppe_drv_assert(kref_read(kref), "%p: ref count rollover for encap header ctrl", &ppe_drv_gbl);
 
 	return true;
 }

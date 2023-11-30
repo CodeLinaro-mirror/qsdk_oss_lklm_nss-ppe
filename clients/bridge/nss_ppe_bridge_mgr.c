@@ -1487,10 +1487,13 @@ static int __init nss_ppe_bridge_mgr_init_module(void)
 {
 	/*
 	 * Monitor bridge activity only on supported platform
+	 * TODO: Remove the devsoc machine compatibility check after SOD.
 	 */
 	if (!of_machine_is_compatible("qcom,ipq9574-emulation")
 			&& !of_machine_is_compatible("qcom,ipq9574")
-			&& !of_machine_is_compatible("qcom,ipq5332")) {
+			&& !of_machine_is_compatible("qcom,ipq5332")
+			&& !of_machine_is_compatible("qcom,ipq5424")
+			&& !of_machine_is_compatible("qcom,devsoc")) {
 		return -EINVAL;
 	}
 
