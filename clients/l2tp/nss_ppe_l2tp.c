@@ -169,7 +169,6 @@ static bool nss_ppe_l2tp_dev_parse_param(struct net_device *netdev, struct ppe_d
 	sock_hold(tunnel->sock);
 	inet = inet_sk(tunnel->sock);
 
-
 	if (tunnel->sock->sk_protocol != IPPROTO_UDP) {
 		sock_put(tunnel->sock);
 		nss_ppe_l2tp_warning("Wrong protocol %u\n", tunnel->sock->sk_protocol);
@@ -296,6 +295,7 @@ bool nss_ppe_l2tp_dev_stats_update(struct net_device *dev, ppe_tun_hw_stats *sta
 	tunnel = l2tp_tunnel_get(dev_net(dev), l2tp_info->tunnel_id);
 	if (!tunnel) {
 		nss_ppe_l2tp_warning("l2tp tunnel get failed\n");
+		dev_put(dev);
 		return false;
 	}
 
@@ -303,6 +303,7 @@ bool nss_ppe_l2tp_dev_stats_update(struct net_device *dev, ppe_tun_hw_stats *sta
 	if (!session) {
 		nss_ppe_l2tp_warning("l2tp session get from tunnel failed\n");
 		l2tp_tunnel_dec_refcount(tunnel);
+		dev_put(dev);
 		return false;
 	}
 
