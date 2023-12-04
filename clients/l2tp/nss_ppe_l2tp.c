@@ -393,6 +393,8 @@ int nss_ppe_l2tp_dev_event(struct notifier_block  *nb, unsigned long event, void
 		 */
 		if (!(ppe_tun_configure(netdev, tun_hdr, tun_cb))) {
 			nss_ppe_l2tp_trace("%px: Not able to create tunnel for dev: %s\n", netdev, netdev->name);
+			nss_l2tp_stats_dentry_free(netdev);
+			ppe_tun_free(netdev);
 		}
 
 		kfree(tun_hdr);
