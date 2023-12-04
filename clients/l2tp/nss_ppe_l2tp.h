@@ -61,7 +61,8 @@
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
 #define NSS_PPE_L2TP_CHANNEL_MAX	1
-#define NSS_PPE_L2TP_VER_2	2
+#define NSS_PPE_L2TP_VER_2		2
+#define NSS_PPE_L2TP_DEFAULT_TTL	64
 
 /*
  * nss_ppe_l2tp
@@ -69,6 +70,7 @@
  */
 struct nss_ppe_l2tp {
 	struct dentry *l2tp_dentry;
+	uint8_t outer_ttl;
 };
 
 static bool nss_l2tp_stats_dentry_create(struct net_device *dev);
