@@ -238,7 +238,6 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_destroy(struct ppe_rfs_ipv4_rule_destroy_msg 
 	}
 
 	if (ppe_drv_v4_assist_rule_destroy(&pd4rd) != PPE_DRV_RET_SUCCESS) {
-		ppe_rfs_warn("%p: error in pushing dummy ppe rules\n", destroy_ipv4);
 		ppe_rfs_stats_inc(&p->stats.v4_destroy_ppe_rule_fail);
 		return PPE_RFS_RET_FAILURE;
 	}
