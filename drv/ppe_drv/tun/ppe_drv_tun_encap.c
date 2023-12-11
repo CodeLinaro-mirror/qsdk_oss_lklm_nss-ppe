@@ -194,6 +194,7 @@ bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctr
 			header_ctrl.udp_sport_base = hdr_ctrl.udp_sport_base;
 			kref_init(&hdr_ctrl_orig_cfg->udp_sport_base_ref);
 			udp_sport_base_ref = true;
+			hdr_ctrl_orig_cfg->udp_sport_base = hdr_ctrl.udp_sport_base;
 		} else {
 			ppe_drv_trace("%p: header control udp sport base already configured", p);
 			goto err_false;
@@ -208,6 +209,7 @@ bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctr
 			header_ctrl.udp_sport_mask = hdr_ctrl.udp_sport_mask;
 			kref_init(&hdr_ctrl_orig_cfg->udp_sport_mask_ref);
 			udp_sport_mask_ref = true;
+			hdr_ctrl_orig_cfg->udp_sport_mask = hdr_ctrl.udp_sport_mask;
 		} else {
 			ppe_drv_trace("%p: header control udp sport mask already configured", p);
 			goto err_false;
@@ -222,6 +224,7 @@ bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctr
 			header_ctrl.proto_map_data[0] = hdr_ctrl.ipv4_addr_map_data;
 			kref_init(&hdr_ctrl_orig_cfg->ipv4_addr_map_ref);
 			ipv4_addr_ref = true;
+			hdr_ctrl_orig_cfg->ipv4_addr_map_data = hdr_ctrl.ipv4_addr_map_data;
 		} else {
 			ppe_drv_trace("%p: header control ipv4 addr map data already configured", p);
 			goto err_false;
@@ -236,6 +239,7 @@ bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctr
 			header_ctrl.proto_map_data[1] = hdr_ctrl.ipv4_proto_map_data;
 			kref_init(&hdr_ctrl_orig_cfg->ipv4_proto_map_ref);
 			ipv4_proto_ref = true;
+			hdr_ctrl_orig_cfg->ipv4_proto_map_data = hdr_ctrl.ipv4_proto_map_data;
 		} else {
 			ppe_drv_warn("%p: header control ipv4 proto map data already configured", p);
 			goto err_false;
@@ -250,6 +254,7 @@ bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctr
 			header_ctrl.proto_map_data[2] = hdr_ctrl.ipv6_addr_map_data;
 			kref_init(&hdr_ctrl_orig_cfg->ipv6_addr_map_ref);
 			ipv6_addr_ref = true;
+			hdr_ctrl_orig_cfg->ipv6_addr_map_data = hdr_ctrl.ipv6_addr_map_data;
 		} else {
 			ppe_drv_trace("%p: header control ipv6 addr map data already configured", p);
 			goto err_false;
@@ -264,6 +269,7 @@ bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctr
 			header_ctrl.proto_map_data[3] = hdr_ctrl.ipv6_proto_map_data;
 			kref_init(&hdr_ctrl_orig_cfg->ipv6_proto_map_ref);
 			ipv6_proto_ref = true;
+			hdr_ctrl_orig_cfg->ipv6_proto_map_data = hdr_ctrl.ipv6_proto_map_data;
 		} else {
 			ppe_drv_trace("%p: header control ipv6 proto map data already configured", p);
 			goto err_false;
@@ -963,6 +969,7 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 			ppe_drv_warn("%p: fal_tunnel_encap_rule_entry_set failed %d\n", ptec, err);
 			return false;
 		}
+		encap_cfg.edit_rule_id = ptec->rule_id;
 	}
 
 	if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {

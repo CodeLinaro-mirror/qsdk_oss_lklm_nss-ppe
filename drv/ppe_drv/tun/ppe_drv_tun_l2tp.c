@@ -116,7 +116,7 @@ bool ppe_drv_tun_l2tp_prgm_prsr_configure(struct ppe_drv_tun_prgm_prsr *program)
 	/*
 	 * Fill the src port and dest port for UDP header match
 	 */
-	cfg->protocol = ((uint32_t)p->l2tp_dport << 16) + p->l2tp_sport;
+	cfg->protocol = ((uint32_t)p->tun_gbl.tun_l2tp.l2tp_dport << 16) + p->tun_gbl.tun_l2tp.l2tp_sport;
 	cfg->protocol_mask = PPE_DRV_TUN_DECAP_L2TP_PROTOCOL_MASK;
 
 	/*
@@ -243,8 +243,8 @@ bool ppe_drv_tun_l2tp_prgm_prsr_configure(struct ppe_drv_tun_prgm_prsr *program)
 bool ppe_drv_tun_l2tp_port_set(uint16_t sport, uint16_t dport)
 {
 	if (!ppe_drv_tun_prgm_prsr_type_allocated(PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2)) {
-		ppe_drv_gbl.l2tp_sport = sport;
-		ppe_drv_gbl.l2tp_dport = dport;
+		ppe_drv_gbl.tun_gbl.tun_l2tp.l2tp_sport = sport;
+		ppe_drv_gbl.tun_gbl.tun_l2tp.l2tp_dport = dport;
 		return true;
 	}
 
@@ -258,8 +258,8 @@ EXPORT_SYMBOL(ppe_drv_tun_l2tp_port_set);
  */
 bool ppe_drv_tun_l2tp_port_get(uint16_t *sport, uint16_t *dport)
 {
-	*sport = ppe_drv_gbl.l2tp_sport;
-	*dport = ppe_drv_gbl.l2tp_dport;
+	*sport = ppe_drv_gbl.tun_gbl.tun_l2tp.l2tp_sport;
+	*dport = ppe_drv_gbl.tun_gbl.tun_l2tp.l2tp_dport;
 
 	return true;
 }
