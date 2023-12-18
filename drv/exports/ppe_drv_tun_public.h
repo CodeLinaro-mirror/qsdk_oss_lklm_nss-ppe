@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -133,4 +133,17 @@ bool ppe_drv_tun_l2tp_port_set(uint16_t sport, uint16_t dport);
  * Success or failure.
  */
 bool ppe_drv_tun_l2tp_port_get(uint16_t *sport, uint16_t *dport);
+
+/*
+ * ppe_drv_tun_vxlan_tunnel_setup_allowed
+ *      Fetch the co-existing tunnel state and
+ *      return the status for setting up Vxlan.
+ *
+ * @param[in] void
+ *
+ * @return
+ * Success or failure.
+ */
+bool ppe_drv_tun_vxlan_tunnel_setup_allowed(void);
+
 #endif /* _PPE_DRV_TUN_PUBLIC_H_ */

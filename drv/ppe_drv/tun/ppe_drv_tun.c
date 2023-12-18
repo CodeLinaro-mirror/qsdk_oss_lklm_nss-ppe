@@ -1239,6 +1239,18 @@ error:
 EXPORT_SYMBOL(ppe_drv_tun_deactivate);
 
 /*
+ * ppe_drv_tun_vxlan_tunnel_setup_allowed
+ *      Fetch the encap hdr ctrl register status
+ */
+bool ppe_drv_tun_vxlan_tunnel_setup_allowed(void)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	return ppe_drv_tun_get_encap_hdr_ctrl_proto_map_configured(p);
+}
+EXPORT_SYMBOL(ppe_drv_tun_vxlan_tunnel_setup_allowed);
+
+/*
  * ppe_drv_tun_vxlan_deconfigure
  *	Disable VxLAN PPE tunnel
  */

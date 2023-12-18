@@ -162,4 +162,5 @@ bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctr
 bool ppe_drv_tun_encap_hdr_ctrl_reset(uint8_t flags);
 bool ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
 bool ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
+bool ppe_drv_tun_get_encap_hdr_ctrl_proto_map_configured(struct ppe_drv *p);
 #endif /* _PPE_DRV_TUN_ENCAP_H_ */

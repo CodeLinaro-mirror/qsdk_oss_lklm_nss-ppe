@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -71,6 +71,17 @@ static int nss_ppe_vxlanmgr_netdev_event(struct notifier_block *nb, unsigned lon
 
 	case NETDEV_REGISTER:
 		nss_ppe_vxlanmgr_trace("%px: NETDEV_REGISTER: event %lu name %s\n", netdev, event, netdev->name);
+
+		/*
+		 *  We avoid creating the tunnel itself in case of DUAL WAN scenarios
+		 *  if coexisting tunnel configuration has already been completed.
+		 *  This way will ensure that Vxlan tunnel offloading happens via next best accel mode, SFE.
+		 */
+		if (ppe_tun_vxlan_tunnel_setup_allowed()) {
+			nss_ppe_vxlanmgr_warn("%px: Avoiding tunnel create since Coexisting tunnel has already been configured, event %lu name %s \n", netdev, event, netdev->name);
+			return NOTIFY_DONE;
+		}
+
 		return nss_ppe_vxlanmgr_tunnel_create(netdev);
 
 	case NETDEV_CHANGEMTU:
@@ -86,6 +97,28 @@ static int nss_ppe_vxlanmgr_netdev_event(struct notifier_block *nb, unsigned lon
 
 	case NETDEV_BR_JOIN:
 		nss_ppe_vxlanmgr_trace("%px: NETDEV_BR_JOIN: event %lu name %s\n", netdev, event, netdev->name);
+
+		/*
+		 * There can be corner cases where the co-existing tunnel configuration would have
+		 * completed in between the Vxlan tunnel events, NETDEV_REGISTER and NETDEV_BR_JOIN.
+		 * Even in those scenarios, we can land up in the same problem.
+		 * Accordingly, it is much needed to track the co-existing tunnel configuration state
+		 * even during this event where vxlan interface is being added to the bridge.
+		 *
+		 * We destroy the tunnel if it exists and avoid performing the further tunnel operations
+		 * as part of BR_JOIN event in case of DUAL WAN scenarios
+		 * if coexisting tunnel configuration has already been completed.
+		 * This way will ensure that Vxlan tunnel offloading happens via next best accel mode, SFE.
+		 */
+		if (ppe_tun_vxlan_tunnel_setup_allowed()) {
+			if (vxlan_ctx.tun_count) {
+				nss_ppe_vxlanmgr_warn("%px: Destroying tunnel context for the existing tunnel since coexistng tunnel is configured, event %lu name %s\n", netdev, event, netdev->name);
+				nss_ppe_vxlanmgr_tunnel_destroy(netdev);
+			}
+			nss_ppe_vxlanmgr_warn("%px: Avoiding tunnel decap operations and further processing, event %lu name %s\n", netdev, event, netdev->name);
+			return NOTIFY_DONE;
+		}
+
 		if (!ppe_tun_decap_enable(netdev)) {
 			nss_ppe_vxlanmgr_warn("%p: Failed enabling decap at index %s", netdev, netdev->name);
 		}

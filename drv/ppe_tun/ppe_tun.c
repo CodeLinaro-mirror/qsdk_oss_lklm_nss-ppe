@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -929,6 +929,17 @@ bool ppe_tun_decap_enable(struct net_device *dev)
 	return ret;
 }
 EXPORT_SYMBOL(ppe_tun_decap_enable);
+
+/*
+ * ppe_tun_vxlan_tunnel_setup_allowed
+ *      Call into PPE DRV Tunnel file to
+ *      Fetch the Global Encap Header Control Register Status
+ */
+bool ppe_tun_vxlan_tunnel_setup_allowed(void)
+{
+	return ppe_drv_tun_vxlan_tunnel_setup_allowed();
+}
+EXPORT_SYMBOL(ppe_tun_vxlan_tunnel_setup_allowed);
 
 /*
  * ppe_tun_l2tp_port_set()

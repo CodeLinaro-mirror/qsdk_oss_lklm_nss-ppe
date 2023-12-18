@@ -1068,3 +1068,12 @@ struct ppe_drv_tun_encap *ppe_drv_tun_encap_entries_alloc(struct ppe_drv *p)
 
 	return ptun_ec;
 }
+
+/*
+ * ppe_drv_tun_get_encap_hdr_ctrl_proto_map_configured
+ * 	Retrieve the global tunnel encap hdr ctrl register status.
+ */
+bool ppe_drv_tun_get_encap_hdr_ctrl_proto_map_configured(struct ppe_drv *p)
+{
+	return ppe_drv_tun_encap_hdr_ctrl_proto_map_configured(p->ecap_hdr_ctrl);
+}
