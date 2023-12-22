@@ -345,6 +345,13 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
 	struct ppe_policer *pol;
 
+	pol = ppe_policer_rule_acl_find_by_id(info->rule_id);
+	if (pol) {
+		ppe_policer_stats_inc(&g_policer->stats.policer_acl_already_exists);
+		ppe_policer_warn("%p: Policer index already configured: %d", g_policer, info->rule_id);
+		return false;
+	}
+
 	pol = ppe_policer_alloc();
 	if (!pol) {
 		ppe_policer_stats_inc(&g_policer->stats.port_create_fail_oom);

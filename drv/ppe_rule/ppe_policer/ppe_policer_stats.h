@@ -32,6 +32,7 @@ struct ppe_policer_stats {
 	atomic64_t acl_create_fail_oom;			/* Port Policer destroy rule success */
 	atomic64_t acl_create_fail_rule_table_full;		/* Port Policer destroy rule fail */
 	atomic64_t policer_acl_create_req;			/* acl Policer destroy rule success */
+	atomic64_t policer_acl_already_exists;			/* acl policer already exists */
 	atomic64_t port_create_fail_oom;			/* Port Policer destroy rule success */
 	atomic64_t port_create_fail_rule_table_full;		/* Port Policer destroy rule fail */
 	atomic64_t policer_port_create_req;			/* acl Policer destroy rule success */
