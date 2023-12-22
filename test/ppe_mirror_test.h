@@ -16,6 +16,7 @@
 
 #include <linux/sysctl.h>
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include "ppe_mirror.h"
 
 /*

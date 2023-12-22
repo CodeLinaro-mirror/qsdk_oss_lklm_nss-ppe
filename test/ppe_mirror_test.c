@@ -53,6 +53,7 @@ static unsigned char ppe_mirror_test_data[PPE_MIRROR_TEST_CMD_STR] __read_mostly
  */
 static int ppe_mirror_test_netdev_up(struct net_device *dev)
 {
+	dev->flags |= IFF_RUNNING;
 	netif_start_queue(dev);
 	return 0;
 }
@@ -63,8 +64,19 @@ static int ppe_mirror_test_netdev_up(struct net_device *dev)
  */
 static int ppe_mirror_test_netdev_down(struct net_device *dev)
 {
+	dev->flags &= ~IFF_RUNNING;
 	netif_stop_queue(dev);
 	return 0;
+}
+
+/*
+ * ppe_mirror_test_xmit()
+ *	API for netdev xmit.
+ */
+static int ppe_mirror_test_xmit(struct sk_buff  *skb, struct net_device  *netdev)
+{
+	dev_kfree_skb_any(skb);
+	return NETDEV_TX_OK;
 }
 
 /*
@@ -74,20 +86,9 @@ static int ppe_mirror_test_netdev_down(struct net_device *dev)
 static const struct net_device_ops ppe_mirror_test_netdev_ops = {
 	.ndo_open		= ppe_mirror_test_netdev_up,
 	.ndo_stop		= ppe_mirror_test_netdev_down,
+	.ndo_start_xmit		= ppe_mirror_test_xmit,
 	.ndo_get_stats64	= NULL,
 };
-
-/*
- * ppe_mirror_test_netdev_setup()
- *      Setup the group net device.
- */
-static void ppe_mirror_test_netdev_setup(struct net_device *dev)
-{
-	dev->addr_len = 0;
-	dev->flags = IFF_NOARP;
-	dev->features = NETIF_F_FRAGLIST;
-	dev->netdev_ops = &ppe_mirror_test_netdev_ops;
-}
 
 /*
  * ppe_mirror_test_get_netdev_by_name()
@@ -182,6 +183,16 @@ static int ppe_mirror_test_convert_char_to_u16(char *buf, uint16_t *arg)
  */
 void ppe_mirror_test_group_cb_process_skb(void *app_data, struct sk_buff *skb, struct net_device *dev)
 {
+	/*
+	 * Process the packet and send it to stack.
+	 * NOTE : This is dummy API for test PPE mirror functionality,
+	 * ideally the packet has to be dropped by the registerent and not
+	 * reinject to stack.
+	 */
+	skb->dev = dev;
+	skb->skb_iif = dev->ifindex;
+	skb->protocol = eth_type_trans(skb, dev);
+
 	netif_receive_skb(skb);
 	return;
 }
@@ -584,11 +595,17 @@ struct net_device *ppe_mirror_test_create_dev(char * buffer)
 	/*
 	 * Allocate and register group device.
 	 */
-	group_dev = alloc_netdev(16, dev_name, NET_NAME_UNKNOWN, ppe_mirror_test_netdev_setup);
+	group_dev = alloc_netdev(16, dev_name, NET_NAME_UNKNOWN, ether_setup);
 	if (!group_dev) {
 		printk("netdev allocation failed\n");
 		return NULL;
 	}
+
+	/*
+	 * Setup net device ops and hw address.
+	 */
+	group_dev->netdev_ops = &ppe_mirror_test_netdev_ops;
+	eth_hw_addr_random(group_dev);
 
 	ret = register_netdev(group_dev);
 	if (ret) {
