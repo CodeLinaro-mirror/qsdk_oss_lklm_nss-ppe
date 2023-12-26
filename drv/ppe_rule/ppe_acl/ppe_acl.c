@@ -2080,17 +2080,6 @@ next_entry:
 }
 
 /*
- * ppe_acl_rule_flow_policer_destroy()
- *	Destroy ACL rule for flow policer in PPE.
- *
- * TODO: remove this.
- */
-ppe_acl_ret_t ppe_acl_rule_flow_policer_destroy(ppe_acl_rule_id_t id)
-{
-	return PPE_ACL_RET_DESTROY_FAIL_INVALID_ID;
-}
-
-/*
  * ppe_acl_rule_flow_policer_create()
  *	Create ACL rule for flow policer in PPE.
  */

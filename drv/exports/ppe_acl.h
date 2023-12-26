@@ -556,20 +556,6 @@ struct ppe_acl_rule {
  */
 
 /**
- * ppe_acl_rule_flow_policer_destroy()
- *	Destroy ACL rule for a flow & policer combination.
- *
- * @datatypes
- * ppe_acl_rule_id_t
- *
- * @param[IN] id 	ACL rule ID to be deleted.
- *
- * @return
- * Status of flow policer destroy rule operation.
- */
-ppe_acl_ret_t ppe_acl_rule_flow_policer_destroy(ppe_acl_rule_id_t id);
-
-/**
  * ppe_acl_rule_process_callback_t
  *	External callback to be registered with ACL for certain actions.
  */
