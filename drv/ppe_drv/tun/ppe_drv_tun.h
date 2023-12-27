@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -154,6 +154,32 @@ struct ppe_drv_tun {
 	atomic_t flow_count;					/**< Number of active flows >*/
 	uint8_t encap_hdr_bitmap;				/**< Bitmap of feilds enabled in encap header control >**/
 };
+
+/*
+ * ppe_drv_tun_dp_port_ds
+ * 	Check if destination port is wifi DS vp port
+ */
+static inline bool ppe_drv_tun_dp_port_ds(struct ppe_drv_port *pp)
+{
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * ppe_drv_tun_dp_port_active_vp
+ *	Check if destination port is wifi Active vp port
+ */
+static inline bool ppe_drv_tun_dp_port_active_vp(struct ppe_drv_port *pp)
+{
+	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
+		return true;
+	}
+
+	return false;
+}
 
 bool ppe_drv_tun_global_init(struct ppe_drv *p);
 bool ppe_drv_tun_check_support(uint8_t protocol);
