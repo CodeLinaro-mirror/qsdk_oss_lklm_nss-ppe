@@ -140,10 +140,6 @@ static bool nss_ppe_tunipip6_dev_parse_param(struct net_device *dev, struct ppe_
 	}
 
 	l3->dscp = ip6_tclass(tunnel->parms.flowinfo) & 0xfc;
-	if (!l3->dscp) {
-		l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP;
-	}
-
 	l3->proto = tunnel->parms.proto;
 	l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_IPV6;
 	tun_hdr->type = PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6;
