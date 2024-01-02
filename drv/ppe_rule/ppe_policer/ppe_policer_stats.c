@@ -28,6 +28,7 @@ static const char *ppe_policer_stats_str[] = {
 	"policer_acl_rule_id_invalid",				/* Port Policer create rule success */
 	"policer_acl_rule_not_found",				/* Port Policer create rule success */
 	"policer_destroy_fail_invalid_id",
+	"policer_acl_already_exists",				/* ACL Policer already exits */
 	"policer_acl_create_fail_oom",				/* Port Policer destroy rule success */
 	"policer_acl_create_fail_rule_table_full",		/* Port Policer destroy rule fail */
 	"policer_policer_acl_create_req",			/* acl Policer destroy rule success */
