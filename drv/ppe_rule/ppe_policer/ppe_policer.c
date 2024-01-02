@@ -114,6 +114,11 @@ static void ppe_policer_acl_rule_free(struct kref *kref)
 	struct ppe_policer *pol = container_of(kref, struct ppe_policer, kref_cnt);
 	struct ppe_policer_base *p = &gbl_ppe_policer;
 
+	if (ppe_acl_rule_destroy(pol->acl_rule_id) != PPE_ACL_RET_SUCCESS) {
+		ppe_policer_warn("%p: failed to destroy dummy ACL: %d", p, pol->acl_rule_id);
+		return;
+	}
+
 	list_del(&pol->list);
 
 	ppe_drv_policer_acl_destroy(pol->drv_ctx.acl_ctx);
@@ -506,12 +511,6 @@ bool ppe_policer_rule_flow_del_cb(void *app_data, struct ppe_drv_policer_flow *i
 	pol = ppe_policer_rule_acl_find_by_id(info->id);
 	if (!pol) {
 		ppe_policer_warn("%p: failed to find the rule for ID: %d", g_policer, info->id);
-		spin_unlock_bh(&g_policer->lock);
-		return false;
-	}
-
-	if (ppe_acl_rule_flow_policer_destroy(pol->acl_rule_id) != PPE_ACL_RET_SUCCESS) {
-		ppe_policer_warn("%p: failed to destroy dummy ACL: %d", g_policer, info->id);
 		spin_unlock_bh(&g_policer->lock);
 		return false;
 	}
