@@ -54,6 +54,7 @@
 #define PPE_DRV_V4_VALID_FLAG_SAWF		0x0020  /**< SAWF fields are valid. */
 #define PPE_DRV_V4_VALID_FLAG_ACL_POLICER	0x0040  /**< ACL/Policer fields are valid. */
 #define PPE_DRV_V4_VALID_FLAG_WIFI_TID		0x0080	/**< TID fields are valid. */
+#define PPE_DRV_V4_VALID_FLAG_SCS		0x0100	/**< SCS fields are valid. */
 
 #define PPE_DRV_V4_MAX_CONN_COUNT		2048
 

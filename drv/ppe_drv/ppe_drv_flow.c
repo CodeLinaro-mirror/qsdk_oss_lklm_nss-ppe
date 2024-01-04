@@ -353,6 +353,7 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32
 		return true;
 
 	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+	case PPE_DRV_TREE_ID_TYPE_SCS:
 		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
 		return true;
 
@@ -1087,6 +1088,7 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32
 		return true;
 
 	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+        case PPE_DRV_TREE_ID_TYPE_SCS:
 		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
 		return true;
 

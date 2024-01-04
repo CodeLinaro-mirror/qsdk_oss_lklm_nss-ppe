@@ -458,6 +458,11 @@ static inline void ppe_drv_v6_conn_flow_metadata_set(struct ppe_drv_v6_conn_flow
 		pcf->flow_metadata.tree_id_data.info.sawf_metadata.peer_id = PPE_DRV_SAWF_PEER_ID_GET(fc_metadata->type.sawf.sawf_mark);
 		return;
 
+	case PPE_DRV_TREE_ID_TYPE_SCS:
+		pcf->flow_metadata.wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(fc_metadata->type.scs.scs_mark);
+                pcf->flow_metadata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_SCS;
+		return;
+
 	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
                 pcf->flow_metadata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_WIFI_TID;
 		pcf->flow_metadata.wifi_qos = fc_metadata->type.mark;
@@ -878,6 +883,18 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			}
 		}
 
+		/*
+		 * Check if SCS info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SCS) &&
+					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			memset(&fc_metadata, 0, sizeof(fc_metadata));
+			fc_metadata.type.scs.scs_mark = sawf_rule->flow_mark;
+			ppe_drv_v6_conn_flow_metadata_set(pcf, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SCS);
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+		}
+
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
 			pcf->ingress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
 			pcf->ingress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
@@ -1024,6 +1041,18 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 				ppe_drv_v6_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
 				ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
 			}
+		}
+
+		/*
+		 * Check if SCS info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SCS) &&
+					(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			memset(&fc_metadata, 0, sizeof(fc_metadata));
+			fc_metadata.type.scs.scs_mark = sawf_rule->return_mark;
+			ppe_drv_v6_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SCS);
+			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
 		}
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
