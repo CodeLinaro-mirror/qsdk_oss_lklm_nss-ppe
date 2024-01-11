@@ -997,6 +997,8 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 	 */
 	memcpy((uint8_t *)&encap_cfg.pkt_header, (uint8_t *)&ptec->hdr[0], FAL_TUNNEL_ENCAP_HEADER_MAX_LEN);
 
+	encap_cfg.ecn_mode = (uint8_t)th->l3.encap_ecn_mode;
+
 	/*
 	 * Configure encap entry into HW
 	 */
