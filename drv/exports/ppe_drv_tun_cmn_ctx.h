@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -49,6 +49,18 @@
 #define PPE_DRV_TUN_CMN_CTX_GRE_R_CSUM		0x08	/**< Remote checksum is enabled >*/
 
 /*
+ * ppe_drv_tun_cmn_ctx_encap_ecn
+ *	PPE tunnel encap ecn mode
+ */
+enum ppe_drv_tun_cmn_ctx_encap_ecn {
+	PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_NO_UPDATE,			 /**< no update ecn >*/
+	PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_RFC3168_LIMIT_RFC6040_CMPAT_MODE,	 /**< RFC3168 limitation mode
+									      RFC6040 compatibility mode for encapsulation >*/
+	PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_RFC3168_FULL_MODE,		 /**< RFC3168 full mode for encapsulation >*/
+	PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_RFC4301_RFC6040_NORMAL_MODE,	 /**< RFC4301 mode and RFC6040 normal mode for encapsulation >*/
+};
+
+/*
  * ppe_drv_tun_cmn_ctx_type
  *	PPE Tunnel types
  */
@@ -72,6 +84,7 @@ struct ppe_drv_tun_cmn_ctx_l3 {
 	uint16_t proto;		/**< IP protocol >*/
 	uint8_t dscp;		/**< Static DSCP value for outer header >*/
 	uint8_t ttl;		/**< Static TTL value for outer header >*/
+	enum ppe_drv_tun_cmn_ctx_encap_ecn encap_ecn_mode;	/**< RFC for ECN in encap direction >*/
 };
 
 /*

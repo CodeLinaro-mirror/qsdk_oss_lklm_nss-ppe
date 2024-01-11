@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -43,6 +43,18 @@ static struct dentry *tunipip6_dentry;
 
 static bool nss_tunipip6_stats_dentry_create(struct net_device *dev);
 static bool nss_tunipip6_stats_dentry_free(struct net_device *dev);
+
+static uint8_t encap_ecn_mode = PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_NO_UPDATE;
+module_param(encap_ecn_mode, byte, 0644);
+MODULE_PARM_DESC(encap_ecn_mode, "Encap ECN mode 0:NO_UPDATE, 1:RFC3168_LIMIT_RFC6040_CMPAT, 2:RFC3168_FULL, 3:RFC4301_RFC6040_NORMAL");
+
+static bool inherit_ttl = false;
+module_param(inherit_ttl, bool, 0644);
+MODULE_PARM_DESC(inherit_ttl, "TTL 0:Dont Inherit inner, 1:Inherit inner");
+
+static bool inherit_dscp = false;
+module_param(inherit_dscp, bool, 0644);
+MODULE_PARM_DESC(inherit_dscp, "DSCP 0:Dont Inherit inner, 1:Inherit inner");
 
 /*
  * nss_ppe_tunipip6_dev_stats_update()
@@ -134,16 +146,19 @@ static bool nss_ppe_tunipip6_dev_parse_param(struct net_device *dev, struct ppe_
 	l3->daddr[2] = (fl6->daddr.s6_addr32[2]);
 	l3->daddr[3] = (fl6->daddr.s6_addr32[3]);
 
-	l3->ttl = tunnel->parms.hop_limit;
-	if (!l3->ttl) {
+	if (inherit_ttl) {
 		l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_TTL;
+	} else {
+		l3->ttl = tunnel->parms.hop_limit;
 	}
 
-	l3->dscp = ip6_tclass(tunnel->parms.flowinfo) & 0xfc;
-	if (!l3->dscp) {
+	if (inherit_dscp) {
 		l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP;
+	} else {
+		l3->dscp = ip6_tclass(tunnel->parms.flowinfo) & 0xfc;
 	}
 
+	l3->encap_ecn_mode = encap_ecn_mode;
 	l3->proto = tunnel->parms.proto;
 	l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_IPV6;
 	tun_hdr->type = PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6;
@@ -385,7 +400,13 @@ int __init nss_ppe_tunipip6_init_module(void)
 	 * Create the debugfs directory for statistics.
 	 */
 	if (!nss_ppe_tunipip6_dentry_init()) {
-		nss_ppe_tunipip6_trace("Failed to initialize debugfs");
+		nss_ppe_tunipip6_warning("Failed to initialize debugfs");
+		return -1;
+	}
+
+	if (encap_ecn_mode > PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_RFC4301_RFC6040_NORMAL_MODE) {
+		nss_ppe_tunipip6_dentry_deinit();
+		nss_ppe_tunipip6_warning("Invalid Encap ECN mode %u\n", encap_ecn_mode);
 		return -1;
 	}
 
