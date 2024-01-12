@@ -61,6 +61,8 @@ struct ppe_drv_tun_cmn_ctx;
 
 #define nss_ppe_vxlanmgr_assert(c) BUG_ON(!(c))
 
+#define NSS_PPE_VXLANMGR_RS(x, y) x >> y
+
 /*
  * VXLAN global context.
  */

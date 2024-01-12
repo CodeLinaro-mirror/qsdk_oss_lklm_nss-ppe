@@ -168,13 +168,9 @@ static bool nss_ppe_gretap_ip4_dev_parse_param(struct net_device *netdev, struct
 	l3->proto = IPPROTO_GRE;
 	l3->flags = PPE_DRV_TUN_CMN_CTX_L3_IPV4;
 
-	/* Set PPE flags to inherit DSCP/TTL values if its not set */
+	/* Set PPE flags to inherit TTL values if its not set */
 	if (!l3->ttl) {
 		l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_TTL;
-	}
-
-	if (!l3->dscp) {
-		l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP;
 	}
 
 	tun_hdr->type = PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP;
@@ -225,13 +221,9 @@ static bool nss_ppe_gretap_ip6_dev_parse_param(struct net_device *netdev, struct
 	l3->proto = IPPROTO_GRE;
 	l3->flags = PPE_DRV_TUN_CMN_CTX_L3_IPV6;
 
-	/* Set PPE flags to inherit DSCP/TTL values if its not set */
+	/* Set PPE flags to inherit TTL values if its not set */
 	if (!l3->ttl) {
 		l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_TTL;
-	}
-
-	if (!l3->dscp) {
-		l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP;
 	}
 
 	tun_hdr->type = PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP;

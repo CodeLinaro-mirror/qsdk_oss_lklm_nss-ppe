@@ -611,7 +611,7 @@ static bool nss_ppe_vxlanmgr_tunnel_parse_end_points(struct net_device *dev, str
 	src_ip = &cfg->saddr;
 
 	if (priv_flags & VXLAN_F_IPV6) {
-		l3->flags = PPE_DRV_TUN_CMN_CTX_L3_IPV6 | PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP;
+		l3->flags = PPE_DRV_TUN_CMN_CTX_L3_IPV6;
 		memcpy(l3->saddr, &src_ip->sin6.sin6_addr, sizeof(struct in6_addr));
 		memcpy(l3->daddr, &rip->sin6.sin6_addr, sizeof(struct in6_addr));
 
@@ -649,7 +649,7 @@ static bool nss_ppe_vxlanmgr_tunnel_parse_end_points(struct net_device *dev, str
 			return true;
 		}
 	} else {
-		l3->flags = PPE_DRV_TUN_CMN_CTX_L3_IPV4 | PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP;
+		l3->flags = PPE_DRV_TUN_CMN_CTX_L3_IPV4;
 		l3->saddr[0] = src_ip->sin.sin_addr.s_addr;
 		l3->daddr[0] = rip->sin.sin_addr.s_addr;
 
@@ -797,7 +797,7 @@ static bool nss_ppe_vxlanmgr_tunnel_header_config(struct net_device *dev, struct
 	tun_hdr->tun.vxlan.dest_port = tun_ctx->dest_port;
 	tun_hdr->tun.vxlan.policy_id = 0;
 	tun_hdr->l3.proto = IPPROTO_UDP;
-	tun_hdr->l3.dscp = 0;
+	tun_hdr->l3.dscp = NSS_PPE_VXLANMGR_RS(tun_ctx->tos, 2);
 	tun_hdr->type = PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN;
 
 	tun_cb.src_excp_method = nss_ppe_vxlan_src_exception;
