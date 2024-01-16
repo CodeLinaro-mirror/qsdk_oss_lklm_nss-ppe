@@ -181,6 +181,24 @@ static inline bool ppe_drv_tun_dp_port_active_vp(struct ppe_drv_port *pp)
 	return false;
 }
 
+/*
+ * ppe_drv_tun_is_dest_port_wifi
+ *	Check if destination port of a tunnel is a DS/Active wifi port
+ */
+static inline bool ppe_drv_tun_is_dest_port_wifi(uint16_t dest_port)
+{
+	struct ppe_drv_port *pp = NULL;
+
+	pp = ppe_drv_port_from_port_num(dest_port);
+
+	if (pp && (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS
+				|| pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP)) {
+		return true;
+	}
+
+	return false;
+}
+
 bool ppe_drv_tun_global_init(struct ppe_drv *p);
 bool ppe_drv_tun_check_support(uint8_t protocol);
 void ppe_drv_tun_vxlan_deconfigure(struct ppe_drv *p);

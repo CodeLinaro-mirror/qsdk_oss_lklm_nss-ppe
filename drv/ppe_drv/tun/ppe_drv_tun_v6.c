@@ -593,3 +593,72 @@ fail:
 
 	return ret;
 }
+
+/*
+ * ppe_drv_tun_v6_fse_entry_del
+ *	Delete tunnel FSE rule entry
+ */
+bool ppe_drv_tun_v6_fse_entry_del(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_flow *pcr)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_comm_stats *comm_stats;
+	struct ppe_drv_fse_rule_info fse_info = {0};
+	struct ppe_drv_v6_conn_flow *fse_cn = NULL;
+	struct ppe_drv_port *rx_port = ppe_drv_v6_conn_flow_rx_port_get(pcf);
+	struct ppe_drv_port *tx_port = ppe_drv_v6_conn_flow_tx_port_get(pcf);
+	bool is_tx_ds = (tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS);
+	bool is_rx_ds = (rx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS);
+	bool is_tx_active_vp = (tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP);
+	bool is_rx_active_vp = (rx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP);
+
+	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
+	if ((is_rx_ds && !is_tx_ds) || (is_rx_active_vp && !is_tx_active_vp)) {
+		ppe_drv_fill_fse_v6_tuple_info(pcf, &fse_info, true);
+		fse_cn = pcf;
+	} else if ((is_tx_ds && !is_rx_ds) || (is_tx_active_vp && !is_rx_active_vp)) {
+		ppe_drv_fill_fse_v6_tuple_info(pcr, &fse_info, true);
+		fse_cn = pcr;
+	} else {
+		ppe_drv_warn("Tx/Rx either port must be active/DS VP\n");
+		return false;
+	}
+
+	if (p->fse_ops->destroy_fse_rule(&fse_info)) {
+		ppe_drv_stats_inc(&p->stats.comm_stats->v6_destroy_fse_fail);
+		ppe_drv_warn("%p: FSE v6 rule deletion failed\n", pcf);
+		return false;
+	}
+
+	ppe_drv_stats_inc(&p->stats.comm_stats->v6_destroy_fse_success);
+	ppe_drv_v6_conn_flow_flags_clear(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FSE);
+	ppe_drv_v6_conn_flow_flags_clear(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_FSE);
+	kref_put(&p->fse_ops_ref, ppe_drv_fse_ops_free);
+	ppe_drv_trace("%p: FSE v6 rule deletion successfull\n", pcf);
+
+	return true;
+}
+
+/*
+ * ppe_drv_tun_v6_fse_entry_add
+ *	Add tunnel FSE rule entry
+ */
+bool ppe_drv_tun_v6_fse_entry_add(void *vcreate_rule, struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_flow *pcr)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_comm_stats *comm_stats;
+	struct ppe_drv_v6_rule_create *create = (struct ppe_drv_v6_rule_create *)vcreate_rule;
+
+	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
+
+	if (ppe_drv_v6_fse_interface_check(pcf)) {
+		if (!ppe_drv_v6_fse_flow_configure(create, pcf, pcr)) {
+			ppe_drv_stats_inc(&comm_stats->v6_create_fse_fail);
+			ppe_drv_warn("%p: FSE flow table programming failed\n", p);
+			return false;
+		}
+
+		ppe_drv_stats_inc(&comm_stats->v6_create_fse_success);
+	}
+
+	return true;
+}

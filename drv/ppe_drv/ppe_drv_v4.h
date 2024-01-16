@@ -886,3 +886,6 @@ void ppe_drv_v4_flow_vlan_set(struct ppe_drv_v4_conn_flow *pcf,
 		uint32_t secondary_ingress_vlan_tag, uint32_t secondary_egress_vlan_tag);
 void ppe_drv_v4_if_walk_release(struct ppe_drv_v4_conn_flow *pcf);
 bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_rule *top_if, ppe_drv_iface_t tx_if, ppe_drv_iface_t rx_if);
+bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create, struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_v4_conn_flow *pcr);
+void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct ppe_drv_fse_rule_info *fse_info, bool is_ds);
+bool ppe_drv_v4_fse_interface_check(struct ppe_drv_v4_conn_flow *pcf);

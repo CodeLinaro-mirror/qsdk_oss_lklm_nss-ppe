@@ -1,5 +1,9 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+<<<<<<< HEAD
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+=======
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+>>>>>>> 7e2eba0... [qca-nss-ppe] Push FSE 3 tuple rule for gretap tunnel with endpoint
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,5 +30,6 @@ ppe_drv_ret_t ppe_drv_v4_tun_add_ce_validate(void *vcreate_rule, struct ppe_drv_
 ppe_drv_ret_t ppe_drv_v4_tun_del_ce_validate(void *vdestroy_rule, struct ppe_drv_v4_conn_sync **cns, struct ppe_drv_v4_conn **cn_v4);
 bool ppe_drv_v4_tun_allow_tunnel_create(struct ppe_drv_v4_rule_create *create);
 bool ppe_drv_v4_tun_allow_tunnel_destroy(struct ppe_drv_v4_rule_destroy *destroy);
-
+bool ppe_drv_tun_v4_fse_entry_add(void *vcreate_rule, struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_v4_conn_flow *pcr);
+bool ppe_drv_tun_v4_fse_entry_del(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_v4_conn_flow *pcr);
 #endif /* _PPE_DRV_TUN_V4_H_ */
