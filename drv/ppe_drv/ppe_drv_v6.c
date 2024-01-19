@@ -2837,6 +2837,11 @@ static bool ppe_drv_v6_fse_flow_configure(struct ppe_drv_v6_rule_create *create,
 			return false;
 		}
 
+		if (!fse_cn) {
+			ppe_drv_trace("Failed to get v6 FSE connection\n");
+			return false;
+		}
+
 		ppe_drv_v6_conn_flow_flags_set(fse_cn, PPE_DRV_V6_CONN_FLOW_FLAG_FSE);
 		kref_get(&p->fse_ops_ref);
 	} else {
