@@ -545,6 +545,11 @@ bool nss_ppe_vlan_mgr_vp_src_exception(struct net_device *dev, struct sk_buff *s
 	struct net_device *real_dev;
 
 	real_dev = nss_ppe_vlan_mgr_get_real_dev(skb->dev);
+	if (!real_dev) {
+		nss_ppe_vlan_mgr_warn("%s: failed to obtain real_dev", dev->name);
+		return false;
+	}
+
 	skb->dev = real_dev;
 	skb->skb_iif = real_dev->ifindex;
 	skb->protocol = eth_type_trans(skb, skb->dev);
