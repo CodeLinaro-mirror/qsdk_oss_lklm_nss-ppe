@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -450,11 +450,14 @@ static void nss_capwapmgr_receive_pkt(struct net_device *dev, struct sk_buff *sk
  * nss_capwapmgr_receive_pkt_ppe_vp()
  *	Receives a pkt from ppe.
  */
-static bool nss_capwapmgr_receive_pkt_ppe_vp(struct net_device *dev, struct sk_buff *skb, void *cb_data)
+static bool nss_capwapmgr_receive_pkt_ppe_vp(struct ppe_vp_cb_info *info, void *cb_data)
 {
+	struct sk_buff *skb = info->skb;
 	struct net_device *parent_netdev = (struct net_device *)cb_data;
-	nss_capwapmgr_assert(parent_dev, "Parent netdev is NULL for internal dev %p", dev);
+
+	nss_capwapmgr_assert(parent_dev, "Parent netdev is NULL for internal dev %p", skb->dev);
 	nss_capwapmgr_receive_pkt(parent_netdev, skb, NULL);
+
 	return true;
 }
 

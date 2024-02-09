@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -306,8 +306,10 @@ static bool ppe_tun_activate_with_conn_entry(uint8_t vp_num, void *create_rule)
  * ppe_tun_exception_dest_cb
  *	Callback handler for destination exception packets.
  */
-static bool ppe_tun_exception_dest_cb(struct net_device *dev, struct sk_buff *skb, void *cb_data)
+static bool ppe_tun_exception_dest_cb(struct ppe_vp_cb_info *info, void *cb_data)
 {
+	struct sk_buff *skb = info->skb;
+	struct net_device *dev = skb->dev;
 	ppe_tun_exception_method_t cb;
 	struct ppe_tun *tun;
 
@@ -327,7 +329,7 @@ static bool ppe_tun_exception_dest_cb(struct net_device *dev, struct sk_buff *sk
 		goto free_skb;
 	}
 
-	cb(dev, skb, tun->tun_data);
+	cb(info, tun->tun_data);
 	ppe_tun_deref(tun);
 
 	return true;
@@ -341,8 +343,10 @@ free_skb:
  * ppe_tun_exception_src_cb
  *	Callback handler for src exception packets.
  */
-static bool ppe_tun_exception_src_cb(struct net_device *dev, struct sk_buff *skb, void *cb_data)
+static bool ppe_tun_exception_src_cb(struct ppe_vp_cb_info *info, void *cb_data)
 {
+	struct sk_buff *skb = info->skb;
+	struct net_device *dev = skb->dev;
 	ppe_tun_exception_method_t cb;
 	struct ppe_tun *tun;
 
@@ -372,9 +376,12 @@ static bool ppe_tun_exception_src_cb(struct net_device *dev, struct sk_buff *skb
 			ppe_tun_deref(tun);
 			goto free_skb;
 		}
+
+		skb->dev = dev;
+		skb->skb_iif = dev->ifindex;
 	}
 
-	cb(dev, skb, tun->tun_data);
+	cb(info, tun->tun_data);
 	ppe_tun_deref(tun);
 
 	return true;

@@ -98,12 +98,12 @@ static bool nss_ppe_tunipip6_dev_stats_update(struct net_device *dev, ppe_tun_hw
  * nss_ppe_tunipip6_src_exception()
  *	handle the source VP exception.
  */
-static bool nss_ppe_tunipip6_src_exception(struct net_device *dev, struct sk_buff *skb, ppe_tun_data *tun_data)
+static bool nss_ppe_tunipip6_src_exception(struct ppe_vp_cb_info *info, ppe_tun_data *tun_data)
 {
+	struct sk_buff *skb = info->skb;
+
 	skb_reset_network_header(skb);
 	skb->protocol = htons(ETH_P_IP);
-	skb->dev = dev;
-	skb->skb_iif = dev->ifindex;
 	netif_receive_skb(skb);
 	return true;
 }

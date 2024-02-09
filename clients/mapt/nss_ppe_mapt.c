@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -98,12 +98,12 @@ static bool nss_ppe_mapt_dev_stats_update(struct net_device *dev, ppe_tun_hw_sta
  * nss_ppe_mapt_src_exception()
  *	handle the source VP exception.
  */
-static bool nss_ppe_mapt_src_exception(struct net_device *dev, struct sk_buff *skb, ppe_tun_data *tun_data)
+static bool nss_ppe_mapt_src_exception(struct ppe_vp_cb_info *info, ppe_tun_data *tun_data)
 {
+	struct sk_buff *skb = info->skb;
+	struct net_device *dev = skb->dev;
 	int ret;
 
-	skb->dev = dev;
-	skb->skb_iif = dev->ifindex;
 	skb->protocol = eth_type_trans(skb, dev);
 	skb_reset_network_header(skb);
 

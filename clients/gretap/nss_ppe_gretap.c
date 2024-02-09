@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -87,18 +87,18 @@ static bool nss_ppe_gretap_dev_stats_update(struct net_device *dev, ppe_tun_hw_s
  * nss_ppe_gretap_src_exception()
  *	handle the source VP exception
  */
-static bool nss_ppe_gretap_src_exception(struct net_device *dev, struct sk_buff *skb, ppe_tun_data *tun_data)
+static bool nss_ppe_gretap_src_exception(struct ppe_vp_cb_info *info, ppe_tun_data *tun_data)
 {
+	struct sk_buff *skb = info->skb;
+	struct net_device *dev = skb->dev;
 	int ret;
 
 	skb->protocol = eth_type_trans(skb, dev);
-	skb->dev = dev;
 	/*
 	 * Packet type is updated to PACKET_OTHERHOST in eth_type_trans. Since the packet
 	 * is already decapsulated set it to PACKET_HOST for futher processing
 	 */
 	skb->pkt_type = PACKET_HOST;
-	skb->skb_iif = dev->ifindex;
 	skb_reset_network_header(skb);
 	ret = netif_receive_skb(skb);
 	if (ret != NET_RX_SUCCESS) {

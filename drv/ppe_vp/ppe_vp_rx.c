@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,11 +26,12 @@ extern struct ppe_vp_base vp_base;
  * ppe_vp_rx_process_cb
  * 	Standard Rx handler for packets with Rx VP
  */
-bool ppe_vp_rx_process_cb(struct net_device *rxdev, struct sk_buff *skb, void *cb_data)
+bool ppe_vp_rx_process_cb(struct ppe_vp_cb_info *info, void *cb_data)
 {
+	struct sk_buff *skb = info->skb;
+	struct net_device *dev = skb->dev;
 
-	skb->protocol = eth_type_trans(skb, rxdev);
-	skb->dev = rxdev;
+	skb->protocol = eth_type_trans(skb, dev);
 	skb->fast_xmit = 0;
 
 	/*
@@ -54,6 +55,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 {
 
 	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
+	struct ppe_vp_cb_info client_cb_info = {0};
 	struct ppe_vp *svp, *dvp;
 
 	/*
@@ -136,7 +138,11 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		 * Destination VP user would consume the skb.
 		 */
 		if (unlikely(dvp->dst_cb)) {
-			if (unlikely(!dvp->dst_cb(dvp->netdev, skb, dvp->dst_cb_data))) {
+			client_cb_info.skb = skb;
+			client_cb_info.ip_summed = rxi->ip_summed;
+			client_cb_info.napi = rxi->napi;
+
+			if (unlikely(!dvp->dst_cb(&client_cb_info, dvp->dst_cb_data))) {
 				ppe_vp_info("%px: Destination VP:%d  Tx dev:%s skb:%p \
 						dropped by user\n", dvp, rxi->dvp, dvp->netdev->name, skb);
 			}
@@ -215,10 +221,14 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		skb->dev = svp->netdev;
 		skb->skb_iif = svp->netdev_if_num;
 
+		client_cb_info.skb = skb;
+		client_cb_info.ip_summed = rxi->ip_summed;
+		client_cb_info.napi = rxi->napi;
+
 		/*
 		 * If not processed successfully VP receive handler would free the skb
 		 */
-		if (unlikely(!svp->src_cb(svp->netdev, skb, svp->src_cb_data))) {
+		if (unlikely(!svp->src_cb(&client_cb_info, svp->src_cb_data))) {
 			rcu_read_unlock();
 			ppe_vp_info("%px: Rx VP:%d Rx dev:%s skb:%p dropped by user\n", svp, rxi->svp, svp->netdev->name, skb);
 			return;

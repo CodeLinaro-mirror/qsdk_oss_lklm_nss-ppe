@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -34,7 +34,7 @@ typedef union {
 } ppe_tun_data;
 
 typedef ppe_vp_hw_stats_t ppe_tun_hw_stats;
-typedef bool(*ppe_tun_exception_method_t)(struct net_device *dev, struct sk_buff *skb, ppe_tun_data  *tun_data);
+typedef bool(*ppe_tun_exception_method_t)(struct ppe_vp_cb_info *info, ppe_tun_data  *tun_data);
 typedef bool (*ppe_tun_stats_method_t)(struct net_device *dev, ppe_tun_hw_stats *stats, ppe_tun_data *tun_data);
 
 /*

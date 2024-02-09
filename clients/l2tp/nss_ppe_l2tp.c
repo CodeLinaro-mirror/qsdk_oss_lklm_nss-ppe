@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,8 +26,10 @@ static struct nss_ppe_l2tp l2tp_gbl;
  * nss_ppe_l2tp_src_exception()
  *	handle source VP exception packets
  */
-static bool nss_ppe_l2tp_src_exception(struct net_device *dev, struct sk_buff *skb, ppe_tun_data *tun_data)
+static bool nss_ppe_l2tp_src_exception(struct ppe_vp_cb_info *info, ppe_tun_data *tun_data)
 {
+	struct sk_buff *skb = info->skb;
+	struct net_device *dev = skb->dev;
 	int ret;
 	const struct iphdr *iph;
 
@@ -40,8 +42,6 @@ static bool nss_ppe_l2tp_src_exception(struct net_device *dev, struct sk_buff *s
 	}
 
 	skb->pkt_type = PACKET_HOST;
-	skb->dev = dev;
-	skb->skb_iif = dev->ifindex;
 	/*
 	 * Reset Skb flags
 	 */

@@ -68,17 +68,27 @@ typedef enum ppe_vp_status {
 typedef int16_t ppe_vp_num_t;
 
 /**
+ * ppe_vp_cb_info
+ *	Information for VP callback
+ *	to process exception packet.
+ */
+struct ppe_vp_cb_info {
+	uint8_t ip_summed;		/**< IP checksum */
+	struct sk_buff *skb;		/**< skb */
+	struct napi_struct *napi;	/**< RX napi */
+};
+
+/**
  * Callback function for VP Rx.
  *
  * @datatypes
  * net_device
  * sk_buff
  *
- * @param[in] net_device  Pointer to the net device.
- * @param[in] sk_buff     Pointer to the skb.
- * @param[in] cb_data     Pointer to the callback data.
+ * @param[in] ppe_vp_cb_info	Pointer to exception information.
+ * @param[in] cb_data		Pointer to the callback data.
  */
-typedef bool(*ppe_vp_callback_t)(struct net_device *, struct sk_buff *, void *cb_data);
+typedef bool(*ppe_vp_callback_t)(struct ppe_vp_cb_info *, void *cb_data);
 
 /**
  * ppe_vp_type
