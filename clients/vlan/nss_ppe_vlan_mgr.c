@@ -554,7 +554,17 @@ bool nss_ppe_vlan_mgr_vp_src_exception(struct ppe_vp_cb_info *info, void *cb_dat
 	skb->dev = real_dev;
 	skb->skb_iif = real_dev->ifindex;
 	skb->protocol = eth_type_trans(skb, skb->dev);
-	netif_receive_skb(skb);
+
+	if (likely(real_dev->features & NETIF_F_RXCSUM)) {
+		skb->ip_summed = info->ip_summed;
+	}
+
+	if (unlikely(real_dev->features & NETIF_F_GRO)) {
+		napi_gro_receive(info->napi, skb);
+	} else {
+		netif_receive_skb(skb);
+	}
+
 	return true;
 }
 
