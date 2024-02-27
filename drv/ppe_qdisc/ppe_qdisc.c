@@ -652,6 +652,7 @@ uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
 		ppe_qdisc_info("%px:returning leaf node int_pri %u", dev, int_pri);
 		return (uint8_t)int_pri;
 	}
+	spin_unlock_bh(&pq->lock);
 
 	ppe_qdisc_info("%px:no child qdisc atytached to class:%u, returning default int_pri", dev, classid);
 	return ppe_qdisc_def_node_int_pri_get(dev);
