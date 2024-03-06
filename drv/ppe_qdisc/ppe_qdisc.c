@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -81,17 +81,35 @@ static int ppe_qdisc_set_parent(struct ppe_qdisc *pq, uint32_t parent)
 	struct Qdisc *parent_qdisc = NULL;
 	unsigned long parent_class = 0;
 
+	/*
+	 * If Qdisc is root, bail.
+	 */
+	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
+		ppe_qdisc_trace("PPE Qdisc %px is a root, no parent existing", pq->qdisc);
+		return 0;
+	}
+
 	if (parent != TC_H_ROOT) {
 		parent_qdisc = qdisc_lookup(dev, TC_H_MAJ(parent));
-		parent_pq = qdisc_priv(parent_qdisc);
+		if (parent_qdisc) {
+			parent_pq = qdisc_priv(parent_qdisc);
+		}
 	} else if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_CLASS)) {
 		parent_pq = qdisc_priv(pq->qdisc);
 	}
 
 	/*
-	 * Set the parent if current Qdisc is not a class.
+	 * Parent does not exist or pattern is of type Queue (FIFO/RED)
 	 */
-	if ((parent_pq) && (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_CLASS))) {
+	if ((!parent_pq) || (parent_pq->type > PPE_QDISC_NODE_SCH_MAX)) {
+		ppe_qdisc_warning("PPE qdisc/class %px cannot be attached to non-existing class %x", pq->qdisc, parent);
+		return PPE_QDISC_PARENT_NOT_EXISTING;
+	}
+
+	/*
+	 * Set the parent if current Qdisc is attached to a class.
+	 */
+	if (!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_CLASS)) {
 		pq->parent = parent_pq;
 
 		/*
@@ -103,7 +121,7 @@ static int ppe_qdisc_set_parent(struct ppe_qdisc *pq, uint32_t parent)
 		 * case of any qdisc attached to PRIO band, the parent is set as PRIO qdisc itself.
 		 * And the below class check is applicable only for the classful qdiscs.
 		 */
-		if ((parent_pq) && (parent_pq->type != PPE_QDISC_NODE_TYPE_PRIO) && (TC_H_MIN(parent))) {
+		if ((parent_pq->type != PPE_QDISC_NODE_TYPE_PRIO) && (TC_H_MIN(parent))) {
 			if (!parent_qdisc) {
 				ppe_qdisc_warning("PPE qdisc/class %px cannot be attached to non-existing class %x", pq->qdisc, parent);
 				return PPE_QDISC_PARENT_NOT_EXISTING;
@@ -546,11 +564,10 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 	/*
 	 * Set the parent of PPE qdisc.
 	 */
-	if (ppe_qdisc_set_parent(pq, parent) < 0) {
+	if (!parent || (ppe_qdisc_set_parent(pq, parent) < 0)) {
 		ppe_qdisc_warning("PPE qdisc/class %x cannot be attached to non-existing parent %x", pq->qos_tag, parent);
 		return -1;
 	}
-
 	/*
 	 * The device we are operational on MUST be recognized as an PPE interface.
 	 * Currently the support is provided only for Physical interfaces.

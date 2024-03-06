@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -333,7 +333,8 @@ ppe_mirror_ret_t ppe_mirror_acl_mapping_delete(uint16_t acl_id)
 	 * Get the Hardware index and destroy the mirror mapping for the that index.
 	 */
 	hw_index = ppe_acl_rule_get_acl_hw_index(acl_id);
-	if (hw_index == PPE_ACL_INVALID_HW_INDEX) {
+	if ((hw_index == PPE_ACL_INVALID_HW_INDEX) ||
+			(hw_index >= PPE_ACL_HW_INDEX_MAX)) {
 		ppe_mirror_warn("%p: Invalid hw index for ACL rule delete %d", mirror_g, acl_id);
 		ret = PPE_MIRROR_RET_DELETE_FAIL_MAPPING_INVALID_ACL_RULE;
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_del_fail_rule_not_found);
@@ -389,7 +390,8 @@ ppe_mirror_ret_t ppe_mirror_acl_mapping_add(struct ppe_mirror_acl_mapping_info *
 	 * Get the hardware index for the ACL id.
 	 */
 	hw_index = ppe_acl_rule_get_acl_hw_index(acl_id);
-	if (hw_index == PPE_ACL_INVALID_HW_INDEX) {
+	if ((hw_index == PPE_ACL_INVALID_HW_INDEX) ||
+			(hw_index >= PPE_ACL_HW_INDEX_MAX)) {
 		ppe_mirror_warn("%p: ACL Rule not found for ACL rule mapping %d", mirror_g, mapping_info->acl_id);
 		ret = PPE_MIRROR_RET_ADD_FAIL_MAPPING_INVALID_ACL_RULE;
 		ppe_mirror_stats_inc(&mirror_g->stats.acl_mapping_add_fail_rule_not_found);

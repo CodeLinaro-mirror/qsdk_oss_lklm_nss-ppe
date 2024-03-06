@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -241,6 +241,11 @@ struct ppe_qdisc_port_res *ppe_qdisc_port_res_alloc(uint32_t port_id, ppe_drv_qo
 {
 	struct ppe_qdisc_port_res *res = NULL;
 	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port_id];
+
+	if (type >= PPE_DRV_QOS_RES_TYPE_MAX) {
+		ppe_qdisc_assert(false, "Resource type:%d not valid for port:%d", type, port_id);
+		return NULL;
+	}
 
 	/*
 	 * Detach the resource from free list

@@ -771,6 +771,11 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	flow_cfg.invalid = !entry_valid;
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
 
+	if (!pp) {
+		ppe_drv_warn("%p: Invalid egress port", pcf);
+		return NULL;
+	}
+
 	if (!ppe_drv_flow_v6_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
 		ppe_drv_warn("%p: failed to obtain a valid service code", pcf);
 		return NULL;
