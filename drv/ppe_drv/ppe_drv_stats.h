@@ -88,6 +88,7 @@ struct ppe_drv_gen_stats {
 	atomic64_t fail_ingress_untag_vlan_del;	/* Ingress untag vlan translation deletion failed */
 	atomic64_t fail_ingress_vlan_over_bridge_add;	/* Ingress VLAN over brige add rule failed */
 	atomic64_t fail_ingress_vlan_over_bridge_del;	/* Ingress VLAN over brige delete rule failed */
+	atomic64_t fail_evp_full;		/* Create req fail due to Enqueue VP full */
 };
 
 /*

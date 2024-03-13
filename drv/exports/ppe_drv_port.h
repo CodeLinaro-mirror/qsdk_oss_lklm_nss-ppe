@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -79,6 +79,7 @@ enum ppe_drv_port_type {
 	PPE_DRV_PORT_VIRTUAL,		/* Virtual Port */
 	PPE_DRV_PORT_EIP,		/* EIP inline Port */
 	PPE_DRV_PORT_VIRTUAL_PO,	/* Virtual point offload port */
+	PPE_DRV_PORT_ENQ_VP,		/* Enqueue VPort */
 };
 
 /*
@@ -228,4 +229,26 @@ bool ppe_drv_port_check_rfs_support(struct net_device *dev);
  * True if the hw stats are cleared, false otherwise.
  */
 bool ppe_drv_port_clear_hw_vp_stats(int16_t port);
+
+/**
+ * ppe_drv_port_metadata_to_pri_prof
+ * 	Get enqueue vport pri profile
+ *
+ * @param[in] port metadata
+ *
+ * @return
+ * pri profile.
+ */
+uint8_t ppe_drv_port_metadata_to_pri_prof(uint8_t port_metadata);
+
+/**
+ * ppe_drv_port_metadata_to_enq_vp
+ * 	Get enqueue vport from metadata
+ *
+ * @param[in] port metadata
+ *
+ * @return
+ * Enqueue vp.
+ */
+uint8_t ppe_drv_port_metadata_to_enq_vp(uint8_t port_metadata);
 #endif /* _PPE_DRV_PORT_H_ */
