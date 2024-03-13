@@ -1826,6 +1826,204 @@ EXPORT_SYMBOL(ppe_drv_port_xcpn_mode_set);
 #endif
 
 /*
+ * ppe_drv_port_metadata_to_enq_vp_internal()
+ *	Get the enqueue vport from port metadata.
+ */
+uint8_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+	uint8_t i;
+
+	for (i = PPE_DRV_PORT_ENQ_VP_END; i >= PPE_DRV_PORT_ENQ_VP_START; i--) {
+		pp = &p->port[i];
+
+		if (kref_read(&pp->ref_cnt)) {
+			if (pp->evp.metadata == port_metadata) {
+				return pp->port;
+			}
+		}
+	}
+	return PPE_DRV_PORT_ID_INVALID;
+}
+
+/*
+ * ppe_drv_port_metadata_to_enq_vp()
+ *	Get the enqueue vport from port metadata.
+ */
+uint8_t ppe_drv_port_metadata_to_enq_vp(uint8_t port_metadata)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint8_t ret;
+
+	spin_lock_bh(&p->lock);
+	ret = ppe_drv_port_metadata_to_enq_vp_internal(port_metadata);
+	spin_unlock_bh(&p->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_port_metadata_to_enq_vp);
+
+/*
+ * ppe_drv_port_metadata_to_pri_prof_internal()
+ *	Get the enqueue vport pri profile.
+ */
+uint8_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+	uint8_t enq_vp;
+
+	enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(port_metadata);
+	if (enq_vp != PPE_DRV_PORT_ID_INVALID) {
+		pp = &p->port[enq_vp];
+		if (kref_read(&pp->ref_cnt)) {
+			return pp->evp.pri_profile;
+		}
+	}
+
+	return PPE_DRV_PORT_ENQ_VP_PRI_PRFL_INVALID;
+}
+
+/*
+ * ppe_drv_port_metadata_to_pri_prof()
+ *	Get the enqueue vport pri profile.
+ */
+uint8_t ppe_drv_port_metadata_to_pri_prof(uint8_t port_metadata)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint8_t ret;
+
+	spin_lock_bh(&p->lock);
+	ret = ppe_drv_port_metadata_to_pri_prof_internal(port_metadata);
+	spin_unlock_bh(&p->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_port_metadata_to_pri_prof);
+
+/*
+ * ppe_drv_port_enq_vp_deinit()
+ *	Deinit the enqueue vport entry in PPE.
+ */
+static void ppe_drv_port_enq_vp_deinit(struct kref *kref)
+{
+	struct ppe_drv_port *pp = container_of(kref, struct ppe_drv_port, ref_cnt);
+
+	pp->evp.metadata = PPE_DRV_PORT_ENQ_VP_METADTA_INVALID;
+}
+
+/*
+ * ppe_drv_port_enq_vp_free()
+ *	Release the enqueue vport to free list.
+ */
+bool ppe_drv_port_enq_vp_free(uint32_t enq_vp)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+
+	if (enq_vp < PPE_DRV_PORT_ENQ_VP_START ||
+		enq_vp > PPE_DRV_PORT_ENQ_VP_END) {
+		return false;
+	}
+
+	pp = &p->port[enq_vp];
+	if (kref_put(&pp->ref_cnt, ppe_drv_port_enq_vp_deinit)) {
+		ppe_drv_trace("reference goes down to 0 for port: %p\n", pp);
+		return true;
+	}
+
+	ppe_drv_trace("%p: port:%u ref dec:%u", pp, pp->port, kref_read(&pp->ref_cnt));
+	return false;
+}
+
+/*
+ * ppe_drv_port_enq_vp_init()
+ *	Initialize the enqueue virtual port in PPE.
+ */
+void ppe_drv_port_enq_vp_init()
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint8_t i;
+	uint8_t pri_prof_idx = PPE_DRV_PORT_EVP_PRI_PROF_START;
+
+	for (i = PPE_DRV_PORT_ENQ_VP_START; i <= PPE_DRV_PORT_ENQ_VP_END; i++) {
+		p->port[i].type = PPE_DRV_PORT_ENQ_VP;
+		p->port[i].evp.pri_profile = pri_prof_idx;
+		p->port[i].evp.metadata = PPE_DRV_PORT_ENQ_VP_METADTA_INVALID;
+		pri_prof_idx--;
+	}
+}
+
+/*
+ * ppe_drv_port_enq_vp_metadata_set()
+ * 	Set the enqueue vport metadata value.
+ *
+ * 	The metadata value would be used during flow lookup
+ * 	to find the pri profile of enqueue vp.
+ */
+bool ppe_drv_port_enq_vp_metadata_set(uint8_t enq_vp, uint8_t evp_metadata)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+
+	if (enq_vp < PPE_DRV_PORT_ENQ_VP_START ||
+			enq_vp > PPE_DRV_PORT_ENQ_VP_END) {
+		return false;
+	}
+
+	pp = &p->port[enq_vp];
+
+	pp->evp.metadata = evp_metadata;
+	return true;
+}
+
+/*
+ * ppe_drv_port_enq_vp_to_pri_prof()
+ *	Get the pri profile for given enqueue vp.
+ */
+int8_t ppe_drv_port_enq_vp_to_pri_prof(uint8_t enq_vp)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+
+	if (enq_vp < PPE_DRV_PORT_ENQ_VP_START ||
+			enq_vp > PPE_DRV_PORT_ENQ_VP_END) {
+		return PPE_DRV_PORT_ENQ_VP_PRI_PRFL_INVALID;
+	}
+
+	pp = &p->port[enq_vp];
+	if (kref_read(&pp->ref_cnt)) {
+		return pp->evp.pri_profile;
+	}
+
+	return PPE_DRV_PORT_ENQ_VP_PRI_PRFL_INVALID;
+}
+
+/*
+ * ppe_drv_port_enq_vp_alloc()
+ *	Allocate the enqueue virtual port in PPE.
+ */
+int8_t ppe_drv_port_enq_vp_alloc(void)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint8_t i;
+
+	/*
+	 * Get a free enqueue vport
+	 */
+	for (i = PPE_DRV_PORT_ENQ_VP_END; i >= PPE_DRV_PORT_ENQ_VP_START; i--) {
+		if (!kref_read(&p->port[i].ref_cnt)) {
+			kref_init(&p->port[i].ref_cnt);
+			return p->port[i].port;
+		}
+	}
+
+	ppe_drv_stats_inc(&p->stats.gen_stats.fail_evp_full);
+	return PPE_DRV_PORT_ID_INVALID;
+}
+
+/*
  * ppe_drv_port_alloc()
  *	Create a new virtual port in PPE.
  */

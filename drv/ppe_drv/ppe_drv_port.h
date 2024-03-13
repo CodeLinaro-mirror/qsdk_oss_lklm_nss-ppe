@@ -21,6 +21,29 @@
 #define PPE_DRV_PORT_VIRTUAL_L3_TUN		0x02	/* Port is L3 tunnel virtual port */
 #define PPE_DRV_PORT_SRC_PROFILE 0
 
+/*
+ * Enqueue vport and pri profile mapping
+ * 	Each enqueue vport defined are mapped to pri profile on PPE VSI table.
+ * 	Use case 1: Enqueue vp could be used by PPE-DS to map with queue and hence ring.
+ *
+ * Note: Ports 32,33 could be used for trunk. Hence MAX enqueue vp is 30[From 34 to 63].
+ */
+#define PPE_DRV_PORT_ENQ_VP_START		34	/**< PPE enqueue vp start  */
+#define PPE_DRV_PORT_ENQ_VP_END			63	/**< PPE enqueue vp end  */
+#define PPE_DRV_PORT_ENQ_VP_METADTA_INVALID	-1	/**< PPE enqueue vp metadata */
+#define PPE_DRV_PORT_ENQ_VP_PRI_PRFL_INVALID	-1	/**<  PPE enqueue vp pri profile invalid */
+#define PPE_DRV_PRI_PROF_DEFAULT 		0	/**< PPE enqueue vp pri profile default */
+#define PPE_DRV_PORT_EVP_PRI_PROF_START	((PPE_DRV_PORT_ENQ_VP_END) - (PPE_DRV_PORT_ENQ_VP_START) + 1)	/**<  PPE enqueue vp pri profile start */
+
+/**
+ * ppe_drv_port_evp_status
+ *	Enqueue vport status.
+ */
+enum ppe_drv_port_evp_status {
+	PPE_DRV_PORT_EVP_DISABLE = 0,	/**<  PPE enqueue vp disable */
+	PPE_DRV_PORT_EVP_ENABLE,	/**<  PPE enqueue vp enable */
+};
+
 /**
  * ppe_port_user_type
  *	User's VP type
@@ -59,6 +82,15 @@ typedef enum ppe_drv_port_flag {
 } ppe_drv_port_flag_t;
 
 /*
+ * ppe_drv_port_enq_vp
+ *	Port enqueue vport information
+ */
+struct ppe_drv_port_enq_vp {
+	uint8_t pri_profile;	/* Enqueue vport pri profile */
+	uint8_t metadata;	/* Metadata value(node_id) for enqueue vport */
+};
+
+/*
  * ppe_drv_port
  *	Port information
  */
@@ -93,6 +125,7 @@ struct ppe_drv_port {
 	uint8_t user_type;			/* PPE VP user type */
 	uint8_t next_core;			/* Next core to pick for RFS */
 	uint8_t xmit_port;			/* Physical port attached to virtual port */
+	struct ppe_drv_port_enq_vp evp;	/* PPE enqueue vport information */
 };
 
 void ppe_drv_port_ucast_queue_update(struct ppe_drv_port *pp, uint8_t queue_id);
@@ -145,6 +178,13 @@ void  ppe_drv_port_tun_set(struct ppe_drv_port *pp, struct ppe_drv_tun *ptun);
 struct ppe_drv_tun *ppe_drv_port_tun_get(struct ppe_drv_port *pp);
 bool ppe_drv_port_check_flow_offload_enabled(struct ppe_drv_port *drv_port);
 bool ppe_drv_is_wlan_vp_port_type(uint8_t user_type);
+int8_t ppe_drv_port_enq_vp_alloc(void);
+void ppe_drv_port_enq_vp_init(void);
+bool ppe_drv_port_enq_vp_metadata_set(uint8_t enq_vp, uint8_t evp_metadata);
+bool ppe_drv_port_enq_vp_free(uint32_t enq_vp);
+int8_t ppe_drv_port_enq_vp_to_pri_prof(uint8_t enq_vp);
+uint8_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata);
+uint8_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata);
 
 /*
  * ppe_drv_port_flags_check()

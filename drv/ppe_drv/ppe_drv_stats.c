@@ -104,6 +104,7 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"fail_ingress_untag_vlan_del",			/* Ingress VLAN del rule failed */
 	"fail_ingress_vlan_over_bridge_add",		/* Ingress VLAN over bridge add rule failed */
 	"fail_ingress_vlan_over_bridge_del",		/* Ingress VLAN over bridge delete rule failed */
+	"fail_evp_full",				/* Create req fail due to enqueue port table full */
 };
 
 /*
