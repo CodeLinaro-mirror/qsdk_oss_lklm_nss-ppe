@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,27 +18,24 @@
 #include "ppe_drv.h"
 #include <fal_vport.h>
 
+
 /*
- * ppe_drv_vp_deinit()
+ * ppe_drv_vp_cleanup()
  *	De-Initialize API exposed to VP driver
  */
-ppe_drv_ret_t ppe_drv_vp_deinit(struct ppe_drv_iface *iface)
+static ppe_drv_ret_t ppe_drv_vp_cleanup(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 
-	spin_lock_bh(&p->lock);
 	l3_if = ppe_drv_iface_l3_if_get(iface);
 	if (!l3_if) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: unable to get l3_if from iface\n", iface);
 		return PPE_DRV_RET_L3_IF_NOT_FOUND;
 	}
 
 	port = ppe_drv_iface_port_get(iface);
 	if (!port) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: unable to get port from iface\n", iface);
 		return PPE_DRV_RET_PORT_NOT_FOUND;
 	}
@@ -52,12 +49,37 @@ ppe_drv_ret_t ppe_drv_vp_deinit(struct ppe_drv_iface *iface)
 	ppe_drv_l3_if_deref(l3_if);
 
 	ppe_drv_port_deref(port);
-	spin_unlock_bh(&p->lock);
 
 	return PPE_DRV_RET_SUCCESS;
 }
-EXPORT_SYMBOL(ppe_drv_vp_deinit);
 
+/*
+ * ppe_drv_vp_deinit()
+ *	De-Initialize API exposed to VP driver
+ */
+ppe_drv_ret_t ppe_drv_vp_deinit(struct ppe_drv_iface *iface)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	ppe_drv_ret_t ret;
+
+	/*
+	 * Before the ppe_iface’s reference count reaches 0,
+	 * if ppe_vp_free is called, then defer the ppe_vp_deinit call.
+	 * Register a cleanup callback function and
+         * it will be called when ppe_iface reference becomes 0.
+	 */
+	spin_lock_bh(&p->lock);
+	if (kref_read(&iface->ref)) {
+		iface->cleanup_cb = ppe_drv_vp_cleanup;
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_SUCCESS;
+	}
+
+	ret = ppe_drv_vp_cleanup(iface);
+	spin_unlock_bh(&p->lock);
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_vp_deinit);
 /*
  * ppe_drv_vp_init()
  *	Initialize API exposed to VP driver

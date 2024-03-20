@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,6 +26,11 @@
 #define PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID 0x40
 
 /*
+ * ppe-iface cleanup function callback
+ */
+typedef ppe_drv_ret_t (*ppe_drv_iface_cleanup_cb)(struct ppe_drv_iface *iface);
+
+/*
  * ppe_drv_iface
  *	PPE interface information
  */
@@ -40,6 +45,7 @@ struct ppe_drv_iface {
 	uint16_t flags;				/* Flag to indicate valid handles */
 	uint16_t index;				/* Interface index */
 	enum ppe_drv_iface_type type;		/* Interface type */
+	ppe_drv_iface_cleanup_cb cleanup_cb;	/* cleanup callback */
 };
 
 bool ppe_drv_iface_deref_internal(struct ppe_drv_iface *iface);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,6 +28,19 @@ static void ppe_drv_iface_free(struct kref *kref)
 	ppe_drv_assert(!iface->port, "%p: Interface still associated with the port", iface);
 	ppe_drv_assert(!iface->vsi, "%p: Interface still associated with the vsi", iface);
 	ppe_drv_assert(!iface->l3, "%p: Interface still associated with the l3_if", iface);
+
+	/*
+	 * The cleanup_cb is registered when
+	 * the references held by other components(like ECM).
+	 * When the reference count of the ppe_iface reaches 0 and
+	 * callback is registered, we perform the deinitialization/cleanup of
+	 * the port before proceeding to clean up the ppe_iface.
+	 * This is a WAR to handle async free call for ppe-vp.
+	 */
+	if (iface->cleanup_cb) {
+		iface->cleanup_cb(iface);
+		iface->cleanup_cb = NULL;
+	}
 
 	iface->flags &= ~PPE_DRV_IFACE_FLAG_VALID;
 
@@ -1047,6 +1060,7 @@ struct ppe_drv_iface *ppe_drv_iface_alloc(enum ppe_drv_iface_type type, struct n
 	iface->port = NULL;
 	iface->vsi = NULL;
 	iface->l3 = NULL;
+	iface->cleanup_cb = NULL;
 
 	spin_unlock_bh(&p->lock);
 
