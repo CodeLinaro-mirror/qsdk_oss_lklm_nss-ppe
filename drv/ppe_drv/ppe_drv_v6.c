@@ -2597,8 +2597,14 @@ ppe_drv_ret_t ppe_drv_v6_rfs_create(struct ppe_drv_v6_rule_create *create)
 	if (!pcf->pf) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_rfs_fail);
 		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
-		ppe_drv_iface_deref_internal(pcf->eg_port_if);
-		ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
+		if (pcf->eg_port_if) {
+			ppe_drv_iface_deref_internal(pcf->eg_port_if);
+		}
+
+		if (cn->pcf.in_l3_if) {
+			ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
+		}
+
 		ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
 		ppe_drv_v6_conn_flow_flags_clear(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST);
 		goto fail;
