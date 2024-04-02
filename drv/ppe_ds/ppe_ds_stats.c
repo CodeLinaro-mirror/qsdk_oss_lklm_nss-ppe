@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,24 @@
 static struct dentry *dbgfs;
 struct ppe_ds_stats ppe_ds_node_stats[PPE_DS_MAX_NODE];
 
+
+/*
+ * ppe_ds_node_info_show()
+ *	Show the node evp information
+ */
+static int ppe_ds_node_info_show(struct seq_file *m,
+		void __attribute__((unused))*ptr)
+{
+	int i = 0;
+
+	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
+		seq_printf(m, "Node: %d\n", i);
+		seq_printf(m, "Node Enqueue VP: %d\n", ppe_drv_port_metadata_to_enq_vp(i));
+		seq_printf(m, "Node pri profile: %d\n\n", ppe_drv_port_metadata_to_pri_prof(i));
+	}
+	return 0;
+}
+
 /*
  * ppe_ds_node_stats_show()
  *	Show the stats of per node
@@ -39,6 +57,15 @@ static int ppe_ds_node_stats_show(struct seq_file *m,
 }
 
 /*
+ * ppe_ds_node_info_open()
+ *	PPE DS node infromation open callback API
+ */
+static int ppe_ds_node_info_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ppe_ds_node_info_show, inode->i_private);
+}
+
+/*
  * ppe_ds_node_stats_open()
  *	PPE DS STATS open callback API
  */
@@ -46,6 +73,17 @@ static int ppe_ds_node_stats_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, ppe_ds_node_stats_show, inode->i_private);
 }
+
+/*
+ * ppe_ds_node_info_file_ops
+ *	File operations for DS Node information
+ */
+const struct file_operations ppe_ds_node_info_file_ops = {
+	.open = ppe_ds_node_info_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
 
 /*
  * ppe_ds_node_stats_general_file_ops
@@ -88,6 +126,11 @@ int ppe_ds_node_stats_debugfs_init(void)
 	}
 
 	if (!debugfs_create_file("ppe_ds_node_stats", S_IRUGO, dbgfs, NULL, &ppe_ds_node_stats_file_ops)) {
+		ppe_ds_warn("%p: Unable to create common statistics file entry in debugfs\n", dbgfs);
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("ppe_ds_node_info", S_IRUGO, dbgfs, NULL, &ppe_ds_node_info_file_ops)) {
 		ppe_ds_warn("%p: Unable to create common statistics file entry in debugfs\n", dbgfs);
 		goto debugfs_dir_failed;
 	}
