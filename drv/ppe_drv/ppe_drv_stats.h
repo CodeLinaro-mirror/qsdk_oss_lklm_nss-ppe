@@ -175,6 +175,9 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_fail;		/* No of v6 create failure */
 	atomic64_t v6_destroy_req;		/* No of v6 delete requests */
 	atomic64_t v6_destroy_fail;		/* No of v6 delete failure */
+	atomic64_t v6_create_fail_bridge_nat;	/* No of v6 create failure due to NAT with bridge flow */
+	atomic64_t v6_create_fail_snat_dnat;	/* No of v6 create failure due to both SNAT and DNAT is requested */
+	atomic64_t v6_create_fail_invalid_nf_target;	/* No of v6 create failure due to Invalid netfilter target used */
 	atomic64_t v6_destroy_conn_not_found;	/* No of v6 delete failure due to connection not found */
 	atomic64_t v6_create_fail_mem;			/* No of v6 create failure due to OOM */
 	atomic64_t v6_create_fail_conn;			/* No of v6 create failure due to invalid parameters */

@@ -66,6 +66,29 @@
 					/* Flow is noedit rule */
 #define PPE_DRV_V6_CONN_FLAG_FLOW_WIFI_DS	0x00020000
 					/* Flow + MLO DS node */
+#define PPE_DRV_V6_CONN_FLOW_FLAG_XLATE_SRC 0x00040000
+					/* Perform source translation */
+#define PPE_DRV_V6_CONN_FLOW_FLAG_XLATE_DEST 0x00080000
+					/* Perform destination translation */
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+/*
+ * ppe_drv_v6_conn_npt6
+ *	structure to store NPTv6 hardware info
+ */
+struct ppe_drv_v6_conn_npt6 {
+	struct ppe_drv_v6_conn *conn;			/* Pointer to parent structure */
+	struct ppe_drv_nptv6_prefix *pfx_flow;		/* Flow prefix pointer */
+	struct ppe_drv_nptv6_prefix *pfx_return;	/* Return prefix pointer */
+	struct ppe_drv_nptv6_iid *iid_flow;		/* IID pointer for the flow direction */
+	struct ppe_drv_nptv6_iid *iid_return;		/* IID pointer for the return direction */
+	uint32_t src_pfx[4];				/* Source Prefix of NPTv6 rule */
+	uint32_t dst_pfx[4];				/* Destination Prefix of NPTv6 rule */
+	uint16_t nptv6_flags;				/* NPTv6 specific flags */
+	uint8_t src_pfx_len;				/* Source Prefix length of NPTv6 rule */
+	uint8_t dst_pfx_len;				/* Destination Prefix length of NPTv6 rule */
+};
+#endif
 
 /*
  * ppe_drv_v6_conn_flow
@@ -80,6 +103,10 @@ struct ppe_drv_v6_conn_flow {
 	uint32_t match_dest_ip[4];			/* Destination IP address */
 	uint32_t match_src_ident;		/* Source port/connection ident */
 	uint32_t match_dest_ident;		/* Destination port/connection ident */
+	uint32_t xlate_src_ip[4];		/* Address after source translation */
+	uint32_t xlate_src_ident;		/* Port/connection ident after source translation */
+	uint32_t xlate_dest_ip[4];		/* Address after destination translation */
+	uint32_t xlate_dest_ident;		/* Port/connection ident after destination translation */
 	uint8_t xmit_dest_mac_addr[ETH_ALEN];	/* Destination MAC address after forwarding */
 
 	/*
@@ -87,6 +114,8 @@ struct ppe_drv_v6_conn_flow {
 	 */
 	uint32_t dump_match_src_ip[4];		/* Source IP address */
 	uint32_t dump_match_dest_ip[4];		/* Destination IP address */
+	uint32_t dump_xlate_src_ip[4];		/* Address after source translation */
+	uint32_t dump_xlate_dest_ip[4];		/* Address after destination translation */
 
 	/*
 	 * PPE to and from port
@@ -161,6 +190,9 @@ struct ppe_drv_v6_conn {
 	struct list_head list;
 	struct ppe_drv_v6_conn_flow pcf;	/* flow object for flow direction */
 	struct ppe_drv_v6_conn_flow pcr;	/* flow object for return direction */
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	struct ppe_drv_v6_conn_npt6 npt6;	/* Object to store NPTv6 rule info */
+#endif
 	uint32_t flags;				/* connection flags */
 	bool toggle;				/* Used during stats sync */
 };
@@ -315,6 +347,18 @@ static inline void ppe_drv_v6_conn_flow_match_src_ip_get(struct ppe_drv_v6_conn_
 }
 
 /*
+ * ppe_drv_v6_conn_flow_xlate_src_ip_get()
+ *	Returns flow xlate source IP.
+ */
+static inline void ppe_drv_v6_conn_flow_xlate_src_ip_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *src_ip)
+{
+	src_ip[0] = pcf->xlate_src_ip[0];
+	src_ip[1] = pcf->xlate_src_ip[1];
+	src_ip[2] = pcf->xlate_src_ip[2];
+	src_ip[3] = pcf->xlate_src_ip[3];
+}
+
+/*
  * ppe_drv_v6_conn_flow_match_dest_ip_get()
  *	Returns flow destination IP.
  */
@@ -327,6 +371,18 @@ static inline void ppe_drv_v6_conn_flow_match_dest_ip_get(struct ppe_drv_v6_conn
 }
 
 /*
+ * ppe_drv_v6_conn_flow_xlate_dest_ip_get()
+ *	Returns flow xlate destination IP.
+ */
+static inline void ppe_drv_v6_conn_flow_xlate_dest_ip_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *dest_ip)
+{
+	dest_ip[0] = pcf->xlate_dest_ip[0];
+	dest_ip[1] = pcf->xlate_dest_ip[1];
+	dest_ip[2] = pcf->xlate_dest_ip[2];
+	dest_ip[3] = pcf->xlate_dest_ip[3];
+}
+
+/*
  * ppe_drv_v6_conn_flow_match_src_ident_get()
  *	Returns flow source l4 port.
  */
@@ -336,12 +392,30 @@ static inline uint32_t ppe_drv_v6_conn_flow_match_src_ident_get(struct ppe_drv_v
 }
 
 /*
+ * ppe_drv_v6_conn_flow_xlate_src_ident_get()
+ *	Returns flow xlate source l4 port.
+ */
+static inline uint32_t ppe_drv_v6_conn_flow_xlate_src_ident_get(struct ppe_drv_v6_conn_flow *pcf)
+{
+	return pcf->xlate_src_ident;
+}
+
+/*
  * ppe_drv_v6_conn_flow_match_dest_ident_get()
  *	Returns flow destination l4 port.
  */
 static inline uint32_t ppe_drv_v6_conn_flow_match_dest_ident_get(struct ppe_drv_v6_conn_flow *pcf)
 {
         return pcf->match_dest_ident;
+}
+
+/*
+ * ppe_drv_v6_conn_flow_xlate_dest_ident_get()
+ *	Returns xlate destination l4 port.
+ */
+static inline uint32_t ppe_drv_v6_conn_flow_xlate_dest_ident_get(struct ppe_drv_v6_conn_flow *pcf)
+{
+	return pcf->xlate_dest_ident;
 }
 
 /*
@@ -547,6 +621,18 @@ static inline void ppe_drv_v6_conn_flow_match_src_ip_set(struct ppe_drv_v6_conn_
 }
 
 /*
+ * ppe_drv_v6_conn_flow_xlate_src_ip_set()
+ *	Sets flow xlate source IP.
+ */
+static inline void ppe_drv_v6_conn_flow_xlate_src_ip_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t xlate_src_ip[4])
+{
+	pcf->xlate_src_ip[0] = xlate_src_ip[0];
+	pcf->xlate_src_ip[1] = xlate_src_ip[1];
+	pcf->xlate_src_ip[2] = xlate_src_ip[2];
+	pcf->xlate_src_ip[3] = xlate_src_ip[3];
+}
+
+/*
  * ppe_drv_v6_conn_flow_dump_match_src_ip_set()
  *	Sets flow source IP in Host order.
  */
@@ -556,6 +642,18 @@ static inline void ppe_drv_v6_conn_flow_dump_match_src_ip_set(struct ppe_drv_v6_
         pcf->dump_match_src_ip[1] = htonl(match_src_ip[1]);
         pcf->dump_match_src_ip[2] = htonl(match_src_ip[2]);
         pcf->dump_match_src_ip[3] = htonl(match_src_ip[3]);
+}
+
+/*
+ * ppe_drv_v6_conn_flow_dump_xlate_src_ip_set()
+ *	Sets flow xlate source IP in host order.
+ */
+static inline void ppe_drv_v6_conn_flow_dump_xlate_src_ip_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t xlate_src_ip[4])
+{
+	pcf->dump_xlate_src_ip[0] = htonl(xlate_src_ip[0]);
+	pcf->dump_xlate_src_ip[1] = htonl(xlate_src_ip[1]);
+	pcf->dump_xlate_src_ip[2] = htonl(xlate_src_ip[2]);
+	pcf->dump_xlate_src_ip[3] = htonl(xlate_src_ip[3]);
 }
 
 /*
@@ -571,6 +669,18 @@ static inline void ppe_drv_v6_conn_flow_match_dest_ip_set(struct ppe_drv_v6_conn
 }
 
 /*
+ * ppe_drv_v6_conn_flow_xlate_dest_ip_set()
+ *	Sets flow xlate destination IP.
+ */
+static inline void ppe_drv_v6_conn_flow_xlate_dest_ip_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t xlate_dest_ip[4])
+{
+	pcf->xlate_dest_ip[0] = xlate_dest_ip[0];
+	pcf->xlate_dest_ip[1] = xlate_dest_ip[1];
+	pcf->xlate_dest_ip[2] = xlate_dest_ip[2];
+	pcf->xlate_dest_ip[3] = xlate_dest_ip[3];
+}
+
+/*
  * ppe_drv_v6_conn_flow_dump_match_dest_ip_set()
  *	Sets flow destination IP.
  */
@@ -583,6 +693,18 @@ static inline void ppe_drv_v6_conn_flow_dump_match_dest_ip_set(struct ppe_drv_v6
 }
 
 /*
+ * ppe_drv_v6_conn_flow_dump_xlate_dest_ip_set()
+ *	Sets flow xlate destination IP in host order.
+ */
+static inline void ppe_drv_v6_conn_flow_dump_xlate_dest_ip_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t xlate_dest_ip[4])
+{
+	pcf->dump_xlate_dest_ip[0] = htonl(xlate_dest_ip[0]);
+	pcf->dump_xlate_dest_ip[1] = htonl(xlate_dest_ip[1]);
+	pcf->dump_xlate_dest_ip[2] = htonl(xlate_dest_ip[2]);
+	pcf->dump_xlate_dest_ip[3] = htonl(xlate_dest_ip[3]);
+}
+
+/*
  * ppe_drv_v6_conn_flow_match_src_ident_set()
  *	Sets flow source l4 port.
  */
@@ -592,12 +714,30 @@ static inline void ppe_drv_v6_conn_flow_match_src_ident_set(struct ppe_drv_v6_co
 }
 
 /*
+ * ppe_drv_v6_conn_flow_xlate_src_ident_set()
+ *	Sets flow xlate source l4 port.
+ */
+static inline void ppe_drv_v6_conn_flow_xlate_src_ident_set(struct ppe_drv_v6_conn_flow *pcf, uint16_t xlate_src_ident)
+{
+	pcf->xlate_src_ident = xlate_src_ident;
+}
+
+/*
  * ppe_drv_v6_conn_flow_match_dest_ident_set()
  *	Sets flow destination l4 port.
  */
 static inline void ppe_drv_v6_conn_flow_match_dest_ident_set(struct ppe_drv_v6_conn_flow *pcf, uint16_t match_dest_ident)
 {
         pcf->match_dest_ident = match_dest_ident;
+}
+
+/*
+ * ppe_drv_v6_conn_flow_xlate_dest_ident_set()
+ *	Sets xlate destination l4 port.
+ */
+static inline void ppe_drv_v6_conn_flow_xlate_dest_ident_set(struct ppe_drv_v6_conn_flow *pcf, uint16_t xlate_dest_ident)
+{
+	pcf->xlate_dest_ident = xlate_dest_ident;
 }
 
 /*

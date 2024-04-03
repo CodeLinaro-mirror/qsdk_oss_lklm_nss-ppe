@@ -191,6 +191,9 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_fail",			/* No of v6 create failure */
 	"v6_destroy_req",			/* No of v6 delete requests */
 	"v6_destroy_fail",			/* No of v6 delete failure */
+	"v6_create_fail_bridge_nat",		/* No of v6 create failure due to NAT with bridge flow */
+	"v6_create_fail_snat_dnat",		/* No of v6 create failure due to both SNAT and DNAT is requested */
+	"v6_create_fail_invalid_nf_target",	/* No of v6 create failure due to invalid netfilter target used */
 	"v6_destroy_conn_not_found",		/* No of v4 delete failure due to connection not found */
 	"v6_create_fail_mem",			/* No of v6 create failure due to OOM */
 	"v6_create_fail_conn",			/* No of v6 create failure due to invalid parameters */
@@ -347,6 +350,9 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_fail",			/* No of v6 create failure */
 	"v6_tun_destroy_req",			/* No of v6 delete requests */
 	"v6_tun_destroy_fail",			/* No of v6 delete failure */
+	"v6_tun_create_fail_bridge_nat",	/* No of v6 create failure due to NAT with bridge flow */
+	"v6_tun_create_fail_snat_dnat",		/* No of v6 create failure due to both SNAT and DNAT is requested */
+	"v6_tun_create_fail_invalid_nf_target",	/* No of v6 create failure due to invalid netfilter target used */
 	"v6_tun_destroy_conn_not_found",	/* No of v4 delete failure due to connection not found */
 	"v6_tun_create_fail_mem",		/* No of v6 create failure due to OOM */
 	"v6_tun_create_fail_conn",		/* No of v6 create failure due to invalid parameters */

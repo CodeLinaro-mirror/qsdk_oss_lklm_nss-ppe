@@ -24,6 +24,9 @@
 #include "ppe_drv_flow.h"
 #include "ppe_drv_host.h"
 #include "ppe_drv_iface.h"
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+#include "ppe_drv_nptv6.h"
+#endif
 #include "ppe_drv_l3_if.h"
 #include "ppe_drv_nexthop.h"
 #include "ppe_drv_policer.h"
@@ -293,7 +296,10 @@ struct ppe_drv {
 	uint32_t nexthop_num;				/* Number of entries in PPE Nexthop table */
 	uint32_t sc_num;				/* Number of entries in PPE Service Code table */
 	uint32_t queue_num;				/* Number of entries in PPE Service Code table */
-
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	uint32_t prefix_num;				/* Number of entries in PPE prefix table */
+	uint32_t iid_num;				/* Number of entries in PPE IID table */
+#endif
 	/*
 	 * Timer
 	 */
@@ -325,6 +331,10 @@ struct ppe_drv {
 	struct ppe_drv_sc *sc;				/* Memory for PPE Service Code table */
 	struct ppe_drv_cc *cc;				/* Memory for PPE CPU Code table */
 	struct ppe_drv_acl *acl;			/* Memory for PPE ACL entries */
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	struct ppe_drv_nptv6_prefix *pfx;		/* Memory for PPE prefix table */
+	struct ppe_drv_nptv6_iid *iid;			/* Memory for PPE IID table */
+#endif
 	struct dentry *dentry;				/* Debugfs entry */
 	struct dentry *stats_dentry;				/* Debugfs entry */
 	struct ctl_table_header *ppe_drv_header;	/* PPE DRV sysctl */

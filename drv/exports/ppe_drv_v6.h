@@ -108,8 +108,24 @@ struct ppe_drv_v6_connection_rule {
 	uint8_t return_mac[ETH_ALEN];		/**< Return MAC address. */
 	uint16_t flow_mtu;			/**< MTU for the flow interface. */
 	uint16_t return_mtu;			/**< MTU for the return interface. */
+	uint32_t flow_ip_xlate[4];		/**< Translated flow IP address. */
+	uint32_t return_ip_xlate[4];		/**< Translated return IP address. */
+	uint32_t flow_ident_xlate;		/**< Translated flow identifier (e.g., port). */
+	uint32_t return_ident_xlate;		/**< Translated return identifier (e.g., port). */
 	ppe_drv_iface_t rx_if;			/**< From PPE interface number */
 	ppe_drv_iface_t tx_if;			/**< To PPE interface number */
+};
+
+/**
+ * ppe_drv_nptv6_rule
+ *	Information pertaining to NPTv6 rules.
+ */
+struct ppe_drv_nptv6_rule {
+	uint32_t src_pfx[4];		/**< Source Prefix of NPTv6 rule. */
+	uint32_t dst_pfx[4];		/**< Destination Prefix of NPTv6 rule. */
+	uint16_t nptv6_flags;		/**< NPTv6 specific flags. */
+	uint8_t src_pfx_len;		/**< Source Prefix length of NPTv6 rule. */
+	uint8_t dst_pfx_len;		/**< Destination Prefix length of NPTv6 rule. */
 };
 
 /**
@@ -132,6 +148,7 @@ struct ppe_drv_v6_rule_create {
 	struct ppe_drv_service_class_rule sawf_rule;    /**< Service class related information. */
 	struct ppe_drv_acl_policer_rule ap_rule;	/**< ACL/Policer rule ID information. */
 	struct ppe_drv_wifi_mdata_rule wifi_rule;	/**< Wi-Fi metadata rule ID information. */
+	struct ppe_drv_nptv6_rule npt6_rule;		/**< NPTv6 configured rule. */
 };
 
 /**
@@ -147,20 +164,24 @@ struct ppe_drv_v6_rule_destroy {
  *	PPE connection sync structure for one connection.
  */
 struct ppe_drv_v6_conn_sync {
-        uint8_t protocol;				/**< Protocol number. */
-        uint32_t flow_ip[4];				/**< Flow IP address. */
-        uint32_t flow_ident;				/**< Flow ident (e.g. port). */
-        uint32_t flow_rx_packet_count;			/**< Flow interface's RX packet count. */
-        uint32_t flow_rx_byte_count;			/**< Flow interface's RX byte count. */
-        uint32_t flow_tx_packet_count;			/**< Flow interface's TX packet count. */
-        uint32_t flow_tx_byte_count;			/**< Flow interface's TX byte count. */
-        uint32_t return_ip[4];				/**< Return IP address. */
-        uint32_t return_ident;				/**< Return ident (e.g. port). */
-        uint32_t return_rx_packet_count;		/**< Return interface's RX packet count. */
-        uint32_t return_rx_byte_count;			/**< Return interface's RX byte count. */
-        uint32_t return_tx_packet_count;		/**< Return interface's TX packet count. */
-        uint32_t return_tx_byte_count;			/**< Return interface's TX byte count. */
-        enum ppe_drv_stats_sync_reason reason;		/**< Reason for the sync. */
+	uint8_t protocol;				/**< Protocol number. */
+	uint32_t flow_ip[4];				/**< Flow IP address. */
+	uint32_t flow_ip_xlate[4];			/**< Translated flow IP address. */
+	uint32_t flow_ident;				/**< Flow ident (e.g. port). */
+	uint32_t flow_ident_xlate;			/**< Translated flow ident (e.g. port). */
+	uint32_t flow_rx_packet_count;			/**< Flow interface's RX packet count. */
+	uint32_t flow_rx_byte_count;			/**< Flow interface's RX byte count. */
+	uint32_t flow_tx_packet_count;			/**< Flow interface's TX packet count. */
+	uint32_t flow_tx_byte_count;			/**< Flow interface's TX byte count. */
+	uint32_t return_ip[4];				/**< Return IP address. */
+	uint32_t return_ip_xlate[4];			/**< Translated return IP address. */
+	uint32_t return_ident;				/**< Return ident (e.g. port). */
+	uint32_t return_ident_xlate;			/**< Translated return ident (e.g. port). */
+	uint32_t return_rx_packet_count;		/**< Return interface's RX packet count. */
+	uint32_t return_rx_byte_count;			/**< Return interface's RX byte count. */
+	uint32_t return_tx_packet_count;		/**< Return interface's TX packet count. */
+	uint32_t return_tx_byte_count;			/**< Return interface's TX byte count. */
+	enum ppe_drv_stats_sync_reason reason;		/**< Reason for the sync. */
 };
 
 /*
