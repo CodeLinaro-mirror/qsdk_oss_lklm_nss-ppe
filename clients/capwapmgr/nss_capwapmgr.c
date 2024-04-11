@@ -433,6 +433,11 @@ static void nss_capwapmgr_receive_pkt(struct net_device *dev, struct sk_buff *sk
 		pre->tunnel_id = priv->if_num_to_tunnel_id[if_num];
 	}
 
+	if (unlikely(pre->type & NSS_CAPWAP_PKT_TYPE_PADDED)) {
+		skb_trim(skb, (skb->len - NSS_CAPWAP_PADDING));
+		pre->type &= ~NSS_CAPWAP_PKT_TYPE_PADDED;
+	}
+
 	skb->dev = dev;
 	skb->pkt_type = PACKET_HOST;
 	skb->skb_iif = dev->ifindex;
@@ -1138,9 +1143,9 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv4_rule(struct nss_capw
 
 	if ((v4->in_vlan_tag[0] & 0xFFF) != 0xFFF) {
 		/*
-	 	 * Copy over the VLAN tag and set the VLAN_VALID flag.
+		 * Copy over the VLAN tag and set the VLAN_VALID flag.
 		 * IP rule direction is AC->AP, so we only update the ingress VLAN tag.
-	 	 */
+		 */
 		pd4rc->vlan_rule.primary_vlan.ingress_vlan_tag = v4->in_vlan_tag[0];
 		pd4rc->vlan_rule.primary_vlan.egress_vlan_tag = NSS_CAPWAPMGR_VLAN_TAG_NOT_CONFIGURED;
 		pd4rc->vlan_rule.secondary_vlan.ingress_vlan_tag = NSS_CAPWAPMGR_VLAN_TAG_NOT_CONFIGURED;
@@ -1151,8 +1156,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv4_rule(struct nss_capw
 
 	if (v4->flow_pppoe_if_exist) {
 		/*
-	 	 * Copy over the PPPOE rules and set PPPOE_VALID flag.
-	 	 */
+		 * Copy over the PPPOE rules and set PPPOE_VALID flag.
+		 */
 		if (!nss_capwapmgr_update_pppoe_rule(v4->top_ndev, &pd4rc->pppoe_rule.flow_session)) {
 			nss_capwapmgr_warn("%px:PPPoE rule update failed\n",t);
 			goto fail;
@@ -1165,7 +1170,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv4_rule(struct nss_capw
 	/*
 	 * Copy over the qos rules and set the QOS_VALID flag.
 	 */
-        if (v4->flags & NSS_IPV4_CREATE_FLAG_QOS_VALID) {
+	if (v4->flags & NSS_IPV4_CREATE_FLAG_QOS_VALID) {
 		pd4rc->qos_rule.flow_qos_tag = v4->flow_qos_tag;
 		pd4rc->qos_rule.return_qos_tag = v4->return_qos_tag;
 		pd4rc->valid_flags |= PPE_DRV_V4_VALID_FLAG_QOS;
@@ -1175,7 +1180,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv4_rule(struct nss_capw
 	 * Copy over the DSCP rule parameters.
 	 */
 	if (v4->flags & NSS_IPV4_CREATE_FLAG_DSCP_MARKING) {
-                pd4rc->dscp_rule.flow_dscp = v4->flow_dscp;
+		pd4rc->dscp_rule.flow_dscp = v4->flow_dscp;
 		pd4rc->dscp_rule.return_dscp = v4->return_dscp;
 		pd4rc->rule_flags |= PPE_DRV_V4_RULE_FLAG_DSCP_MARKING;
 		pd4rc->valid_flags |= PPE_DRV_V4_VALID_FLAG_DSCP_MARKING;
@@ -1327,9 +1332,9 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv6_rule(struct nss_capw
 
 	if ((v6->in_vlan_tag[0] & 0xFFF) != 0xFFF) {
 		/*
-	 	 * Copy over the VLAN tag and set the VLAN_VALID flag.
+		 * Copy over the VLAN tag and set the VLAN_VALID flag.
 		 * IP rule direction is AC->AP, so we only update the ingress VLAN tag.
-	 	 */
+		 */
 		pd6rc->vlan_rule.primary_vlan.ingress_vlan_tag = v6->in_vlan_tag[0];
 		pd6rc->vlan_rule.primary_vlan.egress_vlan_tag = NSS_CAPWAPMGR_VLAN_TAG_NOT_CONFIGURED;
 		pd6rc->vlan_rule.secondary_vlan.ingress_vlan_tag = NSS_CAPWAPMGR_VLAN_TAG_NOT_CONFIGURED;
@@ -1354,7 +1359,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv6_rule(struct nss_capw
 	/*
 	 * Copy over the qos rules and set the QOS_VALID flag.
 	 */
-        if (v6->flags & NSS_IPV6_CREATE_FLAG_QOS_VALID) {
+	if (v6->flags & NSS_IPV6_CREATE_FLAG_QOS_VALID) {
 		pd6rc->qos_rule.flow_qos_tag = v6->flow_qos_tag;
 		pd6rc->qos_rule.return_qos_tag = v6->return_qos_tag;
 		pd6rc->valid_flags |= PPE_DRV_V6_VALID_FLAG_QOS;
@@ -1364,7 +1369,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_create_ipv6_rule(struct nss_capw
 	 * Copy over the DSCP rule parameters.
 	 */
 	if (v6->flags & NSS_IPV6_CREATE_FLAG_DSCP_MARKING) {
-                pd6rc->dscp_rule.flow_dscp = v6->flow_dscp;
+		pd6rc->dscp_rule.flow_dscp = v6->flow_dscp;
 		pd6rc->dscp_rule.return_dscp = v6->return_dscp;
 		pd6rc->rule_flags |= PPE_DRV_V6_RULE_FLAG_DSCP_MARKING;
 		pd6rc->valid_flags |= PPE_DRV_V6_VALID_FLAG_DSCP_MARKING;
@@ -2317,7 +2322,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 
 		/*
 		 * Allocate a PPE-VP to handle DL traffic.
-	 	*/
+		*/
 		vp_num_decap = ppe_vp_alloc(internal_dev_decap, &vpai);
 		if (vp_num_decap == -1) {
 			nss_capwapmgr_warn("%px: VP alloc failed", dev);

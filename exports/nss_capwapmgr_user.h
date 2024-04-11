@@ -37,6 +37,9 @@
 #define NSS_CAPWAP_MAX_REASSEMBLY_TIMEOUT	(10 * 1000)
 				/**< Maximum timeout for reassembly - 10 seconds. */
 
+#define NSS_CAPWAP_PADDING 14	/**< Padded packet length. */
+
+
 /*
  * CAPWAP Rule configure message flags
  */
@@ -87,6 +90,8 @@
 				/**< T=1, then set wbid=1. */
 #define NSS_CAPWAP_PKT_TYPE_802_3		0x0020
 				/**< Data is in 802.3 format. */
+#define NSS_CAPWAP_PKT_TYPE_PADDED	0x4000
+				/**< Packet is padded to bypass EDMA length. */
 
 /**
  * nss_capwap_metaheader
