@@ -724,8 +724,9 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->fse_enable = false;
         p->is_wifi_fse_up = false;
 
-	p->l2tp_dport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
-	p->l2tp_sport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
+	p->tun_gbl.tun_l2tp.l2tp_dport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
+	p->tun_gbl.tun_l2tp.l2tp_sport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
+	p->tun_gbl.tun_l2tp.l2tp_encap_rule = NULL;
 
 	/*
 	 * Allocate tunnel specific entries
