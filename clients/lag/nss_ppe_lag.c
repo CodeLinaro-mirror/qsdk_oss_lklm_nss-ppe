@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2016-2017, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -294,6 +294,15 @@ static int nss_ppe_lag_unregister_event(struct netdev_notifier_info *info)
 
 	spin_lock(&nss_ppe_lag_spinlock);
 	entry = &bond_entry[bond_id];
+
+	/*
+	 * Make sure the bond device has a valid ppe interface.
+	 */
+	if (!entry->iface) {
+		spin_unlock(&nss_ppe_lag_spinlock);
+		nss_ppe_lag_warn("%px: Lag device is not a valid ppe interface\n", bond_dev);
+		return NOTIFY_DONE;
+	}
 
 	/*
 	 * There may be active slaves while the lag interface is deleted.
