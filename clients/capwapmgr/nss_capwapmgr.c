@@ -807,7 +807,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_destroy_ipv4_flow_rule(struct ns
 	pd4rd.tuple.return_ident = (uint32_t)v4->dest_port;
 
 	ppe_status = ppe_drv_v4_destroy(&pd4rd);
-	if (ppe_status != PPE_DRV_RET_SUCCESS) {
+	if ((ppe_status != PPE_DRV_RET_SUCCESS) && (ppe_status != PPE_DRV_RET_FAILURE_DESTROY_NO_CONN)) {
 		nss_capwapmgr_warn("%px: Unconfigure ipv4 flow rule failed : %d\n", v4, ppe_status);
 		return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
 	}
@@ -1251,7 +1251,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_ppe_destroy_ipv6_flow_rule(struct ns
 	pd6rd.tuple.flow_ident = v6->src_port;
 	pd6rd.tuple.return_ident = v6->dest_port;
 	ppe_status = ppe_drv_v6_destroy(&pd6rd);
-	if (ppe_status != PPE_DRV_RET_SUCCESS) {
+	if ((ppe_status != PPE_DRV_RET_SUCCESS) && (ppe_status != PPE_DRV_RET_FAILURE_DESTROY_NO_CONN)) {
 		nss_capwapmgr_warn("%px: unconfigure ipv6 rule failed : %d\n", v6, ppe_status);
 		return NSS_CAPWAPMGR_FAILURE_IP_DESTROY_RULE;
 	}
