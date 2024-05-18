@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -125,6 +125,7 @@ struct ppe_drv_port {
 	uint8_t user_type;			/* PPE VP user type */
 	uint8_t next_core;			/* Next core to pick for RFS */
 	uint8_t xmit_port;			/* Physical port attached to virtual port */
+	uint8_t profile_id;			/* Profile id */
 	struct ppe_drv_port_enq_vp evp;	/* PPE enqueue vport information */
 };
 
@@ -185,6 +186,9 @@ bool ppe_drv_port_enq_vp_free(int16_t enq_vp);
 int8_t ppe_drv_port_enq_vp_to_pri_prof(int16_t enq_vp);
 int16_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata);
 int16_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata);
+
+int ppe_drv_port_src_profile_get_byidx(uint8_t port_idx);
+bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc);
 
 /*
  * ppe_drv_port_flags_check()
