@@ -697,8 +697,32 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 	fal_rule->post_routing = info->cmn.post_routing_en;
 	fal_rule->qos_res_prec = info->cmn.qos_res_pre;
 	fal_rule->acl_pool = info->cmn.res_chain;
-	ppe_drv_trace("%p: post_routing: %d, qos_res_prec: %d, res_chain: %d",
-			ctx, fal_rule->post_routing, fal_rule->qos_res_prec, fal_rule->acl_pool);
+
+	/*
+	 * Update the rule type based on pre-IPO configuration.
+	 */
+	if (ctx->type == PPE_DRV_ACL_PREIPO) {
+		switch (fal_rule->rule_type) {
+		case FAL_ACL_RULE_MAC:
+			fal_rule->rule_type = FAL_ACL_RULE_TUNNEL_MAC;
+			break;
+		case FAL_ACL_RULE_IP4:
+			fal_rule->rule_type = FAL_ACL_RULE_TUNNEL_IP4;
+			break;
+		case FAL_ACL_RULE_IP6:
+			fal_rule->rule_type = FAL_ACL_RULE_TUNNEL_IP6;
+			break;
+		case FAL_ACL_RULE_UDF:
+			fal_rule->rule_type = FAL_ACL_RULE_TUNNEL_UDF;
+			break;
+		default:
+			ppe_drv_warn("%p: invalid rule_type: %d", ctx, fal_rule->rule_type);
+		}
+	}
+
+	ppe_drv_trace("%p: post_routing: %d, qos_res_prec: %d, res_chain: %d rule_type: %d",
+			ctx, fal_rule->post_routing, fal_rule->qos_res_prec,
+			fal_rule->acl_pool, fal_rule->rule_type);
 
 	return true;
 }
