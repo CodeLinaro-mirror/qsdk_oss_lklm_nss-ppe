@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2014-2018, 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -124,6 +124,7 @@ struct ppe_qdisc {
  *	Returns the INT-PRI value for a given classid.
  */
 uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid);
+bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info* pq_info);
 
 /*
  * ppe_qdisc_nla_nest_start()

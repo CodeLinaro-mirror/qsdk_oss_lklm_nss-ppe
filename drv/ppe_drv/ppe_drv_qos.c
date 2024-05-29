@@ -56,6 +56,38 @@ void ppe_drv_qos_int_pri_callback_unregister()
 EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_unregister);
 
 /*
+ * ppe_drv_qos_queue_info_callback_unregister()
+ *	API to unregister PPE-QUEUE fetch callback.
+ */
+void ppe_drv_qos_queue_info_callback_unregister()
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	p->queue_info_get_cb = NULL;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_info_callback_unregister);
+
+/*
+ * ppe_drv_qos_queue_info_callback_register()
+ *	API to register QUEUE INFO fetch callback.
+ */
+void ppe_drv_qos_queue_info_callback_register(ppe_drv_qos_queue_info_callback_t cb)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	/*
+	 * TODO: Return error in case cb is NULL
+	 */
+	spin_lock_bh(&p->lock);
+	p->queue_info_get_cb = cb;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_info_callback_register);
+
+
+/*
  * ppe_drv_qos_int_pri_callback_register()
  *	API to register INT-PRI fetch callback.
  */
@@ -71,6 +103,27 @@ void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb)
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_register);
+
+
+/*
+ * ppe_drv_qos_queue_info_get()
+ *	Returns the INT-PRI value for a class ID.
+ */
+bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info* pq_info)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	int8_t ret = 0;
+
+	spin_lock_bh(&p->lock);
+	if (p->queue_info_get_cb) {
+		ret = p->queue_info_get_cb(dev, classid, pq_info);
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:get int_pri:%d successful for dev:%px classid:%u", p, pq_info->int_pri, dev, classid);
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_info_get);
 
 /*
  * ppe_drv_qos_int_pri_get()

@@ -29,6 +29,9 @@
 #include "nss_ppenl_acl_if.h"
 #include "nss_ppenl_policer.h"
 #include "nss_ppenl_policer_if.h"
+#include "nss_ppenl_qos.h"
+#include "nss_ppenl_qos_if.h"
+
 
 /*
  * nss_ppenl.c
@@ -67,6 +70,16 @@ static struct nss_ppenl_family family_handlers[] = {
 		.exit = NSS_PPENL_POLICER_EXIT,	/* exit */
 		.valid = CONFIG_NSS_PPENL_POLICER	/* 1 or 0 */
 	},
+        {
+                /*
+                 * NSS_PPENL_QOS
+                 */
+                .name = NSS_PPENL_QOS_FAMILY,       	/* Qos Family */
+                .entry = NSS_PPENL_QOS_INIT,        	/* Init */
+                .exit = NSS_PPENL_QOS_EXIT,		/* exit */
+                .valid = CONFIG_NSS_PPENL_QOS       	/* 1 or 0 */
+        },
+
 };
 
 #define NSS_PPENL_FAMILY_HANDLER_SZ ARRAY_SIZE(family_handlers)
