@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -466,25 +466,38 @@ bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port)
 	}
 
 	/*
-	 * Map destination port queue to tunnel port
-	 */
-	dp_queue_id = ppe_drv_port_ucast_queue_get(dp);
-	if (!ppe_drv_port_ucast_queue_set(ptun->pp, dp_queue_id)) {
-		ppe_drv_warn("%p: Failed to set queue %d for port", ptun, dp_queue_id);
-		return false;
-	}
-	ppe_drv_trace("%p: Destination port: %p:%d, queue_id:%d", ptun, dp, xmit_port, dp_queue_id);
-
-	/*
 	 * Set phyiscal port based on xmit_port value
 	 */
 	phy_port = ppe_drv_tun_physical_port_from_xmit_port_get(xmit_port, dp);
 
+	/*
+	 * Map destination port queue to tunnel port
+	 */
 	err = fal_vport_physical_port_id_set(PPE_DRV_SWITCH_ID, v_port, phy_port);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: failed to set physical port:%d for vp port:%d", pp,
 					xmit_port, pp->port);
 		return false;
+	}
+
+	if (ppe_drv_tun_dp_port_ds(dp)) {
+		/*
+		 * Set flag to denote tunnel end point is a WIFI vp with DS enabled
+		 * to configure the correct port profile
+		 */
+		ppe_drv_port_flags_set(ptun->pp, PPE_DRV_PORT_FLAG_TUN_ENDPOINT_DS);
+
+		/*
+		 * Map tunnel port queue to the destination port queue
+		 * Needs to be done after mapping the phy port to tun port and
+		 * for destination ports being a vp as phy ports are already initializaed with
+		 * correct profile and queues initially.
+		 */
+		dp_queue_id = ppe_drv_port_ucast_queue_get(dp);
+		if (!ppe_drv_port_ucast_queue_set(ptun->pp, dp_queue_id)) {
+			ppe_drv_warn("%p: Failed to set queue %d for port", ptun, dp_queue_id);
+			return false;
+		}
 	}
 
 	err = fal_vport_state_check_get(PPE_DRV_SWITCH_ID, v_port, &vp_state);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -1333,6 +1333,11 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 	 * Select PPE-DS profile ID for PPE-DS user ports.
 	 */
 	if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
+		profile = PPE_DRV_REDIR_PROFILE_ID;
+	}
+
+	if (ppe_drv_port_is_tunnel_vp(pp) &&
+			ppe_drv_port_flags_check(pp, PPE_DRV_PORT_FLAG_TUN_ENDPOINT_DS)) {
 		profile = PPE_DRV_REDIR_PROFILE_ID;
 	}
 

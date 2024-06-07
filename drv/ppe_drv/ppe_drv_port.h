@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -54,6 +54,7 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_WIFI_DEV = 0x20,
 	PPE_DRV_PORT_POLICER_ENABLED = 0x40,
 	PPE_DRV_PORT_FLAG_OFFLOAD_ENABLED = 0x80,
+	PPE_DRV_PORT_FLAG_TUN_ENDPOINT_DS = 0x200,
 } ppe_drv_port_flag_t;
 
 /*
