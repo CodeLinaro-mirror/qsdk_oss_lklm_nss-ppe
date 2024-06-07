@@ -1207,6 +1207,22 @@ disable_encap:
 		goto error;
 	}
 
+	/*
+	 * Delete FSE entry created for GRETAP tunnel if endpoint is a DS VP
+	 */
+	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP &&
+			ppe_drv_tun_is_dest_port_wifi(ptun->xmit_port)) {
+		if (vdestroy_rule && is_ipv6) {
+			if (!ppe_drv_tun_v6_fse_entry_del(&cn_v6->pcf, &cn_v6->pcr)) {
+				goto error;
+			}
+		} else if (vdestroy_rule){
+			if (!ppe_drv_tun_v4_fse_entry_del(&cn_v4->pcf, &cn_v4->pcr)) {
+				goto error;
+			}
+		}
+	}
+
 skip_tunnel_deactivation:
 	/*
 	 * Delete all the instances of tunnel stored in cn list
@@ -1577,6 +1593,24 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	}
 
 	ptun->xmit_port = xmit_port;
+
+	/*
+	 * For GRETAP tunnel endpoint on DS port push a 3 tuple
+	 * FSE entry. For now only GRETAP is supported and validated
+	 * can be extended for other tunnels in future
+	 */
+	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP &&
+			ppe_drv_tun_is_dest_port_wifi(xmit_port)) {
+		if (vcreate_rule && is_ipv6) {
+			if (!ppe_drv_tun_v6_fse_entry_add(vcreate_rule, &cn_v6->pcf, &cn_v6->pcr)) {
+				goto err_fail;
+			}
+		} else if (vcreate_rule){
+			if (!ppe_drv_tun_v4_fse_entry_add(vcreate_rule, &cn_v4->pcf, &cn_v4->pcr)) {
+				goto err_fail;
+			}
+		}
+	}
 
 skip_tunnel_activation:
 	/*

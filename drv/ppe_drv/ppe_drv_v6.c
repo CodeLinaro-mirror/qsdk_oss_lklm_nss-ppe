@@ -204,7 +204,7 @@ static bool ppe_drv_v6_unbind_acl_policer(struct ppe_drv_v6_conn *cn)
  * ppe_drv_fill_fse_v6_tuple_info()
  *	Fill FSE v6 tuple information
  */
-static void ppe_drv_fill_fse_v6_tuple_info(struct ppe_drv_v6_conn_flow *conn, struct ppe_drv_fse_rule_info *fse_info, bool is_ds)
+void ppe_drv_fill_fse_v6_tuple_info(struct ppe_drv_v6_conn_flow *conn, struct ppe_drv_fse_rule_info *fse_info, bool is_ds)
 {
 	struct ppe_drv_port *pp;
 
@@ -225,10 +225,10 @@ static void ppe_drv_fill_fse_v6_tuple_info(struct ppe_drv_v6_conn_flow *conn, st
 }
 
 /*
- * ppe_drv_fse_interface_check()
+ * ppe_drv_v6_fse_interface_check()
  *	check if interface is FSE capable
  */
-static bool ppe_drv_fse_interface_check(struct ppe_drv_v6_conn_flow *pcf)
+bool ppe_drv_v6_fse_interface_check(struct ppe_drv_v6_conn_flow *pcf)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *rx_port = ppe_drv_v6_conn_flow_rx_port_get(pcf);
@@ -2511,7 +2511,7 @@ EXPORT_SYMBOL(ppe_drv_v6_rfs_create);
  * ppe_drv_v6_fse_flow_configure()
  *	FSE v6 flow programming
  */
-static bool ppe_drv_v6_fse_flow_configure(struct ppe_drv_v6_rule_create *create, struct ppe_drv_v6_conn_flow *pcf,
+bool ppe_drv_v6_fse_flow_configure(struct ppe_drv_v6_rule_create *create, struct ppe_drv_v6_conn_flow *pcf,
 					struct ppe_drv_v6_conn_flow *pcr)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
@@ -2813,7 +2813,7 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 	/*
 	 * Add corresponding FSE rule for a Wi-Fi flow.
 	 */
-	if (ppe_drv_fse_interface_check(pcf)) {
+	if (ppe_drv_v6_fse_interface_check(pcf)) {
 		if (!ppe_drv_v6_fse_flow_configure(create, pcf, pcr)) {
 			ppe_drv_stats_inc(&comm_stats->v6_create_fse_fail);
 			ret = PPE_DRV_RET_FAILURE_FLOW_CONFIGURE_FAIL;
