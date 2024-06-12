@@ -1330,8 +1330,6 @@ bool ppe_drv_port_deref(struct ppe_drv_port *pp)
  */
 void ppe_drv_port_ucast_queue_update(struct ppe_drv_port *pp, uint8_t queue_id)
 {
-	ppe_drv_assert(kref_read(&pp->ref_cnt), "%p: setting queue ID for an unused port:%u", pp, pp->port);
-
 	/*
 	 * Update shadow copy.
 	 */
