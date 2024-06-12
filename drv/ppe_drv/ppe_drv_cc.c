@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -354,7 +354,8 @@ struct ppe_drv_cc *ppe_drv_cc_entries_alloc(void)
 	for (i = 1; i < max_exception; i++) {
 		cpu_code = ppe_drv_exception_list[i].code;
 		pcc = &cc[cpu_code];
-		pcc->flush = true;
+		pcc->flush = (ppe_drv_exception_list[i].deaccel_en == PPE_DRV_EXCEPTION_DEACCEL_EN)
+				? true : false;
 	}
 
 	pcc = &cc[PPE_DRV_CC_L2_EXP_MTU_FAIL];
