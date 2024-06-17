@@ -2316,7 +2316,7 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 	/*
 	 * Check if the number of rules required are more than the max.
 	 */
-	if (slice_cnt >= PPE_DRV_ACL_RULE_CHAIN_MAX) {
+	if (slice_cnt > PPE_DRV_ACL_RULE_CHAIN_MAX) {
 		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_max_slices);
 		ppe_acl_warn("%p: Request slice cnt: %d is more than max: %d", acl_g, slice_cnt, PPE_DRV_ACL_RULE_CHAIN_MAX);
 		ret = PPE_ACL_RET_CREATE_FAIL_MAX_SLICES;
