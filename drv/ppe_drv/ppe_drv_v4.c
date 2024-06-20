@@ -1037,24 +1037,42 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		}
 
 		/*
-		 * Check if DS metadata info is valid in this direction for MLO assist and if the
-		 * interface is a Wi-Fi VP.
+		 * Check if Wi-Fi tag is valid.
 		 */
-		if ((valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_DS) &&
-					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
-			pcf->wifi_rule_ds_metadata = create->wifi_rule.flow_ds_node_mdata;
-			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS);
-		}
+		if (valid_flags & PPE_DRV_V4_VALID_FLAG_WIFI_TAG) {
+			/*
+			 * If the Wi-Fi tag is valid - check if DS node information is valid
+			 * or not. If DS node is not valid and there is no explicit PPE-VP AE request,
+			 * let the flow fallback to SFE.
+			 */
+			if (!(valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_DS) &&
+					(pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_DS) &&
+					!(rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW)) {
+				ppe_drv_stats_inc(&comm_stats->v4_create_fail_invalid_ds_node);
+				ppe_drv_warn("%p: Invalid DS node ID !", create);
+				return PPE_DRV_RET_FAILURE_INVALID_DS_NODE;
+			}
 
-		/*
-		 * Check if Wi-Fi metadata info is valid in this direction for MLO assist and if the
-		 * interface is a wifi VP.
-		 */
-		if ((valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_MDATA) &&
-					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
-				memset(&fc_metadata, 0, sizeof(fc_metadata));
-				fc_metadata.type.mark = create->wifi_rule.flow_mark;
-				ppe_drv_v4_conn_flow_metadata_set(pcf, &fc_metadata, PPE_DRV_TREE_ID_TYPE_MLO_ASSIST);
+			/*
+			 * Check if DS metadata info is valid in this direction for MLO assist and if the
+			 * interface is a Wi-Fi VP.
+			 */
+			if ((valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_DS) &&
+						(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+				pcf->wifi_rule_ds_metadata = create->wifi_rule.flow_ds_node_mdata;
+				ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS);
+			}
+
+			/*
+			 * Check if Wi-Fi metadata info is valid in this direction for MLO assist and if the
+			 * interface is a wifi VP.
+			 */
+			if ((valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_MDATA) &&
+						(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+					memset(&fc_metadata, 0, sizeof(fc_metadata));
+					fc_metadata.type.mark = create->wifi_rule.flow_mark;
+					ppe_drv_v4_conn_flow_metadata_set(pcf, &fc_metadata, PPE_DRV_TREE_ID_TYPE_MLO_ASSIST);
+			}
 		}
 
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_VLAN) {
@@ -1245,24 +1263,42 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		}
 
 		/*
-		 * Check if DS metadata info is valid in this direction for MLO assist and if the
-		 * interface is a Wi-Fi VP.
+		 * Check if Wi-Fi tag is valid.
 		 */
-		if ((valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS) &&
-					(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
-			pcr->wifi_rule_ds_metadata = create->wifi_rule.return_ds_node_mdata;
-			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS);
-		}
+		if (valid_flags & PPE_DRV_V4_VALID_FLAG_WIFI_TAG) {
+			/*
+			 * If the Wi-Fi tag is valid - check if DS node information is valid
+			 * or not. If DS node is not valid and there is no explicit PPE-VP AE request,
+			 * let the flow fallback to SFE.
+			 */
+			if (!(valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS) &&
+					(pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_DS) &&
+					!(rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW)) {
+				ppe_drv_stats_inc(&comm_stats->v4_create_fail_invalid_ds_node);
+				ppe_drv_warn("%p: Invalid DS node ID !", create);
+				return PPE_DRV_RET_FAILURE_INVALID_DS_NODE;
+			}
 
-		/*
-		 * Check if Wi-Fi metadata info is valid in this direction for MLO assist and if the
-		 * interface is a wifi VP.
-		 */
-		if ((valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_MDATA) &&
-					(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
-				memset(&fc_metadata, 0, sizeof(fc_metadata));
-				fc_metadata.type.mark = create->wifi_rule.return_mark;
-				ppe_drv_v4_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_MLO_ASSIST);
+			/*
+			 * Check if DS metadata info is valid in this direction for MLO assist and if the
+			 * interface is a Wi-Fi VP.
+			 */
+			if ((valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS) &&
+						(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+				pcr->wifi_rule_ds_metadata = create->wifi_rule.return_ds_node_mdata;
+				ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS);
+			}
+
+			/*
+			 * Check if Wi-Fi metadata info is valid in this direction for MLO assist and if the
+			 * interface is a wifi VP.
+			 */
+			if ((valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_MDATA) &&
+						(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+					memset(&fc_metadata, 0, sizeof(fc_metadata));
+					fc_metadata.type.mark = create->wifi_rule.return_mark;
+					ppe_drv_v4_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_MLO_ASSIST);
+			}
 		}
 
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_VLAN) {

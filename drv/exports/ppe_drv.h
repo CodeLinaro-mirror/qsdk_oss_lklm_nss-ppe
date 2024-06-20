@@ -430,6 +430,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_FAILURE_FLOW_CONFIGURE_FAIL,	/**< Failure due to FSE flow configuration failed */
 	PPE_DRV_RET_NO_TOP_RX_IF,			/**< Failure due to no corresponding top interface */
 	PPE_DRV_RET_INVALID_DEV_TYPE,			/**< Invalid port netdev type */
+	PPE_DRV_RET_FAILURE_INVALID_DS_NODE,		/**< Invalid DS node */
 } ppe_drv_ret_t;
 
 /**

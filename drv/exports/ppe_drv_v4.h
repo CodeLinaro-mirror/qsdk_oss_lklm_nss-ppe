@@ -61,6 +61,7 @@
 #define PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_MDATA	0x0400  /**< Wi-Fi return metadata is valid. */
 #define PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_DS	0x0800  /**< Wi-Fi DS flow fields are valid. */
 #define PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS	0x1000  /**< Wi-Fi DS return fields are valid. */
+#define PPE_DRV_V4_VALID_FLAG_WIFI_TAG		0x2000  /**< Wi-Fi valid flag. */
 
 #define PPE_DRV_V4_MAX_CONN_COUNT		2048
 
