@@ -51,11 +51,11 @@ struct ppe_drv_queue_info;
  *	Qos structure to store ppe queue information
  */
 struct ppe_qos {
-	struct net_device *dev;				/* Device associated with port qos */
-	uint8_t port_id;				/* PPE port Id on which qos is configured*/
-	int8_t int_pri;					/* int_pri value of PPE queue*/
-	uint32_t class_id;				/* Class ID corresponding to ppe queue */
-	struct ppe_drv_qos_port ppe_qos_port;		/* HW res details of PPE qos port details */
+	struct net_device *dev;			/* Device associated with port qos. */
+	uint8_t port_id;			/* PPE port Id on which qos is configured. */
+	int8_t int_pri;				/* INT_PRI value of PPE queue. */
+	uint32_t handle_id;			/* Qdisc Handle ID / Class ID corresponding to ppe queue. */
+	struct ppe_drv_qos_port ppe_qos_port;	/* HW res details of PPE qos port details. */
 };
 
 void ppe_qos_deinit(void);

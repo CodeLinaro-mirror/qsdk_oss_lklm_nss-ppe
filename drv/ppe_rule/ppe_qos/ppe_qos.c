@@ -8,7 +8,7 @@
 
 /*
  * ppe_qos_get_int_pri_func()
- *	Get int_pri and other details of PPE queue corresponding to the class_id and dev.
+ *	Get int_pri and other details of PPE queue corresponding to the handle_id/class_id of input dev.
  *
 */
 ppe_qos_ret_t ppe_qos_get_int_pri_func(struct ppe_qos_req *req)
@@ -23,27 +23,31 @@ ppe_qos_ret_t ppe_qos_get_int_pri_func(struct ppe_qos_req *req)
         }
 
 	dev = dev_get_by_name(&init_net, dev_name);
-	q_info.classid = req->class_id;
+	q_info.handle_id = req->handle_id;
 	if(!dev){
 		ppe_qos_warn("DEVICE NOT FOUND FOR dev= %s\n", dev_name);
-		return PPE_QOS_FAIL;
+		return PPE_QOS_INVALID_DEV;
 	}
 
-	if (ppe_drv_qos_queue_info_get(dev, q_info.classid, &q_info)) {
+	if (ppe_drv_qos_queue_info_get(dev, q_info.handle_id, &q_info)) {
 		if (!q_info.valid) {
-			ppe_qos_warn("INT PRI not found for DEV: %s, CLASS ID: %d", dev_name, q_info.classid);
+			ppe_qos_warn("%px:PPE qdisc are attached to only leaf classes.\n"
+					"Classid %d is not a leaf class on %s interface", dev, q_info.handle_id, dev_name);
 			dev_put(dev);
-			return PPE_QOS_FAIL;
+			return PPE_QOS_CLASS_NON_LEAF;
 		}
+
+		req->int_pri = q_info.int_pri;
+		req->port_id = q_info.port_id;
+		req->ucast_qid = q_info.ucast_qid;
+		ppe_qos_info("%px:PPE DRV API called for dev = %s and handle_id = %d and the returned values are:"
+				"\n int_pri = %d \n ucast_qid = %d\n", dev, dev_name, req->handle_id, req->int_pri, req->ucast_qid);
+		dev_put(dev);
+		return PPE_QOS_SUCCESS;
 	}
 
-	req->int_pri = q_info.int_pri;
-	req->port_id = q_info.port_id;
-	req->ucast_qid = q_info.ucast_qid;
-	ppe_qos_info("PPE DRV API called for dev = %s and class_id = %d and the returned values are:"
-		       "\n int_pri = %d \n ucast_qid = %d\n", dev_name, req->class_id, req->int_pri, req->ucast_qid);
 	dev_put(dev);
-	return 	PPE_QOS_SUCCESS;
+	return PPE_QOS_INVALID_HANDLE_ID;
 }
 EXPORT_SYMBOL(ppe_qos_get_int_pri_func);
 

@@ -152,11 +152,11 @@ struct ppe_drv_qos_scheduler {
  * 	Information about PPE queue
  */
  struct ppe_drv_queue_info {
-	 uint8_t int_pri;	/**< Int Pri of PPE queue */
-	 uint8_t port_id;	/**< PPE port id */
-	 uint32_t ucast_qid;	/**< Ucast qid of PPE queue */
-	 uint32_t classid;	/**< Class Id of PPE queue */
-	 bool valid;		/**< Valid flag */
+	 uint8_t int_pri;	/**< INT_PRI of PPE queue. */
+	 uint8_t port_id;	/**< PPE port ID. */
+	 uint32_t ucast_qid;	/**< Ucast ID of PPE queue. */
+	 uint32_t handle_id;	/**< Handle/Class ID of PPE queue. */
+	 bool valid;		/**< Valid flag. */
 };
 
 
@@ -197,11 +197,11 @@ typedef uint8_t (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32
  * @datatypes
  * net_device
  *
- * @param[in] dev   	      Pointer to the associated net device.
- * @param[in] classid         Classid of queue for which information needs to be fetched.
- * @param[out] pq_info        PPE queue information.
+ * @param[in] dev               Pointer to the associated net device.
+ * @param[in] handle_id         Qdisc handle ID or leaf class ID of queue for which information needs to be fetched.
+ * @param[out] pq_info          PPE queue information.
  */
-typedef bool (*ppe_drv_qos_queue_info_callback_t)(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info *pq_info);
+typedef bool (*ppe_drv_qos_queue_info_callback_t)(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info *pq_info);
 
 /**
  * ppe_drv_qos_int_pri_callback_unregister
@@ -251,12 +251,12 @@ void ppe_drv_qos_queue_info_callback_register(ppe_drv_qos_queue_info_callback_t 
  * struct net_device
  *
  * @param[in] dev       Pointer to the network device.
- * @param[in] classid   Class ID of the Qdisc/class.
+ * @param[in] handle_id Qdisc Handle ID/Class ID of the Qdisc/class.
  *
  * @return
  * INT-PRI value
  */
-int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t classid);
+int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t handle_id);
 
 /**
  * ppe_drv_qos_port_id_get
@@ -266,14 +266,14 @@ int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t classid);
  * struct net_device
  *
  * @param[in] dev       Pointer to the associated net dev.
- * @param[in] classid	Classid correspoding to the ppe queue.
- * @param[out] pq_info	PPE queue information.	
+ * @param[in] handle_id Qdisc Handle ID/Class ID corresponding to the PPE queue.
+ * @param[out] pq_info  PPE queue information.
  *
  * @return
  * PPE PORT-ID value
  */
 
-bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info* pq_info);
+bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info* pq_info);
 
 /**
  * ppe_drv_qos_queue_stats_get
