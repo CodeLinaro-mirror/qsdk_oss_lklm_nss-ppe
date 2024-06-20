@@ -101,7 +101,7 @@ static int nss_ppenl_qos_ops_get_int_pri(struct sk_buff *skb, struct genl_info *
 	pid = nl_cm->pid;
 
 	memcpy(&req.dev, nl_qos_req->config.dev, sizeof(nl_qos_req->config.dev));
-	req.class_id = nl_qos_req->config.class_id;	
+	req.handle_id = nl_qos_req->config.handle_id;
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
@@ -112,9 +112,9 @@ static int nss_ppenl_qos_ops_get_int_pri(struct sk_buff *skb, struct genl_info *
 
 	pt = ppe_qos_get_int_pri_func(&req);
 	if (pt == PPE_QOS_SUCCESS) {
-		nss_ppenl_info("PPE qos req create success");
+		nss_ppenl_info("PPE qos req success");
 	} else {
-		nss_ppenl_info("Create PPe qos req in ppe driver failed, error = %d", pt);
+		nss_ppenl_info("Input data is invalid, error = %d", pt);
 	}
 
 	nl_qos_req = nss_ppenl_get_data(resp);
@@ -123,7 +123,9 @@ static int nss_ppenl_qos_ops_get_int_pri(struct sk_buff *skb, struct genl_info *
 	nl_qos_req->config.ucast_qid = req.ucast_qid;
 	nl_qos_req->config.port_id = req.port_id;
 
-	nss_ppenl_info("Returned values from PPE driver callback are:\n int_pr = %d, \n ucast_qid = %d, \n class_id = %d\n", req.int_pri, req.ucast_qid, req.class_id);
+	nss_ppenl_info("Returned values from PPE driver callback are:\n"
+			"int_pri = %d, \n ucast_qid = %d, \n handle_id = %d\n",
+			req.int_pri, req.ucast_qid, req.handle_id);
 
 	nss_ppenl_ucast_resp(resp);
 	return 0;

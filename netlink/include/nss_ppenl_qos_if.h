@@ -11,44 +11,46 @@
 #define __NSS_PPENL_QOS_IF_H
 
 /*
- * QOS Configure Family
+ * QOS Configure Family.
  */
 #define NSS_PPENL_QOS_FAMILY "nss_ppenl_qos"
 
 /*
- * @brief QOS config
+ * @brief QOS config.
  */
 struct nss_ppenl_qos_config {
-	uint32_t class_id;	/* user given qos id */
-	char dev[IFNAMSIZ];	/* dev name for port qos */
-	uint8_t int_pri;	/* int_pri value of ppe queue */
-	uint8_t port_id;	/* ppe port id */
-	uint16_t ucast_qid;	/* unicast queue id of ppe queue */
-	int ret;	/* return value to userspace */
+	uint32_t handle_id;	/* User given qos ID. */
+	char dev[IFNAMSIZ];	/* Dev name for port qos. */
+	uint8_t int_pri;	/* INT_PRI value of ppe queue. */
+	uint8_t port_id;	/* PPE port ID. */
+	uint16_t ucast_qid;	/* Unicast queue id of ppe queue. */
+	int ret;		/* Return value to userspace. */
 };
 
 
 /*
- * @brief QOS req
+ * @brief QOS req.
  */
 struct nss_ppenl_qos_req {
-	struct nss_ppenl_cmn cm;	/*< common message header */
-	struct nss_ppenl_qos_config config;	/* ppe qos config */
+	struct nss_ppenl_cmn cm;	/*< Common message header. */
+	struct nss_ppenl_qos_config config;	/* PPE QoS config. */
 };
 
 /*
- * @brief Message types
+ * @brief Message types.
  */
 enum nss_ppe_qos_message_types {
-	NSS_PPE_QOS_GET_INT_PRI,	/* Qos req create message */
-	NSS_PPE_QOS_MAX_MSG_TYPES		/* Maximum message type */
+	NSS_PPE_QOS_GET_INT_PRI,	/* QoS request create message. */
+	NSS_PPE_QOS_MAX_MSG_TYPES		/* Maximum message type. */
 };
 
 /**
- * @brief NETLINK QOS message init
+ * @brief NETLINK QOS message init.
  *
- * @param req[IN] NSS NETLINK QOS req
- * @param type[IN] QOS message type
+ * @param[IN] req  NSS NETLINK QOS req.
+ * @param[IN] type QOS message type.
+ * @return
+ * None
  */
 static inline void nss_ppenl_qos_req_init(struct nss_ppenl_qos_req *req, enum nss_ppe_qos_message_types type)
 {
