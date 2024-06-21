@@ -471,7 +471,6 @@ void ppe_drv_sc_unregister_vp_cb(ppe_drv_sc_t sc, uint16_t vp_num)
 		return;
 	}
 
-	ppe_drv_assert(cb, "%p: cannot register null cb for sc %u vp %u", p, sc, vp_num);
 	spin_lock_bh(&p->lock);
 	psc = &p->sc[sc];
 	vp_info = rcu_dereference_protected(psc->vp_info[vp_num - PPE_DRV_VIRTUAL_START], 1);
