@@ -1761,6 +1761,7 @@ bool ppe_drv_port_src_profile_set(struct ppe_drv_port *pp, uint8_t src_profile)
 	return true;
 }
 
+#ifdef PPE_TUNNEL_ENABLE
 /*
  * ppe_drv_port_xcpn_mode_set()
  *	Set exception mode for tunnel VP port.
@@ -1795,6 +1796,7 @@ bool ppe_drv_port_xcpn_mode_set(uint16_t vp_num, uint8_t action)
 	return true;
 }
 EXPORT_SYMBOL(ppe_drv_port_xcpn_mode_set);
+#endif
 
 /*
  * ppe_drv_port_alloc()

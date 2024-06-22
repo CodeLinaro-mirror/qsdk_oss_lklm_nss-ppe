@@ -33,7 +33,9 @@ static void ppe_drv_l3_if_dump(struct ppe_drv_l3_if *l3_if)
 	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_intf_macaddr_t mac_cfg = {0};
 	fal_intf_entry_t l3_if_cfg = {0};
+#ifdef PPE_TUNNEL_ENABLE
 	fal_tunnel_id_t tun_cfg = {0};
+#endif
 	uint32_t mtu, mru;
 	uint32_t mtu6, mru6;
 	sw_error_t err;
@@ -89,6 +91,7 @@ static void ppe_drv_l3_if_dump(struct ppe_drv_l3_if *l3_if)
 	ppe_drv_trace("%p: MAC address direction is %u\n", p, mac_cfg.direction);
 	ppe_drv_trace("%p: MAC address  is %pM\n", p, mac_cfg.mac_addr.uc);
 
+#ifdef PPE_TUNNEL_ENABLE
 	err = fal_tunnel_encap_intf_tunnelid_get(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &tun_cfg);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: Tunnel L3_IF query failed for l3_if index: %u", p, l3_if->l3_if_index);
@@ -96,6 +99,7 @@ static void ppe_drv_l3_if_dump(struct ppe_drv_l3_if *l3_if)
 	}
 
 	ppe_drv_trace("%p: tunnel l3_if is %u for l3_ifd is %u\n", p, tun_cfg.tunnel_id_valid, tun_cfg.tunnel_id);
+#endif
 }
 #else
 static void ppe_drv_l3_if_dump(struct ppe_drv_l3_if *l3_if)
@@ -111,8 +115,9 @@ static void ppe_drv_l3_if_free(struct kref *kref)
 {
 	struct ppe_drv_l3_if *l3_if = container_of(kref, struct ppe_drv_l3_if, ref);
 	fal_intf_entry_t in_l3_if_cfg = {0};
+#ifdef PPE_TUNNEL_ENABLE
 	fal_tunnel_id_t tun_cfg = {0};
-
+#endif
 	/*
 	 * Clear IN_L3_IF_TBL entry.
 	 */
@@ -128,13 +133,14 @@ static void ppe_drv_l3_if_free(struct kref *kref)
 		ppe_drv_warn("%p: Clearing IPv6 L3_IF mtu failed for idx: %d\n", l3_if, l3_if->l3_if_index);
 	}
 
+#ifdef PPE_TUNNEL_ENABLE
 	/*
 	 * Clear IN_L3_IF_TBL and EG_L3_IF_TBL entry.
 	 */
 	if (!fal_tunnel_encap_intf_tunnelid_set(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &tun_cfg) != SW_OK) {
 		ppe_drv_warn("%p: Clearing EG_L3_IF for tunnel failed\n", l3_if);
 	}
-
+#endif
 	/*
 	 * Clear shadow copy.
 	 */
