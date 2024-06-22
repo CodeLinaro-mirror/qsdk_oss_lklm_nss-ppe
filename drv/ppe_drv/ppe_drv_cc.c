@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,6 +17,7 @@
 #include <linux/vmalloc.h>
 #include <linux/skbuff.h>
 #include <linux/in.h>
+#include <linux/ip.h>
 #include <linux/etherdevice.h>
 #include "ppe_drv.h"
 
@@ -206,6 +207,7 @@ bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_bu
 	void *app_data;
 	bool ret = false;
 	uint16_t cc = cc_info->cpu_code;
+	struct iphdr *iph;
 
 	ppe_drv_assert((cc > 0) && (cc < PPE_DRV_CC_MAX), "%p: invalid cpu code %u", p, cc);
 
@@ -230,8 +232,29 @@ bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_bu
 	 *    associated rule.
 	 * 2. PPE uses 3 tuple rule for all ip protocol other than TCP, UDP & UDP_LITE,
 	 *    so we STOP_AT_ENCAP.
+	 * 3. For packets with fake MAC header PPE can generate a flow based exception,
+	 *    only when it's an IPv4 or IPv6 packets.
 	 */
-	skb->protocol = eth_type_trans(skb, skb->dev);
+	if (cc_info->fake_mac) {
+		/*
+		 * Discard L2 header
+		 */
+		skb_pull_inline(skb, ETH_HLEN);
+		iph = (struct iphdr *)skb->data;
+
+		if (iph->version == 4) {
+			skb->protocol = htons(ETH_P_IP);
+		} else if (iph->version == 6) {
+			skb->protocol = htons(ETH_P_IPV6);
+		} else {
+			ppe_drv_info("%p: Non-IP packet with fake mac set :%p for cc:%u ",
+					p, skb, cc);
+			goto push;
+		}
+	} else {
+		skb->protocol = eth_type_trans(skb, skb->dev);
+	}
+
 	skb_reset_network_header(skb);
 	if (!skb_flow_dissect_flow_keys(skb, &keys,
 			FLOW_DISSECTOR_F_PARSE_1ST_FRAG | FLOW_DISSECTOR_F_STOP_AT_ENCAP)) {
