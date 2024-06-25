@@ -92,6 +92,10 @@ static void ppe_qdisc_port_res_attach_free(uint32_t port, struct ppe_qdisc_port_
 {
 	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port];
 
+	if (res->type >= PPE_DRV_QOS_RES_TYPE_MAX) {
+		ppe_qdisc_trace("Invalid type for port:%d, res-:%px type:%d", port, res, res->type);
+		return;
+	}
 	spin_lock_bh(&ppe_port->lock);
 	res->next = ppe_port->res_free[res->type];
 	ppe_port->res_free[res->type] = res;
