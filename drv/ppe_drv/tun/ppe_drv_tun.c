@@ -74,7 +74,9 @@ static void ppe_drv_tun_free(struct kref *kref)
 	struct ppe_drv_tun *ptun = container_of(kref, struct ppe_drv_tun, ref);
 	struct ppe_drv *p = &ppe_drv_gbl;
 
-	ppe_drv_port_tun_set(ptun->pp, NULL);
+	if (ptun->pp) {
+		ppe_drv_port_tun_set(ptun->pp, NULL);
+	}
 
 	/*
 	 * Reset encap header control settings if configured
