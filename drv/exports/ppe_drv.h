@@ -74,6 +74,19 @@
 		/**< MAC address for the return interface is valid. */
 
 /*
+ * Host Qdisc classification id
+ */
+#define PPE_DRV_HOST_QDISC_CLASS_ID_DEF_VAL		0x0
+
+/*
+ * Host Qdisc flags
+ */
+#define PPE_DRV_HOST_QDISC_INVALID			0x0
+#define PPE_DRV_HOST_QDISC_DEV_FAST_XMIT_VP		0x1
+#define PPE_DRV_HOST_QDISC_DEV_QUEUE_XMIT		0x2
+#define PPE_DRV_HOST_QDISC_DEV_FAST_XMIT_QDISC	0x4
+
+/*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
  */

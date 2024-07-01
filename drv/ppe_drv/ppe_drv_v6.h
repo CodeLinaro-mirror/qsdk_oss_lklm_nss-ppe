@@ -69,6 +69,8 @@
 #define PPE_DRV_V6_CONN_FLAG_PASSIVE_FLOW 0x00040000
 					/* Flow is pushed from SFE */
 
+#define PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID	0x00080000
+					/* Flow has the host Qdisc related information */
 /*
  * ppe_drv_v6_conn_flow
  *	Structure for individual flow direction
@@ -145,6 +147,11 @@ struct ppe_drv_v6_conn_flow {
 	uint16_t policer_id;		/* User policer index */
 
 	uint8_t wifi_rule_ds_metadata;		/* Wi-Fi rule DS metadata */
+
+	/*
+	 * Host Qdisc hierarchy info
+	 */
+	struct ppe_drv_flow_host_qdisc_info qdisc_info;
 
 	/*
 	 * Statistics for this flow entry
@@ -818,6 +825,19 @@ static inline void ppe_drv_v6_conn_flow_tx_stats_get(struct ppe_drv_v6_conn_flow
 {
 	*tx_pkts = atomic_read(&pcf->tx_packets);
 	*tx_bytes = atomic_read(&pcf->tx_bytes);
+}
+
+/*
+ * ppe_drv_v6_conn_flow_host_qdisc_info_set()
+ *	API to set the host Qdisc related information
+ */
+static inline void ppe_drv_v6_conn_flow_host_qdisc_info_set(struct ppe_drv_v6_conn_flow *pcf,
+						       uint8_t flags, uint32_t class_id,
+						       struct net_device *dev)
+{
+	pcf->qdisc_info.flags = flags;
+	pcf->qdisc_info.class_id = class_id;
+	pcf->qdisc_info.qdisc_xmit_dev = dev;
 }
 
 /*

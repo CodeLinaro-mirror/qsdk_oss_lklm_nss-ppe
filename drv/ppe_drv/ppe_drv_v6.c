@@ -1560,6 +1560,11 @@ static bool ppe_drv_v6_flow_del(struct ppe_drv_v6_conn_flow *pcf)
 	ppe_drv_flow_stats_clear(flow);
 
 	/*
+	 * Clear the host Qdisc information for the deleted flow
+	 */
+	ppe_drv_flow_v6_host_qdisc_info_del(pcf, flow->index);
+
+	/*
 	 * Update stats
 	 */
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
