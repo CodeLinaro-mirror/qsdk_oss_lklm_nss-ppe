@@ -241,6 +241,7 @@ struct ppe_drv_cc_metadata {
 	uint16_t cpu_code;			/**< CPU code for the packet */
 	uint16_t acl_hw_index;			/**< Hardware ACL index */
 	bool acl_index_valid;			/**< ACL rule Valid bit */
+	bool fake_mac;				/**< Packet with fake MAC header */
 };
 
 typedef bool (*ppe_drv_cc_callback_t)(void *app_data, struct sk_buff *skb, void *cc_info);
