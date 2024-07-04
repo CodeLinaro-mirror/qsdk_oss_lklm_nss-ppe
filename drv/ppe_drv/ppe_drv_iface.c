@@ -1069,6 +1069,41 @@ struct ppe_drv_iface *ppe_drv_iface_alloc(enum ppe_drv_iface_type type, struct n
 EXPORT_SYMBOL(ppe_drv_iface_alloc);
 
 /*
+ * ppe_drv_iface_check_if_vp_flow()
+ *	Check whether the given interface index is enabled for VP offload
+ */
+bool ppe_drv_iface_check_if_vp_flow(ppe_drv_iface_t rx_if)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_port *rx_pp = NULL;
+	struct ppe_drv_iface *if_rx;
+
+	spin_lock_bh(&p->lock);
+	if_rx = ppe_drv_iface_get_by_idx(rx_if);
+	if (!if_rx) {
+		ppe_drv_trace("%p: No PPE interface corresponding to rx_if: %d", p, rx_if);
+		goto offload_disabled;
+	}
+
+	rx_pp = ppe_drv_iface_port_get(if_rx);
+	if (!rx_pp) {
+		ppe_drv_trace("%p: Invalid RX port", p);
+		goto offload_disabled;
+	}
+
+	if ((rx_pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP)) {
+		ppe_drv_trace("%p: offload enabled for %d port, This is a VP flow\n", p, rx_pp->port);
+		spin_unlock_bh(&p->lock);
+		return true;
+	}
+
+offload_disabled:
+	spin_unlock_bh(&p->lock);
+	return false;
+}
+EXPORT_SYMBOL(ppe_drv_iface_check_if_vp_flow);
+
+/*
  * ppe_drv_iface_check_flow_offload_enabled()
  *	Check whether the given interface indexes are enabled for offload or not
  */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -269,6 +269,20 @@ ppe_drv_ret_t ppe_drv_iface_ucast_queue_set(struct ppe_drv_iface *iface, uint8_t
  * ppe_drv_iface
  */
 struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx);
+
+/**
+ * ppe_drv_iface_check_if_vp_flow
+ *	API to check whether PPE-VP offload is enabled or not.
+ *
+ * @datatypes
+ * ppe_drv_iface_t
+ *
+ * @param[in] rx_if  Rx interface index.
+ *
+ * @return
+ * true or false
+ */
+bool ppe_drv_iface_check_if_vp_flow(ppe_drv_iface_t rx_if);
 
 /**
  * ppe_drv_iface_check_flow_offload_enabled
