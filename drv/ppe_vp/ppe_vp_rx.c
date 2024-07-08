@@ -17,9 +17,10 @@
 #include <linux/version.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
-#include <ppe_drv_port.h>
+#include <ppe_drv.h>
 #include "ppe_vp_base.h"
 
+#define PPE_VP_FLOW_IDX_FOR_NO_QDISC	-1
 extern struct ppe_vp_base vp_base;
 
 /*
@@ -135,6 +136,9 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
 	struct ppe_vp_cb_info client_cb_info = {0};
 	struct ppe_vp *svp, *dvp;
+	int32_t flow_idx = rxi->flow_idx;
+	int8_t flags;
+	struct net_device *qdisc_dev;
 
 	/*
 	 * Forward to destination VP
@@ -220,13 +224,62 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		/*
 		 * If it can be, try forwarding through fast_xmit.
 		 */
-		if (likely(dvp->flags & PPE_VP_FLAG_VP_FAST_XMIT)) {
+		if (likely(flow_idx == PPE_VP_FLOW_IDX_FOR_NO_QDISC)) {
 			if (unlikely(!dev_fast_xmit_vp(skb, dev))) {
 				atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
 				dev_queue_xmit(skb);
 			}
 
 			rcu_read_unlock();
+			ppe_vp_trace("%px: data path initiated as dev_fast_xmit_vp\n", dvp);
+			return;
+		}
+
+		flags = ppe_drv_get_qdisc_rule_flag(flow_idx);
+		ppe_vp_trace("%px: Qdisc flags is %d for flow index %d\n", dvp, flags, flow_idx);
+
+		/*
+		 * This is the case of Qdisc on any one interface other than bottom
+		 */
+		if (likely(flags & PPE_DRV_HOST_QDISC_DEV_FAST_XMIT_QDISC)) {
+			qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
+			if (likely(qdisc_dev)) {
+				skb->priority = ppe_drv_get_qos_tag(flow_idx);
+				if (likely(dev_fast_xmit_qdisc(skb, qdisc_dev, dev))) {
+					dev_put(qdisc_dev);
+					rcu_read_unlock();
+					ppe_vp_trace("%px: data path initiated as dev_fast_xmit_qdisc\n", dvp);
+					return;
+				}
+			}
+
+			atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
+			dev_queue_xmit(skb);
+			if (unlikely(qdisc_dev)) {
+				dev_put(qdisc_dev);
+			}
+
+			rcu_read_unlock();
+			return;
+		}
+
+		/*
+		 * When qdisc is on bottom interface, send dev_queue_xmit(bottom_dev)
+		 */
+		if (likely(flags & PPE_DRV_HOST_QDISC_DEV_QUEUE_XMIT)) {
+			qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
+			if (likely(qdisc_dev)) {
+				skb->dev = qdisc_dev;
+				skb->priority = ppe_drv_get_qos_tag(flow_idx);
+			}
+
+			dev_queue_xmit(skb);
+			if (likely(qdisc_dev)) {
+				dev_put(qdisc_dev);
+			}
+
+			rcu_read_unlock();
+			ppe_vp_trace("%px: data path initiated as dev_queue_xmit\n", dvp);
 			return;
 		}
 

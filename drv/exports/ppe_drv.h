@@ -618,12 +618,54 @@ ppe_drv_ret_t ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id);
 
 /**
  * ppe_drv_ds_map_free
- *	Provides unmapping of node with enqueue vp and queue.
+ *	Provides unmapping of node with enqueue VP and queue.
  *
- * @param[in] node_id	node id.
+ * @param[in] node_id	Node ID.
  *
  * @return
  * Success or error code.
  */
 ppe_drv_ret_t ppe_drv_ds_map_free(uint8_t node_id);
+
+/**
+ * ppe_drv_get_qos_tag
+ * 	Returns QoS tag
+ *
+ * @datatypes
+ * int32_t
+ *
+ * @param[in] flow_index	Flow index.
+ *
+ * @return
+ * Net device
+ */
+uint32_t ppe_drv_get_qos_tag(int32_t flow_index);
+
+/**
+ * ppe_drv_get_and_hold_qdisc_netdev
+ *	Holds and returns netdev of flow index.
+ *
+ * @datatypes
+ * int32_t
+ *
+ * @param[in] flow_index	Flow index.
+ *
+ * @return
+ * Net device
+ */
+struct net_device *ppe_drv_get_and_hold_qdisc_netdev(int32_t flow_index);
+
+/**
+ * ppe_drv_get_qdisc_rule_flag
+ *	Returns flags for qdisc of flow index.
+ *
+ * @datatypes
+ * int32_t
+ *
+ * @param[in] flow_index	Flow index.
+ *
+ * @return
+ * Qdisc rule flag
+ */
+int8_t ppe_drv_get_qdisc_rule_flag(int32_t flow_index);
 #endif /* _PPE_DRV_H_ */

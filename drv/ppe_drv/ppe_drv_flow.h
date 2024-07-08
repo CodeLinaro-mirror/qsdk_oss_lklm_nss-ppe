@@ -151,6 +151,10 @@ struct ppe_drv_flow *ppe_drv_flow_v6_get(struct ppe_drv_v6_5tuple *tuple);
 struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf,
 		struct ppe_drv_nexthop *nh, struct ppe_drv_host *host, bool entry_valid);
 
+int8_t ppe_drv_flow_get_qdisc_rule_flag(int32_t flow_index);
+struct net_device *ppe_drv_flow_get_and_hold_qdisc_netdev(int32_t flow_index);
+uint32_t ppe_drv_flow_get_qos_tag(int32_t flow_index);
+
 void ppe_drv_flow_entries_free(struct ppe_drv_flow *flow);
 struct ppe_drv_flow *ppe_drv_flow_entries_alloc(void);
 bool ppe_drv_flow_v4_detach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4);

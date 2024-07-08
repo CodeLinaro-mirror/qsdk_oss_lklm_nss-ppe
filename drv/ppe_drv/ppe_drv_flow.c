@@ -2167,3 +2167,74 @@ struct ppe_drv_flow *ppe_drv_flow_entries_alloc()
 
 	return flow;
 }
+
+/*
+ * ppe_drv_flow_get_and_hold_qdisc_netdev()
+ * 	Returns qdisc netdev for a qdisc interface
+ */
+struct net_device *ppe_drv_flow_get_and_hold_qdisc_netdev(int32_t flow_index)
+{
+	struct ppe_drv_flow_host_qdisc_info *qdisc_info = NULL;
+	struct ppe_drv_flow_table_info *flow_info = flow_table_info;
+
+	qdisc_info = rcu_dereference(flow_info->qdisc_info[flow_index]);
+	if (!qdisc_info) {
+		return NULL;
+	}
+
+	if (qdisc_info->flags == PPE_DRV_HOST_QDISC_INVALID) {
+		return NULL;
+	}
+
+	/*
+	 * This will be released after packet is xmitted,
+	 * in ppe_vp_rx_dp_cb()
+	 */
+	if (qdisc_info->qdisc_xmit_dev) {
+		dev_hold(qdisc_info->qdisc_xmit_dev);
+	}
+
+	return qdisc_info->qdisc_xmit_dev;
+}
+
+/*
+ * ppe_drv_get_qdisc_rule_flag()
+ * 	Return flags for Qdisc rule
+ */
+int8_t ppe_drv_flow_get_qdisc_rule_flag(int32_t flow_index)
+{
+	struct ppe_drv_flow_host_qdisc_info *qdisc_info = NULL;
+	struct ppe_drv_flow_table_info *flow_info = flow_table_info;
+
+	qdisc_info = rcu_dereference(flow_info->qdisc_info[flow_index]);
+	if (!qdisc_info) {
+		return PPE_DRV_HOST_QDISC_INVALID;
+	}
+
+        if (qdisc_info->flags != PPE_DRV_HOST_QDISC_INVALID) {
+		return qdisc_info->flags;
+	}
+
+	return PPE_DRV_HOST_QDISC_INVALID;
+}
+
+/*
+ * ppe_drv_flow_get_qos_tag()
+ * 	Returns QoS tag.
+ */
+uint32_t ppe_drv_flow_get_qos_tag(int32_t flow_index)
+{
+	struct ppe_drv_flow_host_qdisc_info *qdisc_info = NULL;
+	struct ppe_drv_flow_table_info *flow_info = flow_table_info;
+
+	qdisc_info = rcu_dereference(flow_info->qdisc_info[flow_index]);
+	if (!qdisc_info) {
+		return PPE_DRV_HOST_QDISC_INVALID;
+	}
+
+        if (qdisc_info->flags != PPE_DRV_HOST_QDISC_INVALID) {
+		return qdisc_info->class_id;
+	}
+
+	return PPE_DRV_HOST_QDISC_INVALID;
+}
