@@ -839,6 +839,33 @@ struct ppe_drv_l3_if *ppe_drv_port_find_pppoe_l3_if(struct ppe_drv_port *pp, uin
 bool ppe_drv_port_check_flow_offload_enabled(struct ppe_drv_port *drv_port)
 {
 	/*
+	 * If the PPE port's device is the VLAN device, then get the VLAN's base
+	 * device and check the PPE offload enablement on it
+	 */
+	if (drv_port->dev && is_vlan_dev(drv_port->dev)) {
+		struct ppe_drv_iface *base_if;
+		struct net_device *base_dev;
+
+		base_dev = vlan_dev_real_dev(drv_port->dev);
+		if (!base_dev) {
+			ppe_drv_warn("Failed to obtain base device for %d port\n", drv_port->port);
+			return true;
+		}
+
+		base_if = ppe_drv_iface_get_by_dev_internal(base_dev);
+		if (!base_if) {
+			ppe_drv_warn("Failed to get the iface of %s base device\n", base_dev->name);
+			return true;
+		}
+
+		drv_port = ppe_drv_iface_port_get(base_if);
+		if (!drv_port) {
+			ppe_drv_warn("Invalid port for %s base device\n", base_dev->name);
+			return true;
+		}
+	}
+
+	/*
 	 * PPE offload disable feature is supported only on physical ports
 	 */
 	if (!PPE_DRV_PHY_PORT_CHK(drv_port->port)) {
