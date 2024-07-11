@@ -56,6 +56,14 @@ static const char *ppe_vp_stats_tx_str[] = {
 	"Tx drops"				/* Total tx drops */
 };
 
+static const char *vp_user_mode[] = {
+	"none",
+	"passive",
+	"active",
+	"ds",
+	"max"
+};
+
 /*
  * ppe_vp_stats_hw_port_stats_sync()
  *	Sync PPE HW stats
@@ -183,6 +191,7 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 	uint32_t active_vp_counter = 0;
 	int16_t idx;
 	uint32_t i;
+	int mode = 0;
 
 	/*
 	 * Read the statistics from the main structure for
@@ -226,6 +235,14 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 			seq_printf(m, "\tVP Port: %u\n", vp_stats->misc_info.ppe_port_num);
 			seq_printf(m, "\t\tNetdev if num: %u\n", vp_stats->misc_info.netdev_if_num);
 			seq_printf(m, "\t\tNetdev name: %s\n", vp->netdev->name);
+			mode = vp->vp_user_mode;
+
+			/*
+			 * Print only for wifi type.
+			 */
+			if (mode) {
+				seq_printf(m, "\t\tVP user mode: %s\n", vp_user_mode[mode]);
+			}
 
 			/*
 			 * Active VP: Accumulate stats from all CPUs.
