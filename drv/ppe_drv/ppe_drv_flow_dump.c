@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -300,6 +300,16 @@ int ppe_flow_dump_v6_get(struct ppe_drv_flow_dump_instance *fdi, struct list_hea
 
 				if ((result = ppe_drv_flow_dump_write(fdi, "service_code", "%u", pcf->pf->service_code))) {
 					goto ppe_drv_flow_dump_write_error;
+				}
+
+				if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_WIFI_DS)) {
+					if ((result = ppe_drv_flow_dump_write(fdi, "enq_vp", "%u", ppe_drv_port_metadata_to_enq_vp_internal(pcf->wifi_rule_ds_metadata)))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
+
+					if ((result = ppe_drv_flow_dump_write(fdi, "evp_pri_profile", "%u", ppe_drv_port_metadata_to_pri_prof_internal(pcf->wifi_rule_ds_metadata)))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
 				}
 			}
 
@@ -624,6 +634,16 @@ int ppe_flow_dump_v4_get(struct ppe_drv_flow_dump_instance *fdi, struct list_hea
 
 				if ((result = ppe_drv_flow_dump_write(fdi, "service_code", "%u", pcf_v4->pf->service_code))) {
 					goto ppe_drv_flow_dump_write_error;
+				}
+
+				if (ppe_drv_v4_conn_flow_flags_check(pcf_v4, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS)) {
+					if ((result = ppe_drv_flow_dump_write(fdi, "enq_vp", "%u", ppe_drv_port_metadata_to_enq_vp_internal(pcf_v4->wifi_rule_ds_metadata)))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
+
+					if ((result = ppe_drv_flow_dump_write(fdi, "evp_pri_profile", "%u", ppe_drv_port_metadata_to_pri_prof_internal(pcf_v4->wifi_rule_ds_metadata)))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
 				}
 			}
 

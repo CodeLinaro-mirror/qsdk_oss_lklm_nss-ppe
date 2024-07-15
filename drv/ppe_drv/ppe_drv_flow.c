@@ -544,13 +544,7 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	 * Get the service code for the flow according to the flow type
 	 * and precedence of these features (like DS flows, policer/ACL based service code, etc)
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_WIFI_DS)) {
-		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-			sc = PPE_DRV_SC_DS_MLO_LINK_BR_NODE0 + pcf->wifi_rule_ds_metadata;
-		} else {
-			sc = PPE_DRV_SC_DS_MLO_LINK_RO_NODE0 + pcf->wifi_rule_ds_metadata;
-		}
-	} else if((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_POLICER_VALID) ||
+	if((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_POLICER_VALID) ||
 			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACL_VALID)) && (pcf->acl_sc != PPE_DRV_SC_NONE)) {
 		sc = pcf->acl_sc;
 	} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
@@ -769,6 +763,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	bool wifi_qos_en = false;
 	uint16_t xmit_mtu;
 	sw_error_t err;
+	uint8_t evp_pri_profile;
 
 	/*
 	 * PPE port reference is not taken for priority assist in PPE. PPE is
@@ -804,6 +799,23 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	if (!pp) {
 		ppe_drv_warn("%p: Invalid egress port", pcf);
 		return NULL;
+	}
+
+	/*
+	 * Add ppe-ds flow with pri profile.
+	 * The classifier provides the PPE-DS node data from Wi-Fi driver.
+	 * The node metadata could be used to get the enqueue vport and its pri profile
+	 * which is programmed into PPE flow rule.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_WIFI_DS)) {
+		evp_pri_profile = ppe_drv_port_metadata_to_pri_prof_internal(pcf->wifi_rule_ds_metadata);
+		if (evp_pri_profile == PPE_DRV_PORT_ENQ_VP_PRI_PRFL_INVALID) {
+			ppe_drv_warn("%p: Enqueue vport pri profile invalid:%d mdata:%d", pcf, evp_pri_profile, pcf->wifi_rule_ds_metadata);
+			return NULL;
+		}
+
+		flow_cfg.pri_profile = evp_pri_profile;
+		ppe_drv_trace("%p: Pri profile: %d metadata:%d\n", pcf, flow_cfg.pri_profile, pcf->wifi_rule_ds_metadata);
 	}
 
 	if (!ppe_drv_flow_v6_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
@@ -1292,13 +1304,7 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	 * Get the service code for the flow according to the flow type
 	 * and precedence of these features (like DS flows, policer/ACL based service code, etc)
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS)) {
-		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
-			sc = PPE_DRV_SC_DS_MLO_LINK_BR_NODE0 + pcf->wifi_rule_ds_metadata;
-		} else {
-			sc = PPE_DRV_SC_DS_MLO_LINK_RO_NODE0 + pcf->wifi_rule_ds_metadata;
-		}
-	} else if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_POLICER_VALID) ||
+	if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_POLICER_VALID) ||
 		ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_ACL_VALID)) && (pcf->acl_sc != PPE_DRV_SC_NONE)) {
 		sc = pcf->acl_sc;
 	} else if (pp->user_type == PPE_DRV_PORT_USER_TYPE_DS) {
@@ -1548,6 +1554,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	bool wifi_qos_en = false;
 	uint16_t xmit_mtu;
 	sw_error_t err;
+	uint8_t evp_pri_profile;
 
 	/*
 	 * PPE port reference is not taken for priority assist in PPE as PPE is
@@ -1580,6 +1587,23 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	flow_cfg.deacclr_en = A_FALSE;
 	flow_cfg.invalid = !entry_valid;
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
+
+	/*
+	 * Add ppe-ds flow with pri profile.
+	 * The classifier provides the PPE-DS node data from Wi-Fi driver.
+	 * The node metadata could be used to get the enqueue vport and its pri profile
+	 * which is programmed into PPE flow rule.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS)) {
+		evp_pri_profile = ppe_drv_port_metadata_to_pri_prof_internal(pcf->wifi_rule_ds_metadata);
+		if (evp_pri_profile == PPE_DRV_PORT_ENQ_VP_PRI_PRFL_INVALID) {
+			ppe_drv_warn("%p: Enqueue vport pri profile invalid:%d mdata:%d", pcf, evp_pri_profile, pcf->wifi_rule_ds_metadata);
+			return NULL;
+		}
+
+		flow_cfg.pri_profile = evp_pri_profile;
+		ppe_drv_trace("%p: Pri profile: %d metadata:%d\n", pcf, flow_cfg.pri_profile, pcf->wifi_rule_ds_metadata);
+	}
 
 	if (!ppe_drv_flow_v4_service_code_get(pcf, pp, &flow_cfg.sevice_code)) {
 		ppe_drv_warn("%p: failed to obtain a valid service code", pcf);

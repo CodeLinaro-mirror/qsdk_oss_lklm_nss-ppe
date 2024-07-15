@@ -412,20 +412,169 @@ int16_t ppe_drv_queue_from_core(uint8_t core)
 EXPORT_SYMBOL(ppe_drv_queue_from_core);
 
 /*
+ * ppe_drv_enq_vp_queue_reset()
+ *	Reset the queue ID of given enqueue vport in PPE.
+ */
+static bool ppe_drv_enq_vp_queue_reset(struct ppe_drv *p,
+					uint32_t enq_vport)
+{
+        sw_error_t err;
+	fal_ucast_queue_dest_t q_dst = {0};
+
+	q_dst.src_profile = PPE_DRV_PORT_SRC_PROFILE;
+	q_dst.dst_port = enq_vport;
+	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, PPE_DRV_ENQ_VP_QID_NONE, PPE_DRV_REDIR_PROFILE_ID);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Unable to reset PPE queue for enqueue vp :%d", p, enq_vport);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * ppe_drv_enq_vp_queue_set()
+ *	Set the queue ID of given enqueue vport in PPE.
+ */
+static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
+					uint32_t enq_vport,
+					a_uint32_t queue_id)
+{
+        sw_error_t err;
+	fal_ucast_queue_dest_t q_dst = {0};
+
+	q_dst.src_profile = PPE_DRV_PORT_SRC_PROFILE;
+	q_dst.dst_port = enq_vport;
+	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Unable to map enqueue vp with queue:%d", p, queue_id);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * ppe_drv_ds_map_free()
+ *	Provides unmapping of node with enqueue vp and queue
+ */
+ppe_drv_ret_t ppe_drv_ds_map_free(uint8_t node_id)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	fal_enqueue_cfg_t enqueue_cfg = {0};
+        sw_error_t ret;
+	int8_t pri_profile;
+	uint8_t enq_vp;
+
+	spin_lock_bh(&p->lock);
+	enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(node_id);
+	if (enq_vp == PPE_DRV_PORT_ID_INVALID) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Unable to get enqueue vport for node_id:%d ", p, node_id);
+		return PPE_DRV_RET_METADATA_TO_ENQ_VP_FAIL;
+	}
+
+	pri_profile = ppe_drv_port_enq_vp_to_pri_prof(enq_vp);
+	if (pri_profile == PPE_DRV_PORT_ENQ_VP_PRI_PRFL_INVALID) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Unable to get pri profile for enqueue vport:%d ", p, enq_vp);
+		return PPE_DRV_RET_ENQ_VP_TO_PRI_PROF_FAIL;
+	}
+
+	/*
+	 * Reset queue_id for a given port on PPE.
+	 */
+	if (!ppe_drv_enq_vp_queue_reset(p, enq_vp)) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Enqueue vp queue reset failed for node_id:%d", p, node_id);
+		return PPE_DRV_RET_ENQ_VP_QID_RESET_FAIL;
+	}
+
+	/*
+	 * Disable enqueue vp bit on PORT_VSI_ENQUEUE table.
+	 */
+	enqueue_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_FLOW;
+	enqueue_cfg.rule_entry.flow_pri_profile = PPE_DRV_PORT_ENQVP_VSI_TBL_START_IDX + pri_profile;
+	enqueue_cfg.index_entry.enqueue_en = (a_bool_t)PPE_DRV_PORT_EVP_DISABLE;
+	enqueue_cfg.index_entry.enqueue_vport = enq_vp;
+	ret = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enqueue_cfg);
+	if (ret != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Unable to reset enq_vp:%d disable on PORT VSI", p, enq_vp);
+		return PPE_DRV_RET_ENQ_VP_DISABLE_FAIL;
+	}
+
+	ppe_drv_port_enq_vp_free(enq_vp);
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_ds_map_free);
+
+/*
  * ppe_drv_ds_map_node_to_queue()
  *	node to queue mapping
  *
- * This API will be invoked by DP driver to provide node to queue mapping.
+ * This API will be invoked by PPE-DS module to provide node to queue mapping.
  */
-void ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id)
+ppe_drv_ret_t ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id)
 {
-	if (node_id > PPE_DRV_DS_MLO_LINK_NODE_ID_MAX) {
-		ppe_drv_warn("Invalid node ID %d, for queue id %d\n", node_id, queue_id);
-		return;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	fal_enqueue_cfg_t enqueue_cfg = {0};
+        sw_error_t ret;
+	int8_t pri_profile;
+	int8_t enq_vp;
+
+	spin_lock_bh(&p->lock);
+	enq_vp = ppe_drv_port_enq_vp_alloc();
+	if (enq_vp == PPE_DRV_PORT_ID_INVALID) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Unable to get the enqueue vport ", p);
+		return PPE_DRV_RET_ENQ_VP_ALLOC_FAIL;
 	}
 
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_DS_MLO_LINK_RO_NODE0 + node_id, queue_id, PPE_DRV_REDIR_PROFILE_ID);
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_DS_MLO_LINK_BR_NODE0 + node_id, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+	pri_profile = ppe_drv_port_enq_vp_to_pri_prof(enq_vp);
+	if (pri_profile == PPE_DRV_PORT_ENQ_VP_PRI_PRFL_INVALID) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_port_enq_vp_free(enq_vp);
+		ppe_drv_warn("%p: Unable to get pri profile for enqueue vport:%d ", p, enq_vp);
+		return PPE_DRV_RET_ENQ_VP_TO_PRI_PROF_FAIL;
+	}
+
+	/*
+	 * Set queue_id for a given port on PPE.
+	 */
+	if (!ppe_drv_enq_vp_queue_set(p, enq_vp, queue_id)) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_port_enq_vp_free(enq_vp);
+		ppe_drv_warn("%p: Enqueue vp queue init failed for qid:%d", p, queue_id);
+		return PPE_DRV_RET_ENQ_VP_QID_SET_FAIL;
+	}
+
+	/*
+	 * Configure the allocated enqueue vp number on PORT_VSI_ENQUEUE table.
+	 */
+	enqueue_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_FLOW;
+	enqueue_cfg.rule_entry.flow_pri_profile = PPE_DRV_PORT_ENQVP_VSI_TBL_START_IDX + pri_profile;
+	enqueue_cfg.index_entry.enqueue_en = (a_bool_t)PPE_DRV_PORT_EVP_ENABLE;
+	enqueue_cfg.index_entry.enqueue_vport = enq_vp;
+	ret = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enqueue_cfg);
+	if (ret != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_port_enq_vp_free(enq_vp);
+		ppe_drv_warn("%p: Unable to set the enqueue vp config", p);
+		return PPE_DRV_RET_ENQ_VP_EN_FAIL;
+	}
+
+	/*
+	 * Each enqueue vp has metadata value(node_id in case of PPE-DS).
+	 * Set enqueue vport metadata value.
+	 * Cookie will be used as key to find the corresponding enqueue vp during PPE flow addition.
+	 */
+	ppe_drv_port_enq_vp_metadata_set(enq_vp, node_id);
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("%p: Enqueue vp node to queue map done qid:%d enq_vp:%d pri_prof:%d node_id:%d", p, queue_id, enq_vp, enqueue_cfg.rule_entry.flow_pri_profile, node_id);
+	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_ds_map_node_to_queue);
 
@@ -840,6 +989,11 @@ static int ppe_drv_probe(struct platform_device *pdev)
 
 	ppe_drv_flow_dump_init(p->dentry);
 	ppe_drv_if_map_init(p->dentry);
+
+	/*
+	 * Initialize the enqueue vports.
+	 */
+	ppe_drv_port_enq_vp_init();
 
 	return of_platform_populate(np, NULL, NULL, &pdev->dev);
 

@@ -431,6 +431,13 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_NO_TOP_RX_IF,			/**< Failure due to no corresponding top interface */
 	PPE_DRV_RET_INVALID_DEV_TYPE,			/**< Invalid port netdev type */
 	PPE_DRV_RET_FAILURE_INVALID_DS_NODE,		/**< Invalid DS node */
+	PPE_DRV_RET_ENQ_VP_ALLOC_FAIL,			/**< Enqueue vport allocation failure */
+	PPE_DRV_RET_ENQ_VP_TO_PRI_PROF_FAIL,		/**< Enqueue vport to pri profile map failure */
+	PPE_DRV_RET_ENQ_VP_QID_SET_FAIL,		/**< Enqueue vport queue id set failure */
+	PPE_DRV_RET_ENQ_VP_EN_FAIL,			/**< Enqueue vport enable failure */
+	PPE_DRV_RET_METADATA_TO_ENQ_VP_FAIL,		/**< Metadata to enqueue vport fetch failed */
+	PPE_DRV_RET_ENQ_VP_QID_RESET_FAIL,		/**< Enqueue vport queue id reset failure */
+	PPE_DRV_RET_ENQ_VP_DISABLE_FAIL,		/**< Enqueue vport disable failed */
 } ppe_drv_ret_t;
 
 /**
@@ -578,7 +585,18 @@ int32_t ppe_drv_mht_port_from_fdb(uint8_t *dmac, uint16_t vid);
  * @param[in] queue_id	queue_id.
  *
  * @return
- * none.
+ * Success or error code.
  */
-void ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id);
+ppe_drv_ret_t ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id);
+
+/**
+ * ppe_drv_ds_map_free
+ *	Provides unmapping of node with enqueue vp and queue.
+ *
+ * @param[in] node_id	node id.
+ *
+ * @return
+ * Success or error code.
+ */
+ppe_drv_ret_t ppe_drv_ds_map_free(uint8_t node_id);
 #endif /* _PPE_DRV_H_ */
