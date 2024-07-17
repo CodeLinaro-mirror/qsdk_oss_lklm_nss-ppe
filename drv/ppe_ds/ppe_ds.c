@@ -296,6 +296,7 @@ static void ppe_ds_get_cur_prod_cons_ring_idx(ppe_ds_wlan_handle_t *wlan_handle,
 	dp_ops->set_rxfill_prod_idx(edma_handle, dp_ops->get_rxfill_cons_idx(edma_handle));
 
 	reg_info->ppe_ds_int_mode_enabled = !polling_for_idx_update;
+	reg_info->dp_ppeds_node_id = node->node_cfg_idx;
 
 	ppe_ds_info("%px: PPE-DS get current EDMA ring indices API call successful", node);
 	return;

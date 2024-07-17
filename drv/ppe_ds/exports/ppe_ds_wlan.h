@@ -65,6 +65,7 @@ struct ppe_ds_wlan_reg_info {
 	uint32_t ppe2tcl_start_idx;		/**< PPE2TCL ring index */
 	uint32_t reo2ppe_start_idx;		/**< REO2PPE ring index */
 	bool ppe_ds_int_mode_enabled;  /**< Interrupt mode to process PPE2TCL */
+	uint8_t dp_ppeds_node_id;	/**< Node id of ds node */
 };
 
 /**
