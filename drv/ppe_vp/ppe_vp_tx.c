@@ -101,6 +101,75 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 EXPORT_SYMBOL(ppe_vp_tx_to_ppe);
 
 /*
+ * ppe_vp_tx_to_vp()
+ *	process the packets destined to VP in PPE
+ *
+ * sbks are consumed by this function regardless of the return
+ * value.
+ */
+bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
+{
+
+	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
+	struct ppe_vp *dvp;
+	struct nss_dp_vp_tx_info dptxi = {};
+	struct ppe_vp_rx_stats *rx_stats;
+	unsigned int len = 0;
+
+	/*
+	 * Check if DVP exists and forward to PPE
+	 */
+	rcu_read_lock();
+	dvp = rcu_dereference(vpa[vp_num - PPE_DRV_VIRTUAL_START]);
+	if (unlikely(!dvp || !(dvp->flags & PPE_VP_FLAG_VP_ACTIVE))) {
+		atomic64_inc(&vp_base.base_stats.rx_dvp_inactive);
+		rcu_read_unlock();
+
+		ppe_vp_info("%px: Dest VP %d inactive, dropping skb %px", dvp, vp_num, skb);
+		skb->fast_xmit = 0;
+		dev_kfree_skb_any(skb);
+		return false;
+	}
+
+	rx_stats = this_cpu_ptr(dvp->vp_stats.rx_stats);
+	dptxi.fake_mac = false;
+
+	if (dvp->vp_type == PPE_VP_TYPE_SW_L3) {
+		dptxi.fake_mac = true;
+		skb_push(skb, ETH_HLEN);
+	}
+
+	rcu_read_unlock();
+
+	dptxi.dvp = vp_num;
+	dptxi.svp = 0;
+	dptxi.sc = PPE_DRV_SC_FMAC_BYPASS;
+
+	len = skb->len;
+
+	/*
+	 * If enqueue to PPE fails, drop the packet.
+	 */
+	if (NETDEV_TX_OK != nss_dp_vp_xmit(vp_base.edma_vp_dev, &dptxi, skb)) {
+		ppe_vp_info("Dropping skb %pxd, edma failed to enqueue to VP %d", skb, vp_num);
+		u64_stats_update_begin(&rx_stats->syncp);
+		rx_stats->rx_drops++;
+		u64_stats_update_end(&rx_stats->syncp);
+		skb->fast_xmit = 0;
+		dev_kfree_skb_any(skb);
+		return false;
+	}
+
+	u64_stats_update_begin(&rx_stats->syncp);
+	rx_stats->rx_pkts++;
+	rx_stats->rx_bytes += len;
+	u64_stats_update_end(&rx_stats->syncp);
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_vp_tx_to_vp);
+
+/*
  * ppe_vp_tx_to_ppe_by_dev()
  *	Wrapper API to transmit the packet via PPE-VP when VP client
  *	has the context of netdevice but not the actual VP number.
