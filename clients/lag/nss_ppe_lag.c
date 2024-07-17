@@ -628,6 +628,7 @@ int __init nss_ppe_lag_init(void)
 	}
 
 	ppe_drv_notifier_ops_register(&ppe_drv_notifier_ops_lag);
+	nss_ppe_vlan_mgr_register_bond_dev_get_id_cb(nss_ppe_bond_dev_get_id);
 
 	nss_ppe_lag_info("LAG Manager Installed\n");
 	return ret;

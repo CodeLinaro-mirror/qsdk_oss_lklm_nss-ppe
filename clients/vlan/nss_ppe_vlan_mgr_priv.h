@@ -84,6 +84,7 @@ struct nss_ppe_vlan_mgr_context {
 	spinlock_t lock;			/* Lock to protect vlan private instance */
 	struct ctl_table_header *sys_hdr;	/* "/pro/sys/nss/vlan_client" directory */
 	nss_ppe_vlan_mgr_br_vlan_cb_t vlan_over_bridge_cb;	/* CB to update bridge manager */
+	nss_ppe_bond_dev_get_id_cb_t bond_id_get_cb;	 /* Callback function to get bond_id */
 };
 
 /*

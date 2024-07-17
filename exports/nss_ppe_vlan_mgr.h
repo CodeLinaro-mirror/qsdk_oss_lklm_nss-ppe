@@ -43,6 +43,15 @@ enum nss_ppe_vlan_mgr_vlan {
 };
 
 /*
+ * nss_ppe_bond_dev_get_id_cb_t
+ *	Callback API to get bond id.
+ *
+ * @param bond_dev[IN] bond netdevice.
+ * @return bond_id.
+ */
+typedef int32_t (*nss_ppe_bond_dev_get_id_cb_t)(struct net_device *bond_dev);
+
+/*
  * nss_ppe_vlan_mgr_br_vlan_cb_t
  *	Callback API to update bridge manager at bridge netdev level
  *
@@ -149,4 +158,12 @@ void nss_ppe_vlan_mgr_vlan_over_bridge_register_cb(nss_ppe_vlan_mgr_br_vlan_cb_t
  */
 int nss_ppe_vlan_mgr_config_bridge_vlan_ingress_rule(struct ppe_drv_iface *slave_iface, struct net_device *bridge_dev,
 						     enum nss_ppe_vlan_mgr_ingress_br_vlan_rule rule_action);
+
+/*
+ * nss_ppe_vlan_mgr_register_bond_dev_get_id_cb()
+ *	Register the callback to get bond_id.
+ *
+ * @param cb[IN] callback function.
+ */
+void nss_ppe_vlan_mgr_register_bond_dev_get_id_cb(nss_ppe_bond_dev_get_id_cb_t cb);
 #endif /* _NSS_PPE_VLAN_MGR_H_ */
