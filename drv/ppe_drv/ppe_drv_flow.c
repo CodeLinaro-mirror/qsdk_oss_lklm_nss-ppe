@@ -31,6 +31,7 @@ void ppe_drv_flow_dump(struct ppe_drv_flow *pf)
 {
 	fal_flow_entry_t flow_cfg = {0};
 	sw_error_t err;
+	uint32_t tree_id;
 
 	flow_cfg.entry_id = pf->index;
 	err = fal_flow_entry_get(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_INDEX, &flow_cfg);
@@ -61,7 +62,8 @@ void ppe_drv_flow_dump(struct ppe_drv_flow *pf)
 	ppe_drv_trace("%p: sevice_code: %d", pf, flow_cfg.sevice_code);
 	ppe_drv_trace("%p: src_port: %d", pf, flow_cfg.src_port);
 	ppe_drv_trace("%p: dst_port: %d", pf, flow_cfg.dst_port);
-	ppe_drv_trace("%p: tree_id: %d", pf, flow_cfg.flow_qos.tree_id);
+	tree_id = flow_cfg.flow_qos.tree_id[0] | (flow_cfg.flow_qos.tree_id[1] << 8) | (flow_cfg.flow_qos.tree_id[2] << 16);
+	ppe_drv_trace("%p: tree_id: %d", pf, tree_id);
 	ppe_drv_trace("%p: pkt_counter: %d", pf, flow_cfg.pkt_counter);
 	ppe_drv_trace("%p: byte_counter: %llu", pf, flow_cfg.byte_counter);
 	ppe_drv_trace("%p: pmtu_check_l3: %d", pf, flow_cfg.pmtu_check_l3);
@@ -70,8 +72,8 @@ void ppe_drv_flow_dump(struct ppe_drv_flow *pf)
 	ppe_drv_trace("%p: vlan_fmt_valid: %d", pf, flow_cfg.vlan_fmt_valid);
 	ppe_drv_trace("%p: svlan_fmt: %d", pf, flow_cfg.svlan_fmt);
 	ppe_drv_trace("%p: cvlan_fmt: %d", pf, flow_cfg.cvlan_fmt);
-	ppe_drv_trace("%p: wifi_qos_en: %d", pf, flow_cfg.flow_qos.wifi_qos_en);
-	ppe_drv_trace("%p: wifi_qos: %d", pf, flow_cfg.flow_qos.wifi_qos);
+	ppe_drv_trace("%p: wifi_qos_en: %d", pf, flow_cfg.flow_qos.qos_valid);
+	ppe_drv_trace("%p: wifi_qos: %d", pf, flow_cfg.flow_qos.qos);
 	ppe_drv_trace("%p: invalid: %d", pf, flow_cfg.invalid);
 
 	if (pf->type == PPE_DRV_IP_TYPE_V4) {
@@ -338,34 +340,48 @@ bool ppe_drv_flow_v6_qos_clear(struct ppe_drv_flow *pf)
  * ppe_drv_flow_v6_tree_id_get()
  *	Find the tree ID associated with a flow
  */
-static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *tree_id)
+static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint8_t *tree_id)
 {
 	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 
 	switch (tree_id_data->type) {
-	case PPE_DRV_TREE_ID_TYPE_NONE:
-		*tree_id = tree_id_data->info.value;
-		return true;
+		case PPE_DRV_TREE_ID_TYPE_NONE:
+			tree_id[0] = tree_id_data->info.value & 0xFF;
+			tree_id[1] = (tree_id_data->info.value & 0xFF00) >> 8;
+			tree_id[2] = (tree_id_data->info.value & 0xFF0000) >> 16;
+			return true;
 
-	case PPE_DRV_TREE_ID_TYPE_SAWF:
-		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
-		PPE_DRV_TREE_ID_SERVICE_CLASS_SET(tree_id, tree_id_data->info.sawf_metadata.service_class);
-		PPE_DRV_TREE_ID_PEER_ID_SET(tree_id, tree_id_data->info.sawf_metadata.peer_id);
-		return true;
+		case PPE_DRV_TREE_ID_TYPE_SAWF:
+			/*
+                         * type(4bits) | reserved(2bits) | svc_id(8bits) | peer_id(10 bits)
+                         */
+			tree_id[0] = tree_id_data->info.sawf_metadata.peer_id & 0xFF;
+			tree_id[1] = (tree_id_data->info.sawf_metadata.peer_id & 0x300) >> 8;
+			tree_id[1] |= (tree_id_data->info.sawf_metadata.service_class & 0x3F) << 2 ;
+			tree_id[2] = (tree_id_data->info.sawf_metadata.service_class & 0xC0) >> 6;
+			tree_id[2] |= tree_id_data->type << 4;
+			return true;
 
-	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
-	case PPE_DRV_TREE_ID_TYPE_SCS:
-		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
-		return true;
+		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+		case PPE_DRV_TREE_ID_TYPE_SCS:
+			tree_id[2] |= tree_id_data->type << 4;
+			tree_id[1] = 0;
+			tree_id[0] = 0;
+			return true;
 
-	case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
-		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
-		PPE_DRV_TREE_ID_MLO_MARK_SET(tree_id, tree_id_data->info.value);
-		return true;
+		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
+			/*
+                         * type(4 bits) | reserved (2 bits) | mlo data (18 bits)
+                         */
+			tree_id[0] = tree_id_data->info.value & 0xFF;
+			tree_id[1] = (tree_id_data->info.value & 0xFF00) >> 8;
+			tree_id[2] = (tree_id_data->info.value & 0x30000) >> 16;
+			tree_id[2] |= tree_id_data->type << 4;
+			return true;
 
-	default:
-		ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
-		return false;
+		default:
+			ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
+			return false;
 	}
 }
 
@@ -386,7 +402,7 @@ static bool ppe_drv_flow_v6_vpn_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_
  * ppe_drv_flow_ds_wifi_qos_set()
  *	Sets the WiFi QoS for DS mode
  */
-static void ppe_drv_flow_ds_wifi_qos_set(uint32_t *wifi_qos, uint32_t *msduq_value, bool flow_override_mode)
+static void ppe_drv_flow_ds_wifi_qos_set(uint8_t *wifi_qos, uint32_t *msduq_value, bool flow_override_mode)
 {
 	bool flow_override;
 	uint8_t tid;
@@ -441,7 +457,7 @@ static bool ppe_drv_flow_override_mode_get(uint32_t *msduq_value)
  * ppe_drv_flow_v6_wifi_qos_get()
  *	Find the WIFI QOS associated with a flow
  */
-static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *wifi_qos, bool *wifi_qos_en)
+static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8_t *wifi_qos, bool *wifi_qos_en)
 {
 	bool flow_override_mode = true;
 
@@ -818,7 +834,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	/*
 	 * Get the tree ID corresponding to flow.
 	 */
-	if (!ppe_drv_flow_v6_tree_id_get(pcf, &flow_cfg.flow_qos.tree_id)) {
+	if (!ppe_drv_flow_v6_tree_id_get(pcf, flow_cfg.flow_qos.tree_id)) {
 		ppe_drv_warn("%p: failed to obtain a valid tree ID", pcf);
 		return NULL;
 	}
@@ -834,14 +850,16 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	/*
 	 * Get the WIFI QOS corresponding to flow.
 	 */
-	if (!ppe_drv_flow_v6_wifi_qos_get(pcf, &flow_cfg.flow_qos.wifi_qos, &wifi_qos_en)) {
+	if (!ppe_drv_flow_v6_wifi_qos_get(pcf, &flow_cfg.flow_qos.qos, &wifi_qos_en)) {
 		ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
 		return NULL;
 	}
 
-	flow_cfg.flow_qos.wifi_qos_en = wifi_qos_en;
+	flow_cfg.flow_qos.qos_valid = wifi_qos_en;
 
 #ifdef NSS_PPE_IPQ53XX
+	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_TREE_ID;
+
 	if (!ppe_drv_flow_v6_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
 		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
 		return NULL;
@@ -1141,34 +1159,48 @@ bool ppe_drv_flow_v4_qos_clear(struct ppe_drv_flow *pf)
  * ppe_drv_flow_v4_tree_id_get()
  *	Find the tree ID associated with a flow
  */
-static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *tree_id)
+static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint8_t *tree_id)
 {
 	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 
 	switch (tree_id_data->type) {
-	case PPE_DRV_TREE_ID_TYPE_NONE:
-		*tree_id = tree_id_data->info.value;
-		return true;
+		case PPE_DRV_TREE_ID_TYPE_NONE:
+			tree_id[0] = tree_id_data->info.value & 0xFF;
+			tree_id[1] = (tree_id_data->info.value & 0xFF00) >> 8;
+			tree_id[2] = (tree_id_data->info.value & 0xFF0000) >> 16;
+			return true;
 
-	case PPE_DRV_TREE_ID_TYPE_SAWF:
-		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
-		PPE_DRV_TREE_ID_SERVICE_CLASS_SET(tree_id, tree_id_data->info.sawf_metadata.service_class);
-		PPE_DRV_TREE_ID_PEER_ID_SET(tree_id, tree_id_data->info.sawf_metadata.peer_id);
-		return true;
+		case PPE_DRV_TREE_ID_TYPE_SAWF:
+			/*
+			 * type(4bits) | reserved(2bits) | svc_id(8bits) | peer_id(10 bits)
+			 */
+			tree_id[0] = tree_id_data->info.sawf_metadata.peer_id & 0xFF;
+			tree_id[1] = (tree_id_data->info.sawf_metadata.peer_id & 0x300) >> 8;
+			tree_id[1] |= (tree_id_data->info.sawf_metadata.service_class & 0x3F) << 2 ;
+			tree_id[2] = (tree_id_data->info.sawf_metadata.service_class & 0xC0) >> 6;
+			tree_id[2] |= tree_id_data->type << 4;
+			return true;
 
-	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
-        case PPE_DRV_TREE_ID_TYPE_SCS:
-		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
-		return true;
+		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+		case PPE_DRV_TREE_ID_TYPE_SCS:
+			tree_id[2] |= tree_id_data->type << 4;
+			tree_id[1] = 0;
+			tree_id[0] = 0;
+			return true;
 
-	case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
-		PPE_DRV_TREE_ID_TYPE_SET(tree_id, tree_id_data->type);
-		PPE_DRV_TREE_ID_MLO_MARK_SET(tree_id, tree_id_data->info.value);
-		return true;
+		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
+			/*
+			 * type(4 bits) | reserved (2 bits) | mlo data (18 bits)
+			 */
+			tree_id[0] = tree_id_data->info.value & 0xFF;
+			tree_id[1] = (tree_id_data->info.value & 0xFF00) >> 8;
+			tree_id[2] = (tree_id_data->info.value & 0x30000) >> 16;
+			tree_id[2] |= tree_id_data->type << 4;
+			return true;
 
-	default:
-		ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
-		return false;
+		default:
+			ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
+			return false;
 	}
 }
 
@@ -1189,7 +1221,7 @@ static bool ppe_drv_flow_v4_vpn_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_
  * ppe_drv_flow_v4_wifi_qos_get()
  *	Find the WIFI QOS associated with a flow
  */
-static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *wifi_qos, bool *wifi_qos_en)
+static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8_t *wifi_qos, bool *wifi_qos_en)
 {
 	bool flow_override_mode = true;
 
@@ -1588,10 +1620,11 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	ppe_drv_trace("service_code: %d\n", flow_cfg.sevice_code);
 
 	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index, flow_cfg.sevice_code);
+
 	/*
 	 * Get the tree ID corresponding to flow.
 	 */
-	if (!ppe_drv_flow_v4_tree_id_get(pcf, &flow_cfg.flow_qos.tree_id)) {
+	if (!ppe_drv_flow_v4_tree_id_get(pcf, flow_cfg.flow_qos.tree_id)) {
 		ppe_drv_warn("%p: failed to obtain a valid tree ID", pcf);
 		return NULL;
 	}
@@ -1607,14 +1640,16 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	/*
 	 * Get the WIFI QOS corresponding to flow.
 	 */
-	if (!ppe_drv_flow_v4_wifi_qos_get(pcf, &flow_cfg.flow_qos.wifi_qos, &wifi_qos_en)) {
+	if (!ppe_drv_flow_v4_wifi_qos_get(pcf, &flow_cfg.flow_qos.qos, &wifi_qos_en)) {
 		ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
 		return NULL;
 	}
 
-	flow_cfg.flow_qos.wifi_qos_en = wifi_qos_en;
+	flow_cfg.flow_qos.qos_valid = wifi_qos_en;
 
 #ifdef NSS_PPE_IPQ53XX
+	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_TREE_ID;
+
 	if (!ppe_drv_flow_v4_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
 		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
 		return NULL;
