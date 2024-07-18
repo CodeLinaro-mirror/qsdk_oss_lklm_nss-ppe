@@ -63,6 +63,7 @@ qca-nss-ppe-objs += tun/ppe_drv_tun_v6.o
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))
+ccflags-y += -DPPE_DRV_FLOW_COOKIE_SUPPORT
 ccflags-y += -DPPE_DRV_NPTV6_HW_SUPPORT
 qca-nss-ppe-objs += ppe_drv_nptv6.o
 endif

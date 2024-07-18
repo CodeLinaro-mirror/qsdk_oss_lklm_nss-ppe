@@ -336,6 +336,63 @@ bool ppe_drv_flow_v6_qos_clear(struct ppe_drv_flow *pf)
 	return true;
 }
 
+#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+/*
+ * ppe_drv_flow_v6_flow_cookie40b_get()
+ *      Find the tree ID associated with a flow
+ */
+static bool ppe_drv_flow_v6_flow_cookie40b_get(struct ppe_drv_v6_conn_flow *pcf, uint8_t *cookie_40b)
+{
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
+
+	switch (tree_id_data->type) {
+		case PPE_DRV_TREE_ID_TYPE_NONE:
+			cookie_40b[0] = tree_id_data->info.value & 0xFF;
+			cookie_40b[1] = (tree_id_data->info.value & 0xFF00) >> 8;
+			cookie_40b[2] = (tree_id_data->info.value & 0xFF0000) >> 16;
+			cookie_40b[3] = (tree_id_data->info.value & 0xFF000000) >> 24;
+
+			/*
+			 * Currently info.value is a 32 bit metadata
+			 * Hence storing the 8 bits with 0
+			 */
+			cookie_40b[4] = 0;
+			return true;
+
+		case PPE_DRV_TREE_ID_TYPE_SAWF:
+			/*
+			 * type(5 bits) | reserved(11 bits) | svc_id(8 bits) | peer_id(16 bits)
+			 */
+			cookie_40b[0] = tree_id_data->info.sawf_metadata.peer_id & 0xFF;
+			cookie_40b[1] = (tree_id_data->info.sawf_metadata.peer_id & 0xFF00) >> 8;
+			cookie_40b[2] = tree_id_data->info.sawf_metadata.service_class & 0xFF;
+			cookie_40b[3] = 0;
+			cookie_40b[4] = tree_id_data->type << 3;
+			return true;
+
+		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+		case PPE_DRV_TREE_ID_TYPE_SCS:
+			cookie_40b[4] = tree_id_data->type << 3;
+			return true;
+
+		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
+			/*
+			 * type(5 bits) | reserved(17bits) | mlo data(18 bits)
+			 */
+			cookie_40b[0] = tree_id_data->info.value & 0xFF;
+			cookie_40b[1] = (tree_id_data->info.value & 0xFF00) >> 8;
+			cookie_40b[2] = (tree_id_data->info.value & 0x30000) >> 16;
+			cookie_40b[3] = 0;
+			cookie_40b[4] = tree_id_data->type << 3;
+
+			return true;
+
+		default:
+			ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
+			return false;
+	}
+}
+#else
 /*
  * ppe_drv_flow_v6_tree_id_get()
  *	Find the tree ID associated with a flow
@@ -384,6 +441,7 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint8_
 			return false;
 	}
 }
+#endif
 
 /*
  * ppe_drv_flow_v6_vpn_id_get()
@@ -831,6 +889,21 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index,
 		      flow_cfg.sevice_code);
 
+#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+        /*
+         * Get the flow cookie corresponding to flow.
+         */
+        if (!ppe_drv_flow_v6_flow_cookie40b_get(pcf, flow_cfg.flow_qos.cookie_40b)) {
+                ppe_drv_warn("%p: failed to obtain a valid flow cookie", pcf);
+                return NULL;
+        }
+
+        flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_COOKIE_40B;
+
+        /*
+         * TODO: 48bit flow cookie
+         */
+#else
 	/*
 	 * Get the tree ID corresponding to flow.
 	 */
@@ -838,7 +911,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 		ppe_drv_warn("%p: failed to obtain a valid tree ID", pcf);
 		return NULL;
 	}
-
+#endif
 	/*
 	 * Get the VPN ID corresponding to flow.
 	 */
@@ -1155,6 +1228,66 @@ bool ppe_drv_flow_v4_qos_clear(struct ppe_drv_flow *pf)
 	return true;
 }
 
+#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+/*
+ * ppe_drv_flow_v4_flow_cookie40b_get()
+ *      Find the tree ID associated with a flow
+ */
+static bool ppe_drv_flow_v4_flow_cookie40b_get(struct ppe_drv_v4_conn_flow *pcf, uint8_t *cookie_40b)
+{
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
+
+	switch (tree_id_data->type) {
+		case PPE_DRV_TREE_ID_TYPE_NONE:
+			cookie_40b[0] = tree_id_data->info.value & 0xFF;
+			cookie_40b[1] = (tree_id_data->info.value & 0xFF00) >> 8;
+			cookie_40b[2] = (tree_id_data->info.value & 0xFF0000) >> 16;
+			cookie_40b[3] = (tree_id_data->info.value & 0xFF000000) >> 24;
+
+			/*
+			 * Currently info.value is a 32 bit metadata
+			 * Hence storing the 8 bits with 0
+			 */
+			cookie_40b[4] = 0;
+
+			return true;
+
+		case PPE_DRV_TREE_ID_TYPE_SAWF:
+			/*
+			 * type(5 bits) | reserved(11 bits) | svc_id(8 bits) | peer_id(16 bits)
+			 */
+			cookie_40b[0] = tree_id_data->info.sawf_metadata.peer_id & 0xFF;
+			cookie_40b[1] = (tree_id_data->info.sawf_metadata.peer_id & 0xFF00) >> 8;
+			cookie_40b[2] = tree_id_data->info.sawf_metadata.service_class & 0xFF;
+			cookie_40b[3] = 0;
+			cookie_40b[4] = tree_id_data->type << 3;
+
+			return true;
+
+		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+		case PPE_DRV_TREE_ID_TYPE_SCS:
+			cookie_40b[4] = tree_id_data->type << 3;
+
+			return true;
+
+		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
+			/*
+			 * type(5 bits) | reserved(17bits) | mlo data(18 bits)
+			 */
+			cookie_40b[0] = tree_id_data->info.value & 0xFF;
+			cookie_40b[1] = (tree_id_data->info.value & 0xFF00) >> 8;
+			cookie_40b[2] = (tree_id_data->info.value & 0x30000) >> 16;
+			cookie_40b[3] = 0;
+			cookie_40b[4] = tree_id_data->type << 3;
+
+			return true;
+
+		default:
+			ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
+			return false;
+	}
+}
+#else
 /*
  * ppe_drv_flow_v4_tree_id_get()
  *	Find the tree ID associated with a flow
@@ -1203,6 +1336,7 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint8_
 			return false;
 	}
 }
+#endif
 
 /*
  * ppe_drv_flow_v4_vpn_id_get()
@@ -1621,6 +1755,21 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 
 	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index, flow_cfg.sevice_code);
 
+#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+	/*
+	 * Get the flow cookie corresponding to flow.
+	 */
+	if (!ppe_drv_flow_v4_flow_cookie40b_get(pcf, flow_cfg.flow_qos.cookie_40b)) {
+		ppe_drv_warn("%p: failed to obtain a valid flow cookie", pcf);
+		return NULL;
+	}
+
+	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_COOKIE_40B;
+
+	/*
+	 * TODO: 48bit flow cookie
+	 */
+#else
 	/*
 	 * Get the tree ID corresponding to flow.
 	 */
@@ -1628,7 +1777,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		ppe_drv_warn("%p: failed to obtain a valid tree ID", pcf);
 		return NULL;
 	}
-
+#endif
 	/*
 	 * Get the VPN ID corresponding to flow.
 	 */
