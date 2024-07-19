@@ -1829,7 +1829,7 @@ EXPORT_SYMBOL(ppe_drv_port_xcpn_mode_set);
  * ppe_drv_port_metadata_to_enq_vp_internal()
  *	Get the enqueue vport from port metadata.
  */
-uint8_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata)
+int16_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
@@ -1851,7 +1851,7 @@ uint8_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata)
  * ppe_drv_port_metadata_to_enq_vp()
  *	Get the enqueue vport from port metadata.
  */
-uint8_t ppe_drv_port_metadata_to_enq_vp(uint8_t port_metadata)
+int16_t ppe_drv_port_metadata_to_enq_vp(uint8_t port_metadata)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t ret;
@@ -1868,11 +1868,11 @@ EXPORT_SYMBOL(ppe_drv_port_metadata_to_enq_vp);
  * ppe_drv_port_metadata_to_pri_prof_internal()
  *	Get the enqueue vport pri profile.
  */
-uint8_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata)
+int16_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
-	uint8_t enq_vp;
+	int16_t enq_vp;
 
 	enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(port_metadata);
 	if (enq_vp != PPE_DRV_PORT_ID_INVALID) {
@@ -1889,7 +1889,7 @@ uint8_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata)
  * ppe_drv_port_metadata_to_pri_prof()
  *	Get the enqueue vport pri profile.
  */
-uint8_t ppe_drv_port_metadata_to_pri_prof(uint8_t port_metadata)
+int16_t ppe_drv_port_metadata_to_pri_prof(uint8_t port_metadata)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t ret;
@@ -1917,7 +1917,7 @@ static void ppe_drv_port_enq_vp_deinit(struct kref *kref)
  * ppe_drv_port_enq_vp_free()
  *	Release the enqueue vport to free list.
  */
-bool ppe_drv_port_enq_vp_free(uint32_t enq_vp)
+bool ppe_drv_port_enq_vp_free(int16_t enq_vp)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
@@ -1962,7 +1962,7 @@ void ppe_drv_port_enq_vp_init()
  * 	The metadata value would be used during flow lookup
  * 	to find the pri profile of enqueue vp.
  */
-bool ppe_drv_port_enq_vp_metadata_set(uint8_t enq_vp, uint8_t evp_metadata)
+bool ppe_drv_port_enq_vp_metadata_set(int16_t enq_vp, uint8_t evp_metadata)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
@@ -1982,7 +1982,7 @@ bool ppe_drv_port_enq_vp_metadata_set(uint8_t enq_vp, uint8_t evp_metadata)
  * ppe_drv_port_enq_vp_to_pri_prof()
  *	Get the pri profile for given enqueue vp.
  */
-int8_t ppe_drv_port_enq_vp_to_pri_prof(uint8_t enq_vp)
+int8_t ppe_drv_port_enq_vp_to_pri_prof(int16_t enq_vp)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
@@ -2004,7 +2004,7 @@ int8_t ppe_drv_port_enq_vp_to_pri_prof(uint8_t enq_vp)
  * ppe_drv_port_enq_vp_alloc()
  *	Allocate the enqueue virtual port in PPE.
  */
-int8_t ppe_drv_port_enq_vp_alloc(void)
+int16_t ppe_drv_port_enq_vp_alloc(void)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t i;

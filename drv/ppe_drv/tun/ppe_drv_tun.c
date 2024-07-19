@@ -429,9 +429,10 @@ uint8_t ppe_drv_tun_xmit_port_get(uint8_t xmit_port)
  * ppe_drv_tun_port_configure
  * 	Configure L2 VP port table.
  */
-bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port)
+static bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port, int16_t enq_vp)
 {
 	sw_error_t err;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_vport_state_t vp_state = {0};
 	struct ppe_drv_port *pp = ptun->pp;
 	uint32_t v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, pp->port);
@@ -475,6 +476,19 @@ bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port)
 	}
 
 	if (ppe_drv_tun_dp_port_ds(dp)) {
+		/*
+		 * enqueue vp port is valid if DS metadata is valid.
+		 * Map tunnel destination port with enqueue vp queue
+		 * instead of destination port.
+		 */
+		if (enq_vp != PPE_DRV_PORT_ID_INVALID) {
+			dp = &p->port[enq_vp];
+			if (!dp) {
+				ppe_drv_warn("%p: enqueue vp port structure invalid for vp port %d, enq port = %d", ptun, xmit_port, enq_vp);
+				return false;
+			}
+		}
+
 		/*
 		 * Set flag to denote tunnel end point is a WIFI vp with DS enabled
 		 * to configure the correct port profile
@@ -1396,6 +1410,7 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	uint16_t xmit_port;
 	bool is_ipv6;
 	bool status;
+	int16_t enq_vp = PPE_DRV_PORT_ID_INVALID;
 
 	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
 	spin_lock_bh(&p->lock);
@@ -1453,6 +1468,12 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 		 * Extract the L2 HDR from ECM rule
 		 */
 		ppe_drv_tun_v6_parse_l2_hdr(vcreate_rule, cn_v6, l2_hdr);
+
+		if (ppe_drv_v6_conn_flow_flags_check(&cn_v6->pcf, PPE_DRV_V6_CONN_FLAG_FLOW_WIFI_DS)) {
+			enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(cn_v6->pcf.wifi_rule_ds_metadata);
+		} else if (ppe_drv_v6_conn_flow_flags_check(&cn_v6->pcr, PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS)) {
+			enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(cn_v6->pcr.wifi_rule_ds_metadata);
+		}
 	} else if (vcreate_rule) {
 		cn_v4 = ppe_drv_v4_conn_alloc();
 		if (!cn_v4) {
@@ -1469,6 +1490,12 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 		 * Extract the L2 HDR from ECM Connection entry
 		 */
 		ppe_drv_tun_v4_parse_l2_hdr(vcreate_rule, cn_v4, l2_hdr);
+
+		if (ppe_drv_v4_conn_flow_flags_check(&cn_v4->pcf, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS)) {
+			enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(cn_v4->pcf.wifi_rule_ds_metadata);
+		} else if (ppe_drv_v4_conn_flow_flags_check(&cn_v4->pcr, PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS)) {
+			enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(cn_v4->pcr.wifi_rule_ds_metadata);
+		}
 	}
 
 	/*
@@ -1576,7 +1603,7 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	/*
 	 * Activate tunnel in L2_VP_TBL
 	 */
-	if (!ppe_drv_tun_port_configure(ptun, xmit_port)) {
+	if (!ppe_drv_tun_port_configure(ptun, xmit_port, enq_vp)) {
 		ppe_drv_warn("%p: Failed to configure VP tunnel port for tun %d of type %d", ptun, ptun->tun_idx, pth->type);
 		goto err_fail;
 	}

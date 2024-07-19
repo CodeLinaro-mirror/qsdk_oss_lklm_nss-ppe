@@ -239,7 +239,7 @@ bool ppe_drv_port_clear_hw_vp_stats(int16_t port);
  * @return
  * pri profile.
  */
-uint8_t ppe_drv_port_metadata_to_pri_prof(uint8_t port_metadata);
+int16_t ppe_drv_port_metadata_to_pri_prof(uint8_t port_metadata);
 
 /**
  * ppe_drv_port_metadata_to_enq_vp
@@ -250,5 +250,5 @@ uint8_t ppe_drv_port_metadata_to_pri_prof(uint8_t port_metadata);
  * @return
  * Enqueue vp.
  */
-uint8_t ppe_drv_port_metadata_to_enq_vp(uint8_t port_metadata);
+int16_t ppe_drv_port_metadata_to_enq_vp(uint8_t port_metadata);
 #endif /* _PPE_DRV_PORT_H_ */
