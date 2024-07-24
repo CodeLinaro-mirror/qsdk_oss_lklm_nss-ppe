@@ -66,6 +66,8 @@
 					/* Flow is noedit rule */
 #define PPE_DRV_V6_CONN_FLAG_FLOW_WIFI_DS	0x00020000
 					/* Flow + MLO DS node */
+#define PPE_DRV_V6_CONN_FLAG_PASSIVE_FLOW 0x00040000
+					/* Flow is pushed from SFE */
 
 /*
  * ppe_drv_v6_conn_flow

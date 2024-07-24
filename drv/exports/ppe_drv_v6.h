@@ -66,6 +66,7 @@
 #define PPE_DRV_V6_RULE_FROM_BRIDGE_VLAN_NETDEV		0x0800  /**< VLAN over bridge in ingress direction */
 #define PPE_DRV_V6_RULE_NOEDIT_FLOW_RULE		0x1000  /**< Noedit rule creation for flow direction */
 #define PPE_DRV_V6_RULE_NOEDIT_RETURN_RULE		0x2000  /**< Noedit rule creation for return direction */
+#define PPE_DRV_V6_RULE_FLAG_PASSIVE_FLOW		0x4000	/**< Rule creation for passive flow */
 
 /*
  * v6 valid flags
