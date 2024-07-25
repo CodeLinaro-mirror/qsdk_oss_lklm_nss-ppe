@@ -998,6 +998,9 @@ static void nss_ppe_vlan_mgr_instance_free(struct kref *kref)
 	 */
 	if (v->is_vlan_as_vp_iface) {
 		nss_ppe_vlan_mgr_trace("Vlan as VP interface: %d\n", v->xlate_info.port_id);
+		if (v->parent) {
+			nss_ppe_vlan_mgr_instance_deref(v->parent);
+		}
 		nss_ppe_vlan_mgr_deconfigure_vp(v);
 		nss_ppe_vlan_mgr_free_vp(v->xlate_info.port_id);
 		kfree(v);
