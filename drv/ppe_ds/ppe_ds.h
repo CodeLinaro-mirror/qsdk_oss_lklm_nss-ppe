@@ -67,8 +67,13 @@
 #define PPE_DS_MAX_NODE		4	/* Max DS node supported */
 #define PPE_DS_RXFILL_LOW_THRES_DIVISOR	3	/* PPE-DS node's Rxfill low threshold divisor */
 #define PPE_DS_RXFILL_NUM_DESC_MAX	65535	/* PPE-DS node's Rxfill maximum descriptor count */
+#if defined(PPE_DS_MEM_PROFILE_LOW)
+#define PPE_DS_RXFILL_NUM_DESC_MIN	256	/* PPE-DS node's Rxfill minimum descriptor count */
+#define PPE_DS_RXFILL_NUM_DESC_DEF	512	/* PPE-DS node's Rxfill default descriptor count */
+#else
 #define PPE_DS_RXFILL_NUM_DESC_MIN	1024	/* PPE-DS node's Rxfill minimum descriptor count */
 #define PPE_DS_RXFILL_NUM_DESC_DEF	2048	/* PPE-DS node's Rxfill default descriptor count */
+#endif
 #define PPE_DS_TXCMPL_NUM_DESC_MAX	65535	/* PPE-DS node's Txcmpl maximum descriptor count */
 #define PPE_DS_TXCMPL_NUM_DESC_MIN	1024	/* PPE-DS node's Txcmpl minimum descriptor count */
 #define PPE_DS_TXCMPL_NUM_DESC_DEF	8192	/* PPE-DS node's Txcmpl default descriptor count */

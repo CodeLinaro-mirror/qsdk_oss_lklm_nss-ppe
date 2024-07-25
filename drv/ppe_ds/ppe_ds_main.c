@@ -56,7 +56,11 @@ unsigned int cpu_mask_6g = 0x1;
 module_param(cpu_mask_6g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(cpu_mask_6g, "CPU mask for the 6G radio VAP");
 
+#if defined(PPE_DS_MEM_PROFILE_LOW)
+unsigned int ppe2tcl_rxfill_num_desc = 512;
+#else
 unsigned int ppe2tcl_rxfill_num_desc = 2048;
+#endif
 module_param(ppe2tcl_rxfill_num_desc, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(ppe2tcl_rxfill_num_desc, "PPE2TCL Rxfill ring descriptor count");
 
@@ -64,7 +68,7 @@ unsigned int reo2ppe_txcmpl_num_desc = 16384;
 module_param(reo2ppe_txcmpl_num_desc, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(reo2ppe_txcmpl_num_desc, "REO2PPE Tx complete ring descriptor count");
 
-#if defined(NSS_PPE_IPQ53XX)
+#if defined(NSS_PPE_IPQ53XX) && !defined(PPE_DS_MEM_PROFILE_LOW)
 unsigned int rxfill_low_threshold = 1024;
 #else
 unsigned int rxfill_low_threshold = 256;

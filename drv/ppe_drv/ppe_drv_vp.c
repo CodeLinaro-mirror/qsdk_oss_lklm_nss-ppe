@@ -18,7 +18,6 @@
 #include "ppe_drv.h"
 #include <fal_vport.h>
 
-
 /*
  * ppe_drv_vp_cleanup()
  *	De-Initialize API exposed to VP driver
@@ -121,6 +120,14 @@ ppe_drv_ret_t ppe_drv_vp_cfg_update(struct ppe_drv_iface *iface, struct ppe_drv_
 
 	port->core_mask = port->shadow_core_mask = info->core_mask;
 	port->user_type = info->usr_type;
+
+	/*
+	 * Wifi sends core mask in cfg_update call.
+	 * Set the rfs flag if core_mask is set.
+	 */
+	if (info->core_mask) {
+		port->flags |= PPE_DRV_PORT_RFS_ENABLED;
+	}
 
 	spin_unlock_bh(&p->lock);
 

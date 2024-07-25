@@ -185,6 +185,8 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_create_fail_acl",		/* No of v4 create failure due to ACL linking */
 	"v4_destroy_fail_acl",		/* No of v4 delete failure due to ACL unlinking */
 
+	"v4_create_fail_invalid_ds_node",	/* Create failed due to invalid DS node */
+
 	"v6_create_req",			/* No of v6 create requests */
 	"v6_create_fail",			/* No of v6 create failure */
 	"v6_destroy_req",			/* No of v6 delete requests */
@@ -255,6 +257,8 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_destroy_fail_acl",		/* No of v6 delete failure due to ACL unlinking */
 
 	"v6_create_fail_offload_disabled",	/* No of v6 create failure due to offload disable */
+
+	"v6_create_fail_invalid_ds_node",	/* Create failed due to invalid DS node */
 };
 
 /*
@@ -337,6 +341,8 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_create_fail_acl",		/* No of v4 create failure due to ACL linking */
 	"v4_tun_destroy_fail_acl",		/* No of v4 delete failure due to ACL unlinking */
 
+	"v4_create_fail_invalid_ds_node",	/* Create failed due to invalid DS node */
+
 	"v6_tun_create_req",			/* No of v6 create requests */
 	"v6_tun_create_fail",			/* No of v6 create failure */
 	"v6_tun_destroy_req",			/* No of v6 delete requests */
@@ -408,6 +414,8 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_destroy_fail_acl",		/* No of v6 delete failure due to ACL unlinking */
 
 	"v6_create_fail_offload_disabled",	/* No of v6 create failure due to offload disable */
+
+	"v6_create_fail_invalid_ds_node",	/* Create failed due to invalid DS node */
 };
 
 /*
