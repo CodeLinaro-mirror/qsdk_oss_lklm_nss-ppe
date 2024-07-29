@@ -68,6 +68,11 @@
 #define PPE_DRV_VALID_FLAG_FLOW_POLICER		0x01	/**< Policer is enabled in flow direction. */
 #define PPE_DRV_VALID_FLAG_RETURN_POLICER	0x02	/**< Policer is enabled in return direction. */
 
+#define PPE_DRV_VALID_TUN_SRC_MAC_FLOW 0x01
+		/**< MAC address for the flow interface is valid. */
+#define PPE_DRV_VALID_TUN_SRC_MAC_RETURN 0x02
+		/**< MAC address for the return interface is valid. */
+
 /*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
@@ -124,6 +129,15 @@ struct ppe_drv_fse_rule_info {
 	struct net_device *dev;			/**< VAP netdevice. */
 	uint32_t flags;				/**< Info flag */
 	uint8_t vp_num;			/**< Virtual port number. */
+};
+
+/**
+ * Information for source MAC address rules.
+ */
+struct ppe_drv_src_mac_rule {
+	uint32_t mac_valid_flags;       /**< MAC address validity flags. */
+	uint8_t flow_src_mac[6];       /**< Source MAC address for the flow direction. */
+	uint8_t return_src_mac[6];     /**< Source MAC address for the return direction. */
 };
 
 /*
