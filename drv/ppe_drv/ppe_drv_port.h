@@ -178,13 +178,13 @@ void  ppe_drv_port_tun_set(struct ppe_drv_port *pp, struct ppe_drv_tun *ptun);
 struct ppe_drv_tun *ppe_drv_port_tun_get(struct ppe_drv_port *pp);
 bool ppe_drv_port_check_flow_offload_enabled(struct ppe_drv_port *drv_port);
 bool ppe_drv_is_wlan_vp_port_type(uint8_t user_type);
-int8_t ppe_drv_port_enq_vp_alloc(void);
+int16_t ppe_drv_port_enq_vp_alloc(void);
 void ppe_drv_port_enq_vp_init(void);
-bool ppe_drv_port_enq_vp_metadata_set(uint8_t enq_vp, uint8_t evp_metadata);
-bool ppe_drv_port_enq_vp_free(uint32_t enq_vp);
-int8_t ppe_drv_port_enq_vp_to_pri_prof(uint8_t enq_vp);
-uint8_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata);
-uint8_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata);
+bool ppe_drv_port_enq_vp_metadata_set(int16_t enq_vp, uint8_t evp_metadata);
+bool ppe_drv_port_enq_vp_free(int16_t enq_vp);
+int8_t ppe_drv_port_enq_vp_to_pri_prof(int16_t enq_vp);
+int16_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata);
+int16_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata);
 
 /*
  * ppe_drv_port_flags_check()

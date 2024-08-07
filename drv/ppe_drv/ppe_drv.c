@@ -437,11 +437,12 @@ static bool ppe_drv_enq_vp_queue_reset(struct ppe_drv *p,
  *	Set the queue ID of given enqueue vport in PPE.
  */
 static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
-					uint32_t enq_vport,
+					int16_t enq_vport,
 					a_uint32_t queue_id)
 {
         sw_error_t err;
 	fal_ucast_queue_dest_t q_dst = {0};
+	struct ppe_drv_port *pp = NULL;
 
 	q_dst.src_profile = PPE_DRV_PORT_SRC_PROFILE;
 	q_dst.dst_port = enq_vport;
@@ -450,6 +451,13 @@ static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
 		ppe_drv_warn("%p: Unable to map enqueue vp with queue:%d", p, queue_id);
 		return false;
 	}
+
+	/*
+	 * Update drv port structure with the correct ucast queue
+	 * mapped to the enqueue vp port for easy access elsewhere.
+	 */
+	pp = &p->port[enq_vport];
+	pp->ucast_queue = queue_id;
 
 	return true;
 }
@@ -464,7 +472,7 @@ ppe_drv_ret_t ppe_drv_ds_map_free(uint8_t node_id)
 	fal_enqueue_cfg_t enqueue_cfg = {0};
         sw_error_t ret;
 	int8_t pri_profile;
-	uint8_t enq_vp;
+	int16_t enq_vp;
 
 	spin_lock_bh(&p->lock);
 	enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(node_id);
@@ -522,7 +530,7 @@ ppe_drv_ret_t ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id)
 	fal_enqueue_cfg_t enqueue_cfg = {0};
         sw_error_t ret;
 	int8_t pri_profile;
-	int8_t enq_vp;
+	int16_t enq_vp;
 
 	spin_lock_bh(&p->lock);
 	enq_vp = ppe_drv_port_enq_vp_alloc();

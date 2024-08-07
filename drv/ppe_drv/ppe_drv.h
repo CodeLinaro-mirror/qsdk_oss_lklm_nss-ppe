@@ -423,5 +423,3 @@ extern int ppe_drv_get_vxlan_dport(void);
 void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv ppe_drv_gbl;
 extern uint32_t if_bm_to_offload;
-uint8_t ppe_drv_ds_get_enq_vpnum(void);
-uint8_t ppe_drv_ds_enq_vp_get_mapped_pri_prof(uint8_t enq_vp);
