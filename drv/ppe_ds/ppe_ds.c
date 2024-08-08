@@ -840,6 +840,7 @@ void ppe_ds_wlan_inst_free(ppe_ds_wlan_handle_t *wlan_handle)
 	struct nss_dp_ppeds_ops *dp_ops;
 	nss_dp_ppeds_handle_t *edma_handle;
 	ppe_drv_ret_t ret;
+	uint8_t node_id;
 
 	if (!wlan_handle) {
 		ppe_ds_err("wlan_handle is NULL\n");
@@ -866,14 +867,20 @@ void ppe_ds_wlan_inst_free(ppe_ds_wlan_handle_t *wlan_handle)
 	node_cfg->node_state = PPE_DS_NODE_STATE_FREE_IN_PROG;
 	write_unlock_bh(&node_cfg->lock);
 
+	/*
+	 * Capture the node_id before node free,
+	 * the same could be used for enqueue vp free.
+	 */
+	node_id = node->node_cfg_idx;
+
 	dp_ops->free(edma_handle);
 
 	/*
 	 * Enqueue vport release for enqueue vp allocated during inst alloc.
 	 */
-	ret = ppe_drv_ds_map_free(node->node_cfg_idx);
+	ret = ppe_drv_ds_map_free(node_id);
 	if (ret != PPE_DRV_RET_SUCCESS) {
-		ppe_ds_err("PPE-DS failed unmap for node_id:%d error:%d\n", node->node_cfg_idx, ret);
+		ppe_ds_err("PPE-DS failed unmap for node_id:%d error:%d\n", node_id, ret);
 		return;
 	}
 
