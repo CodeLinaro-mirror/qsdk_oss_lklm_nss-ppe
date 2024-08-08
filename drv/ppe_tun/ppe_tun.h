@@ -90,6 +90,7 @@ struct ppe_tun_accel {
 	bool ppe_tun_ipip6_accel;	/* Controls ipip6 acceleration */
 	bool ppe_tun_mapt_accel;	/* Controls mapt acceleration */
 	bool ppe_tun_l2tp_accel;	/* Controls l2tp acceleration */
+	bool ppe_tun_cust_accel;	/* Controls custom tunnel acceleration */
 };
 
 /*

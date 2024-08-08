@@ -70,6 +70,13 @@ static bool ppe_tun_allow_accel(enum ppe_drv_tun_cmn_ctx_type type)
 		ppe_tun_warn("%p: PPE l2tp acceleration is not enabled", ptp);
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUST:
+		if (ptp->tun_accel.ppe_tun_cust_accel) {
+			return true;
+		}
+		ppe_tun_warn("%p: PPE custom tunnel acceleration is not enabled", ptp);
+		break;
+
 	default:
 		break;
 	}
@@ -594,6 +601,10 @@ bool ppe_tun_conf_accel(enum ppe_drv_tun_cmn_ctx_type type, bool action)
 		ptp->tun_accel.ppe_tun_l2tp_accel = action;
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUST:
+		ptp->tun_accel.ppe_tun_cust_accel = action;
+		break;
+
 	default:
 		ppe_tun_info("%p: Tunnel type %u is invalid", ptp, type);
 		return false;
@@ -776,7 +787,7 @@ bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type)
 	if ((type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN)) {
 		vpai.type = PPE_VP_TYPE_HW_L2TUN;
 	} else if ((type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) ||
-					(type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2)) {
+					(type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_CUST)) {
 		vpai.type = PPE_VP_TYPE_HW_L3TUN;
 	} else {
 		ppe_tun_warn("%p: tunnel type %u is invalid", dev, type);
@@ -893,6 +904,32 @@ bool ppe_tun_setup(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr)
 	return true;
 }
 EXPORT_SYMBOL(ppe_tun_setup);
+
+/*
+ * ppe_tun_destroy()
+ *	deactivate and free the tunnel
+ */
+bool ppe_tun_destroy(struct net_device *dev)
+{
+	if (!ppe_tun_deactivate(dev)) {
+		ppe_tun_warn("%p: tunnel deactivation failed", dev);
+		return false;
+	}
+
+	if (!ppe_tun_deconfigure(dev)) {
+		ppe_tun_warn("%p: tunnel deconfigure failed", dev);
+		return false;
+	}
+
+	if (!ppe_tun_free(dev)) {
+		ppe_tun_warn("%p: tunnel free failed", dev);
+		return false;
+	}
+
+	ppe_tun_info("%p: tunnel destroy successful", dev);
+	return true;
+}
+EXPORT_SYMBOL(ppe_tun_destroy);
 
 /*
  * ppe_tun_decap_disable()
@@ -1024,6 +1061,58 @@ const struct file_operations ppe_tun_l2tp_file_fops = {
 	.owner = THIS_MODULE,
 	.write = ppe_tun_l2tp_write,
 	.read = ppe_tun_l2tp_read,
+};
+
+/*
+ * ppe_tun_cust_read()
+ *	custom_tunnel read handler
+ */
+static ssize_t ppe_tun_cust_read(struct file *f, char *buf, size_t count, loff_t *offset)
+{
+	int len;
+	char lbuf[24];
+
+	len = snprintf(lbuf, sizeof(lbuf), "custom_tunnel accel %s\n", (ptp->tun_accel.ppe_tun_cust_accel) ? ("enabled") : ("disabled"));
+
+	return simple_read_from_buffer(buf, count, offset, lbuf, len);
+}
+
+/*
+ * ppe_tun_cust_write()
+ *	custom_tunnel write handler
+ */
+static ssize_t ppe_tun_cust_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
+{
+	ssize_t size;
+	char data[16];
+	bool res;
+	int status;
+
+	size = simple_write_to_buffer(data, sizeof(data), offset, buffer, len);
+	if (size < 0) {
+		ppe_tun_warn("%p: Error reading the input for custom_tunnel configuration", ptp);
+		return size;
+	}
+
+	status = kstrtobool(data, &res);
+	if (status) {
+		ppe_tun_warn("%p: Error reading the input for custom_tunnel configuration", ptp);
+		return status;
+	}
+
+	ppe_tun_conf_accel(PPE_DRV_TUN_CMN_CTX_TYPE_CUST, res);
+
+	return len;
+}
+
+/*
+ * ppe_tun_cust_file_ops
+ * Custom tunnel enable/disable file ops.
+ */
+const struct file_operations ppe_tun_cust_file_fops = {
+	.owner = THIS_MODULE,
+	.write = ppe_tun_cust_write,
+	.read = ppe_tun_cust_read,
 };
 
 /*
@@ -1450,6 +1539,7 @@ static int __init ppe_tun_module_init(void)
 	ptp->tun_accel.ppe_tun_ipip6_accel = true;
 	ptp->tun_accel.ppe_tun_mapt_accel = true;
 	ptp->tun_accel.ppe_tun_l2tp_accel = true;
+	ptp->tun_accel.ppe_tun_cust_accel = true;
 
 	ptp->xcpn_mode.gretap = PPE_TUN_XCPN_MODE_1;
 	ptp->xcpn_mode.ipip6 = PPE_TUN_XCPN_MODE_1;
@@ -1499,6 +1589,9 @@ static int __init ppe_tun_module_init(void)
 	}
 	if (!debugfs_create_file("l2tp", 0644, dir, NULL, &ppe_tun_l2tp_file_fops)) {
 		ppe_tun_warn("Failed to create debugfs entry for l2tp");
+	}
+	if (!debugfs_create_file("cust", 0644, dir, NULL, &ppe_tun_cust_file_fops)) {
+		ppe_tun_warn("Failed to create debugfs entry for custom tunnel");
 	}
 
 	dir = debugfs_create_dir("xcpn_mode", ptp->dentry);
