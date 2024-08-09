@@ -218,6 +218,10 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 
 	pd6rc.rule_flags |= PPE_DRV_V6_RULE_FLAG_FLOW_VALID;
 
+	if (create_ipv6->rule_flags & PPE_RFS_V6_RULE_FLAG_PASSIVE_FLOW) {
+		pd6rc.rule_flags |= PPE_DRV_V6_RULE_FLAG_PASSIVE_FLOW;
+	}
+
 	ret = ppe_drv_v6_assist_rule_create(&pd6rc, PPE_DRV_ASSIST_FEATURE_RFS);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_rfs_warn("%p: Error in pushing Passive PPE RFS rules\n", create_ipv6);
@@ -406,6 +410,10 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 
 	if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_FLAG_BRIDGE_FLOW) {
 		pd4rc.rule_flags |= PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW;
+	}
+
+	if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_FLAG_PASSIVE_FLOW) {
+		pd4rc.rule_flags |= PPE_DRV_V4_RULE_FLAG_PASSIVE_FLOW;
 	}
 
 	pd4rc.rule_flags |= PPE_DRV_V4_RULE_FLAG_FLOW_VALID;
