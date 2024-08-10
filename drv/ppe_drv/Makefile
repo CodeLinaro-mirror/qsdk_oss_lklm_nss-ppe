@@ -65,6 +65,7 @@ endif
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))
 ccflags-y += -DPPE_DRV_FLOW_COOKIE_SUPPORT
 ccflags-y += -DPPE_DRV_NPTV6_HW_SUPPORT
+ccflags-y += -DPPE_DRV_RPS_HASH_SELECT
 qca-nss-ppe-objs += ppe_drv_nptv6.o
 endif
 

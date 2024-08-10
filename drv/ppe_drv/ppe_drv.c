@@ -249,6 +249,19 @@ static bool ppe_drv_hash_init(void)
 	fal_rss_hash_mode_t mode = { 0 };
 	fal_rss_hash_config_t config = { 0 };
 
+#ifdef PPE_DRV_RPS_HASH_SELECT
+	fal_rss_hash_algm_t rsshash_algm = { 0 };
+	rsshash_algm.hash_algm = FAL_RSS_LEGACY_HASH;
+
+	/*
+	 * TODO: Add support to select legacy hash and toeplitz hash
+	 */
+	if ((fal_rsshash_algm_set(PPE_DRV_SWITCH_ID, &rsshash_algm)) != SW_OK) {
+		ppe_drv_warn("Failed to set hash algorithm \n");
+		return false;
+	}
+#endif /* !PPE_DRV_RPS_HASH_SELECT */
+
 	mode = FAL_RSS_HASH_IPV4ONLY;
 	config.hash_mask = PPE_DRV_HASH_MASK;
 	config.hash_fragment_mode = ipfrag_2tuple_hash;
