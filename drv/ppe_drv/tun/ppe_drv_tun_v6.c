@@ -278,19 +278,21 @@ void ppe_drv_tun_v6_parse_l2_hdr(struct ppe_drv_v6_rule_create *create, struct p
 
 	if (!ppe_drv_port_tun_get(pcf->tx_port)) {
 		pp = pcf->tx_port;
+		src_mac_addr = pp->mac_addr;
+		if (create->src_mac_rule.mac_valid_flags & PPE_DRV_VALID_TUN_SRC_MAC_RETURN) {
+			src_mac_addr = create->src_mac_rule.return_src_mac;
+		}
 		tun = ppe_drv_port_tun_get(pcf->rx_port);
 	} else {
 		pp = pcf->rx_port;
+		src_mac_addr = pp->mac_addr;
+		if (create->src_mac_rule.mac_valid_flags & PPE_DRV_VALID_TUN_SRC_MAC_FLOW) {
+			src_mac_addr = create->src_mac_rule.flow_src_mac;
+		}
 		tun = ppe_drv_port_tun_get(pcf->tx_port);
 	}
 
-	ppe_drv_assert(pp, "%p: physical xmit port not found", create);
-
 	xmit_port = pp->port;
-
-	ppe_drv_assert(pp->mac_valid, "%p: MAC address is not set", pp);
-
-	src_mac_addr = pp->mac_addr;
 
 	memset(l2, 0, sizeof(*l2));
 
