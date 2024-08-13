@@ -208,10 +208,19 @@ void ppe_drv_vlan_egress_rule_action_set_vp(fal_vlan_trans_adv_rule_t *xlt_rule,
 	 * Fields for egress match.
 	 * Accept tagged/untagged/priority tagged svlan and cvlan.
 	 */
-	xlt_rule->s_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
-			| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
-	xlt_rule->c_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
-			| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	if (info->svid != FAL_VLAN_INVALID) {
+		xlt_rule->s_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+				| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	} else {
+		xlt_rule->s_tagged = FAL_PORT_VLAN_XLT_MATCH_UNTAGGED;
+	}
+
+	if (info->cvid != FAL_VLAN_INVALID) {
+		xlt_rule->c_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+				| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	} else {
+		xlt_rule->c_tagged = FAL_PORT_VLAN_XLT_MATCH_UNTAGGED;
+	}
 
 	/*
 	 * Fields for egress action.
