@@ -27,10 +27,18 @@
 #include <fal/fal_init.h>
 #include <fal/fal_qm.h>
 #include <fal/fal_fdb.h>
+#ifdef PPE_DRV_PKT_PADDING_STRIP
+#include <fal/fal_pktedit.h>
+#endif
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
 
 #define PPE_DRV_STATIC_DBG_LEVEL_STR_LEN 8
+
+#ifdef PPE_DRV_PKT_PADDING_STRIP
+#define PPE_DRV_PACKET_PADDING_STR_LEN 128
+#endif
+#define NSS_PPE_DRV_WHITESPACE		" \t\v\f\n,"
 
 /*
  * Module parameter to enable/disable 2-tuple RSS hash for IP fragments.
@@ -45,6 +53,9 @@ uint32_t static_dbg_level = 0;
 static char static_dbg_level_str[PPE_DRV_STATIC_DBG_LEVEL_STR_LEN];
 uint8_t ppe_drv_redir_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7};
 static bool eth2eth_offload_if_bitmap;
+#ifdef PPE_DRV_PKT_PADDING_STRIP
+static char packet_padding[PPE_DRV_PACKET_PADDING_STR_LEN];
+#endif
 
 /*
  * Define the filename to be used for assertions.
@@ -333,6 +344,32 @@ static bool ppe_drv_phy_port_base_queue_init(struct ppe_drv *p)
 
 	return true;
 }
+
+#ifdef PPE_DRV_PKT_PADDING_STRIP
+/*
+ * ppe_drv_pkt_edit_init()
+ *      Initialize the PPE packet editor registers
+ */
+static bool ppe_drv_pkt_edit_init(void)
+{
+	fal_pktedit_padding_t padding = { 0 };
+
+	/*
+	 * Default config for removing padidng from packet
+	 */
+	padding.strip_padding_route_en = 1;
+	padding.strip_padding_en = 1;
+	padding.strip_padding_bridge_en = 0;
+	padding.strip_tunnel_inner_padding_en = 0;
+
+	if (fal_pktedit_padding_set(PPE_DRV_SWITCH_ID, &padding) != SW_OK) {
+		ppe_drv_warn("Failed to update strip_padding_en config \n");
+		return false;
+	}
+
+	return true;
+}
+#endif
 
 /*
  * ppe_drv_fse_feature_enable()
@@ -657,6 +694,12 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	if (!ppe_drv_l3_route_ctrl_init(p)) {
 		return -1;
 	}
+
+#ifdef PPE_DRV_PKT_PADDING_STRIP
+	if (!ppe_drv_pkt_edit_init()) {
+		return -1;
+	}
+#endif
 
 #ifdef PPE_TUNNEL_ENABLE
 	if (!ppe_drv_tun_global_init(p)) {
@@ -1423,6 +1466,100 @@ static int ppe_drv_static_dbg_level_handler(struct ctl_table *table,
 	return ret;
 }
 
+#ifdef PPE_DRV_PKT_PADDING_STRIP
+/*
+ * ppe_drv_pkt_padding_handler
+ * 	sysctl to enable/disable stripping of packet padding
+ */
+static int ppe_drv_pkt_padding_handler(struct ctl_table *table,  int write, void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	fal_pktedit_padding_t padding = { 0 };
+	char *start_ch_ptr = NULL;
+	char *end_ch_ptr = NULL;
+	char config[32];
+	int len, i, ret;
+	char *map_name;
+
+	/*
+	 * Find the string, return an error if not found
+	 */
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret || !write) {
+		return ret;
+	}
+
+	map_name = packet_padding;
+
+	/*
+	 * echo "route_pad_strip_en=1 br_pad_strip_en=0 tun_inner_pad_strip_en=0" > /proc/sys/ppe/ppe_drv/packet_padding
+	 */
+	start_ch_ptr = map_name + strspn(map_name, NSS_PPE_DRV_WHITESPACE);
+	for (i = 0; *start_ch_ptr; start_ch_ptr = end_ch_ptr + strspn(end_ch_ptr, NSS_PPE_DRV_WHITESPACE), i++) {
+		char *config_str, *pad_strip_config;
+		int pad_strip_en;
+
+		end_ch_ptr = start_ch_ptr + strcspn(start_ch_ptr, NSS_PPE_DRV_WHITESPACE);
+		if (end_ch_ptr != start_ch_ptr) {
+			len = end_ch_ptr - start_ch_ptr;
+		} else {
+			len = strlen(start_ch_ptr);
+		}
+
+		if (len <= 32) {
+			memcpy(config, start_ch_ptr, len);
+		}
+
+		config[len] = '\0';
+
+		/*
+		 * Obtain the config, value pair
+		 */
+		config_str = config;
+		pad_strip_config = strsep(&config_str, "=");
+		if (pad_strip_config != NULL) {
+			pad_strip_en = *config_str - '0';
+		} else {
+			return -1;
+		}
+
+		if ((pad_strip_en != 0) && (pad_strip_en != 1)) {
+			pr_err("Invalid config value\n");
+			return -1;
+		}
+
+		if (!strcmp(pad_strip_config, "route_pad_strip_en")) {
+			padding.strip_padding_route_en = pad_strip_en;
+			if (padding.strip_padding_route_en) {
+				padding.strip_padding_en = 1;
+			}
+		} else if (!strcmp(pad_strip_config, "br_pad_strip_en")) {
+			padding.strip_padding_bridge_en = pad_strip_en;
+			if (padding.strip_padding_bridge_en) {
+				padding.strip_padding_en = 1;
+			}
+		} else if (!strcmp(pad_strip_config, "tun_inner_pad_strip_en")) {
+			padding.strip_tunnel_inner_padding_en = pad_strip_en;
+			if (padding.strip_tunnel_inner_padding_en) {
+				padding.strip_padding_en = 1;
+			}
+		} else {
+			pr_err("Invalid config, usage example: echo route_pad_strip_en=1"
+					" br_pad_strip_en=0 tun_inner_pad_strip_en=0 > /proc/sys/ppe/ppe_drv/packet_padding/n");
+			return -1;
+		}
+	}
+
+	if (fal_pktedit_padding_set(PPE_DRV_SWITCH_ID, &padding) != SW_OK) {
+		ppe_drv_warn("Failed to update strip_padding_en config \n");
+		return -1;
+	}
+
+	ppe_drv_info("Updating strip_padding_en config to %d\n", padding.strip_padding_en);
+
+	return ret;
+}
+#endif
+
 /*
  * ppe_drv_sub
  *	PPE DRV sub directory
@@ -1456,6 +1593,15 @@ static struct ctl_table ppe_drv_sub[] = {
 		.mode           =       0644,
 		.proc_handler   =       ppe_drv_eth2eth_offload_if_bitmap_handler
 	},
+#ifdef PPE_DRV_PKT_PADDING_STRIP
+	{
+		.procname       =       "packet_padding",
+		.data           =       &packet_padding,
+		.maxlen         =       sizeof(char) * PPE_DRV_PACKET_PADDING_STR_LEN,
+		.mode           =       0644,
+		.proc_handler   =       ppe_drv_pkt_padding_handler
+	},
+#endif
 	{}
 };
 
