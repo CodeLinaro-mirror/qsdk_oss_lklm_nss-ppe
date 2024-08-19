@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,7 @@
 #include "ppe_vp_public.h"
 #include "ppe_ds.h"
 #include "ppe_ds_stats.h"
+#include <ppe_drv.h>
 
 #define IDX_MGMT_PERIOD max_t(u64, 10000, NSEC_PER_SEC / idx_mgmt_freq)
 
@@ -837,6 +838,7 @@ void ppe_ds_wlan_inst_free(ppe_ds_wlan_handle_t *wlan_handle)
 	struct ppe_ds_node_config *node_cfg;
 	struct nss_dp_ppeds_ops *dp_ops;
 	nss_dp_ppeds_handle_t *edma_handle;
+	ppe_drv_ret_t ret;
 
 	if (!wlan_handle) {
 		ppe_ds_err("wlan_handle is NULL\n");
@@ -864,6 +866,15 @@ void ppe_ds_wlan_inst_free(ppe_ds_wlan_handle_t *wlan_handle)
 	write_unlock_bh(&node_cfg->lock);
 
 	dp_ops->free(edma_handle);
+
+	/*
+	 * Enqueue vport release for enqueue vp allocated during inst alloc.
+	 */
+	ret = ppe_drv_ds_map_free(node->node_cfg_idx);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_ds_err("PPE-DS failed unmap for node_id:%d error:%d\n", node->node_cfg_idx, ret);
+		return;
+	}
 
 	write_lock_bh(&node_cfg->lock);
 	node_cfg->node_state = PPE_DS_NODE_STATE_AVAIL;
@@ -897,6 +908,9 @@ ppe_ds_wlan_handle_t *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t
 	int size = priv_size + sizeof(struct ppe_ds);
 	struct nss_dp_ppeds_ops *dp_ops = NULL;
 	uint32_t i;
+	uint32_t ppe_queue_start;
+	uint8_t ds_node_metadata;
+	ppe_drv_ret_t ret;
 
 	dp_ops = nss_dp_ppeds_get_ops();
 	if (!dp_ops || !dp_ops->alloc) {
@@ -930,6 +944,11 @@ ppe_ds_wlan_handle_t *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t
 		return NULL;
 	}
 
+	/*
+	 * Get queue id of node.
+	 */
+	dp_ops->get_queues(edma_handle, &ppe_queue_start);
+
 	node = (struct ppe_ds *)nss_dp_ppeds_priv(edma_handle);
 	node->wlan_ops = ops;
 	node->dp_ops = dp_ops;
@@ -937,6 +956,23 @@ ppe_ds_wlan_handle_t *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t
 	node->node_cfg_idx = i;
 	node->en_process_irq = false;
 	node->umac_reset_inprogress = 0;
+
+	/*
+	 * Map the enqueue vp of node with queue id.
+	 *
+	 * PPE-DS flow use enqueue vp for PPE2TCL ring selection.
+	 * Each enqueue vp is programmed on PPE VSI table at particular index and
+	 * mapped to specific PPE queue. The PPE queue is further mapped to ring.
+	 */
+	ds_node_metadata = node->node_cfg_idx;
+	ret = ppe_drv_ds_map_node_to_queue(ds_node_metadata, ppe_queue_start);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		write_lock_bh(&ppe_ds_node_cfg[i].lock);
+		ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
+		write_unlock_bh(&ppe_ds_node_cfg[i].lock);
+		ppe_ds_err("Unable to allocate enqueue vport for node:%d error:%d", node->node_cfg_idx, ret);
+		return NULL;
+	}
 
 	write_lock_bh(&ppe_ds_node_cfg[i].lock);
 	ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_ALLOC;
