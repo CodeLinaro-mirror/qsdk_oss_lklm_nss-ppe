@@ -231,12 +231,10 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 			}
 
 			rcu_read_unlock();
-			ppe_vp_trace("%px: data path initiated as dev_fast_xmit_vp\n", dvp);
 			return;
 		}
 
 		flags = ppe_drv_get_qdisc_rule_flag(flow_idx);
-		ppe_vp_trace("%px: Qdisc flags is %d for flow index %d\n", dvp, flags, flow_idx);
 
 		/*
 		 * This is the case of Qdisc on any one interface other than bottom
@@ -248,7 +246,6 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 				if (likely(dev_fast_xmit_qdisc(skb, qdisc_dev, dev))) {
 					dev_put(qdisc_dev);
 					rcu_read_unlock();
-					ppe_vp_trace("%px: data path initiated as dev_fast_xmit_qdisc\n", dvp);
 					return;
 				}
 			}
@@ -279,7 +276,6 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 			}
 
 			rcu_read_unlock();
-			ppe_vp_trace("%px: data path initiated as dev_queue_xmit\n", dvp);
 			return;
 		}
 
