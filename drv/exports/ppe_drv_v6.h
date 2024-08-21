@@ -125,6 +125,7 @@ struct ppe_drv_v6_rule_create {
 	uint16_t rule_flags;				/**< Bit flags associated with the rule. */
 	struct ppe_drv_v6_5tuple tuple;			/**< Holds values of the 5 tuple. */
 	struct ppe_drv_v6_connection_rule conn_rule;	/**< Basic connection-specific data. */
+	struct ppe_drv_src_mac_rule src_mac_rule;           /**< Source MAC address rule. */
 	struct ppe_drv_pppoe_rule pppoe_rule;		/**< PPPoE-related acceleration parameters. */
 	struct ppe_drv_qos_rule qos_rule;		/**< QoS-related acceleration parameters. */
 	struct ppe_drv_dscp_rule dscp_rule;		/**< DSCP-related acceleration parameters. */

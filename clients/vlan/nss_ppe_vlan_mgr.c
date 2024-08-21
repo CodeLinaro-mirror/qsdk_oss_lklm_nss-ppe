@@ -140,6 +140,45 @@ static int32_t nss_ppe_vlan_mgr_get_port_id(struct net_device *dev)
 }
 
 /*
+ * nss_ppe_vlan_mgr_calculate_new_vp_port_role()
+ *	check if we can change this base/VP port to edge port
+ */
+static void nss_ppe_vlan_mgr_calculate_new_vp_port_role(int32_t port, int32_t portindex)
+{
+	struct nss_vlan_pvt *v;
+	bool to_edge_port = true;
+
+	if (vlan_mgr_ctx.port_role[port] == FAL_QINQ_EDGE_PORT) {
+		return;
+	}
+
+	if (vlan_mgr_ctx.ctpid != vlan_mgr_ctx.stpid) {
+		return;
+	}
+
+	/*
+	 * If no other VLAN as VP interface is configured on the same physcial
+	 * port, lets set the PPE port as EDGE port
+	 */
+	spin_lock(&vlan_mgr_ctx.lock);
+	list_for_each_entry(v, &vlan_mgr_ctx.list, list) {
+		if ((v->port[portindex] == port) && (v->is_vlan_as_vp_iface)) {
+			to_edge_port = false;
+			break;
+		}
+	}
+	spin_unlock(&vlan_mgr_ctx.lock);
+
+	if (to_edge_port) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, port, FAL_QINQ_EDGE_PORT)) {
+			nss_ppe_vlan_mgr_warn("failed to set %d as edge port\n", port);
+			return;
+		}
+		vlan_mgr_ctx.port_role[port] = FAL_QINQ_EDGE_PORT;
+	}
+}
+
+/*
  * nss_ppe_vlan_mgr_calculate_new_port_role()
  *	check if we can change this port to edge port
  */
@@ -642,22 +681,14 @@ static void nss_ppe_vlan_mgr_deconfigure_vp(struct nss_vlan_pvt *v)
 	}
 
 	/*
-	 * Need to change the port role. While adding
-	 * double VLAN as VP, the role of the port(s) changedvfrom EDGE to CORE.
-	 * So, while removing double VLAN as VP, the role of the port(s) should be
-	 * changed from CORE to EDGE.
+	 * Need to revert the port role.
+	 * While adding VLAN as VP, the role of the port(s) changed from
+	 * EDGE to CORE. So, while removing VLAN as VP, the role of the
+	 * port(s) should be changed back to EDGE.
 	 */
 	for (i = 0; i < NSS_PPE_VLAN_MGR_PORT_MAX; i++) {
 		if (v->port[i]) {
-			if (vlan_mgr_ctx.port_role[v->port[i]] == FAL_QINQ_EDGE_PORT) {
-				continue;
-			}
-
-			if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[i], FAL_QINQ_EDGE_PORT)) {
-				nss_ppe_vlan_mgr_warn("failed to set %d as edge port\n", v->port[i]);
-				continue;
-			}
-			vlan_mgr_ctx.port_role[v->port[i]] = FAL_QINQ_EDGE_PORT;
+			nss_ppe_vlan_mgr_calculate_new_vp_port_role(v->port[i], i);
 		}
 	}
 
@@ -756,6 +787,31 @@ static int nss_ppe_vlan_mgr_alloc_configure_ppe_vp(struct nss_vlan_pvt *v, struc
 	v->is_vlan_as_vp_iface = true;
 
 	/*
+	 * Update the default port role to CORE PORT for both the base port as
+	 * well the VLAN virtual port.
+	 * The base port's role needs to be updated for ingress translation rule
+	 * while the VLAN virtual port's role needs to be updated for the egress
+	 * translation rule.
+	 */
+	if (vlan_mgr_ctx.port_role[v->port[0]] != FAL_QINQ_CORE_PORT) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[0], FAL_QINQ_CORE_PORT)) {
+			nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", dev->name, v->port[0]);
+			return -1;
+		}
+		vlan_mgr_ctx.port_role[v->port[0]] = FAL_QINQ_CORE_PORT;
+		res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
+	}
+
+	if (vlan_mgr_ctx.port_role[v->port[vp_num - 1]] != FAL_QINQ_CORE_PORT) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[vp_num - 1], FAL_QINQ_CORE_PORT)) {
+			nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", dev->name, v->port[vp_num - 1]);
+			return -1;
+		}
+		vlan_mgr_ctx.port_role[v->port[vp_num - 1]] = FAL_QINQ_CORE_PORT;
+		res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
+	}
+
+	/*
 	 * calculate the cvid and svid.
 	 */
 	if (NSS_PPE_VLAN_MGR_TAG_CNT(v) == NSS_PPE_VLAN_MGR_TYPE_DOUBLE) {
@@ -785,32 +841,6 @@ static int nss_ppe_vlan_mgr_alloc_configure_ppe_vp(struct nss_vlan_pvt *v, struc
 
 	nss_ppe_vlan_mgr_trace("%s: v->port[0]: %d, v->port[vp_num - 1]: %d\n", dev->name,
 			v->port[0], v->port[vp_num - 1]);
-	/*
-	 * Update the port role for the double VLAN case for both the base port
-	 * as well the VLAN virtual port.
-	 * The base port's role needs to be updated for ingress translation rule
-	 * while the VLAN virtual port's role needs to be updated for the egress
-	 * translation rule.
-	 */
-	if ((v->ppe_cvid != FAL_VLAN_INVALID) && (v->ppe_svid != FAL_VLAN_INVALID)) {
-		if (vlan_mgr_ctx.port_role[v->port[0]] != FAL_QINQ_CORE_PORT) {
-			if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[0], FAL_QINQ_CORE_PORT)) {
-				nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", dev->name, v->port[0]);
-				return -1;
-			}
-			vlan_mgr_ctx.port_role[v->port[0]] = FAL_QINQ_CORE_PORT;
-			res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
-		}
-
-		if (vlan_mgr_ctx.port_role[v->port[vp_num - 1]] != FAL_QINQ_CORE_PORT) {
-			if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[vp_num - 1], FAL_QINQ_CORE_PORT)) {
-				nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", dev->name, v->port[vp_num - 1]);
-				return -1;
-			}
-			vlan_mgr_ctx.port_role[v->port[vp_num - 1]] = FAL_QINQ_CORE_PORT;
-			res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
-		}
-	}
 	return res;
 }
 
