@@ -718,10 +718,6 @@ bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t handle_id, struct
 		}
 	}
 
-	if(!pq_info->valid) {
-		ppe_qdisc_warning("%px: PPE Qdisc not found for handle_id = %d", dev, handle_id);
-		return false;
-	}
 	return true;
 }
 
