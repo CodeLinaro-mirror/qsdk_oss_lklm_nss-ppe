@@ -250,7 +250,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 				}
 			}
 
-			atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
+			atomic64_inc(&vp_base.base_stats.rx_qdisc_fastxmit_fails);
 			dev_queue_xmit(skb);
 			if (unlikely(qdisc_dev)) {
 				dev_put(qdisc_dev);
