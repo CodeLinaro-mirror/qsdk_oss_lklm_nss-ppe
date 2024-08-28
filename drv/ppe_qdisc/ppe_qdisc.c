@@ -28,8 +28,8 @@
 /*
  * Max number of PRIO bands supported based on level.
  */
-#define PPE_QDISC_PORT_LEVEL_PRIO_BANDS_MAX	2
-#define PPE_QDISC_FLOW_LEVEL_PRIO_BANDS_MAX	4
+#define PPE_QDISC_PORT_LEVEL_PRIO_BANDS_MAX	4
+#define PPE_QDISC_FLOW_LEVEL_PRIO_BANDS_MAX	8
 
 /*
  * Error codes
@@ -659,6 +659,74 @@ uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
 }
 
 /*
+ * ppe_qdisc_queue_info_get()
+ *      Returns the PPE queue info for a given classid.
+ *
+ */
+bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info* pq_info)
+{
+	struct Qdisc *q, *rq = NULL;
+	struct ppe_qdisc *pq, *cursor, *pqr = NULL;
+	bool ret = false;
+	pq_info->valid = false;
+	cursor = NULL;
+
+	if (!classid) {
+		ppe_qdisc_info("%px:class Id is zero", dev);
+		return ret;
+	}
+
+	q = qdisc_lookup(dev, TC_H_MAJ(classid));
+	if (!q) {
+		ppe_qdisc_info("%px:qdisc not found for class:%u", dev, classid);
+		return ret;
+	}
+
+	/*
+	 * Get the root queue
+	 */
+	pq = qdisc_priv(q);
+	if (!pq) {
+		ppe_qdisc_info("%px:PPE qdisc not found for Qdisc:%px with class_id: %u", dev, q, classid);
+		return ret;
+	}
+
+	rq = (pq->flags & PPE_QDISC_FLAG_NODE_ROOT) ? pq->qdisc : dev->qdisc;
+	pqr = qdisc_priv(rq);
+	if (!pqr) {
+		ppe_qdisc_info("%px:PPE root qdisc not found for Qdisc:%px with class_id: %u", dev, rq, classid);
+		return ret;
+	}
+
+	/* 
+	 * Iterate through the list of leaf nodes 
+	 */
+	list_for_each_entry(cursor, &pqr->stats_wq->q_list_head, q_list_element) {
+		if (cursor != NULL) {
+			spin_lock_bh(&cursor->lock);
+			if (cursor->qos_tag != classid && cursor->parent->qos_tag != classid) {
+				spin_unlock_bh(&cursor->lock);
+				continue;
+			}
+			ppe_qdisc_info("%px:PPE QDISC FOUND and details are int_pri = %d\n ucastq_id = %d\n", cursor, cursor->int_pri, cursor->res.q.ucast_qid);
+			pq_info->int_pri = cursor->int_pri;
+			pq_info->ucast_qid = cursor->res.q.ucast_qid;
+			pq_info->port_id = cursor->port_id;
+			pq_info->valid = true;
+			spin_unlock_bh(&cursor->lock);
+			break;
+		}
+	}
+	if (pq_info->valid) {
+		ret = true;
+	} else {
+		ppe_qdisc_warning("%px: PPE Qdisc not found for classid = %d", dev, classid);
+	}
+
+	return ret;
+}
+
+/*
  * ppe_qdisc_module_init()
  *	Loads and initializes PPE qdisc module.
  */
@@ -714,6 +782,7 @@ static int __init ppe_qdisc_module_init(void)
 	}
 
 	ppe_drv_qos_int_pri_callback_register(ppe_qdisc_int_pri_get);
+	ppe_drv_qos_queue_info_callback_register(ppe_qdisc_queue_info_get);
 
 	ppe_qdisc_info("ppe qdisc module initialized");
 	return 0;
@@ -746,6 +815,7 @@ fail1:
 static void __exit ppe_qdisc_module_exit(void)
 {
 	ppe_drv_qos_int_pri_callback_unregister();
+	ppe_drv_qos_queue_info_callback_unregister();
 	ppe_qdisc_stats_work_queue_exit();
 
 	unregister_qdisc(&ppe_pfifo_qdisc_ops);

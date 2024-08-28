@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -146,6 +146,20 @@ struct ppe_drv_qos_scheduler {
 	bool l0_valid;		/**< Level 0 scheduler resources valid? */
 };
 
+
+/**
+ * ppe_drv_qos_info
+ * 	Information about PPE queue
+ */
+ struct ppe_drv_queue_info {
+	 uint8_t int_pri;	/**< Int Pri of PPE queue */
+	 uint8_t port_id;	/**< PPE port id */
+	 uint32_t ucast_qid;	/**< Ucast qid of PPE queue */
+	 uint32_t classid;	/**< Class Id of PPE queue */
+	 bool valid;		/**< Valid flag */
+};
+
+
 /**
  * ppe_drv_qos_res
  *	Information for QoS resources.
@@ -178,6 +192,18 @@ struct ppe_drv_qos_port {
 typedef uint8_t (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32_t tag);
 
 /**
+ * Callback function for getting PPE queue information
+ *
+ * @datatypes
+ * net_device
+ *
+ * @param[in] dev   	      Pointer to the associated net device.
+ * @param[in] classid         Classid of queue for which information needs to be fetched.
+ * @param[out] pq_info        PPE queue information.
+ */
+typedef bool (*ppe_drv_qos_queue_info_callback_t)(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info *pq_info);
+
+/**
  * ppe_drv_qos_int_pri_callback_unregister
  *	API to unregister INT-PRI fetch callback.
  *
@@ -185,6 +211,15 @@ typedef uint8_t (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32
  * None
  */
 void ppe_drv_qos_int_pri_callback_unregister(void);
+
+/**
+ * ppe_drv_qos_queue_info_callback_unregister
+ *	API to unregister PPE queue info fetch callback.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_queue_info_callback_unregister(void);
 
 /**
  * ppe_drv_qos_int_pri_callback_register
@@ -196,6 +231,17 @@ void ppe_drv_qos_int_pri_callback_unregister(void);
  * None
  */
 void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb);
+
+/**
+ * ppe_drv_qos_queue_info_callback_register
+ *	API to register PPE queue info fetch callback.
+ *
+ * @param[in] cb     Pointer to the callback function.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_queue_info_callback_register(ppe_drv_qos_queue_info_callback_t cb);
 
 /**
  * ppe_drv_qos_int_pri_get
@@ -211,6 +257,23 @@ void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb);
  * INT-PRI value
  */
 int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t classid);
+
+/**
+ * ppe_drv_qos_port_id_get
+ *	Returns the PORT-ID value for a class ID.
+ *
+ * @datatypes
+ * struct net_device
+ *
+ * @param[in] dev       Pointer to the associated net dev.
+ * @param[in] classid	Classid correspoding to the ppe queue.
+ * @param[out] pq_info	PPE queue information.	
+ *
+ * @return
+ * PPE PORT-ID value
+ */
+
+bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info* pq_info);
 
 /**
  * ppe_drv_qos_queue_stats_get

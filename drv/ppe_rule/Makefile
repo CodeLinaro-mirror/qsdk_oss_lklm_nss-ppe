@@ -28,6 +28,10 @@ qca-nss-ppe-rule-objs += ppe_acl/ppe_acl.o
 qca-nss-ppe-rule-objs += ppe_acl/ppe_acl_dump.o
 qca-nss-ppe-rule-objs += ppe_acl/ppe_acl_stats.o
 ccflags-y += -DPPE_ACL_DEBUG_LEVEL=3
+
+ifeq ($(PPE_QOS_ENABLED), y)
+qca-nss-ppe-rule-objs += ppe_qos/ppe_qos.o
+ccflags-y += -DPPE_QOS_DEBUG_LEVEL=3
 endif
 
 ifeq ($(PPE_MIRROR_ENABLED), y)

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2014-2017, 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,8 +20,7 @@
 /*
  * TODO: Based on level, this needs be updated
  */
-#define PPE_HTB_MAX_PRIORITY 4
-
+#define PPE_HTB_MAX_PRIORITY 8
 /*
  * ppe_htb_param
  *	PPE HTB class parameters

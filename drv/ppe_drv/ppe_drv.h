@@ -277,6 +277,7 @@ struct ppe_drv {
 	ppe_drv_v6_sync_callback_t ipv6_stats_sync_cb;		/* Callback to call to sync ipv6 statistics */
 	void *ipv6_stats_sync_data;				/* Argument for above callback: ipv6_stats_sync_cb */
 	ppe_drv_qos_int_pri_callback_t int_pri_get_cb;		/* Callback to call to get INT-PRI value */
+	ppe_drv_qos_queue_info_callback_t queue_info_get_cb;		/* Callback to call to get PPE PORT-ID */
 	struct list_head nh_active;			/* List of active nexthops */
 	struct list_head nh_free;			/* List of free nexthops */
 	struct kref ref;				/* Reference count */
