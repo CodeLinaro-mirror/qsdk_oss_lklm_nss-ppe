@@ -107,40 +107,40 @@ EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_register);
 
 /*
  * ppe_drv_qos_queue_info_get()
- *	Returns the INT-PRI value for a class ID.
+ *	Updates the the INT-PRI and unicast PPE queue ID for the given qdisc handle ID or leaf class ID.
  */
-bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info* pq_info)
+bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info* pq_info)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	int8_t ret = 0;
 
 	spin_lock_bh(&p->lock);
 	if (p->queue_info_get_cb) {
-		ret = p->queue_info_get_cb(dev, classid, pq_info);
+		ret = p->queue_info_get_cb(dev, handle_id, pq_info);
 	}
 	spin_unlock_bh(&p->lock);
 
-	ppe_drv_info("%px:get int_pri:%d successful for dev:%px classid:%u", p, pq_info->int_pri, dev, classid);
+	ppe_drv_info("%px:get int_pri:%d successful for dev:%px handle_id:%u", p, pq_info->int_pri, dev, handle_id);
 	return ret;
 }
 EXPORT_SYMBOL(ppe_drv_qos_queue_info_get);
 
 /*
  * ppe_drv_qos_int_pri_get()
- *	Returns the INT-PRI value for a class ID.
+ *	Returns the INT-PRI value for a qdisc handle ID or leaf class ID.
   */
-int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t classid)
+int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t handle_id)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t int_pri = 0;
 
 	spin_lock_bh(&p->lock);
 	if (p->int_pri_get_cb) {
-		int_pri = p->int_pri_get_cb(dev, classid);
+		int_pri = p->int_pri_get_cb(dev, handle_id);
 	}
 	spin_unlock_bh(&p->lock);
 
-	ppe_drv_info("%px:get int_pri:%d successful for dev:%px classid:%u", p, int_pri, dev, classid);
+	ppe_drv_info("%px:get int_pri:%d successful for dev:%px handle_id:%u", p, int_pri, dev, handle_id);
 	return int_pri;
 }
 EXPORT_SYMBOL(ppe_drv_qos_int_pri_get);
