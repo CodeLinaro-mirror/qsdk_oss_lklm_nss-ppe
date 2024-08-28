@@ -15,39 +15,38 @@
 
 
 /*
- * ppe_qos_status
- *	ppe req status
+ * ppe_qos_ret
+ *	PPE QoS return status types.
  */
 typedef enum ppe_qos_ret {
-	PPE_QOS_SUCCESS = 0,	/**< Success */
-	PPE_QOS_FAIL,		/**< Failure*/
+	PPE_QOS_SUCCESS = 0,	/**< Success. */
+	PPE_QOS_CLASS_NON_LEAF,	/**< Class is not a leaf node. */
+	PPE_QOS_INVALID_HANDLE_ID,	/**< Class ID is not present in Qos heirarchy. */
+	PPE_QOS_INVALID_DEV,	/**< Interface not valid. */
+	PPE_QOS_FAIL,		/**< Failure. */
 } ppe_qos_ret_t;
 
 
 /*
  * ppe_qos_req
- *	ppe_qos_req: Send request to get qos data
+ *	PPE QoS request information.
  */
 struct ppe_qos_req {
-	uint8_t int_pri;	/**< int_pri value of PPE Queue */
-	uint8_t port_id;	/**< PPE port id */
-	uint16_t ucast_qid;	/**< unicast queue id of PPE */
-	uint32_t class_id;	/**< classid corresponding to the PPE Queue */
-	char dev[IFNAMSIZ];	/**< Netdevice */
+	uint8_t int_pri;	/**< INT PRI value of PPE Queue. */
+	uint8_t port_id;	/**< PPE port ID. */
+	uint16_t ucast_qid;	/**< Unicast queue number of PPE. */
+	uint32_t handle_id;	/**< Qdisc handle ID/Class ID corresponding to the PPE Queue. */
+	char dev[IFNAMSIZ];	/**< Netdevice. */
 };
 
 /**
  * ppe_qos_get_int_pri_func
- *	Create PPE qos req.
+ *	Function to fetch PPE QoS internal priority for a Qdisc/leaf class.
  *
  *
- * @param[in]
- *
- * dev: netdev given by user
- * class_id: Clas Id for which int_pri is needed
- *
+ * @param[in] req         PPE QoS request's information.
  * @return
- * internal priority assigned to the class
+ * PPE QoS request's return status.
  */
 ppe_qos_ret_t ppe_qos_get_int_pri_func(struct ppe_qos_req *req);
 
