@@ -1535,6 +1535,33 @@ static int ppe_drv_static_dbg_level_handler(struct ctl_table *table,
 }
 
 /*
+ * ppe_drv_get_and_hold_qdisc_netdev()
+ * 	Get qdisc netdev from flow
+ */
+uint32_t ppe_drv_get_qos_tag(int32_t flow_index) {
+	return ppe_drv_flow_get_qos_tag(flow_index);
+}
+EXPORT_SYMBOL(ppe_drv_get_qos_tag);
+
+/*
+ * ppe_drv_get_and_hold_qdisc_netdev()
+ * 	Get qdisc netdev from flow
+ */
+struct net_device *ppe_drv_get_and_hold_qdisc_netdev(int32_t flow_index) {
+	return ppe_drv_flow_get_and_hold_qdisc_netdev(flow_index);
+}
+EXPORT_SYMBOL(ppe_drv_get_and_hold_qdisc_netdev);
+
+/*
+ * ppe_drv_get_qdisc_rule_flag()
+ * 	Get qdisc flags from flow
+ */
+int8_t ppe_drv_get_qdisc_rule_flag(int32_t flow_index) {
+	return ppe_drv_flow_get_qdisc_rule_flag(flow_index);
+}
+EXPORT_SYMBOL(ppe_drv_get_qdisc_rule_flag);
+
+/*
  * ppe_drv_sub
  *	PPE DRV sub directory
  */

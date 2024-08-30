@@ -772,6 +772,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 	struct ppe_drv_top_if_rule *top_rule = &create->top_rule;
 	struct ppe_drv_service_class_rule *sawf_rule = &create->sawf_rule;
 	struct ppe_drv_qos_rule *qos_rule = &create->qos_rule;
+	struct ppe_drv_vp_dl_qdisc_rule *qdisc_rule = &create->qdisc_rule;
 	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
 	uint16_t valid_flags = create->valid_flags;
@@ -1008,6 +1009,16 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_PPPOE_FLOW);
 		}
 
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_FLOW_HOST_QDISC_VALID) {
+			ppe_drv_v6_conn_flow_host_qdisc_info_set(pcf, qdisc_rule->flow_flags,
+					qdisc_rule->flow_class_id, qdisc_rule->flow_netdev);
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID);
+			ppe_drv_trace("%p: valid_flags: 0x%0x, qdisc_flags: 0x%0x"
+					" class_id: %u, netdev name: %s\n", create, valid_flags,
+					pcf->qdisc_info.flags, pcf->qdisc_info.class_id,
+					pcf->qdisc_info.qdisc_xmit_dev->name);
+		}
+
 		/*
 		 * Bridge + VLAN? Make sure both top interfaces are attached to same parent.
 		 * If Interface is set as wanif using "echo eth# > /proc/sys/ppe/bridge_mgr/add_wanif",
@@ -1210,6 +1221,16 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_pppoe_session_id_set(pcr, flow_pppoe_rule->session_id);
 			ppe_drv_v6_conn_flow_pppoe_server_mac_set(pcr, flow_pppoe_rule->server_mac);
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_PPPOE_FLOW);
+		}
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_RETURN_HOST_QDISC_VALID) {
+			ppe_drv_v6_conn_flow_host_qdisc_info_set(pcr, qdisc_rule->return_flags,
+					qdisc_rule->return_class_id, qdisc_rule->return_netdev);
+			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID);
+			ppe_drv_trace("%p: valid_flags: 0x%0x, qdisc_flags: 0x%0x"
+					" class_id: %u, netdev name: %s\n", create, valid_flags,
+					pcr->qdisc_info.flags, pcr->qdisc_info.class_id,
+					pcr->qdisc_info.qdisc_xmit_dev->name);
 		}
 
 		/*
@@ -1558,6 +1579,11 @@ static bool ppe_drv_v6_flow_del(struct ppe_drv_v6_conn_flow *pcf)
 	ppe_drv_flow_v6_stats_update(pcf);
 
 	ppe_drv_flow_stats_clear(flow);
+
+	/*
+	 * Clear the host Qdisc information for the deleted flow
+	 */
+	ppe_drv_flow_v6_host_qdisc_info_del(pcf, flow->index);
 
 	/*
 	 * Update stats

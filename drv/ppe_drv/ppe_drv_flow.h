@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -37,6 +37,26 @@
 #define PPE_DRV_FLOW_HLOS_OVERRIDE_MSDUQ_MAX		0x07
 struct ppe_drv_v4_conn_flow;
 struct ppe_drv_v6_conn_flow;
+
+
+/*
+ * ppe_drv_flow_host_qdisc_info
+ *	Structure for storing the flow based host Qdisc related data
+ */
+struct ppe_drv_flow_host_qdisc_info {
+	uint8_t flags;		/* Flag to indicate the type of xmit API to be used for the flow */
+	uint32_t class_id;			/* Class id to be used for this flow */
+	struct net_device *qdisc_xmit_dev;	/* The Qdisc net device to be used for this flow */
+	struct rcu_head rcu;			/* RCU head */
+};
+
+/*
+ * ppe_drv_flow_table_info
+ *	Structure to store flow based information
+ */
+struct ppe_drv_flow_table_info {
+	struct ppe_drv_flow_host_qdisc_info __rcu **qdisc_info;	/* Flow based host Qdisc information */
+};
 
 /*
  * ppe_drv_flow_sawf_metadata
@@ -113,6 +133,8 @@ void ppe_drv_flow_dump(struct ppe_drv_flow *pf);
 void ppe_drv_flow_stats_clear(struct ppe_drv_flow *pf);
 void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf);
 void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf);
+void ppe_drv_flow_v4_host_qdisc_info_del(struct ppe_drv_v4_conn_flow *pcf, uint32_t flow_idx);
+void ppe_drv_flow_v6_host_qdisc_info_del(struct ppe_drv_v6_conn_flow *pcf, uint32_t flow_idx);
 
 bool ppe_drv_flow_v4_qos_clear(struct ppe_drv_flow *pf);
 bool ppe_drv_flow_v4_qos_set(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_flow *pf);
@@ -128,6 +150,10 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf,
 struct ppe_drv_flow *ppe_drv_flow_v6_get(struct ppe_drv_v6_5tuple *tuple);
 struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf,
 		struct ppe_drv_nexthop *nh, struct ppe_drv_host *host, bool entry_valid);
+
+int8_t ppe_drv_flow_get_qdisc_rule_flag(int32_t flow_index);
+struct net_device *ppe_drv_flow_get_and_hold_qdisc_netdev(int32_t flow_index);
+uint32_t ppe_drv_flow_get_qos_tag(int32_t flow_index);
 
 void ppe_drv_flow_entries_free(struct ppe_drv_flow *flow);
 struct ppe_drv_flow *ppe_drv_flow_entries_alloc(void);

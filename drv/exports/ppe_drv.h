@@ -74,6 +74,26 @@
 		/**< MAC address for the return interface is valid. */
 
 /*
+ * Host Qdisc classification id
+ */
+#define PPE_DRV_HOST_QDISC_CLASS_ID_DEF_VAL		0x0
+
+/*
+ * Host Qdisc flags
+ */
+#define PPE_DRV_HOST_QDISC_INVALID			0x0
+#define PPE_DRV_HOST_QDISC_DEV_FAST_XMIT_VP		0x1
+#define PPE_DRV_HOST_QDISC_DEV_QUEUE_XMIT		0x2
+#define PPE_DRV_HOST_QDISC_DEV_FAST_XMIT_QDISC		0x4
+
+/*
+ * Qdisc direction flag
+ */
+#define PPE_DRV_QDISC_DIR_FLOW_VALID		0x01	/**< Qdisc rules are for flow direction. */
+#define PPE_DRV_QDISC_DIR_RETURN_VALID		0x02	/**< Qdisc rules are for return direction. */
+#define PPE_DRV_QDISC_DIR_INVALID		0x04	/**< Qdisc rules are for direction is invalid. */
+
+/*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
  */
@@ -205,6 +225,25 @@ struct ppe_drv_qos_rule {
 	uint8_t return_int_pri;		/**< PPE INT_PRI corresponding to return_qos_tag when PPE Qdisc is configured. */
 	uint8_t qos_valid_flags;	/**< FLAGS to identify PPE QOS. */
 	uint8_t reserved[1];		/**< Reserved; padding for alignment. */
+};
+
+/**
+ * ppe_drv_vp_dl_qdisc_rule
+ * 	Information for Linux Qdisc rules.
+ */
+struct ppe_drv_vp_dl_qdisc_rule {
+	uint8_t flow_flags;
+		/**< Flow direction Qdisc flags to understand the how many qdiscs are in hierarchy. */
+	uint8_t return_flags;
+		/**< Return direction Qdisc flags to understand the how many qdiscs are in hierarchy. */
+	uint32_t flow_class_id;
+		/**< Flow direction QoS tag. */
+	uint32_t return_class_id;
+		/**< Return direction QoS tag. */
+	struct net_device *flow_netdev;
+		/**< Flow direction Qdisc net device where the packets should be transmitted. */
+	struct net_device *return_netdev;
+		/**< Return direction Qdisc net device where the packets should be transmitted. */
 };
 
 /**
@@ -605,12 +644,54 @@ ppe_drv_ret_t ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id);
 
 /**
  * ppe_drv_ds_map_free
- *	Provides unmapping of node with enqueue vp and queue.
+ *	Provides unmapping of node with enqueue VP and queue.
  *
- * @param[in] node_id	node id.
+ * @param[in] node_id	Node ID.
  *
  * @return
  * Success or error code.
  */
 ppe_drv_ret_t ppe_drv_ds_map_free(uint8_t node_id);
+
+/**
+ * ppe_drv_get_qos_tag
+ * 	Returns QoS tag
+ *
+ * @datatypes
+ * int32_t
+ *
+ * @param[in] flow_index	Flow index.
+ *
+ * @return
+ * Net device
+ */
+uint32_t ppe_drv_get_qos_tag(int32_t flow_index);
+
+/**
+ * ppe_drv_get_and_hold_qdisc_netdev
+ *	Holds and returns netdev of flow index.
+ *
+ * @datatypes
+ * int32_t
+ *
+ * @param[in] flow_index	Flow index.
+ *
+ * @return
+ * Net device
+ */
+struct net_device *ppe_drv_get_and_hold_qdisc_netdev(int32_t flow_index);
+
+/**
+ * ppe_drv_get_qdisc_rule_flag
+ *	Returns flags for qdisc of flow index.
+ *
+ * @datatypes
+ * int32_t
+ *
+ * @param[in] flow_index	Flow index.
+ *
+ * @return
+ * Qdisc rule flag
+ */
+int8_t ppe_drv_get_qdisc_rule_flag(int32_t flow_index);
 #endif /* _PPE_DRV_H_ */

@@ -63,6 +63,8 @@
 #define PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_DS	0x0800  /**< Wi-Fi DS flow fields are valid. */
 #define PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS	0x1000  /**< Wi-Fi DS return fields are valid. */
 #define PPE_DRV_V4_VALID_FLAG_WIFI_TAG		0x2000  /**< Wi-Fi valid flag. */
+#define PPE_DRV_V4_VALID_FLAG_FLOW_HOST_QDISC_VALID	0x4000	/**< Qdisc info is valid in flow direction. */
+#define PPE_DRV_V4_VALID_FLAG_RETURN_HOST_QDISC_VALID	0x8000	/**< Qdisc info is valid in return direction. */
 
 #define PPE_DRV_V4_MAX_CONN_COUNT		2048
 
@@ -116,6 +118,7 @@ struct ppe_drv_v4_rule_create {
 	struct ppe_drv_service_class_rule sawf_rule;	/**< Service class related information. */
 	struct ppe_drv_acl_policer_rule ap_rule;	/**< ACL/Policer rule ID information. */
 	struct ppe_drv_wifi_mdata_rule wifi_rule;	/**< Wi-Fi metadata rule ID information. */
+	struct ppe_drv_vp_dl_qdisc_rule qdisc_rule;	/**< Qdisc rule information for VP DL flow. */
 };
 
 /**
