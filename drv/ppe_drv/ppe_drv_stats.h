@@ -171,6 +171,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_destroy_fail_acl;		/* No of v4 delete failure due to ACL unlinking */
 
 	atomic64_t v4_create_fail_invalid_ds_node;	/* Create failed due to invalid DS node */
+	atomic64_t v4_create_fail_uni_inner_rule; /* Create failed due to unidirectional inner rule push */
 
 	atomic64_t v6_create_req;		/* No of v6 create requests */
 	atomic64_t v6_create_fail;		/* No of v6 create failure */
@@ -245,6 +246,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_fail_offload_disabled;	/* No of v6 create request where offload is disabled */
 
 	atomic64_t v6_create_fail_invalid_ds_node;	/* Create failed due to invalid DS node */
+	atomic64_t v6_create_fail_uni_inner_rule; /* Create failed due to unidirectional inner rule push */
 };
 
 /*
