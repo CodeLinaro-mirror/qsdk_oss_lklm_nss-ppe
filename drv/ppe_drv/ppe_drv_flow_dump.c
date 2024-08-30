@@ -226,6 +226,23 @@ int ppe_flow_dump_v6_get(struct ppe_drv_flow_dump_instance *fdi, struct list_hea
 				goto ppe_drv_flow_dump_write_error;
 			}
 
+			if (pcf->qdisc_info.flags != PPE_DRV_HOST_QDISC_INVALID) {
+				if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_flags",
+								"%u", pcf->qdisc_info.flags))) {
+					goto ppe_drv_flow_dump_write_error;
+				}
+
+				if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_netdev_name",
+								"%s", pcf->qdisc_info.qdisc_xmit_dev->name))) {
+					goto ppe_drv_flow_dump_write_error;
+				}
+
+				if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_class_id",
+								"%u", pcf->qdisc_info.class_id))) {
+					goto ppe_drv_flow_dump_write_error;
+				}
+			}
+
 			if (pcf->in_port_if) {
 
 				if ((pcf->in_port_if->flags & PPE_DRV_IFACE_FLAG_VALID) == PPE_DRV_IFACE_FLAG_VALID) {
@@ -370,6 +387,23 @@ int ppe_flow_dump_v6_get(struct ppe_drv_flow_dump_instance *fdi, struct list_hea
 
 				if ((result = ppe_drv_flow_dump_write(fdi, "ppe_rx_port", "%u", pcr->rx_port->port))) {
 					goto ppe_drv_flow_dump_write_error;
+				}
+
+				if (pcr->qdisc_info.flags != PPE_DRV_HOST_QDISC_INVALID) {
+					if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_flags",
+									"%u", pcr->qdisc_info.flags))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
+
+					if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_netdev_name",
+									"%s", pcr->qdisc_info.qdisc_xmit_dev->name))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
+
+					if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_class_id",
+									"%u", pcr->qdisc_info.class_id))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
 				}
 
 				if (pcr->in_port_if) {
@@ -560,6 +594,23 @@ int ppe_flow_dump_v4_get(struct ppe_drv_flow_dump_instance *fdi, struct list_hea
 				goto ppe_drv_flow_dump_write_error;
 			}
 
+			if (pcf_v4->qdisc_info.flags != PPE_DRV_HOST_QDISC_INVALID) {
+				if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_flags",
+								"%u", pcf_v4->qdisc_info.flags))) {
+					goto ppe_drv_flow_dump_write_error;
+				}
+
+				if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_netdev_name",
+								"%s", pcf_v4->qdisc_info.qdisc_xmit_dev->name))) {
+					goto ppe_drv_flow_dump_write_error;
+				}
+
+				if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_class_id",
+								"%u", pcf_v4->qdisc_info.class_id))) {
+					goto ppe_drv_flow_dump_write_error;
+				}
+			}
+
 			if (pcf_v4->in_port_if) {
 
 				if ((pcf_v4->in_port_if->flags & PPE_DRV_IFACE_FLAG_VALID) == PPE_DRV_IFACE_FLAG_VALID) {
@@ -720,6 +771,23 @@ int ppe_flow_dump_v4_get(struct ppe_drv_flow_dump_instance *fdi, struct list_hea
 
 				if ((result = ppe_drv_flow_dump_write(fdi, "ppe_rx_port", "%u", pcr_v4->rx_port->port))) {
 					goto ppe_drv_flow_dump_write_error;
+				}
+
+				if (pcr_v4->qdisc_info.flags != PPE_DRV_HOST_QDISC_INVALID) {
+					if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_flags",
+									"%u", pcr_v4->qdisc_info.flags))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
+
+					if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_netdev_name",
+									"%s", pcr_v4->qdisc_info.qdisc_xmit_dev->name))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
+
+					if ((result = ppe_drv_flow_dump_write(fdi, "ppe_host_qdisc_class_id",
+									"%u", pcr_v4->qdisc_info.class_id))) {
+						goto ppe_drv_flow_dump_write_error;
+					}
 				}
 
 				if (pcr_v4->in_port_if) {

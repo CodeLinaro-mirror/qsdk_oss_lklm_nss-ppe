@@ -491,6 +491,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_METADATA_TO_ENQ_VP_FAIL,		/**< Metadata to enqueue vport fetch failed */
 	PPE_DRV_RET_ENQ_VP_QID_RESET_FAIL,		/**< Enqueue vport queue id reset failure */
 	PPE_DRV_RET_ENQ_VP_DISABLE_FAIL,		/**< Enqueue vport disable failed */
+	PPE_DRV_RET_HOST_QDISC_CFG_FAIL,		/**< Host Qdisc configuration failed. */
 } ppe_drv_ret_t;
 
 /**
