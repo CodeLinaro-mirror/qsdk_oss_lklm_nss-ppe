@@ -5,7 +5,11 @@ ccflags-y += -DPPE_DRV_BUILD_ID="$(BUILD_ID)"
 ccflags-y += -Wall -Werror
 
 ifeq ($(PPE_RULE_IPQ53XX), y)
-ccflags-y += -DNSS_PPE_RULE_IPQ53XX
+ccflags-y += -DPPE_RULE_FLOW_TBL_POLICER
+endif
+
+ifeq ($(PPE_RULE_IPQ54XX), y)
+ccflags-y += -DPPE_RULE_FLOW_TBL_POLICER
 endif
 
 ifeq ($(PPE_LOWMEM_PROFILE_16M), y)

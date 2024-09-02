@@ -44,6 +44,8 @@
 #define PPE_DRV_PHY_ETH_PORT_START	1	/* Physical eth port start with port 1 */
 #ifdef NSS_PPE_IPQ53XX
 #define PPE_DRV_PHY_ETH_PORT_MAX	2	/* PPE supports 2 physical ports 1-2 for IPQ53XX */
+#elif defined(NSS_PPE_IPQ54XX)
+#define PPE_DRV_PHY_ETH_PORT_MAX	3	/* PPE supports 3 physical ports 1-3 for IPQ54XX */
 #else
 #define PPE_DRV_PHY_ETH_PORT_MAX	6	/* PPE supports 6 physical ports 1-6 for Others */
 #endif

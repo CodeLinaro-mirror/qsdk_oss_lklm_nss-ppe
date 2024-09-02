@@ -4,6 +4,9 @@ ccflags-y := -I$(obj)/../exports -I$(obj)/..
 ccflags-y += -DPPE_DRV_BUILD_ID="$(BUILD_ID)"
 ifeq ($(SoC),$(filter $(SoC),ipq53xx))
 ccflags-y += -DNSS_PPE_IPQ53XX
+ccflags-y += -DPPE_DRV_BRIDGE_NEXT_HOP
+ccflags-y += -DPPE_DRV_SRC_INTERFACE_CHECK
+ccflags-y += -DPPE_DRV_FLOW_TBL_POLICER
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq95xx))
@@ -68,6 +71,10 @@ ccflags-y += -DPPE_DRV_FLOW_COOKIE_SUPPORT
 ccflags-y += -DPPE_DRV_NPTV6_HW_SUPPORT
 ccflags-y += -DPPE_DRV_RPS_HASH_SELECT
 ccflags-y += -DPPE_DRV_PKT_PADDING_STRIP
+ccflags-y += -DPPE_DRV_BRIDGE_NEXT_HOP
+ccflags-y += -DPPE_DRV_SRC_INTERFACE_CHECK
+ccflags-y += -DPPE_DRV_FLOW_TBL_POLICER
+ccflags-y += -DNSS_PPE_IPQ54XX
 qca-nss-ppe-objs += ppe_drv_nptv6.o
 endif
 
