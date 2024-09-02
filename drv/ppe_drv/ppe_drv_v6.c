@@ -1114,7 +1114,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC);
 		}
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_SRC_INTERFACE_CHECK
 		/*
 		 * Check source interface based on rule flags.
 		 */
@@ -1351,7 +1351,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC);
 		}
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_SRC_INTERFACE_CHECK
 		/*
 		 * Check source interface based on rule flags.
 		 */
@@ -1773,7 +1773,7 @@ static struct ppe_drv_flow *ppe_drv_v6_flow_add(struct ppe_drv_v6_conn_flow *pcf
 	struct ppe_drv_host *host = NULL;
 	struct ppe_drv_port *tx_port = NULL;
 	struct ppe_drv_port *rx_port = NULL;
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 	uint8_t vlan_cnt = 0;
 	struct ppe_drv_vsi *eg_top_vsi = NULL;
 	struct ppe_drv_port *pp_tx = NULL;
@@ -1796,7 +1796,7 @@ static struct ppe_drv_flow *ppe_drv_v6_flow_add(struct ppe_drv_v6_conn_flow *pcf
 		}
 	}
 
-#if defined(NSS_PPE_IPQ53XX)
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 	/*
 	 * Fetch a new nexthop entry for bridged flows.
 	 */

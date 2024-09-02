@@ -587,7 +587,7 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8
 	return true;
 }
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_FLOW_TBL_POLICER
 /*
  * ppe_drv_flow_v6_policer_get()
  *	Find the Policer get associated with a flow
@@ -1064,7 +1064,9 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 
 #ifdef NSS_PPE_IPQ53XX
 	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_TREE_ID;
+#endif
 
+#ifdef PPE_DRV_FLOW_TBL_POLICER
 	if (!ppe_drv_flow_v6_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
 		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
 		return NULL;
@@ -1129,7 +1131,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 		flow_cfg.fwd_type = FAL_FLOW_BRIDGE;
 		ppe_drv_trace("%p: flow_tbl[fwd_type]: L2: %u", pcf, FAL_FLOW_BRIDGE);
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 		/*
 		 * VLAN tag addition from NEXTHOP_TBL for flow based bridging.
 		 * With VLAN tagging capability from flow table for bridge flows,
@@ -1561,7 +1563,7 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8
 	return true;
 }
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_FLOW_TBL_POLICER
 /*
  * ppe_drv_flow_v4_policer_get()
  *	Find the Policer get associated with a flow
@@ -1998,7 +2000,9 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 
 #ifdef NSS_PPE_IPQ53XX
 	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_TREE_ID;
+#endif
 
+#ifdef PPE_DRV_FLOW_TBL_POLICER
 	if (!ppe_drv_flow_v4_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
 		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
 		return NULL;
@@ -2079,7 +2083,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		flow_cfg.fwd_type = FAL_FLOW_BRIDGE;
 		ppe_drv_trace("%p: flow_tbl[fwd_type]: L2: %u", pcf, FAL_FLOW_BRIDGE);
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 		/*
 		 * VLAN tag addition from NEXTHOP_TBL for flow based bridging.
 		 * With VLAN tagging capability from flow table for bridge flows,

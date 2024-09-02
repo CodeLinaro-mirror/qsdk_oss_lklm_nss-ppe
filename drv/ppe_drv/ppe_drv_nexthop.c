@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -569,7 +569,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 	return nh;
 }
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 /*
  * ppe_drv_nexthop_v6_bridge_flow_get_and_ref()
  *	Allocate nexthop entry for bridge flow if it does not exist and returns

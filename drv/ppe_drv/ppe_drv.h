@@ -235,6 +235,8 @@ enum ppe_drv_static_dbg_level {
 
 #if defined(NSS_PPE_IPQ53XX)
 #define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3
+#elif defined(NSS_PPE_IPQ54XX)
+#define PPE_DRV_PORT_OFFLOAD_MAX_VAL            0x7
 #elif defined(NSS_PPE_IPQ95XX)
 #define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3f
 #else

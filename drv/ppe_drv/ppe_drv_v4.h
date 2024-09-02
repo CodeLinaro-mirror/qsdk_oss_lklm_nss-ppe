@@ -50,7 +50,7 @@
 #define PPE_DRV_V4_CONN_FLAG_BRIDGE_VLAN_NETDEV 0x00001000
 					/* Flow is via bridge VLAN netdev */
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_SRC_INTERFACE_CHECK
 #define PPE_DRV_V4_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK 0x00001000
 					/* source interface check */
 #endif
