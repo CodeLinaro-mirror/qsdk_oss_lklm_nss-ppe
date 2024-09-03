@@ -677,26 +677,25 @@ uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
 
 /*
  * ppe_qdisc_queue_info_get()
- *      Returns the PPE queue info for a given classid.
+ *      Returns the PPE queue info for a given qdisc handle ID/leaf class ID.
  *
  */
-bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info* pq_info)
+bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info* pq_info)
 {
 	struct Qdisc *q, *rq = NULL;
 	struct ppe_qdisc *pq, *cursor, *pqr = NULL;
-	bool ret = false;
 	pq_info->valid = false;
 	cursor = NULL;
 
-	if (!classid) {
+	if (!handle_id) {
 		ppe_qdisc_info("%px:class Id is zero", dev);
-		return ret;
+		return false;
 	}
 
-	q = qdisc_lookup(dev, TC_H_MAJ(classid));
+	q = qdisc_lookup(dev, TC_H_MAJ(handle_id));
 	if (!q) {
-		ppe_qdisc_info("%px:qdisc not found for class:%u", dev, classid);
-		return ret;
+		ppe_qdisc_warning("%px:Qdisc not found with handle:%u", dev, handle_id);
+		return false;
 	}
 
 	/*
@@ -704,43 +703,43 @@ bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t classid, struct p
 	 */
 	pq = qdisc_priv(q);
 	if (!pq) {
-		ppe_qdisc_info("%px:PPE qdisc not found for Qdisc:%px with class_id: %u", dev, q, classid);
-		return ret;
+		ppe_qdisc_warning("%px:PPE qdisc not found for Qdisc:%px with handle_id: %u", dev, q, handle_id);
+		return false;
 	}
 
 	rq = (pq->flags & PPE_QDISC_FLAG_NODE_ROOT) ? pq->qdisc : dev->qdisc;
 	pqr = qdisc_priv(rq);
 	if (!pqr) {
-		ppe_qdisc_info("%px:PPE root qdisc not found for Qdisc:%px with class_id: %u", dev, rq, classid);
-		return ret;
+		ppe_qdisc_warning("%px:PPE root qdisc not found for Qdisc:%px with handle_id: %u", dev, rq, handle_id);
+		return false;
 	}
 
-	/* 
-	 * Iterate through the list of leaf nodes 
+	/*
+	 * Iterate through the list of leaf nodes
 	 */
 	list_for_each_entry(cursor, &pqr->stats_wq->q_list_head, q_list_element) {
 		if (cursor != NULL) {
 			spin_lock_bh(&cursor->lock);
-			if (cursor->qos_tag != classid && cursor->parent->qos_tag != classid) {
+			if (cursor->qos_tag != handle_id && cursor->parent->qos_tag != handle_id) {
 				spin_unlock_bh(&cursor->lock);
 				continue;
 			}
-			ppe_qdisc_info("%px:PPE QDISC FOUND and details are int_pri = %d\n ucastq_id = %d\n", cursor, cursor->int_pri, cursor->res.q.ucast_qid);
 			pq_info->int_pri = cursor->int_pri;
 			pq_info->ucast_qid = cursor->res.q.ucast_qid;
 			pq_info->port_id = cursor->port_id;
 			pq_info->valid = true;
 			spin_unlock_bh(&cursor->lock);
+			ppe_qdisc_info("%px:PPE QDISC FOUND and details are int_pri = %d\n ucastq_id = %d\n",
+					pq, pq_info->int_pri, pq_info->ucast_qid);
 			break;
 		}
 	}
-	if (pq_info->valid) {
-		ret = true;
-	} else {
-		ppe_qdisc_warning("%px: PPE Qdisc not found for classid = %d", dev, classid);
-	}
 
-	return ret;
+	if(!pq_info->valid) {
+		ppe_qdisc_warning("%px: PPE Qdisc not found for handle_id = %d", dev, handle_id);
+		return false;
+	}
+	return true;
 }
 
 /*
