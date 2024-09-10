@@ -63,17 +63,18 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_L2_TUNNEL_EXCEPTION = 23,	/* Service code to allow decapsulated VXLAN/GRE tunnel exception. */
 	PPE_DRV_SC_NOEDIT_PRIORITY_SET = 24, /* Service code to prioritize packets without editing and redirection */
 	PPE_DRV_SC_NOEDIT_RULE = 25, 	/* Service code to redirect packets without editing */
+	PPE_DRV_SC_FMAC_BYPASS = 26,		/* Service code to bypasses fake mac check in PPE */
 
-	PPE_DRV_SC_DS_MLO_LINK_BR_NODE0 = 26, /* Service code when bridge flow in DS with PPEDS Node 0 allocated for MLO Link */
-	PPE_DRV_SC_DS_MLO_LINK_BR_NODE1 = 27, /* Service code when bridge flow in DS with PPEDS Node 1 allocated for MLO Link */
-	PPE_DRV_SC_DS_MLO_LINK_BR_NODE2 = 28, /* Service code when bridge flow in DS with PPEDS Node 2 allocated for MLO Link */
-	PPE_DRV_SC_DS_MLO_LINK_BR_NODE3 = 29, /* Service code when bridge flow in DS with PPEDS Node 3 allocated for MLO Link */
-	PPE_DRV_SC_DS_MLO_LINK_RO_NODE0 = 30, /* Service code when routed flow in DS with PPEDS Node 0 allocated for MLO Link */
-	PPE_DRV_SC_DS_MLO_LINK_RO_NODE1 = 31, /* Service code when routed flow in DS with PPEDS Node 1 allocated for MLO Link */
-	PPE_DRV_SC_DS_MLO_LINK_RO_NODE2 = 32, /* Service code when routed flow in DS with PPEDS Node 2 allocated for MLO Link */
-	PPE_DRV_SC_DS_MLO_LINK_RO_NODE3 = 33, /* Service code when routed flow in DS with PPEDS Node 3 allocated for MLO Link */
-	PPE_DRV_SC_LOOPBACK_RING = 34, 	 /* Service code for EDMA LOOPBACK ring */
-	PPE_DRV_SC_LOOPBACK_RING_NEXT = 35, 	 /* Next Service code for EDMA LOOPBACK ring */
+	PPE_DRV_SC_DS_MLO_LINK_BR_NODE0 = 27, /* Service code when bridge flow in DS with PPEDS Node 0 allocated for MLO Link */
+	PPE_DRV_SC_DS_MLO_LINK_BR_NODE1 = 28, /* Service code when bridge flow in DS with PPEDS Node 1 allocated for MLO Link */
+	PPE_DRV_SC_DS_MLO_LINK_BR_NODE2 = 29, /* Service code when bridge flow in DS with PPEDS Node 2 allocated for MLO Link */
+	PPE_DRV_SC_DS_MLO_LINK_BR_NODE3 = 30, /* Service code when bridge flow in DS with PPEDS Node 3 allocated for MLO Link */
+	PPE_DRV_SC_DS_MLO_LINK_RO_NODE0 = 31, /* Service code when routed flow in DS with PPEDS Node 0 allocated for MLO Link */
+	PPE_DRV_SC_DS_MLO_LINK_RO_NODE1 = 32, /* Service code when routed flow in DS with PPEDS Node 1 allocated for MLO Link */
+	PPE_DRV_SC_DS_MLO_LINK_RO_NODE2 = 33, /* Service code when routed flow in DS with PPEDS Node 2 allocated for MLO Link */
+	PPE_DRV_SC_DS_MLO_LINK_RO_NODE3 = 34, /* Service code when routed flow in DS with PPEDS Node 3 allocated for MLO Link */
+	PPE_DRV_SC_LOOPBACK_RING = 35, 	 /* Service code for EDMA LOOPBACK ring */
+	PPE_DRV_SC_LOOPBACK_RING_NEXT = 36, 	 /* Next Service code for EDMA LOOPBACK ring */
 
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
