@@ -337,6 +337,11 @@ static inline ppe_vp_status_t __ppe_vp_cfg_update(ppe_vp_num_t vp_num, struct pp
 		return PPE_VP_STATUS_UPDATE_FAIL;
 	}
 
+	/*
+	 * Store vp user mode for ppe_vp stats.
+	 */
+	vp->vp_user_mode = info.usr_type;
+
 	rcu_read_unlock();
 	ppe_vp_info("%px: vp %px at port num %u, updated", pvb, vp, vp_num);
 
@@ -551,6 +556,10 @@ static struct ppe_vp *__ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai
 		vp->dst_cb_data = vpai->dst_cb_data;
 	}
 
+	/*
+	 * Store VP user mode for vp stats.
+	 */
+	vp->vp_user_mode = vpai->usr_type;
 	spin_unlock_bh(&vp->lock);
 
 	return vp;
