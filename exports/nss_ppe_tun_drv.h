@@ -118,6 +118,17 @@ uint16_t ppe_tun_get_active_tun_cnt(void);
 bool ppe_tun_setup(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr);
 
 /**
+ * ppe_tun_destroy()
+ *	Destroy the PPE tunnel
+ *
+ * @param[in] dev      net device
+ *
+ * @return
+ * Status of operation
+ */
+bool ppe_tun_destroy(struct net_device *dev);
+
+/**
  * ppe_tun_free()
  *	Free a struct ppe_tun
  *

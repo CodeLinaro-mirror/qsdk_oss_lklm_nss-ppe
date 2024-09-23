@@ -369,7 +369,7 @@ static void ppe_acl_rule_to_slice_type(struct ppe_acl_rule_match_one *r, ppe_acl
 	case PPE_ACL_RULE_MATCH_TYPE_L3_1ST_FRAG:
 	case PPE_ACL_RULE_MATCH_TYPE_IP_LEN:
 	case PPE_ACL_RULE_MATCH_TYPE_TTL_HOPLIMIT:
-	case PPE_ACL_RULE_MATCH_TYPE_DSCP_TC:
+	case PPE_ACL_RULE_MATCH_TYPE_TOS_TC:
 	case PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR:
 	case PPE_ACL_RULE_MATCH_TYPE_TCP_FLAG:
 		slice_type[PPE_DRV_ACL_SLICE_TYPE_IP_MISC] = true;
@@ -737,14 +737,14 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		slice->valid = true;
 		break;
 
-	case PPE_ACL_RULE_MATCH_TYPE_DSCP_TC:
+	case PPE_ACL_RULE_MATCH_TYPE_TOS_TC:
 		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_IP_MISC];
 		ip = &slice->rule.ip;
 
-		ip->l3_dscp_tc = r->rule.dscp_tc.l3_dscp_tc;
-		memset(&ip->l3_dscp_tc_mask, 0xff, sizeof(ip->l3_dscp_tc_mask));
-		if (r->rule_flags & PPE_ACL_RULE_FLAG_DSCP_TC_MASK) {
-			ip->l3_dscp_tc_mask = r->rule.dscp_tc.l3_dscp_tc_mask;
+		ip->l3_tos_tc = r->rule.tos_tc.l3_tos_tc;
+		memset(&ip->l3_tos_tc_mask, 0xff, sizeof(ip->l3_tos_tc_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_TOS_TC_MASK) {
+			ip->l3_tos_tc_mask = r->rule.tos_tc.l3_tos_tc_mask;
 		}
 
 		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
@@ -756,7 +756,7 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		}
 
 		slice->sub_rule_cnt++;
-		slice->flags |= PPE_DRV_ACL_IP_MISC_FLAG_DSCPTC;
+		slice->flags |= PPE_DRV_ACL_IP_MISC_FLAG_TOS_TC;
 		slice->type = PPE_DRV_ACL_SLICE_TYPE_IP_MISC;
 		slice->valid = true;
 		break;
@@ -1301,9 +1301,9 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_STAG_PCP;
 	}
 
-	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_DSCP_TC_CHANGE_EN) {
-		acl_action->dscp_tc = r_action->dscp_tc;
-		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_DSCP_TC;
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_TOS_TC_CHANGE_EN) {
+		acl_action->tos_tc = r_action->tos_tc;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_TOS_TC;
 	}
 
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_CVID_CHANGE_EN) {
@@ -2040,9 +2040,9 @@ static bool ppe_acl_rule_exist(struct ppe_acl *acl)
 					}
 				}
 
-				if (slice->flags & PPE_DRV_ACL_IP_MISC_FLAG_DSCPTC) {
-					if (!((ae_ip->l3_dscp_tc == ip->l3_dscp_tc)
-						&& (ae_ip->l3_dscp_tc_mask == ip->l3_dscp_tc_mask))) {
+				if (slice->flags & PPE_DRV_ACL_IP_MISC_FLAG_TOS_TC) {
+					if (!((ae_ip->l3_tos_tc == ip->l3_tos_tc)
+						&& (ae_ip->l3_tos_tc_mask == ip->l3_tos_tc_mask))) {
 						goto next_entry;
 					}
 				}

@@ -630,19 +630,19 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 
 			break;
 
-		case PPE_ACL_RULE_MATCH_TYPE_DSCP_TC:
-			if ((result = ppe_acl_dump_prefix_add(adi, "dscp_tc"))) {
+		case PPE_ACL_RULE_MATCH_TYPE_TOS_TC:
+			if ((result = ppe_acl_dump_prefix_add(adi, "tos_tc"))) {
 				goto error;
 			}
 
 			if ((result = ppe_acl_dump_write(adi, "val", "%d",
-							r->rule.dscp_tc.l3_dscp_tc))) {
+							r->rule.tos_tc.l3_tos_tc))) {
 				goto error;
 			}
 
-			if (r->rule_flags & PPE_ACL_RULE_FLAG_DSCP_TC_MASK) {
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_TOS_TC_MASK) {
 				if ((result = ppe_acl_dump_write(adi, "mask", "%d",
-							r->rule.dscp_tc.l3_dscp_tc_mask))) {
+							r->rule.tos_tc.l3_tos_tc_mask))) {
 					goto error;
 				}
 			}
@@ -1100,8 +1100,8 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 		}
 	}
 
-	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_DSCP_TC_CHANGE_EN) {
-		if ((result = ppe_acl_dump_write(adi, "dscp_tc", "%d", r_action->dscp_tc))) {
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_TOS_TC_CHANGE_EN) {
+		if ((result = ppe_acl_dump_write(adi, "tos_tc", "%d", r_action->tos_tc))) {
 			goto error;
 		}
 	}

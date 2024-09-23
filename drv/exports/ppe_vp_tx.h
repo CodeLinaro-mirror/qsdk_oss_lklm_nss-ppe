@@ -37,3 +37,17 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb);
  * true if packet is consumed by the API or false if the packet is not consumed.
  */
 bool ppe_vp_tx_to_ppe_by_dev(struct net_device *dev, struct sk_buff *skb);
+
+/*
+ * ppe_vp_tx_to_vp()
+ *      API for transmitting the packets to VP in PPE.
+ *
+ * @param[IN] vp_num   VP num corresponding to its interface.
+ * @param[IN] skb  Socket buffer to be enqueued.
+ *
+ * @return
+ * true if packet is successfully forwarded to VP in PPE, false if its dropped.
+ */
+bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb);
+
+

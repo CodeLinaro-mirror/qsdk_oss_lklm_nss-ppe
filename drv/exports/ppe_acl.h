@@ -50,16 +50,16 @@ typedef enum ppe_acl_rule_match_type {
 	PPE_ACL_RULE_MATCH_TYPE_PPPOE_SESS,		/**< PPPOE session rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_ETHER_TYPE,		/**< Ether type rule */
 	PPE_ACL_RULE_MATCH_TYPE_L3_1ST_FRAG,		/**< First IP fragment rule type. */
-	PPE_ACL_RULE_MATCH_TYPE_IP_LEN,		/**< IP length rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_IP_LEN,			/**< IP length rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_TTL_HOPLIMIT,		/**< TTL/hop-limit rule type. */
-	PPE_ACL_RULE_MATCH_TYPE_DSCP_TC,		/**< DSCP/traffic-class rule type. */
-	PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR,	/**< L4 proto rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_TOS_TC,			/**< TOS/traffic-class rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR,		/**< L4 proto rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_TCP_FLAG,		/**< TCP flags rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_SIP,			/**< Source IP rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_DIP,			/**< Destination rule type. */
-	PPE_ACL_RULE_MATCH_TYPE_SPORT,		/**< L4 source port rule type. */
-	PPE_ACL_RULE_MATCH_TYPE_DPORT,		/**< L4 destination port rule type. */
-	PPE_ACL_RULE_MATCH_TYPE_IP_GEN,		/**< General IP fields rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_SPORT,			/**< L4 source port rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_DPORT,			/**< L4 destination port rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_IP_GEN,			/**< General IP fields rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_UDF,			/**< User Defined fields (UDF) rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_DEFAULT,		/**< Default rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_MAX,			/**< Maximum rule type. */
@@ -79,7 +79,7 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_MATCH_TYPE_L3_1ST_FRAG_VALID	(1 << PPE_ACL_RULE_MATCH_TYPE_L3_1ST_FRAG)
 #define PPE_ACL_RULE_MATCH_TYPE_IP_LEN_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_IP_LEN)
 #define PPE_ACL_RULE_MATCH_TYPE_TTL_HOPLIMIT_VALID	(1 << PPE_ACL_RULE_MATCH_TYPE_TTL_HOPLIMIT)
-#define PPE_ACL_RULE_MATCH_TYPE_DSCP_TC_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_DSCP_TC)
+#define PPE_ACL_RULE_MATCH_TYPE_TOS_TC_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_TOS_TC)
 #define PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR_VALID	(1 << PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR)
 #define PPE_ACL_RULE_MATCH_TYPE_TCP_FLAG_VALID	(1 << PPE_ACL_RULE_MATCH_TYPE_TCP_FLAG)
 #define PPE_ACL_RULE_MATCH_TYPE_SIP_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_SIP)
@@ -151,7 +151,7 @@ typedef enum ppe_acl_rule_match_type {
 /*
  * DSCP/TC rule flag.
  */
-#define PPE_ACL_RULE_FLAG_DSCP_TC_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 1)	/**< Rule match with DSCP/TC mask. */
+#define PPE_ACL_RULE_FLAG_TOS_TC_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 1)	/**< Rule match with TOS/TC mask. */
 
 /*
  * L4 protocol rule flag.
@@ -208,7 +208,7 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_ACTION_FLAG_CTAG_PCP_CHANGE_EN		0x00000010	/**< Rule action to change C-PCP marking. */
 #define PPE_ACL_RULE_ACTION_FLAG_STAG_DEI_CHANGE_EN		0x00000020	/**< Rule action to change S-DEI bit in 1p. */
 #define PPE_ACL_RULE_ACTION_FLAG_STAG_PCP_CHANGE_EN		0x00000040	/**< Rule action to change S-PCP marking. */
-#define PPE_ACL_RULE_ACTION_FLAG_DSCP_TC_CHANGE_EN		0x00000080	/**< Rule action to change DSCP/traffic-class in IP header. */
+#define PPE_ACL_RULE_ACTION_FLAG_TOS_TC_CHANGE_EN		0x00000080	/**< Rule action to change TOS/traffic-class in IP header. */
 #define PPE_ACL_RULE_ACTION_FLAG_CVID_CHANGE_EN			0x00000100	/**< Rule action to change C-VID. */
 #define PPE_ACL_RULE_ACTION_FLAG_SVID_CHANGE_EN			0x00000200	/**< Rule action to change S-VID. */
 #define PPE_ACL_RULE_ACTION_FLAG_DEST_INFO_CHANGE_EN		0x00000400	/**< Rule action to change destination. */
@@ -374,12 +374,14 @@ struct ppe_acl_rule_match_l4_proto {
 };
 
 /**
- * ppe_acl_rule_match_dscp_tc
- *	DSCP/TC based ACL rule.
+ * ppe_acl_rule_match_tos_tc
+ *	ToS/TC based ACL rule.
+ *	IPv4 header: 8-bit ToS [DSCP(6) & ECN(2)]
+ *	IPv6 header: 8-bit TC [DSCP(6) & ECN(2)]
  */
-struct ppe_acl_rule_match_dscp_tc {
-	uint8_t l3_dscp_tc;			/**< DSCP/TC value for ACL match. */
-	uint8_t l3_dscp_tc_mask;		/**< DSCP/TC mask for ACL match. */
+struct ppe_acl_rule_match_tos_tc {
+	uint8_t l3_tos_tc;			/**< ToS/TC value for ACL match. */
+	uint8_t l3_tos_tc_mask;			/**< ToS/TC mask for ACL match. */
 };
 
 
@@ -441,7 +443,7 @@ struct ppe_acl_rule_action {
 	uint8_t enqueue_pri;			/**< Changed enqueue priority. */
 	uint8_t ctag_pcp;			/**< Changed CPCP. */
 	uint8_t stag_pcp;			/**< Changed SPCP. */
-	uint8_t dscp_tc;			/**< Changed DSCP/TC. */
+	uint8_t tos_tc;				/**< Changed TOS/TC. */
 	uint16_t cvid;				/**< Changed CVID. */
 	uint16_t svid;				/**< Changed SVID. */
 	union {
@@ -486,8 +488,8 @@ struct ppe_acl_rule_match_one {
 							/**< Rule with tcp flag match. */
 		struct ppe_acl_rule_match_l4_proto proto_nexthdr;
 							/**< Rule with L4 proto match. */
-		struct ppe_acl_rule_match_dscp_tc dscp_tc;
-							/**< Rule with DSCP/traffic-class match. */
+		struct ppe_acl_rule_match_tos_tc tos_tc;
+							/**< Rule with ToS/traffic-class match. */
 		struct ppe_acl_rule_match_l3_len l3_len;
 							/**< Rule with L3 length match. */
 		struct ppe_acl_rule_match_ttl_hop ttl_hop;

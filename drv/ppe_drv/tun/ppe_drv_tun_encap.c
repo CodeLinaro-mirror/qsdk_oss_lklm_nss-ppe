@@ -758,6 +758,17 @@ static void ppe_drv_tun_encap_hdr_set(struct ppe_drv_tun_encap *ptec,
 		tun_hdr += sizeof(struct ppe_drv_tun_encap_ppp_hdr);
 		tun_len += sizeof(struct ppe_drv_tun_encap_ppp_hdr);
 		l4_offset_valid = true;
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUST) {
+		if (th->tun.cust.cust_type == PPE_DRV_TUN_CMN_CTX_CUST_TYPE_UDP_ST) {
+			struct udphdr udph;
+			memset(&udph, 0, sizeof(struct udphdr));
+
+			udph.source = th->tun.cust.cust_tun.udp_st.sport;
+			udph.dest = th->tun.cust.cust_tun.udp_st.dport;
+			memcpy((void *)tun_hdr, (void *)&udph, sizeof(udph));
+			tun_hdr += sizeof(udph);
+			tun_len += sizeof(udph);
+		}
 	}
 
 	ptec->tun_len = tun_len;
@@ -956,6 +967,12 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 			return false;
 		}
 		encap_cfg.edit_rule_id = ptec->rule_id;
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUST) {
+		if (th->tun.cust.cust_type == PPE_DRV_TUN_CMN_CTX_CUST_TYPE_UDP_ST) {
+			encap_cfg.l4_proto = FAL_TUNNEL_ENCAP_L4_PROTO_UDP;
+			encap_cfg.l4_checksum_en = A_TRUE;
+			encap_cfg.payload_inner_type = FAL_TUNNEL_INNER_IP;
+		}
 	}
 
 	if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {

@@ -466,10 +466,14 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 	} else {
 		/*
 		 * MAPT cases are not expected to use these tables only other
-		 * tunnel supported is DS-Lite
+		 * tunnel supported is DS-Lite. For UDP_ST custom tunnels,
+		 * decap processing is not required. We only use decap hw index
+		 * as its required for encap configuration.
 		 */
-		ppe_drv_warn("%p: Invalid tunnel type: %d", pp, pth->type);
-		return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		if (pth->type != PPE_DRV_TUN_CMN_CTX_TYPE_CUST) {
+			ppe_drv_warn("%p: Invalid tunnel type: %d", pp, pth->type);
+			return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		}
 	}
 
 
