@@ -36,6 +36,7 @@ void ppe_drv_flow_dump(struct ppe_drv_flow *pf)
 	uint32_t tree_id;
 
 	flow_cfg.entry_id = pf->index;
+	flow_cfg.entry_type = pf->entry_type;
 	err = fal_flow_entry_get(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_INDEX, &flow_cfg);
 	if (err != SW_OK){
 		ppe_drv_warn("%p: failed to get flow entry", pf);
