@@ -224,59 +224,61 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		/*
 		 * If it can be, try forwarding through fast_xmit.
 		 */
-		if (likely(flow_idx == PPE_VP_FLOW_IDX_FOR_NO_QDISC)) {
-			if (unlikely(!dev_fast_xmit_vp(skb, dev))) {
-				atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
-				dev_queue_xmit(skb);
-			}
-
-			rcu_read_unlock();
-			return;
-		}
-
-		flags = ppe_drv_get_qdisc_rule_flag(flow_idx);
-
-		/*
-		 * This is the case of Qdisc on any one interface other than bottom
-		 */
-		if (likely(flags & PPE_DRV_HOST_QDISC_DEV_FAST_XMIT_QDISC)) {
-			qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
-			if (likely(qdisc_dev)) {
-				skb->priority = ppe_drv_get_qos_tag(flow_idx);
-				if (likely(dev_fast_xmit_qdisc(skb, qdisc_dev, dev))) {
-					dev_put(qdisc_dev);
-					rcu_read_unlock();
-					return;
+		if (likely(dvp->flags & PPE_VP_FLAG_VP_FAST_XMIT)) {
+			if (likely(flow_idx == PPE_VP_FLOW_IDX_FOR_NO_QDISC)) {
+				if (unlikely(!dev_fast_xmit_vp(skb, dev))) {
+					atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
+					dev_queue_xmit(skb);
 				}
+
+				rcu_read_unlock();
+				return;
 			}
 
-			atomic64_inc(&vp_base.base_stats.rx_qdisc_fastxmit_fails);
-			dev_queue_xmit(skb);
-			if (unlikely(qdisc_dev)) {
-				dev_put(qdisc_dev);
+			flags = ppe_drv_get_qdisc_rule_flag(flow_idx);
+
+			/*
+			 * This is the case of Qdisc on any one interface other than bottom
+			 */
+			if (likely(flags & PPE_DRV_HOST_QDISC_DEV_FAST_XMIT_QDISC)) {
+				qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
+				if (likely(qdisc_dev)) {
+					skb->priority = ppe_drv_get_qos_tag(flow_idx);
+					if (likely(dev_fast_xmit_qdisc(skb, qdisc_dev, dev))) {
+						dev_put(qdisc_dev);
+						rcu_read_unlock();
+						return;
+					}
+				}
+
+				atomic64_inc(&vp_base.base_stats.rx_qdisc_fastxmit_fails);
+				dev_queue_xmit(skb);
+				if (unlikely(qdisc_dev)) {
+					dev_put(qdisc_dev);
+				}
+
+				rcu_read_unlock();
+				return;
 			}
 
-			rcu_read_unlock();
-			return;
-		}
+			/*
+			 * When qdisc is on bottom interface, send dev_queue_xmit(bottom_dev)
+			 */
+			if (likely(flags & PPE_DRV_HOST_QDISC_DEV_QUEUE_XMIT)) {
+				qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
+				if (likely(qdisc_dev)) {
+					skb->dev = qdisc_dev;
+					skb->priority = ppe_drv_get_qos_tag(flow_idx);
+				}
 
-		/*
-		 * When qdisc is on bottom interface, send dev_queue_xmit(bottom_dev)
-		 */
-		if (likely(flags & PPE_DRV_HOST_QDISC_DEV_QUEUE_XMIT)) {
-			qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
-			if (likely(qdisc_dev)) {
-				skb->dev = qdisc_dev;
-				skb->priority = ppe_drv_get_qos_tag(flow_idx);
+				dev_queue_xmit(skb);
+				if (likely(qdisc_dev)) {
+					dev_put(qdisc_dev);
+				}
+
+				rcu_read_unlock();
+				return;
 			}
-
-			dev_queue_xmit(skb);
-			if (likely(qdisc_dev)) {
-				dev_put(qdisc_dev);
-			}
-
-			rcu_read_unlock();
-			return;
 		}
 
 		/*
