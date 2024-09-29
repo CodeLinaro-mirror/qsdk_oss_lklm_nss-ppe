@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -72,6 +72,7 @@ struct ppe_policer {
 	struct net_device *dev;				/* Device associated with port policer */
 	uint32_t rule_id;				/* Associated Policer rule id for ACL/FLOW policer */
 	uint32_t acl_rule_id;				/* ACL rule id for Policer + FLOW case */
+	bool is_flow_policer;				/* Flag for flow policer */
 	union {
 		struct ppe_drv_policer_acl *acl_ctx;     	  	/* PPE driver context */
 		struct ppe_drv_policer_port *port_ctx;     	  	/* PPE driver context */

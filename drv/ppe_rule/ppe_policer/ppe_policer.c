@@ -114,7 +114,10 @@ static void ppe_policer_acl_rule_free(struct kref *kref)
 	struct ppe_policer *pol = container_of(kref, struct ppe_policer, kref_cnt);
 	struct ppe_policer_base *p = &gbl_ppe_policer;
 
-	if (ppe_acl_rule_destroy(pol->acl_rule_id) != PPE_ACL_RET_SUCCESS) {
+	/*
+	 * ACL rule needs to be destroyed only for flow policer where ACL is created internally.
+	 */
+	if (pol->is_flow_policer && (ppe_acl_rule_destroy(pol->acl_rule_id) != PPE_ACL_RET_SUCCESS)) {
 		ppe_policer_warn("%p: failed to destroy dummy ACL: %d", p, pol->acl_rule_id);
 		return;
 	}
@@ -570,9 +573,10 @@ bool ppe_policer_rule_flow_add_cb(void *app_data, struct ppe_drv_policer_flow *i
 	info->sc = flow_rule.sc;
 
 	/*
-	 * Fill acl rule id for deletion
+	 * Fill acl rule id and is_flow_policer flag for deletion
 	 */
 	pol->acl_rule_id = flow_rule.rule_id;
+	pol->is_flow_policer = true;
 
 	/*
 	 * Reference: during flow_add_cb()
