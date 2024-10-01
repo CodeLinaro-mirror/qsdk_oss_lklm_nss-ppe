@@ -685,8 +685,8 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 			}
 		}
 	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
-		if (ppe_drv_v6_conn_flow_flags_check(pcf,
-					PPE_DRV_V6_CONN_FLAG_FLOW_OFFLOAD_DISABLED)) {
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_OFFLOAD_DISABLED) ||
+					ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_PASSIVE_FLOW)) {
 			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
 			pp->shadow_core_mask &= ~(1 << next_core);
 			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
@@ -1493,8 +1493,8 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 			}
 		}
 	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
-		if (ppe_drv_v4_conn_flow_flags_check(pcf,
-					PPE_DRV_V4_CONN_FLAG_FLOW_OFFLOAD_DISABLED)) {
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_OFFLOAD_DISABLED) ||
+					ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_PASSIVE_FLOW)) {
 			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
 			pp->shadow_core_mask &= ~(1 << next_core);
 			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
