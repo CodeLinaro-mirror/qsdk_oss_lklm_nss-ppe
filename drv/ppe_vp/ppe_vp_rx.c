@@ -225,9 +225,20 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		 * If it can be, try forwarding through fast_xmit.
 		 */
 		if (likely(dvp->flags & PPE_VP_FLAG_VP_FAST_XMIT)) {
+			struct ethhdr *ethh;
+
 			if (likely(flow_idx == PPE_VP_FLOW_IDX_FOR_NO_QDISC)) {
 				if (unlikely(!dev_fast_xmit_vp(skb, dev))) {
 					atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
+
+					/*
+					 * Update the skb protocol field
+					 */
+					ethh = (struct ethhdr *)skb->data;
+					skb->protocol = ethh->h_proto;
+					skb_reset_mac_header(skb);
+					skb_set_network_header(skb, rxi->l3offset);
+
 					dev_queue_xmit(skb);
 				}
 
@@ -241,6 +252,15 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 			 * This is the case of Qdisc on any one interface other than bottom
 			 */
 			if (likely(flags & PPE_DRV_HOST_QDISC_DEV_FAST_XMIT_QDISC)) {
+
+				/*
+				 * Update the skb protocol field, since host qdisc is present
+				 */
+				ethh = (struct ethhdr *)skb->data;
+				skb->protocol = ethh->h_proto;
+				skb_reset_mac_header(skb);
+				skb_set_network_header(skb, rxi->l3offset);
+
 				qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
 				if (likely(qdisc_dev)) {
 					skb->priority = ppe_drv_get_qos_tag(flow_idx);
@@ -265,6 +285,15 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 			 * When qdisc is on bottom interface, send dev_queue_xmit(bottom_dev)
 			 */
 			if (likely(flags & PPE_DRV_HOST_QDISC_DEV_QUEUE_XMIT)) {
+
+				/*
+				 * Update the skb protocol field, since host qdisc is present
+				 */
+				ethh = (struct ethhdr *)skb->data;
+				skb->protocol = ethh->h_proto;
+				skb_reset_mac_header(skb);
+				skb_set_network_header(skb, rxi->l3offset);
+
 				qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
 				if (likely(qdisc_dev)) {
 					skb->dev = qdisc_dev;
