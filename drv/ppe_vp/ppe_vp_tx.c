@@ -134,7 +134,7 @@ bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
 	rx_stats = this_cpu_ptr(dvp->vp_stats.rx_stats);
 	dptxi.fake_mac = false;
 
-	if (dvp->vp_type == PPE_VP_TYPE_SW_L3) {
+	if (dvp->vp_type == PPE_VP_TYPE_HW_L3TUN) {
 		dptxi.fake_mac = true;
 		skb_push(skb, ETH_HLEN);
 	}
