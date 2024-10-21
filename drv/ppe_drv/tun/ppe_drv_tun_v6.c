@@ -201,6 +201,27 @@ static bool ppe_drv_v6_vxlan_tunnel(struct ppe_drv_v6_rule_create *create, struc
 }
 
 /*
+ * ppe_drv_v6_vxlan_gpe_tunnel()
+ *	Check if create request for VxLAN-GPE tunnel.
+ */
+static bool ppe_drv_v6_vxlan_gpe_tunnel(struct ppe_drv_v6_rule_create *create, struct net_device *dev)
+{
+	int vxlan_gpe_dport = ppe_drv_get_vxlan_gpe_dport();
+
+	if (netif_is_vxlan(dev) || (!strncmp(dev->name, "ppe_vxlan_tun", 13))) {
+		/*
+		 * Check if it is an outer rule.
+		 */
+		if ((create->tuple.flow_ident == vxlan_gpe_dport) && (create->tuple.return_ident == vxlan_gpe_dport)) {
+			ppe_drv_info("%p: Creating VXLAN-GPE tunnel dev: %s", dev, dev->name);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
  * ppe_drv_v6_tun_allow_tunnel_create()
  *	Check if the create rule is received for tunnel activation
  *
@@ -240,8 +261,15 @@ bool ppe_drv_v6_tun_allow_tunnel_create(struct ppe_drv_v6_rule_create *create)
 		return false;
 	}
 
+	/*
+	 * Check if the rule is for VxLAN or VxLAN-GPE
+	 */
 	dev = ppe_drv_port_to_dev(port_tun->pp);
 	if (ppe_drv_v6_vxlan_tunnel(create, dev)) {
+		return true;
+	}
+
+	if (ppe_drv_v6_vxlan_gpe_tunnel(create, dev)) {
 		return true;
 	}
 

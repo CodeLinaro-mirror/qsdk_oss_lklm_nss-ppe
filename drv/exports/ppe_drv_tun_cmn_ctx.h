@@ -71,6 +71,14 @@ enum ppe_drv_tun_cmn_ctx_decap_ecn {
 };
 
 /*
+ * ppe_drv_tun_cmn_ctx_cust_type
+ *	Custom tunnel type
+ */
+enum ppe_drv_tun_cmn_ctx_cust_type {
+	PPE_DRV_TUN_CMN_CTX_CUST_TYPE_UDP_ST = 1, /**< Custom tunnel type udp speedtest >*/
+};
+
+/*
  * ppe_drv_tun_cmn_ctx_type
  *	PPE Tunnel types
  */
@@ -80,6 +88,8 @@ enum ppe_drv_tun_cmn_ctx_type {
 	PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6,		/**< PPE Tunnel header type DSLite/MAP-E >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_MAPT,		/**< PPE Tunnel header type MAP-T >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2,	/**< PPE Tunnel header type L2TP-V2 >*/
+	PPE_DRV_TUN_CMN_CTX_TYPE_CUST,		/**< Custom PPE Tunnel header >*/
+	PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE,	/**< PPE Tunnel header type VxLAN-GPE >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_MAX
 };
 
@@ -148,7 +158,10 @@ struct ppe_drv_tun_cmn_ctx_gretap {
 struct ppe_drv_tun_cmn_ctx_vxlan {
 	uint32_t vni;		/**< VxLAN Network Identifier >*/
 	uint32_t flags;		/**< Header flags >*/
-	uint16_t policy_id;	/**< Group Policy ID >*/
+	union {
+		uint8_t next_proto;	/**< Next protocol used for VxLAN-GPE >*/
+		uint16_t policy_id;	/**< Group Policy ID used for VxLAN-GPO >*/
+	} u;
 	uint16_t src_port_min;	/**< UDP source port min >*/
 	uint16_t src_port_max;	/**< UDP source port max >*/
 	uint16_t dest_port;	/**< UDP destination port >*/
@@ -192,6 +205,26 @@ struct ppe_drv_tun_cmn_ctx_l2tp {
 };
 
 /*
+ * ppe_drv_tun_cmn_ctx_cust_udp_st
+ *	UDP Speedtest L4 params.
+ */
+struct ppe_drv_tun_cmn_ctx_cust_udp_st {
+	uint16_t sport;		/**< Source Port >*/
+	uint16_t dport;		/**< Destination Port >*/
+};
+
+/*
+ * ppe_drv_tun_cmn_ctx_cust
+ *	Custom tunnel context.
+ */
+struct ppe_drv_tun_cmn_ctx_cust {
+	union {
+		struct ppe_drv_tun_cmn_ctx_cust_udp_st udp_st;	/**< UDP ST context >*/
+	} cust_tun;
+	enum ppe_drv_tun_cmn_ctx_cust_type cust_type;		/**< Custom tunnel type >*/
+};
+
+/*
  * ppe_drv_tun_cmn_ctx
  *	PPE tunnel header parameters
  */
@@ -203,6 +236,7 @@ struct ppe_drv_tun_cmn_ctx {
 		struct ppe_drv_tun_cmn_ctx_vxlan vxlan;	/**< VxLAN tunnel configuration >*/
 		struct ppe_drv_tun_cmn_ctx_mapt mapt;	/**< Map-T tunnel configuration >*/
 		struct ppe_drv_tun_cmn_ctx_l2tp l2tp;	/**< L2TP tunnel configuration >*/
+		struct ppe_drv_tun_cmn_ctx_cust cust;	/**< Custom tunnel configuration >*/
 	} tun;
 	enum ppe_drv_tun_cmn_ctx_type type;
 };

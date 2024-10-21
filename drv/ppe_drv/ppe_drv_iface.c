@@ -516,6 +516,65 @@ bool ppe_drv_iface_l3_if_set(struct ppe_drv_iface *iface, struct ppe_drv_l3_if *
 }
 
 /*
+ * ppe_drv_iface_udp_zero_csum_action_set()
+ *	Set zero checkscum action of a given PPE interface.
+ */
+bool ppe_drv_iface_udp_zero_csum_action_set(struct ppe_drv_iface *iface, ppe_drv_iface_zero_csum_action_t action)
+{
+	fal_udp_zero_csum_cmd_t fal_action;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_l3_if *l3_if;
+	struct ppe_drv_port *vp;
+
+	switch (action) {
+	case PPE_DRV_IFACE_ZERO_CSUM_ACTION_FRWRD:
+		fal_action = FAL_UDP_ZERO_CSUM_FRWRD;
+		break;
+	case PPE_DRV_IFACE_ZERO_CSUM_ACTION_DROP:
+		fal_action = FAL_UDP_ZERO_CSUM_DROP;
+		break;
+	case PPE_DRV_IFACE_ZERO_CSUM_ACTION_RECALC_MAPT:
+		fal_action = FAL_UDP_ZERO_CSUM_RECALC_MAPT;
+		break;
+	case PPE_DRV_IFACE_ZERO_CSUM_ACTION_RDT_TO_CPU:
+		fal_action = FAL_UDP_ZERO_CSUM_RDT_TO_CPU;
+		break;
+	default:
+		ppe_drv_warn("%p: unsupported action: %u for L3 iface", iface, action);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+
+	/*
+	 * Get the port of the PPE interface to find its L3 interface.
+	 */
+	vp = ppe_drv_iface_port_get(iface);
+	if (!vp) {
+		ppe_drv_warn("%p: failed to find the port for the interface\n", iface);
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	l3_if = ppe_drv_port_find_port_l3_if(vp);
+	if (!l3_if) {
+		ppe_drv_warn("%p: failed to find L3 interface for the port: %u\n", iface, vp->port);
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	if (!ppe_drv_l3_if_udp_zero_csum_action_set(l3_if, fal_action)) {
+		ppe_drv_warn("%p: failed to set action: %d for the port: %u\n", iface, fal_action, vp->port);
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	spin_unlock_bh(&p->lock);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_iface_udp_zero_csum_action_set);
+
+/*
  * ppe_drv_iface_eip_set
  *	Configure an interface as inline EIP virtual port
  */

@@ -189,8 +189,11 @@ static struct rtnl_link_stats64 *nss_pvxlanmgr_get_tunnel_stats(struct net_devic
 	/*
 	 * Netdev seems to be incrementing rx_dropped because we don't give IP header.
 	 * So reset it as it's of no use for us.
+	 * rx_dropped is removed from net_device structure in kernel 6.6
 	 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 	atomic_long_set(&dev->rx_dropped, 0);
+#endif
 	priv = netdev_priv(dev);
 	memset(stats, 0, sizeof(struct rtnl_link_stats64));
 	memcpy(stats, &priv->stats, sizeof(struct rtnl_link_stats64));
@@ -297,8 +300,12 @@ static void nss_pvxlanmgr_netdev_setup(struct net_device *dev)
 	dev->netdev_ops = &nss_pvxlanmgr_netdev_ops;
 	dev->priv_destructor = NULL;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 	memset(dev->dev_addr, 0x00, dev->addr_len);
-	memset(dev->broadcast, 0xff, dev->addr_len);
+#else
+	dev_addr_set(dev, "\x00\x00\x00\x00\x00\x00");
+#endif
+	memset((void*)dev->broadcast, 0xff, dev->addr_len);
 	memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);
 }
 
@@ -382,7 +389,7 @@ nss_pvxlanmgr_status_t nss_pvxlanmgr_netdev_disable(struct net_device *dev)
 	if (ret != NSS_TX_SUCCESS) {
 		nss_pvxlanmgr_warn("%px: Tunnel disable failed: %d\n", dev, ret);
 		dev_put(dev);
-		return ret;
+		return (nss_pvxlanmgr_status_t)ret;
 	}
 
 	ret = nss_pvxlanmgr_tunnel_tx_msg_disable(priv->pvxlan_ctx, priv->if_num_outer);
@@ -390,11 +397,11 @@ nss_pvxlanmgr_status_t nss_pvxlanmgr_netdev_disable(struct net_device *dev)
 		nss_pvxlanmgr_warn("%px: Tunnel disable failed: %d\n", dev, ret);
 		nss_pvxlanmgr_tunnel_tx_msg_enable(priv->pvxlan_ctx, priv->if_num_host_inner, priv->if_num_outer);
 		dev_put(dev);
-		return ret;
+		return (nss_pvxlanmgr_status_t)ret;
 	}
 
 	dev_put(dev);
-	return ret;
+	return (nss_pvxlanmgr_status_t)ret;
 }
 EXPORT_SYMBOL(nss_pvxlanmgr_netdev_disable);
 
@@ -414,7 +421,7 @@ nss_pvxlanmgr_status_t nss_pvxlanmgr_netdev_enable(struct net_device *dev)
 	if (ret != NSS_TX_SUCCESS) {
 		nss_pvxlanmgr_warn("%px: Tunnel enable failed: %d\n", dev, ret);
 		dev_put(dev);
-		return ret;
+		return (nss_pvxlanmgr_status_t)ret;
 	}
 
 	ret = nss_pvxlanmgr_tunnel_tx_msg_enable(priv->pvxlan_ctx, priv->if_num_outer, priv->if_num_host_inner);
@@ -422,11 +429,11 @@ nss_pvxlanmgr_status_t nss_pvxlanmgr_netdev_enable(struct net_device *dev)
 		nss_pvxlanmgr_warn("%px: Tunnel enable failed: %d\n", dev, ret);
 		nss_pvxlanmgr_tunnel_tx_msg_disable(priv->pvxlan_ctx, priv->if_num_host_inner);
 		dev_put(dev);
-		return ret;
+		return (nss_pvxlanmgr_status_t)ret;
 	}
 
 	dev_put(dev);
-	return ret;
+	return (nss_pvxlanmgr_status_t)ret;
 }
 EXPORT_SYMBOL(nss_pvxlanmgr_netdev_enable);
 

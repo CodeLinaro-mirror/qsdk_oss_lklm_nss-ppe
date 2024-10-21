@@ -313,6 +313,14 @@ static inline ppe_vp_status_t __ppe_vp_cfg_update(ppe_vp_num_t vp_num, struct pp
 	struct ppe_drv_vp_info info = {0};
 	struct ppe_vp *vp;
 	ppe_drv_ret_t ret;
+	uint16_t flags = vpui->update_flags;
+
+	/*
+	 * Initialize the update fields to invalid.
+	 */
+	info.mpsk_en = PPE_VP_UPDATE_FLAG_INVALID;
+	info.core_mask = PPE_VP_UPDATE_FLAG_INVALID;
+	info.usr_type = PPE_VP_UPDATE_FLAG_INVALID;
 
 	rcu_read_lock();
 	vp = ppe_vp_base_get_vp_by_port_num(vp_num);
@@ -327,8 +335,25 @@ static inline ppe_vp_status_t __ppe_vp_cfg_update(ppe_vp_num_t vp_num, struct pp
 	/*
 	 * Update the PPE drv VP info.
 	 */
-	info.core_mask = vpui->core_mask;
-	info.usr_type = vpui->usr_type;
+	if (flags & PPE_VP_UPDATE_FLAG_VP_SRC_CB) {
+		vp->src_cb = vpui->src_cb;
+		ppe_vp_info("%px: vp %px at port num %u, src cb updated", pvb, vp, vp_num);
+	}
+
+	if (flags & PPE_VP_UPDATE_FLAG_VP_SRC_CB_DATA) {
+		vp->src_cb_data = vpui->cb_data;
+		ppe_vp_info("%px: vp %px at port num %u, src cb data updated", pvb, vp, vp_num);
+	}
+
+	if (flags & PPE_VP_UPDATE_FLAG_VP_CORE_MASK)
+		info.core_mask = vpui->core_mask;
+
+	if (flags & PPE_VP_UPDATE_FLAG_VP_USR_TYPE)
+		info.usr_type = vpui->usr_type;
+
+	if (flags & PPE_VP_UPDATE_FLAG_VP_MPSK_EN)
+		info.mpsk_en = vpui->mpsk_en;
+
 
 	ret = ppe_drv_vp_cfg_update(ppe_iface, &info);
 	if (ret != PPE_DRV_RET_SUCCESS) {
@@ -340,7 +365,8 @@ static inline ppe_vp_status_t __ppe_vp_cfg_update(ppe_vp_num_t vp_num, struct pp
 	/*
 	 * Store vp user mode for ppe_vp stats.
 	 */
-	vp->vp_user_mode = info.usr_type;
+	if (flags & PPE_VP_UPDATE_FLAG_VP_USR_TYPE)
+		vp->vp_user_mode = info.usr_type;
 
 	rcu_read_unlock();
 	ppe_vp_info("%px: vp %px at port num %u, updated", pvb, vp, vp_num);

@@ -36,6 +36,7 @@ void ppe_drv_flow_dump(struct ppe_drv_flow *pf)
 	uint32_t tree_id;
 
 	flow_cfg.entry_id = pf->index;
+	flow_cfg.entry_type = pf->entry_type;
 	err = fal_flow_entry_get(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_INDEX, &flow_cfg);
 	if (err != SW_OK){
 		ppe_drv_warn("%p: failed to get flow entry", pf);
@@ -586,7 +587,7 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8
 	return true;
 }
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_FLOW_TBL_POLICER
 /*
  * ppe_drv_flow_v6_policer_get()
  *	Find the Policer get associated with a flow
@@ -734,6 +735,23 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	}
 
 	/*
+	 * If the egress port has MPSK support and if it is a bridge flow,
+	 * bypass the egress vlan table for the same.
+	 */
+	if (ppe_drv_port_flags_check(pp, PPE_DRV_PORT_FLAG_MPSK)) {
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+			if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_VP_MPSK)) {
+				ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+							pcf, service_code, PPE_DRV_SC_VP_MPSK);
+				return false;
+			}
+		}
+
+		*scp = service_code;
+		return true;
+	}
+
+	/*
 	 * Get the service code for the flow according to the flow type
 	 * and precedence of these features (like DS flows, policer/ACL based service code, etc)
 	 */
@@ -767,8 +785,8 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 			}
 		}
 	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
-		if (ppe_drv_v6_conn_flow_flags_check(pcf,
-					PPE_DRV_V6_CONN_FLAG_FLOW_OFFLOAD_DISABLED)) {
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_OFFLOAD_DISABLED) ||
+					ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_PASSIVE_FLOW)) {
 			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
 			pp->shadow_core_mask &= ~(1 << next_core);
 			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
@@ -1063,7 +1081,9 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 
 #ifdef NSS_PPE_IPQ53XX
 	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_TREE_ID;
+#endif
 
+#ifdef PPE_DRV_FLOW_TBL_POLICER
 	if (!ppe_drv_flow_v6_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
 		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
 		return NULL;
@@ -1128,7 +1148,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 		flow_cfg.fwd_type = FAL_FLOW_BRIDGE;
 		ppe_drv_trace("%p: flow_tbl[fwd_type]: L2: %u", pcf, FAL_FLOW_BRIDGE);
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 		/*
 		 * VLAN tag addition from NEXTHOP_TBL for flow based bridging.
 		 * With VLAN tagging capability from flow table for bridge flows,
@@ -1560,7 +1580,7 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8
 	return true;
 }
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_FLOW_TBL_POLICER
 /*
  * ppe_drv_flow_v4_policer_get()
  *	Find the Policer get associated with a flow
@@ -1642,6 +1662,23 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	}
 
 	/*
+	 * If the egress port has MPSK support and it is a bridge flow,
+	 * bypass the egress vlan table for the same.
+	 */
+	if (ppe_drv_port_flags_check(pp, PPE_DRV_PORT_FLAG_MPSK)) {
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+			if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_VP_MPSK)) {
+				ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+							pcf, service_code, PPE_DRV_SC_VP_MPSK);
+				return false;
+			}
+		}
+
+		*scp = service_code;
+		return true;
+	}
+
+	/*
 	 * Get the service code for the flow according to the flow type
 	 * and precedence of these features (like DS flows, policer/ACL based service code, etc)
 	 */
@@ -1675,8 +1712,8 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 			}
 		}
 	} else if ((pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) && pp->core_mask) {
-		if (ppe_drv_v4_conn_flow_flags_check(pcf,
-					PPE_DRV_V4_CONN_FLAG_FLOW_OFFLOAD_DISABLED)) {
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_OFFLOAD_DISABLED) ||
+					ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_PASSIVE_FLOW)) {
 			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
 			pp->shadow_core_mask &= ~(1 << next_core);
 			sc = PPE_DRV_CORE2SC_NOEDIT(next_core);
@@ -1997,7 +2034,9 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 
 #ifdef NSS_PPE_IPQ53XX
 	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_TREE_ID;
+#endif
 
+#ifdef PPE_DRV_FLOW_TBL_POLICER
 	if (!ppe_drv_flow_v4_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
 		ppe_drv_warn("%p: failed to obtain policer_index", pcf);
 		return NULL;
@@ -2078,7 +2117,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		flow_cfg.fwd_type = FAL_FLOW_BRIDGE;
 		ppe_drv_trace("%p: flow_tbl[fwd_type]: L2: %u", pcf, FAL_FLOW_BRIDGE);
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 		/*
 		 * VLAN tag addition from NEXTHOP_TBL for flow based bridging.
 		 * With VLAN tagging capability from flow table for bridge flows,

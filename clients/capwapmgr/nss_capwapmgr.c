@@ -216,12 +216,15 @@ static struct rtnl_link_stats64 *nss_capwapmgr_get_tunnel_stats(struct net_devic
 		return stats;
 	}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 	/*
 	 * Netdev seems to be incrementing rx_dropped because we don't give IP header.
 	 * So reset it as it's of no use for us.
+	 *
+	 * rx_dropped is removed from net_device structure in Kernel 6.6.
 	 */
 	atomic_long_set(&dev->rx_dropped, 0);
-
+#endif
 	memset(stats, 0, sizeof (struct rtnl_link_stats64));
 	nss_capwapmgr_fill_up_stats(stats, &global.tunneld_stats);
 
@@ -254,7 +257,11 @@ static const struct net_device_ops nss_capwapmgr_netdev_ops = {
 	.ndo_stop		= nss_capwapmgr_close,
 	.ndo_start_xmit		= nss_capwapmgr_start_xmit,
 	.ndo_set_mac_address	= eth_mac_addr,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 	.ndo_change_mtu		= eth_change_mtu,
+#else
+	.ndo_change_mtu		= dev_set_mtu,
+#endif
 	.ndo_get_stats64	= nss_capwapmgr_dev_tunnel_stats,
 };
 
@@ -274,7 +281,11 @@ static void nss_capwapmgr_dummy_netdev_setup(struct net_device *dev)
 	dev->netdev_ops = &nss_capwapmgr_netdev_ops;
 	dev->priv_destructor = NULL;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 	memcpy(dev->dev_addr, "\x00\x00\x00\x00\x00\x00", dev->addr_len);
+#else
+	dev_addr_set(dev, "\x00\x00\x00\x00\x00\x00");
+#endif
 	memset(dev->broadcast, 0xff, dev->addr_len);
 	memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);
 }
@@ -520,7 +531,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_msg_sync(struct nss_ctx_instance 
 	/*
 	 * Call NSS driver
 	 */
-	status = nss_capwap_tx_msg(ctx, msg);
+	status = (nss_capwapmgr_status_t)nss_capwap_tx_msg(ctx, msg);
 	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		up(&r->sem);
 		dev_put(dev);
@@ -565,7 +576,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device
 	struct nss_ctx_instance *ctx = nss_capwap_get_ctx();
 	struct nss_capwap_msg capwapmsg;
 	struct nss_capwap_rule_msg *capwapcfg;
-	nss_tx_status_t status;
+	nss_capwapmgr_status_t status;
 
 	nss_capwapmgr_info("%px: ctx: CAPWAP Rule src_port: 0x%d dest_port:0x%d\n", ctx,
 	    ntohl(msg->encap.src_port), ntohl(msg->encap.dest_port));
@@ -634,7 +645,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_create_capwap_rule(struct net_device
 			nss_capwapmgr_msg_event_receive, dev);
 
 	status = nss_capwapmgr_tx_msg_sync(ctx, dev, &capwapmsg);
-	if (status != NSS_TX_SUCCESS) {
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%px: ctx: create encap data tunnel error %d \n", ctx, status);
 		return status;
 	}
@@ -866,7 +877,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_rule_create_v4(struct nss_capwapm
 	/*
 	 * Update the tunnel id to be used for trustsec_tx.
 	 */
-	tunnel_id.tunnel_id_valid = true;
+	tunnel_id.tunnel_id_valid = A_TRUE;
 	tunnel_id.tunnel_id = t->tunnel_id;
 
 	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, t->vp_num_encap);
@@ -958,7 +969,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_rule_create_v4(struct nss_capwapm
 fail1:
 	fal_vport_physical_port_id_set(dev_id, v_port, 0);
 fail:
-	tunnel_id.tunnel_id_valid = false;
+	tunnel_id.tunnel_id_valid = A_FALSE;
 	fal_tunnel_encap_port_tunnelid_set(dev_id, v_port, &tunnel_id);
 done:
 	return status;
@@ -993,7 +1004,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_rule_create_v6(struct nss_capwapm
 	/*
 	 * Update the tunnel id to be used for trustsec_tx.
 	 */
-	tunnel_id.tunnel_id_valid = true;
+	tunnel_id.tunnel_id_valid = A_TRUE;
 	tunnel_id.tunnel_id = t->tunnel_id;
 
 	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, t->vp_num_encap);
@@ -1083,7 +1094,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tx_rule_create_v6(struct nss_capwapm
 fail1:
 	fal_vport_physical_port_id_set(dev_id, v_port, 0);
 fail:
-	tunnel_id.tunnel_id_valid = false;
+	tunnel_id.tunnel_id_valid = A_FALSE;
 	fal_tunnel_encap_port_tunnelid_set(dev_id, v_port, &tunnel_id);
 done:
 	return status;
@@ -1420,10 +1431,10 @@ done:
  * nss_capwapmgr_tx_msg_enable_tunnel()
  *	Common function to send CAPWAP tunnel enable msg
  */
-static nss_tx_status_t nss_capwapmgr_tx_msg_enable_tunnel(struct nss_ctx_instance *ctx, struct net_device *dev, uint32_t if_num, uint32_t sibling_if_num)
+static nss_capwapmgr_status_t nss_capwapmgr_tx_msg_enable_tunnel(struct nss_ctx_instance *ctx, struct net_device *dev, uint32_t if_num, uint32_t sibling_if_num)
 {
 	struct nss_capwap_msg capwapmsg;
-	nss_tx_status_t status;
+	nss_capwapmgr_status_t status;
 
 	/*
 	 * Prepare the tunnel configuration parameter to send to NSS FW
@@ -1437,7 +1448,7 @@ static nss_tx_status_t nss_capwapmgr_tx_msg_enable_tunnel(struct nss_ctx_instanc
 	nss_capwap_msg_init(&capwapmsg, if_num, NSS_CAPWAP_MSG_TYPE_ENABLE_TUNNEL, sizeof(struct nss_capwap_enable_tunnel_msg), nss_capwapmgr_msg_event_receive, dev);
 
 	status = nss_capwapmgr_tx_msg_sync(ctx, dev, &capwapmsg);
-	if (status != NSS_TX_SUCCESS) {
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%px: ctx: CMD: %d Tunnel error : %d \n", ctx, NSS_CAPWAP_MSG_TYPE_ENABLE_TUNNEL, status);
 	}
 
@@ -1449,10 +1460,10 @@ static nss_tx_status_t nss_capwapmgr_tx_msg_enable_tunnel(struct nss_ctx_instanc
  *	Common function for CAPWAP tunnel operation messages without
  *	any message data structures.
  */
-static nss_tx_status_t nss_capwapmgr_tunnel_action(struct nss_ctx_instance *ctx, struct net_device *dev, uint32_t if_num, nss_capwap_msg_type_t cmd)
+static nss_capwapmgr_status_t nss_capwapmgr_tunnel_action(struct nss_ctx_instance *ctx, struct net_device *dev, uint32_t if_num, nss_capwap_msg_type_t cmd)
 {
 	struct nss_capwap_msg capwapmsg;
-	nss_tx_status_t status;
+	nss_capwapmgr_status_t status;
 
 	/*
 	 * Prepare the tunnel configuration parameter to send to NSS FW
@@ -1465,7 +1476,7 @@ static nss_tx_status_t nss_capwapmgr_tunnel_action(struct nss_ctx_instance *ctx,
 	nss_capwap_msg_init(&capwapmsg, if_num, cmd, 0, nss_capwapmgr_msg_event_receive, dev);
 
 	status = nss_capwapmgr_tx_msg_sync(ctx, dev, &capwapmsg);
-	if (status != NSS_TX_SUCCESS) {
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%px: ctx: CMD: %d Tunnel error : %d \n", ctx, cmd, status);
 	}
 
@@ -1476,10 +1487,10 @@ static nss_tx_status_t nss_capwapmgr_tunnel_action(struct nss_ctx_instance *ctx,
  * nss_capwapmgr_tx_msg_update_vp_num()
  *	Function to send update vp message.
  */
-static nss_tx_status_t nss_capwapmgr_tx_msg_update_vp_num(struct net_device *dev, uint32_t if_num, int16_t vp_num)
+static nss_capwapmgr_status_t nss_capwapmgr_tx_msg_update_vp_num(struct net_device *dev, uint32_t if_num, int16_t vp_num)
 {
 	struct nss_capwap_msg capwapmsg;
-	nss_tx_status_t status;
+	nss_capwapmgr_status_t status;
 	struct nss_capwapmgr_priv *priv = netdev_priv(dev);
 	struct nss_ctx_instance *ctx = priv->nss_ctx;
 
@@ -1495,7 +1506,7 @@ static nss_tx_status_t nss_capwapmgr_tx_msg_update_vp_num(struct net_device *dev
 	nss_capwap_msg_init(&capwapmsg, if_num, NSS_CAPWAP_MSG_TYPE_UPDATE_VP_NUM, sizeof(struct nss_capwap_update_vp_num_msg), nss_capwapmgr_msg_event_receive, dev);
 
 	status = nss_capwapmgr_tx_msg_sync(ctx, dev, &capwapmsg);
-	if (status != NSS_TX_SUCCESS) {
+	if (status != NSS_CAPWAPMGR_SUCCESS) {
 		nss_capwapmgr_warn("%px: ctx: CMD: %d Tunnel error : %d \n", ctx, NSS_CAPWAP_MSG_TYPE_UPDATE_VP_NUM, status);
 	}
 
@@ -2377,13 +2388,13 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 	}
 
 	if (!outer_trustsec_enabled) {
-		if (nss_capwapmgr_tx_msg_update_vp_num(dev, capwap_if_num_outer, vp_num_decap) != NSS_TX_SUCCESS) {
+		if (nss_capwapmgr_tx_msg_update_vp_num(dev, capwap_if_num_outer, vp_num_decap) != NSS_CAPWAPMGR_SUCCESS) {
 			nss_capwapmgr_warn("%px: %d VP number update failed %d", dev, vp_num_decap, status);
 			status = NSS_CAPWAPMGR_FAILURE_UPDATE_VP_NUM;
 			goto fail4;
 		}
 
-		if (nss_capwapmgr_tx_msg_update_vp_num(dev, capwap_if_num_inner, vp_num_encap) != NSS_TX_SUCCESS) {
+		if (nss_capwapmgr_tx_msg_update_vp_num(dev, capwap_if_num_inner, vp_num_encap) != NSS_CAPWAPMGR_SUCCESS) {
 			nss_capwapmgr_warn("%px: %d VP number update failed %d", dev, vp_num_encap, status);
 			status = NSS_CAPWAPMGR_FAILURE_UPDATE_VP_NUM;
 			goto fail4;

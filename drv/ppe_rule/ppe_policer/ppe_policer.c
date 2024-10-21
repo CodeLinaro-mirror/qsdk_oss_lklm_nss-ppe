@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -490,7 +490,7 @@ ppe_policer_ret_t ppe_policer_create(struct ppe_policer_create_info *create)
 }
 EXPORT_SYMBOL(ppe_policer_create);
 
-#ifdef NSS_PPE_RULE_IPQ53XX
+#ifdef PPE_RULE_FLOW_TBL_POLICER
 bool ppe_policer_rule_flow_add_cb(void *app_data, struct ppe_drv_policer_flow *info)
 {
 	return true;

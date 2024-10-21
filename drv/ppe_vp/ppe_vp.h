@@ -62,4 +62,5 @@ struct ppe_vp {
 	ppe_vp_callback_t src_cb;			/* Packet to be handed over to stack by VP user callback */
 	void *src_cb_data;				/* Callback data */
 	uint8_t vp_user_mode;				/* VP user mode for wifi dev type */
+	bool mpsk_en;					/* Indicates if MPSK is enabled on this VP */
 };

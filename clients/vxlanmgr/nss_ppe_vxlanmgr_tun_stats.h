@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,6 +17,8 @@
 #ifndef __NSS_PPE_VXLANMGR_TUN_STATS_H
 #define __NSS_PPE_VXLANMGR_TUN_STATS_H
 
+#include "nss_ppe_tun_drv.h"
+
 /*
  * VxLAN statistics APIs
  */
@@ -24,5 +26,6 @@ extern void nss_ppe_vxlanmgr_tun_stats_dentry_deinit(void);
 extern bool nss_ppe_vxlanmgr_tun_dentry_init(void);
 extern void nss_ppe_vxlanmgr_tun_stats_dentry_remove(struct nss_ppe_vxlanmgr_tun_ctx *tun_ctx);
 extern bool nss_ppe_vxlanmgr_tun_stats_dentry_create(struct nss_ppe_vxlanmgr_tun_ctx *tun_ctx);
+bool nss_ppe_vxlan_dev_stats_update(struct net_device *dev, ppe_tun_hw_stats *stats, ppe_tun_data *tun_cb_data);
 
 #endif /* __NSS_PPE_VXLANMGR_TUN_STATS_H */

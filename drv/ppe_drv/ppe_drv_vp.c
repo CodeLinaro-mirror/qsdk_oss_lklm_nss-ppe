@@ -118,14 +118,25 @@ ppe_drv_ret_t ppe_drv_vp_cfg_update(struct ppe_drv_iface *iface, struct ppe_drv_
 		return PPE_DRV_RET_INVALID_DEV_TYPE;
 	}
 
-	port->core_mask = port->shadow_core_mask = info->core_mask;
-	port->user_type = info->usr_type;
+	if (info->mpsk_en != PPE_DRV_PORT_FLAG_UPDATE_INVALID) {
+		if (info->mpsk_en) {
+			ppe_drv_port_flags_set(port, PPE_DRV_PORT_FLAG_MPSK);
+		} else {
+			ppe_drv_port_flags_clear(port, PPE_DRV_PORT_FLAG_MPSK);
+		}
+	}
+
+	if (info->core_mask != PPE_DRV_PORT_FLAG_UPDATE_INVALID)
+		port->core_mask = port->shadow_core_mask = info->core_mask;
+
+	if (info->core_mask != PPE_DRV_PORT_FLAG_UPDATE_INVALID)
+		port->user_type = info->usr_type;
 
 	/*
 	 * Wifi sends core mask in cfg_update call.
 	 * Set the rfs flag if core_mask is set.
 	 */
-	if (info->core_mask) {
+	if (info->core_mask != PPE_DRV_PORT_FLAG_UPDATE_INVALID) {
 		port->flags |= PPE_DRV_PORT_RFS_ENABLED;
 	}
 

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +18,7 @@
 #include <linux/debugfs.h>
 #include <linux/etherdevice.h>
 #include <linux/netdevice.h>
+#include <linux/version.h>
 #include "nss_ppe_vxlanmgr_priv.h"
 #include "nss_ppe_vxlanmgr_tun_stats.h"
 
@@ -29,6 +30,63 @@
  * VxLAN context
  */
 extern struct nss_ppe_vxlanmgr_ctx vxlan_ctx;
+
+/*
+ * nss_ppe_vxlan_dev_stats_update()
+ * 	Update vxlan dev statistics
+ */
+bool nss_ppe_vxlan_dev_stats_update(struct net_device *dev, ppe_tun_hw_stats *stats, ppe_tun_data *tun_cb_data)
+{
+	struct pcpu_sw_netstats *tstats;
+	struct net_device *pdev;
+	int ifindex;
+
+	if (!dev) {
+		return false;
+	}
+
+	tstats = this_cpu_ptr(dev->tstats);
+
+	/*
+	 * For VXLAN device add the stats to the parent netdevice instead of nss_netdev.
+	 */
+	if (unlikely(strncmp(dev->name, "ppe_vxlan_tun", 13) == 0)) {
+		ifindex = *(int *)netdev_priv(dev);
+		pdev = dev_get_by_index(&init_net, ifindex);
+		if (!pdev) {
+			nss_ppe_vxlanmgr_warn("%p: Parent dev of the nss-netdev %s is not present.", dev, dev->name);
+			return false;
+		}
+
+		tstats = this_cpu_ptr(pdev->tstats);
+		dev_put(pdev);
+	}
+
+	u64_stats_update_begin(&tstats->syncp);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
+	tstats->tx_bytes += stats->tx_byte_cnt;
+	tstats->tx_packets += stats->tx_pkt_cnt;
+	tstats->rx_bytes += stats->rx_byte_cnt;
+	tstats->rx_packets += stats->rx_pkt_cnt;
+#else
+	u64_stats_add(&tstats->tx_bytes, stats->tx_byte_cnt);
+	u64_stats_add(&tstats->tx_packets,  stats->tx_pkt_cnt);
+	u64_stats_add(&tstats->rx_bytes, stats->rx_byte_cnt);
+	u64_stats_add(&tstats->rx_packets,  stats->rx_pkt_cnt);
+#endif
+
+	u64_stats_update_end(&tstats->syncp);
+
+	/*
+	 * TODO: Remove the following check when net_device support for
+	 * drop counters is added from Kernel for PPE Tunnel stats.
+	 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
+	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);
+	atomic_long_add(stats->rx_drop_pkt_cnt, &dev->rx_dropped);
+#endif
+	return true;
+}
 
 /*
  * nss_ppe_vxlanmgr_tun_stats_show()

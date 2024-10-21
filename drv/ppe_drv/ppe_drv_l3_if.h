@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -78,6 +78,7 @@ struct ppe_drv_l3_if *ppe_drv_l3_if_ref(struct ppe_drv_l3_if *l3_if);
 bool ppe_drv_l3_if_deref(struct ppe_drv_l3_if *l3_if);
 
 bool ppe_drv_l3_if_disable_ttl_dec(struct ppe_drv_l3_if *l3_if, bool disable_ttl_dec);
+bool ppe_drv_l3_if_udp_zero_csum_action_set(struct ppe_drv_l3_if *l3_if, fal_udp_zero_csum_cmd_t fal_action);
 
 void ppe_drv_l3_if_entries_free(struct ppe_drv_l3_if *l3_if);
 struct ppe_drv_l3_if *ppe_drv_l3_if_entries_alloc(void);

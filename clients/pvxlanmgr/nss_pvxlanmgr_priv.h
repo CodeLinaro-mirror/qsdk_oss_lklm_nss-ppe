@@ -23,6 +23,7 @@
  */
 #include <linux/types.h>
 #include <linux/of.h>
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/etherdevice.h>

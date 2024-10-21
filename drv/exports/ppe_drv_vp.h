@@ -41,6 +41,7 @@ struct ppe_drv_vp_info {
 	uint8_t queue_num;		/**< Queue number */
 	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
 	uint8_t usr_type;		/**< VP user type */
+	uint8_t mpsk_en;		/**< MPSK Enable flag */
 };
 
 /**

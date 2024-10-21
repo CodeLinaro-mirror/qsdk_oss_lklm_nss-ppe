@@ -81,7 +81,7 @@
 #define PPE_DRV_ACL_IP_MISC_FLAG_L3STATE	0x00000080	/**< ACL rule with L3 state flag. */
 #define PPE_DRV_ACL_IP_MISC_FLAG_TCPFLAG	0x00000100	/**< ACL rule with TCP flags. */
 #define PPE_DRV_ACL_IP_MISC_FLAG_L31STFRAG	0x00000200	/**< ACL rule with L3 first fragment. */
-#define PPE_DRV_ACL_IP_MISC_FLAG_DSCPTC		0x00000400	/**< ACL rule with DSCP or TC value. */
+#define PPE_DRV_ACL_IP_MISC_FLAG_TOS_TC		0x00000400	/**< ACL rule with TOS or TC value. */
 #define PPE_DRV_ACL_IP_MISC_FLAG_L4PROTO	0x00000800	/**< ACL rule with L4 protocol number. */
 #define PPE_DRV_ACL_IP_MISC_FLAG_L3LEN		0x00001000	/**< ACL rule with specific L3 length. */
 
@@ -97,7 +97,7 @@
 #define PPE_DRV_ACL_ACTION_FLAG_CTAG_PCP	0x00000040	/**< ACL action for C-PCP change. */
 #define PPE_DRV_ACL_ACTION_FLAG_STAG_DEI	0x00000080	/**< ACL action for S-DEI change. */
 #define PPE_DRV_ACL_ACTION_FLAG_STAG_PCP	0x00000100	/**< ACL action for C-PCP change. */
-#define PPE_DRV_ACL_ACTION_FLAG_DSCP_TC		0x00000200	/**< ACL action for DSCP or TC change. */
+#define PPE_DRV_ACL_ACTION_FLAG_TOS_TC		0x00000200	/**< ACL action for TOS or TC change. */
 #define PPE_DRV_ACL_ACTION_FLAG_CVID		0x00000400	/**< ACL action for C-VID change. */
 #define PPE_DRV_ACL_ACTION_FLAG_SVID		0x00000800	/**< ACL action for S-VID change. */
 #define PPE_DRV_ACL_ACTION_FLAG_DST_INFO	0x00001000	/**< ACL action for destination change. */
@@ -413,7 +413,7 @@ struct ppe_drv_acl_ip_misc {
 	uint8_t l3_state_option_flag;		/**< L3 state option flag match. */
 	uint8_t tcp_flags;			/**< TCP flags based match. */
 	uint8_t l3_1st_fragment_flag;		/**< L3 first fragment flag match. */
-	uint8_t l3_dscp_tc;			/**< L3 DSCP/TC based match. */
+	uint8_t l3_tos_tc;			/**< L3 ToS/TC based match. */
 	uint8_t l3_v4proto_v6nexthdr;		/**< L4 proto/nexth-header based match. */
 	uint16_t l3_length;			/**< L3 length based match. */
 
@@ -434,7 +434,7 @@ struct ppe_drv_acl_ip_misc {
 	uint8_t l3_state_option_flag_mask;	/**< L3 state option flag mask. */
 	uint8_t tcp_flags_mask;			/**< TCP flags mask. */
 	uint8_t l3_1st_fragment_flag_mask;	/**< L3 first fragment flag mask. */
-	uint8_t l3_dscp_tc_mask;		/**< L3 DSCP/TC mask. */
+	uint8_t l3_tos_tc_mask;			/**< L3 ToS/TC mask. */
 	uint8_t l3_v4proto_v6nexthdr_mask;	/**< L4 proto/nexth-header mask. */
 	uint16_t l3_length_mask_max;		/**< L3 length mask or max for range. */
 };
@@ -514,7 +514,7 @@ struct ppe_drv_acl_action {
 	uint8_t ctag_pcp;			/**< C-PCP change action. */
 	uint8_t stag_dei;			/**< S-DEI change action. */
 	uint8_t stag_pcp;			/**< S-PCP change action. */
-	uint8_t dscp_tc;			/**< DSCP change action. */
+	uint8_t tos_tc;				/**< TOS/TC change action. */
 	uint16_t cvid;				/**< C-VID change action. */
 	uint16_t svid;				/**< S-VID change action. */
 	ppe_drv_acl_dst_type_t dest_type;	/**< Destination type. */

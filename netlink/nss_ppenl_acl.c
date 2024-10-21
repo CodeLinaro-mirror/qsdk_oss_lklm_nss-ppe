@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -132,7 +132,7 @@ static void ppe_acl_rule_dump_rule(struct ppe_acl_rule *rule) {
 
 	nss_ppenl_info("%px: action dump: service_code %d, qid %d\n"
 			"enqueue_pri %d, ctag_pcp %d, stag_pcp %d\n"
-			"dscp_tc %d, cvid %d, svid %d\n"
+			"tos_tc %d, cvid %d, svid %d\n"
 			"redir_core %d\n"
 			"fwd_cmd %d, flags %d\n",
 			rule, rule->action.service_code,
@@ -140,7 +140,7 @@ static void ppe_acl_rule_dump_rule(struct ppe_acl_rule *rule) {
 			rule->action.enqueue_pri,
 			rule->action.ctag_pcp,
 			rule->action.stag_pcp,
-			rule->action.dscp_tc,
+			rule->action.tos_tc,
 			rule->action.cvid,
 			rule->action.svid,
 			rule->action.redir_core,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -63,6 +63,17 @@ bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, v
  * Success or failure.
  */
 bool ppe_drv_tun_configure_vxlan_and_dport(uint16_t dport);
+
+/**
+ * ppe_drv_tun_configure_vxlan_gpe_and_dport
+ *	Configure VXLAN-GPE destination port.
+ *
+ * @param[in] dport VXLAN-GPE destination port number
+ *
+ * @return
+ * Success or failure.
+ */
+bool ppe_drv_tun_configure_vxlan_gpe_and_dport(uint16_t dport);
 
 /**
  * ppe_drv_tun_deactivate

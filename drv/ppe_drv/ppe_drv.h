@@ -235,6 +235,8 @@ enum ppe_drv_static_dbg_level {
 
 #if defined(NSS_PPE_IPQ53XX)
 #define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3
+#elif defined(NSS_PPE_IPQ54XX)
+#define PPE_DRV_PORT_OFFLOAD_MAX_VAL            0x7
 #elif defined(NSS_PPE_IPQ95XX)
 #define PPE_DRV_PORT_OFFLOAD_MAX_VAL		0x3f
 #else
@@ -290,6 +292,7 @@ struct ppe_drv_tun_gre_acl;
 struct ppe_drv_tun_gbl {
 	struct ppe_drv_tun_l2tp tun_l2tp;
 	struct ppe_drv_tun_gre_acl *gre;
+	struct ppe_drv_tun_encap_xlate_rule *vxlan_gpe_encap_rule;	/* PPE VXLAN-GPE EG translate rule entry */
 };
 
 /*
@@ -377,6 +380,7 @@ struct ppe_drv {
 	struct ppe_drv_fse_ops *fse_ops;        /* Wi-Fi FSE block operations */
 	struct kref fse_ops_ref;		/* FSE Reference count */
 	int vxlan_dport;			/* VXLAN destination port */
+	int vxlan_gpe_dport;			/* VXLAN-GPE destination port */
 	bool fse_enable;			/* FSE enabled */
 	bool is_wifi_fse_up;			/* Wi-FI FSE ops registered with PPE */
 
@@ -447,6 +451,7 @@ struct ppe_drv_flow_cookie_metadata {
 };
 
 extern int ppe_drv_get_vxlan_dport(void);
+extern int ppe_drv_get_vxlan_gpe_dport(void);
 void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv ppe_drv_gbl;
 extern uint32_t if_bm_to_offload;

@@ -39,7 +39,12 @@
 #include <net/protocol.h>
 #include <net/route.h>
 #include <crypto/aes.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 #include <crypto/sha.h>
+#else
+#include <crypto/sha1.h>
+#include <crypto/sha2.h>
+#endif
 
 #include <nss_api_if.h>
 #include <nss_dynamic_interface.h>
@@ -529,7 +534,11 @@ void nss_dtlsmgr_ctx_dev_setup(struct net_device *dev)
 #else
 	dev->priv_destructor = nss_dtlsmgr_ctx_dev_free;
 #endif
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 	memcpy(dev->dev_addr, "\xaa\xbb\xcc\xdd\xee\xff", dev->addr_len);
+#else
+	dev_addr_set(dev, "\xaa\xbb\xcc\xdd\xee\xff");
+#endif
 	memset(dev->broadcast, 0xff, dev->addr_len);
 	memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);
 }

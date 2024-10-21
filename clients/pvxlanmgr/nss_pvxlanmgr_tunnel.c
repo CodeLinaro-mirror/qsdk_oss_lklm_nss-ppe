@@ -68,7 +68,7 @@ static inline nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_tx_msg_mac_del(struct 
 	}
 
 	dev_put(dev);
-	return status;
+	return (nss_pvxlanmgr_status_t)status;
 }
 
 /*
@@ -109,7 +109,7 @@ static inline nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_tx_msg_mac_add(struct 
 	}
 
 	dev_put(dev);
-	return status;
+	return (nss_pvxlanmgr_status_t)status;
 }
 
 /*
@@ -136,7 +136,7 @@ static nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_pvxlan_rule_destroy(struct ns
 	status = nss_pvxlanmgr_tunnel_tx_msg(ctx, &pvxlanmsg, if_num, NSS_PVXLAN_MSG_TYPE_TUNNEL_DESTROY_RULE, sizeof(struct nss_pvxlan_rule_msg));
 	if (status != NSS_TX_SUCCESS) {
 		nss_pvxlanmgr_warn("%px: ctx: create encap data tunnel error %d\n", ctx, status);
-		return status;
+		return (nss_pvxlanmgr_status_t)status;
 	}
 
 	return NSS_PVXLANMGR_SUCCESS;
@@ -166,7 +166,7 @@ static nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_pvxlan_rule_create(struct nss
 	status = nss_pvxlanmgr_tunnel_tx_msg(ctx, &pvxlanmsg, if_num, NSS_PVXLAN_MSG_TYPE_TUNNEL_CREATE_RULE, sizeof(struct nss_pvxlan_rule_msg));
 	if (status != NSS_TX_SUCCESS) {
 		nss_pvxlanmgr_warn("%px: ctx: create encap data tunnel error %d\n", ctx, status);
-		return status;
+		return (nss_pvxlanmgr_status_t)status;
 	}
 
 	return NSS_PVXLANMGR_SUCCESS;

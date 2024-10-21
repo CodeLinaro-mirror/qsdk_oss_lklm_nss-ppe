@@ -302,7 +302,8 @@ void ppe_drv_v4_flow_vlan_set(struct ppe_drv_v4_conn_flow *pcf,
 		}
 	}
 
-	if ((primary_egress_vlan_tag & PPE_DRV_VLAN_ID_MASK) != PPE_DRV_VLAN_NOT_CONFIGURED) {
+	if (((primary_egress_vlan_tag & PPE_DRV_VLAN_ID_MASK) != PPE_DRV_VLAN_NOT_CONFIGURED) &&
+			!(ppe_drv_port_flags_check(pcf->tx_port, PPE_DRV_PORT_FLAG_MPSK))) {
 		pcf->egress_vlan[0].tpid = primary_egress_vlan_tag >> 16;
 		pcf->egress_vlan[0].tci = (uint16_t) primary_egress_vlan_tag;
 		pcf->egress_vlan_cnt++;
@@ -315,7 +316,8 @@ void ppe_drv_v4_flow_vlan_set(struct ppe_drv_v4_conn_flow *pcf,
 		}
 	}
 
-	if ((secondary_egress_vlan_tag & PPE_DRV_VLAN_ID_MASK) != PPE_DRV_VLAN_NOT_CONFIGURED) {
+	if (((secondary_egress_vlan_tag & PPE_DRV_VLAN_ID_MASK) != PPE_DRV_VLAN_NOT_CONFIGURED) &&
+			!(ppe_drv_port_flags_check(pcf->tx_port, PPE_DRV_PORT_FLAG_MPSK))) {
 		pcf->egress_vlan[1].tpid = ((secondary_egress_vlan_tag & PPE_DRV_VLAN_TPID_MASK) >> 16);
 		pcf->egress_vlan[1].tci = (secondary_egress_vlan_tag & PPE_DRV_VLAN_TCI_MASK);
 		pcf->egress_vlan_cnt++;
@@ -1085,6 +1087,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			pcf->ingress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
 			pcf->egress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
 			pcf->egress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+
 			ppe_drv_v4_flow_vlan_set(pcf, vlan_primary_rule->ingress_vlan_tag,
 					vlan_primary_rule->egress_vlan_tag,
 					vlan_secondary_rule->ingress_vlan_tag,
@@ -1146,7 +1149,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_IPSEC);
 		}
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_SRC_INTERFACE_CHECK
 		/*
 		 * Check source interface based on rule flags.
 		 */
@@ -1326,6 +1329,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			pcr->ingress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
 			pcr->egress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
 			pcr->egress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+
 			ppe_drv_v4_flow_vlan_set(pcr, vlan_primary_rule->egress_vlan_tag,
 					vlan_primary_rule->ingress_vlan_tag,
 					vlan_secondary_rule->egress_vlan_tag,
@@ -1388,7 +1392,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_IPSEC);
 		}
 
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_SRC_INTERFACE_CHECK
 		/*
 		 * Check source interface based on rule flags.
 		 */
@@ -1792,7 +1796,7 @@ static struct ppe_drv_flow *ppe_drv_v4_flow_add(struct ppe_drv_v4_conn_flow *pcf
 	struct ppe_drv_host *host = NULL;
 	struct ppe_drv_port *tx_port = NULL;
 	struct ppe_drv_port *rx_port = NULL;
-#ifdef NSS_PPE_IPQ53XX
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 	uint8_t vlan_cnt = 0;
 	struct ppe_drv_vsi *eg_top_vsi = NULL;
 	struct ppe_drv_port *pp_tx = NULL;
@@ -1815,7 +1819,7 @@ static struct ppe_drv_flow *ppe_drv_v4_flow_add(struct ppe_drv_v4_conn_flow *pcf
 		}
 	}
 
-#if defined(NSS_PPE_IPQ53XX)
+#ifdef PPE_DRV_BRIDGE_NEXT_HOP
 	/*
 	 * Fetch a new nexthop entry for bridged flows.
 	 */

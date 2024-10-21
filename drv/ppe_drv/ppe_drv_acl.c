@@ -586,9 +586,9 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 					ctx, fal_rule->is_first_frag_val, fal_rule->is_first_frag_mask);
 			}
 
-			if (slice->flags & PPE_DRV_ACL_IP_MISC_FLAG_DSCPTC) {
-				fal_rule->ip_dscp_val = slice->rule.ip.l3_dscp_tc;
-				fal_rule->ip_dscp_mask = slice->rule.ip.l3_dscp_tc_mask;
+			if (slice->flags & PPE_DRV_ACL_IP_MISC_FLAG_TOS_TC) {
+				fal_rule->ip_dscp_val = slice->rule.ip.l3_tos_tc;
+				fal_rule->ip_dscp_mask = slice->rule.ip.l3_tos_tc_mask;
 				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_IP_DSCP);
 				ppe_drv_trace("%p: slice ip misc dscp_tc: %d, mask: 0x%x",
 					ctx, fal_rule->ip_dscp_val, fal_rule->ip_dscp_mask);
@@ -798,11 +798,11 @@ static bool ppe_drv_acl_action_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 		ppe_drv_trace("%p: action spcp: %d", ctx, fal_rule->stag_pri);
 	}
 
-	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_DSCP_TC) {
-		fal_rule->dscp = action->dscp_tc;
+	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_TOS_TC) {
+		fal_rule->dscp = action->tos_tc;
 		fal_rule->dscp_mask = 0xff;
 		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_REMARK_DSCP);
-		ppe_drv_trace("%p: action dscp_tc: %d", ctx, fal_rule->dscp);
+		ppe_drv_trace("%p: action tos_tc: %d", ctx, fal_rule->dscp);
 	}
 
 	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_CVID) {

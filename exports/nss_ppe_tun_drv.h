@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -118,6 +118,17 @@ uint16_t ppe_tun_get_active_tun_cnt(void);
 bool ppe_tun_setup(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr);
 
 /**
+ * ppe_tun_destroy()
+ *	Destroy the PPE tunnel
+ *
+ * @param[in] dev      net device
+ *
+ * @return
+ * Status of operation
+ */
+bool ppe_tun_destroy(struct net_device *dev);
+
+/**
  * ppe_tun_free()
  *	Free a struct ppe_tun
  *
@@ -179,6 +190,17 @@ bool ppe_tun_decap_enable(struct net_device *dev);
  * Status of operation
  */
 bool ppe_tun_configure_vxlan_dport(uint16_t dport);
+
+/*
+ *  ppe_tun_configure_vxlan_gpe_dport
+ *	Configure VXLAN-GPE destination port
+ *
+ * @param type[IN] dport  destination port
+ *
+ * @return
+ * Status of operation
+ */
+bool ppe_tun_configure_vxlan_gpe_dport(uint16_t dport);
 
 /*
  *  ppe_tun_l2tp_port_set

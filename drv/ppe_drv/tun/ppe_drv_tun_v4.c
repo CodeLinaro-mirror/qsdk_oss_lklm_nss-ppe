@@ -174,6 +174,27 @@ static bool ppe_drv_v4_vxlan_tunnel(struct ppe_drv_v4_rule_create *create, struc
 }
 
 /*
+ * ppe_drv_v4_vxlan_gpe_tunnel()
+ *	Check if create request for VxLAN-GPE tunnel.
+ */
+static bool ppe_drv_v4_vxlan_gpe_tunnel(struct ppe_drv_v4_rule_create *create, struct net_device *dev)
+{
+	int vxlan_gpe_dport = ppe_drv_get_vxlan_gpe_dport();
+
+	if (netif_is_vxlan(dev) || (!strncmp(dev->name, "ppe_vxlan_tun", 13))) {
+		/*
+		 * Check if it is an outer rule.
+		 */
+		if((create->tuple.flow_ident == vxlan_gpe_dport) && (create->tuple.return_ident == vxlan_gpe_dport)) {
+			ppe_drv_info("%p: Creating VXLAN-GPE tunnel dev: %s", dev, dev->name);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
  * ppe_drv_v4_l2tp_tunnel()
  *	Check if create request for l2tp tunnel.
  */
@@ -199,6 +220,7 @@ bool ppe_drv_v4_l2tp_tunnel(uint8_t protocol, uint32_t flow_ident, uint32_t retu
 bool ppe_drv_v4_tun_allow_tunnel_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 {
 	int vxlan_dport = ppe_drv_get_vxlan_dport();
+	int vxlan_gpe_dport = ppe_drv_get_vxlan_gpe_dport();
 
 	/*
 	 * PPE accelearation is only supported for default port currently.
@@ -207,7 +229,11 @@ bool ppe_drv_v4_tun_allow_tunnel_destroy(struct ppe_drv_v4_rule_destroy *destroy
 		return true;
 	}
 
-       if ((destroy->tuple.flow_ident == vxlan_dport && destroy->tuple.return_ident == vxlan_dport)) {
+       if ((destroy->tuple.flow_ident == vxlan_dport) && (destroy->tuple.return_ident == vxlan_dport)) {
+		return true;
+       }
+
+       if ((destroy->tuple.flow_ident == vxlan_gpe_dport) && (destroy->tuple.return_ident == vxlan_gpe_dport)) {
 		return true;
        }
 
@@ -253,8 +279,16 @@ bool ppe_drv_v4_tun_allow_tunnel_create(struct ppe_drv_v4_rule_create *create)
 		return false;
 	}
 
+	/*
+	 * Check if rule is for a VxLAN or VxLAN-GPE tunnel.
+	 */
 	dev = ppe_drv_port_to_dev(port_tun->pp);
 	if (ppe_drv_v4_vxlan_tunnel(create, dev)) {
+		spin_unlock_bh(&p->lock);
+		return true;
+	}
+
+	if (ppe_drv_v4_vxlan_gpe_tunnel(create, dev)) {
 		spin_unlock_bh(&p->lock);
 		return true;
 	}

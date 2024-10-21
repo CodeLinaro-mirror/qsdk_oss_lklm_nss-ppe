@@ -100,6 +100,7 @@ struct ppe_drv_exception_tcpflag {
  */
 extern struct ppe_drv_exception ppe_drv_exception_list[];
 
+int ppe_drv_exception_l4_checksum_enable(void);
 const uint8_t ppe_drv_exception_max(void);
 const uint8_t ppe_drv_exception_tcpflag_max(void);
 void ppe_drv_exception_init(void);

@@ -61,6 +61,19 @@ enum ppe_drv_iface_type {
 	PPE_DRV_IFACE_TYPE_MAX,			/**< Interface type max. */
 };
 
+/**
+ * ppe_drv_iface_zero_csum_action
+ *	PPE L3 interface action for zero udp checksum packets.
+ */
+enum ppe_drv_iface_zero_csum_action {
+	PPE_DRV_IFACE_ZERO_CSUM_ACTION_FRWRD,		/**< Forward packet with zero UDP checksum. */
+	PPE_DRV_IFACE_ZERO_CSUM_ACTION_DROP,		/**< Drop packet with zero UDP checksum. */
+	PPE_DRV_IFACE_ZERO_CSUM_ACTION_RECALC_MAPT,	/**< Recalculate checksum for MAP-T for packets with zero UDP checksum. */
+	PPE_DRV_IFACE_ZERO_CSUM_ACTION_RDT_TO_CPU,	/**< Redirect packet to CPU with zero UDP checksum. */
+	PPE_DRV_IFACE_ZERO_CSUM_ACTION_INVALID,		/**< Invalid action. */
+};
+typedef enum ppe_drv_iface_zero_csum_action ppe_drv_iface_zero_csum_action_t;
+
 /*
  * ppe_drv_iface_is_physical()
  *	Check if a PPE iface is a physical interface.
@@ -299,6 +312,22 @@ bool ppe_drv_iface_check_if_vp_flow(ppe_drv_iface_t rx_if);
  */
 bool ppe_drv_iface_check_flow_offload_enabled(ppe_drv_iface_t rx_if,
 				ppe_drv_iface_t tx_if);
+
+/**
+ * ppe_drv_iface_udp_zero_csum_action_set
+ * 	Update udp zero checksum action of a given PPE interface
+ *
+ * @datatypes
+ * ppe_drv_iface
+ *
+ * @param[in] iface   PPE interface.
+ * @param[in] action  Action for rx packets.
+ *
+ * @return
+ * true or false
+ */
+bool ppe_drv_iface_udp_zero_csum_action_set(struct ppe_drv_iface *iface,
+				ppe_drv_iface_zero_csum_action_t action);
 
 /** @} */ /* end_addtogroup ppe_drv_iface_subsystem */
 #endif /* _PPE_DRV_IFACE_H_ */

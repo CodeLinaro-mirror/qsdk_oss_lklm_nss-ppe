@@ -30,94 +30,8 @@
 
 #include "nss_ppe_vxlanmgr_priv.h"
 #include "nss_ppe_vxlanmgr_tun_stats.h"
-#include "nss_ppe_tun_drv.h"
 #include "ppe_drv_tun_cmn_ctx.h"
 #include <nss_ppe_bridge_mgr.h>
-
-static uint8_t encap_ecn_mode = PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_NO_UPDATE;
-module_param(encap_ecn_mode, byte, 0644);
-MODULE_PARM_DESC(encap_ecn_mode, "Encap ECN mode 0:NO_UPDATE, 1:RFC3168_LIMIT_RFC6040_CMPAT, 2:RFC3168_FULL, 3:RFC4301_RFC6040_NORMAL");
-
-static uint8_t decap_ecn_mode = PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC3168_MODE;
-module_param(decap_ecn_mode, byte, 0644);
-MODULE_PARM_DESC(decap_ecn_mode, "Decap ECN mode 0:RFC3168, 1:RFC4301, 2:RFC6040");
-
-static bool inherit_dscp = false;
-module_param(inherit_dscp, bool, 0644);
-MODULE_PARM_DESC(inherit_dscp, "DSCP 0:Dont Inherit inner, 1:Inherit inner");
-
-static bool inherit_ttl = false;
-module_param(inherit_ttl, bool, 0644);
-MODULE_PARM_DESC(inherit_ttl, "TTL 0:Dont Inherit inner, 1:Inherit inner");
-
-/*
- * nss_ppe_vxlan_dev_stats_update()
- *	Update vxlan dev statistics
- */
-static bool nss_ppe_vxlan_dev_stats_update(struct net_device *dev, ppe_tun_hw_stats *stats, ppe_tun_data *tun_cb_data)
-{
-	struct pcpu_sw_netstats *tstats;
-	struct net_device *pdev;
-	int ifindex;
-
-	if (!dev) {
-		return false;
-	}
-
-	tstats = this_cpu_ptr(dev->tstats);
-
-	/*
-	 * For VXLAN device add the stats to the parent netdevice instead of nss_netdev.
-	 */
-	if (unlikely(strncmp(dev->name, "ppe_vxlan_tun", 13) == 0)) {
-		ifindex = *(int *)netdev_priv(dev);
-		pdev = dev_get_by_index(&init_net, ifindex);
-		if (!pdev) {
-			nss_ppe_vxlanmgr_warn("%p: Parent dev of the nss-netdev %s is not present.", dev, dev->name);
-			return true;
-		}
-
-		tstats = this_cpu_ptr(pdev->tstats);
-		dev_put(pdev);
-	}
-
-	u64_stats_update_begin(&tstats->syncp);
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-	tstats->tx_bytes += stats->tx_byte_cnt;
-	tstats->tx_packets += stats->tx_pkt_cnt;
-	tstats->rx_bytes += stats->rx_byte_cnt;
-	tstats->rx_packets += stats->rx_pkt_cnt;
-#else
-	u64_stats_add(&tstats->tx_bytes, stats->tx_byte_cnt);
-	u64_stats_add(&tstats->tx_packets,  stats->tx_pkt_cnt);
-	u64_stats_add(&tstats->rx_bytes, stats->rx_byte_cnt);
-	u64_stats_add(&tstats->rx_packets,  stats->rx_pkt_cnt);
-#endif
-
-	u64_stats_update_end(&tstats->syncp);
-
-/*
- * TODO: Remove the following check when net_device support for
- * drop counters is added from Kernel for PPE Tunnel stats.
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-	atomic_long_add(stats->tx_drop_pkt_cnt, &dev->tx_dropped);
-	atomic_long_add(stats->rx_drop_pkt_cnt, &dev->rx_dropped);
-#endif
-	return true;
-}
-
-/*
- * 2^8 = 256 is the size of the hash table.
- */
-#define NSS_PPE_VXLANMGR_HASH_TABLE_SIZE 8
-#define NSS_PPE_VXLANMGR_MAX_REMOTES 8
-
-/*
- * VxLAN tunnel context hash table. Hash-key is the vni.
- */
-DEFINE_HASHTABLE(nss_ppe_vxlanmgr_tunnel_tbl, NSS_PPE_VXLANMGR_HASH_TABLE_SIZE);
-DEFINE_SPINLOCK(nss_ppe_vxlanmgr_tunnel_tbl_lock);
 
 /*
  * VxLAN neighbor-event list.
@@ -128,167 +42,6 @@ static DEFINE_SPINLOCK(rtm_neigh_event_list_lock);
 struct work_struct rtm_neigh_event_work;			/* Work queue */
 static const struct net_device_ops nss_ppe_vxlanmgr_nss_netdev_ops;
 struct workqueue_struct *nss_ppe_vxlanmgr_rtm_neigh_event_wq;
-
-/*
- * VxLAN context
- */
-extern struct nss_ppe_vxlanmgr_ctx vxlan_ctx;
-
-extern int dstport;
-
-/*
- * nss_ppe_vxlanmgr_tunnel_ctx_dev_get()
- *	Find VxLAN tunnel context using nss_netdev.
- */
-struct nss_ppe_vxlanmgr_tun_ctx *nss_ppe_vxlanmgr_tunnel_ctx_dev_get(struct net_device *nss_dev)
-{
-	struct nss_ppe_vxlanmgr_tun_ctx *curr_tun_ctx;
-	unsigned bkt;
-
-	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	hash_for_each(nss_ppe_vxlanmgr_tunnel_tbl, bkt, curr_tun_ctx, node) {
-		if ((curr_tun_ctx->vp_status == NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) && (curr_tun_ctx->remote_info.nss_netdev == nss_dev)) {
-			spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-			return curr_tun_ctx;
-		}
-	}
-
-	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	return NULL;
-}
-
-/*
- * nss_ppe_vxlanmgr_tunnel_ctx_dev_get_safe()
- *	Find VxLAN tunnel context using nss_netdev.
- */
-static struct nss_ppe_vxlanmgr_tun_ctx *nss_ppe_vxlanmgr_tunnel_ctx_dev_get_safe(struct net_device* nss_dev)
-{
-	struct nss_ppe_vxlanmgr_tun_ctx *curr_tun_ctx;
-	struct hlist_node *temp;
-	unsigned bkt;
-
-	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	hash_for_each_safe(nss_ppe_vxlanmgr_tunnel_tbl, bkt, temp, curr_tun_ctx, node) {
-		if ((curr_tun_ctx->vp_status == NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) && (curr_tun_ctx->remote_info.nss_netdev == nss_dev)) {
-			spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-			return curr_tun_ctx;
-		}
-	}
-
-	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	return NULL;
-}
-
-/*
- * nss_ppe_vxlanmgr_addr_equal()
- *	Return true if both the VXLAN address are equal.
- */
-static bool nss_ppe_vxlanmgr_addr_equal(union vxlan_addr *a, union vxlan_addr *b)
-{
-	uint32_t a_addr[4] = {0};
-	uint32_t b_addr[4] = {0};
-
-	if (!a || !b) {
-		nss_ppe_vxlanmgr_warn("VXLAN address is NULL a:%p b:%p", a, b);
-		return false;
-	}
-
-	nss_ppe_vxlanmgr_trace("b-family: %u  a-faimly: %u ", b->sa.sa_family, a->sa.sa_family);
-
-	if (a->sa.sa_family != b->sa.sa_family)
-		return false;
-
-	if (a->sa.sa_family == AF_INET6) {
-		memcpy(a_addr, &a->sin6.sin6_addr, sizeof(struct in6_addr));
-		memcpy(b_addr, &b->sin6.sin6_addr, sizeof(struct in6_addr));
-		nss_ppe_vxlanmgr_trace("a-addr: %pI6h b-addr: %pI6h", &a_addr[0], &b_addr[0]);
-		return ipv6_addr_equal(&a->sin6.sin6_addr, &b->sin6.sin6_addr);
-	}
-
-	nss_ppe_vxlanmgr_trace("b-addr: %pI4h  a-addr: %pI4h", &b->sin.sin_addr.s_addr, &a->sin.sin_addr.s_addr);
-	return a->sin.sin_addr.s_addr == b->sin.sin_addr.s_addr;
-}
-
-/*
- * nss_ppe_vxlanmgr_convert_to_vxlan_addr()
- *	Convert the address to the VXLAN address format.
- */
-static void nss_ppe_vxlanmgr_convert_to_vxlan_addr(union vxlan_addr *vxlan_address, uint32_t *addr, uint8_t type)
-{
-	if (type == AF_INET) {
-		vxlan_address->sa.sa_family = AF_INET;
-		vxlan_address->sin.sin_addr.s_addr = addr[0];
-		nss_ppe_vxlanmgr_trace("%px: VXLAN remote IPV4: %X", vxlan_address, addr[0]);
-	} else {
-		vxlan_address->sa.sa_family = AF_INET6;
-		memcpy(&vxlan_address->sin6.sin6_addr, addr, sizeof(struct in6_addr));
-		nss_ppe_vxlanmgr_trace("%px: VXLAN remote IPV6: %pI6h", vxlan_address, &addr[0]);
-	}
-}
-
-/*
- * nss_ppe_vxlanmgr_get_remote_count()
- *	Return the count of number of remotes.
- */
-static uint8_t nss_ppe_vxlanmgr_get_remote_count(struct net_device *dev)
-{
-	struct nss_ppe_vxlanmgr_tun_ctx *curr_tun_ctx;
-	struct vxlan_dev *priv;
-	uint32_t vni_key;
-	uint8_t count = 0;
-
-	priv = netdev_priv(dev);
-	vni_key = vxlan_vni_field(priv->cfg.vni);
-
-	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	hash_for_each_possible(nss_ppe_vxlanmgr_tunnel_tbl, curr_tun_ctx, node, vni_key) {
-		if ((curr_tun_ctx->vp_status == NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) && (curr_tun_ctx->vni == vni_key))
-			count++;
-	}
-
-	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	nss_ppe_vxlanmgr_trace("%px: The number of remotes for the dev: %s is: %u", dev, dev->name, count);
-
-	return count;
-}
-
-/*
- * nss_ppe_vxlanmgr_get_tun_ctx_by_pdev_and_rip()
- *	get the nss_netdevice by the parent-netdevice and the remote IP address
- */
-static struct nss_ppe_vxlanmgr_tun_ctx *nss_ppe_vxlanmgr_get_tun_ctx_by_pdev_and_rip(struct net_device *dev, union vxlan_addr *rip)
-{
-	struct nss_ppe_vxlanmgr_tun_ctx *curr_tun_ctx = NULL;
-	struct vxlan_dev *priv;
-	uint32_t vni_key;
-
-	priv = netdev_priv(dev);
-	vni_key = vxlan_vni_field(priv->cfg.vni);
-
-	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	hash_for_each_possible(nss_ppe_vxlanmgr_tunnel_tbl, curr_tun_ctx, node, vni_key) {
-		if ((curr_tun_ctx->vp_status == NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) && (curr_tun_ctx->vni == vni_key) && (nss_ppe_vxlanmgr_addr_equal(&curr_tun_ctx->remote_info.remote_ip, rip))) {
-			spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-			return curr_tun_ctx;
-		}
-	}
-
-	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	return NULL;
-}
-
-/*
- * nss_ppe_vxlanmgr_new_remote()
- *	Return true if it is a new remote.
- */
-static bool nss_ppe_vxlanmgr_new_remote(struct net_device *dev, union vxlan_addr *rip)
-{
-	if (nss_ppe_vxlanmgr_get_tun_ctx_by_pdev_and_rip(dev, rip)) {
-		return false;
-	}
-
-	return true;
-}
 
 /*
  * nss_ppe_vxlanmgr_nss_netdev_setup()
@@ -541,20 +294,17 @@ static void nss_ppe_vxlanmgr_tunnel_destroy(struct nss_ppe_vxlanmgr_tun_ctx *tun
 	struct nss_ppe_vxlanmgr_remote_info *remote_info;
 
 	/*
-	 * Delete the tunnel is UNSUCCESS case.
+	 * Delete the tunnel in UNSUCCESS case.
 	 */
 	if (tun_ctx->vp_status != NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) {
-		hash_del(&tun_ctx->node);
 		kfree(tun_ctx);
 		return;
 	}
 
 	/*
-	 * Delete the tunnel is SUCCESS case.
+	 * Delete the tunnel in SUCCESS case.
 	 */
 	remote_info = &tun_ctx->remote_info;
-
-	hash_del(&tun_ctx->node);
 
 	ppe_tun_deconfigure(dev);
 
@@ -588,7 +338,7 @@ static void nss_ppe_vxlanmgr_delete_remote(struct kref *kref)
 
 	nss_ppe_vxlanmgr_trace("%px: deleteing the Remote pdev:%s nss_dev:%s", pdev, pdev->name, nss_dev->name);
 
-	tun_ctx = nss_ppe_vxlanmgr_tunnel_ctx_dev_get_safe(nss_dev);
+	tun_ctx = nss_ppe_vxlanmgr_tunnel_ctx_get_and_dettach(nss_dev);
 	if (!tun_ctx) {
 		nss_ppe_vxlanmgr_warn("%px: Failed to get tunnel context. Invalid tunnel context", nss_dev);
 		return;
@@ -723,7 +473,15 @@ static int nss_ppe_vxlanmgr_switchdev_fdb_event(struct notifier_block *nb_unused
 		return NOTIFY_DONE;
 	}
 
+	/*
+	 * Check if VxLAN-GPE, it is used to encap L3 packet and fdb/neigh event is not applicable.
+	 */
 	priv = netdev_priv(dev);
+	if (priv->cfg.flags & VXLAN_F_GPE) {
+		nss_ppe_vxlanmgr_trace("%px: Netdevice with VXLAN-GPE configured", fdb_info);
+		return NOTIFY_DONE;
+	}
+
 	if (dstport != ntohs(priv->cfg.dst_port)) {
 		nss_ppe_vxlanmgr_trace("%px: VXLAN: configured PPE dport: %u is not-equal to user given dport:%dn", fdb_info, dstport, ntohs(priv->cfg.dst_port));
 		return NOTIFY_DONE;
@@ -814,7 +572,7 @@ static bool nss_ppe_vxlanmgr_tunnel_header_config(struct net_device *dev, struct
 	tun_hdr->tun.vxlan.src_port_min = tun_ctx->src_port_min;
 	tun_hdr->tun.vxlan.src_port_max = tun_ctx->src_port_max;
 	tun_hdr->tun.vxlan.dest_port = tun_ctx->dest_port;
-	tun_hdr->tun.vxlan.policy_id = 0;
+	tun_hdr->tun.vxlan.u.policy_id = 0;
 	tun_hdr->l3.proto = IPPROTO_UDP;
 	tun_hdr->l3.dscp = NSS_PPE_VXLAN_MGR_O_DSCP_GET(tun_ctx->tos, 2);
 	tun_hdr->type = PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN;
@@ -907,13 +665,16 @@ static void nss_ppe_vxlanmgr_rtm_newneigh_handler(struct nss_ppe_vxlanmgr_rtm_ne
 	struct nss_ppe_vxlanmgr_remote_info *remote_info;
 	struct nss_ppe_vxlanmgr_nss_dev_priv *nss_netdev_priv;
 	struct vxlan_dev *pdev_priv;
+	__be32 vni;
 
 	nss_ppe_vxlanmgr_trace("%px: parent_netdev: %s", rtm_newneigh_info, pdev->name);
 
 	dev_hold(pdev);
-	if (!nss_ppe_vxlanmgr_new_remote(pdev, &rtm_newneigh_info->rip)) {
+	pdev_priv = netdev_priv(pdev);
+	vni = vxlan_vni_field(pdev_priv->cfg.vni);
+	if (!nss_ppe_vxlanmgr_new_remote(vni, &rtm_newneigh_info->rip)) {
 		nss_ppe_vxlanmgr_trace("%px: Remote already present in the hash. Its a known remote!", rtm_newneigh_info);
-		tun_ctx = nss_ppe_vxlanmgr_get_tun_ctx_by_pdev_and_rip(pdev, &rtm_newneigh_info->rip);
+		tun_ctx = nss_ppe_vxlanmgr_get_tun_ctx_by_vni_and_rip(vni, &rtm_newneigh_info->rip);
 		if (tun_ctx) {
 			kref_get(&tun_ctx->remote_info.mac_address_ref);
 			dev_put(pdev);
@@ -927,7 +688,7 @@ static void nss_ppe_vxlanmgr_rtm_newneigh_handler(struct nss_ppe_vxlanmgr_rtm_ne
 	/*
 	 * New remote.
 	 */
-	if (nss_ppe_vxlanmgr_get_remote_count(pdev) == NSS_PPE_VXLANMGR_MAX_REMOTES) {
+	if (nss_ppe_vxlanmgr_get_remote_count(pdev, vni) == NSS_PPE_VXLANMGR_MAX_REMOTES) {
 		nss_ppe_vxlanmgr_warn("%px: Max number of remotes exist already for the dev:%s", rtm_newneigh_info, pdev->name);
 		dev_put(pdev);
 		return;
@@ -1023,9 +784,7 @@ static void nss_ppe_vxlanmgr_rtm_newneigh_handler(struct nss_ppe_vxlanmgr_rtm_ne
 	}
 
 	tun_ctx->vp_status = NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS;
-	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	hash_add(nss_ppe_vxlanmgr_tunnel_tbl, &tun_ctx->node, tun_ctx->vni);
-	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
+	nss_ppe_vxlanmgr_tunnel_ctx_attach(tun_ctx);
 	dev_put(pdev);
 
 	return;
@@ -1052,9 +811,7 @@ vp_failure:
 	 * At this time only the vp_status, pdev, remote_ip will be filled.
 	 */
 	tun_ctx->vp_status = NSS_PPE_VXLANMGR_VP_CREATION_FAILED;
-	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	hash_add(nss_ppe_vxlanmgr_tunnel_tbl, &tun_ctx->node, tun_ctx->vni);
-	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
+	nss_ppe_vxlanmgr_tunnel_ctx_attach(tun_ctx);
 	dev_put(pdev);
 }
 
@@ -1066,6 +823,8 @@ static void nss_ppe_vxlanmgr_rtm_delneigh_handler(struct nss_ppe_vxlanmgr_rtm_ne
 {
 	struct nss_ppe_vxlanmgr_tun_ctx *tun_ctx;
 	struct net_device *pdev = rtm_delneigh_info->parent_netdev;
+	struct vxlan_dev *priv;
+	__be32 vni;
 
 	nss_ppe_vxlanmgr_trace("%px: Executing the SWITCHDEV_VXLAN_FDB_DEL_TO_DEVICE handler pdev:%s", rtm_delneigh_info, pdev->name);
 
@@ -1073,14 +832,16 @@ static void nss_ppe_vxlanmgr_rtm_delneigh_handler(struct nss_ppe_vxlanmgr_rtm_ne
 	 * Remote that does-not exists in the database.
 	 */
 	dev_hold(pdev);
-	if (nss_ppe_vxlanmgr_new_remote(pdev, &rtm_delneigh_info->rip)) {
+	priv = netdev_priv(pdev);
+	vni = vxlan_vni_field(priv->cfg.vni);
+	if (nss_ppe_vxlanmgr_new_remote(vni, &rtm_delneigh_info->rip)) {
 		nss_ppe_vxlanmgr_trace("%px: It is the new remote. pdev:%s", rtm_delneigh_info, pdev->name);
 		dev_put(pdev);
 		return;
 	}
 
 	nss_ppe_vxlanmgr_trace("%px: Remote already present in the hash. Its a known remote!", rtm_delneigh_info);
-	tun_ctx = nss_ppe_vxlanmgr_get_tun_ctx_by_pdev_and_rip(pdev, &rtm_delneigh_info->rip);
+	tun_ctx = nss_ppe_vxlanmgr_get_tun_ctx_by_vni_and_rip(vni, &rtm_delneigh_info->rip);
 	if (!tun_ctx) {
 		nss_ppe_vxlanmgr_warn("%px: failed to get the tunnel context", rtm_delneigh_info);
 		dev_put(pdev);
@@ -1139,119 +900,11 @@ void nss_ppe_vxlanmgr_delete_all_remotes()
 
 	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
 	hash_for_each_safe(nss_ppe_vxlanmgr_tunnel_tbl, bkt, temp, curr_tun_ctx, node) {
-			nss_ppe_vxlanmgr_tunnel_destroy(curr_tun_ctx, curr_tun_ctx->remote_info.nss_netdev);
+		hash_del(&curr_tun_ctx->node);
+		nss_ppe_vxlanmgr_tunnel_destroy(curr_tun_ctx, curr_tun_ctx->remote_info.nss_netdev);
 	}
 	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
 }
-
-/*
- * nss_ppe_vxlanmgr_get_ifindex_and_vp_status()
- *	Find the parent/host netdevice using the parent ndetdevice and the remote IP address.
- */
-enum nss_ppe_vxlanmgr_vp_creation nss_ppe_vxlanmgr_get_ifindex_and_vp_status(struct net_device *dev, uint32_t *remote_ip, uint8_t ip_type, int *ifindex)
-{
-	struct nss_ppe_vxlanmgr_tun_ctx *curr_tun_ctx, *remote_tun_ctx;
-	struct vxlan_dev *priv;
-	uint32_t vni_key;
-	union vxlan_addr vxlan_remote_ip = {0};
-	enum nss_ppe_vxlanmgr_vp_creation vp_status = NSS_PPE_VXLANMGR_VP_CREATION_INVALID;
-
-	nss_ppe_vxlanmgr_assert(netif_is_vxlan(dev));
-
-	if (!remote_ip) {
-		nss_ppe_vxlanmgr_trace("%px: remote IP is null", dev);
-		return NSS_PPE_VXLANMGR_VP_CREATION_INVALID;
-	}
-
-	nss_ppe_vxlanmgr_convert_to_vxlan_addr(&vxlan_remote_ip, remote_ip, ip_type);
-	nss_ppe_vxlanmgr_trace("%px: VXLAN remote ip_type: %d", dev, ip_type);
-
-	priv = netdev_priv(dev);
-	vni_key = vxlan_vni_field(priv->cfg.vni);
-
-	if (dstport != ntohs(priv->cfg.dst_port)) {
-		nss_ppe_vxlanmgr_warn("%px: VXLAN: configured PPE dport: %u is not-equal to user given dport:%dn", dev, dstport, ntohs(priv->cfg.dst_port));
-		return NSS_PPE_VXLANMGR_VP_CREATION_FAILED;
-	}
-
-	/*
-	 * CASE 1: When the Remote IP (RIP) is found in the Data-Base (DB)
-	 */
-	*ifindex = -1;
-	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	hash_for_each_possible(nss_ppe_vxlanmgr_tunnel_tbl, curr_tun_ctx, node, vni_key) {
-		if (curr_tun_ctx->vni == vni_key && nss_ppe_vxlanmgr_addr_equal(&curr_tun_ctx->remote_info.remote_ip, &vxlan_remote_ip)) {
-			vp_status = curr_tun_ctx->vp_status;
-			remote_tun_ctx = curr_tun_ctx;
-			if (vp_status == NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) {
-				*ifindex = curr_tun_ctx->remote_info.nss_netdev->ifindex;
-			}
-			nss_ppe_vxlanmgr_trace("%px: Found VP in the database", dev);
-			break;
-		}
-	}
-	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-
-	/*
-	 * We assume VP creation status as "in-progess" for the time needed to create the VP and add it into the hash table.
-	 * VXLANMgr sends VP status as "failed" when ECM query has reached NSS_PPE_VXLANMGR_VP_STATUS_MAX for each remote.
-	 * This is to ensure that, vp status is not stuck in "in-progess" state for long time.
-	 * This will allow ECM to go-ahead with different acceleration engine if not PPE.
-	 *
-	 * CASE 2: When the Remote IP (RIP) is found in the Data-Base (DB) and the vp status is "IN_PROGRESS,
-	 * then wait for NSS_PPE_VXLANMGR_VP_STATUS_MAX retries to transition the vp status to the "SUCCESS" state.
-	 */
-	if (vp_status == NSS_PPE_VXLANMGR_VP_CREATION_IN_PROGRESS) {
-		remote_tun_ctx->remote_info.vp_status_nack++;
-		if (remote_tun_ctx->remote_info.vp_status_nack > vxlan_ctx.nack_limit) {
-			return NSS_PPE_VXLANMGR_VP_CREATION_FAILED;
-		}
-		nss_ppe_vxlanmgr_trace("%px: vp_status: %u vp_status_nack: %u", dev, vp_status, remote_tun_ctx->remote_info.vp_status_nack);
-	}
-
-	/*
-	 * CASE 3: When the Remote IP (RIP) is NEVER found in the Data-Base (DB)
-	 * a) Never found in the data-base so return "FAILED".
-	 * b) Dint find in the data-base but it may be created soon, so set status as "IN_PROGRESS".
-	 */
-	if (vp_status == NSS_PPE_VXLANMGR_VP_CREATION_INVALID) {
-		if (nss_ppe_vxlanmgr_get_remote_count(dev) == NSS_PPE_VXLANMGR_MAX_REMOTES) {
-			nss_ppe_vxlanmgr_warn("%px: VXLAN: The RIP is not found in the Data-Base/Hash table", dev);
-			return NSS_PPE_VXLANMGR_VP_CREATION_FAILED;
-		}
-
-		vp_status = NSS_PPE_VXLANMGR_VP_CREATION_IN_PROGRESS;
-		nss_ppe_vxlanmgr_trace("%px: VP is still being created. vp_status: %u dev->name:%s", dev, vp_status, dev->name);
-	}
-
-	/*
-	 * CASE 1 & 2 & 3: Return the vp_status found.
-	 */
-	return vp_status;
-}
-EXPORT_SYMBOL(nss_ppe_vxlanmgr_get_ifindex_and_vp_status);
-
-/*
- * nss_ppe_vxlanmgr_get_parent_netdev()
- *	Find the parent/host netdevice using the nss-netdevice.
- */
-struct net_device *nss_ppe_vxlanmgr_get_parent_netdev(struct net_device *nss_dev)
-{
-	struct nss_ppe_vxlanmgr_tun_ctx *curr_tun_ctx;
-	unsigned int bkt;
-
-	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	hash_for_each(nss_ppe_vxlanmgr_tunnel_tbl, bkt, curr_tun_ctx, node) {
-		if ((curr_tun_ctx->vp_status == NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) && (curr_tun_ctx->remote_info.nss_netdev == nss_dev)) {
-			spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-			return curr_tun_ctx->parent_dev;
-		}
-	}
-
-	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
-	return NULL;
-}
-EXPORT_SYMBOL(nss_ppe_vxlanmgr_get_parent_netdev);
 
 /*
  * nss_ppe_vxlanmgr_wq_exit()

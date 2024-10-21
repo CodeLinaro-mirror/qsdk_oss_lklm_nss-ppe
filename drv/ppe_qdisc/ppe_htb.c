@@ -587,7 +587,7 @@ static int ppe_htb_dump_class(struct Qdisc *sch, unsigned long arg, struct sk_bu
 	 * All htb group nodes are root nodes. i.e. they dont
 	 * have any mode htb groups attached beneath them.
 	 */
-	tcm->tcm_parent = TC_H_ROOT;
+	tcm->tcm_parent = cl->parent ? cl->parent->sch_common.classid : TC_H_ROOT;
 	tcm->tcm_handle = cl->sch_common.classid;
 	tcm->tcm_info = cl->qdisc->handle;
 

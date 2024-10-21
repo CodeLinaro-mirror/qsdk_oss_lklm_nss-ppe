@@ -234,6 +234,28 @@ static bool ppe_drv_tun_decap_vxlan_check_n_set(struct ppe_drv_tun_decap *ptdc,
 }
 
 /*
+ * ppe_drv_tun_decap_vxlan_gpe_check_n_set
+ *	Validate VxLAN-GPE header parameters and fill TL_TBL entry data.
+ */
+static bool ppe_drv_tun_decap_vxlan_gpe_check_n_set(struct ppe_drv_tun_decap *ptdc,
+					struct ppe_drv_tun_cmn_ctx *th, fal_tunnel_rule_t *decap_entry)
+{
+	if (th->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
+		decap_entry->tunnel_type = FAL_TUNNEL_TYPE_VXLAN_GPE_OVER_IPV4;
+	} else {
+		decap_entry->tunnel_type = FAL_TUNNEL_TYPE_VXLAN_GPE_OVER_IPV6;
+	}
+
+	decap_entry->l4_proto = IPPROTO_UDP;
+	decap_entry->dport = ntohs(th->tun.vxlan.dest_port);
+
+	decap_entry->tunnel_info = ntohl(th->tun.vxlan.vni);
+	decap_entry->key_bmp |= (PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_TLINFO_EN) | PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_DPORT_EN));
+
+	return true;
+}
+
+/*
  * ppe_drv_tun_decap_enable
  *	Enable tunnel decapsulation
  */
@@ -463,13 +485,25 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 		}
 		ftde.decap_action.udp_csum_zero = A_TRUE;
 		ftde.decap_action.update_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_UDP_CSUM_ZERO_UPDATE);
+	} else if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE) {
+		/*
+		 * Sanity validation for VxLAN-GPE tunnels
+		 */
+		if (!ppe_drv_tun_decap_vxlan_gpe_check_n_set(ptdc, pth, &ftde.decap_rule)) {
+			ppe_drv_trace("%p: VxLAN-GPE header validation failed", pp);
+			return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		}
 	} else {
 		/*
 		 * MAPT cases are not expected to use these tables only other
-		 * tunnel supported is DS-Lite
+		 * tunnel supported is DS-Lite. For UDP_ST custom tunnels,
+		 * decap processing is not required. We only use decap hw index
+		 * as its required for encap configuration.
 		 */
-		ppe_drv_warn("%p: Invalid tunnel type: %d", pp, pth->type);
-		return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		if (pth->type != PPE_DRV_TUN_CMN_CTX_TYPE_CUST) {
+			ppe_drv_warn("%p: Invalid tunnel type: %d", pp, pth->type);
+			return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		}
 	}
 
 
@@ -491,12 +525,21 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 
 	/*
 	 * Allow UDP checksum zero packets.
-	 * VXLAN IPV4 will always allow the UDP checksum zero packets but,
-	 * VXLAN IPV6 will allow UDP checksum zero packets only if PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM6_RX is set.
+	 * VXLAN/VXLAN-GPE IPV4 will always allow the UDP checksum zero packets but,
+	 * VXLAN/VXLAN-GPE IPV6 will allow UDP checksum zero packets only if PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM6_RX is set.
 	 */
 	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN) {
 		ftde.decap_action.service_code_en = A_TRUE;
 		ftde.decap_action.service_code = PPE_DRV_SC_L2_TUNNEL_EXCEPTION;
+		ftde.decap_action.update_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_UDP_CSUM_ZERO_UPDATE);
+		if (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
+			ftde.decap_action.udp_csum_zero = A_TRUE;
+		} else if ((pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV6) && (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM6_RX)) {
+			ftde.decap_action.udp_csum_zero = A_TRUE;
+		}
+	}
+
+	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE) {
 		ftde.decap_action.update_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_UDP_CSUM_ZERO_UPDATE);
 		if (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
 			ftde.decap_action.udp_csum_zero = A_TRUE;

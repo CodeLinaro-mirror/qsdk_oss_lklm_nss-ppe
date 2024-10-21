@@ -18,6 +18,7 @@
 #include <linux/udp.h>
 #include <net/gre.h>
 #include <net/vxlan.h>
+#include <net/tun_proto.h>
 #include <linux/if_tunnel.h>
 #include <fal_tunnel.h>
 #include <ppe_drv/ppe_drv.h>
@@ -377,6 +378,48 @@ bool ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(struct ppe_drv *p, struct ppe_dr
 }
 
 /*
+ * ppe_drv_tun_encap_hdr_ctrl_vxlan_gpe_configure
+ *	configure encap header control for vxlan-gpe tunnel
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_vxlan_gpe_configure(struct ppe_drv *p, struct ppe_drv_tun *tun)
+{
+	struct ppe_drv_tun_encap_header_ctrl hdr_ctrl = {0};
+
+	/*
+	 * Configure header control global registers to update UDP sport values for all the packets
+	 * encapsulated by PPE for vxlan-gpe tunnel. PPE currently supports only the default source
+	 * port range (49152 to 65535)
+	 */
+	hdr_ctrl.udp_sport_base = FAL_TUNNEL_UDP_ENTROPY_SPORT_BASE;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_BASE);
+	hdr_ctrl.udp_sport_mask = FAL_TUNNEL_UDP_ENTROPY_SPORT_MASK;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_MASK);
+
+	/*
+	 * Configure header control global register to update next protocol
+	 * for IPv4 packet proto_map_data[1] is used and for IPv6 proto_map_data[3] is used
+	 */
+	hdr_ctrl.ipv4_proto_map_data = TUN_P_IPV4;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP);
+	hdr_ctrl.ipv6_proto_map_data = TUN_P_IPV6;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP);
+
+	if (!ppe_drv_tun_encap_hdr_ctrl_set(hdr_ctrl)) {
+		ppe_drv_warn("%p encap header control set failed", p);
+		return false;
+	}
+
+	/*
+	 * Set the encap header control bitmap in tunnel structure
+	 */
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_BASE);
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_MASK);
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP);
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP);
+	return true;
+}
+
+/*
  * ppe_drv_tun_encap_hdr_ctrl_l2tp_configure
  *	configure encap header control for l2tp tunnel
  */
@@ -716,10 +759,9 @@ static void ppe_drv_tun_encap_hdr_set(struct ppe_drv_tun_encap *ptec,
 		vxh.vx_vni = th->tun.vxlan.vni;
 
 		if (th->tun.vxlan.flags & VXLAN_F_GBP) {
-			vxh_gbp.policy_id = th->tun.vxlan.policy_id;
 			vxh_gbp.vx_flags = th->tun.vxlan.flags;
 			vxh_gbp.vx_vni = th->tun.vxlan.vni;
-			vxh_gbp.policy_id = th->tun.vxlan.policy_id;
+			vxh_gbp.policy_id = th->tun.vxlan.u.policy_id;
 			memcpy((void *)tun_hdr, (void *)&vxh_gbp, sizeof(vxh_gbp));
 			tun_hdr += sizeof(vxh_gbp);
 			tun_len += sizeof(vxh_gbp);
@@ -757,6 +799,39 @@ static void ppe_drv_tun_encap_hdr_set(struct ppe_drv_tun_encap *ptec,
 
 		tun_hdr += sizeof(struct ppe_drv_tun_encap_ppp_hdr);
 		tun_len += sizeof(struct ppe_drv_tun_encap_ppp_hdr);
+		l4_offset_valid = true;
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUST) {
+		if (th->tun.cust.cust_type == PPE_DRV_TUN_CMN_CTX_CUST_TYPE_UDP_ST) {
+			struct udphdr udph;
+			memset(&udph, 0, sizeof(struct udphdr));
+
+			udph.source = th->tun.cust.cust_tun.udp_st.sport;
+			udph.dest = th->tun.cust.cust_tun.udp_st.dport;
+			memcpy((void *)tun_hdr, (void *)&udph, sizeof(udph));
+			tun_hdr += sizeof(udph);
+			tun_len += sizeof(udph);
+		}
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE) {
+		struct udphdr udph;
+		struct vxlanhdr_gpe vxh;
+
+		memset(&udph, 0, sizeof(struct udphdr));
+		memset(&vxh, 0, sizeof(struct vxlanhdr));
+
+		udph.dest = th->tun.vxlan.dest_port;
+		memcpy((void *)tun_hdr, (void *)&udph, sizeof(udph));
+		tun_hdr += sizeof(udph);
+		tun_len += sizeof(udph);
+
+		vxh.version = 0;
+		vxh.instance_applied = !!(th->tun.vxlan.flags & VXLAN_HF_VNI);
+		vxh.np_applied = !!(th->tun.vxlan.flags & VXLAN_HF_NP);
+		vxh.next_protocol = th->tun.vxlan.u.next_proto;
+		vxh.vx_vni = th->tun.vxlan.vni;
+
+		memcpy((void *)tun_hdr, (void *)&vxh, sizeof(vxh));
+		tun_hdr += sizeof(vxh);
+		tun_len += sizeof(vxh);
 		l4_offset_valid = true;
 	}
 
@@ -955,6 +1030,78 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 			ppe_drv_warn("%p: fal_tunnel_encap_rule_entry_set failed %d\n", ptec, err);
 			return false;
 		}
+		encap_cfg.edit_rule_id = ptec->rule_id;
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUST) {
+		if (th->tun.cust.cust_type == PPE_DRV_TUN_CMN_CTX_CUST_TYPE_UDP_ST) {
+			encap_cfg.l4_proto = FAL_TUNNEL_ENCAP_L4_PROTO_UDP;
+			encap_cfg.l4_checksum_en = A_TRUE;
+			encap_cfg.payload_inner_type = FAL_TUNNEL_INNER_IP;
+		}
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE) {
+		encap_cfg.l4_proto = FAL_TUNNEL_ENCAP_L4_PROTO_UDP; /* 0:Non;1:TCP;2:UDP;3:UDP-Lite;4:Reserved (ICMP);5:GRE; */
+		encap_cfg.sport_entry_en = 1;  /* TODO: FAL API should be entropy */
+		encap_cfg.payload_inner_type = FAL_TUNNEL_INNER_IP;
+		encap_cfg.encap_target = FAL_TUNNEL_ENCAP_TARGET_TUNNEL_INFO;
+		encap_cfg.tunnel_offset =  sizeof(struct ethhdr) + sizeof(struct udphdr);
+
+		/*
+		 * Tunnel Offset must be configured accordingly if outer header is IPv4 or IPv6 and
+		 * if there are any additional vlan or PPPoE headers
+		 */
+		if (th->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
+			encap_cfg.tunnel_offset += sizeof(struct iphdr);
+		} else if (th->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV6) {
+			encap_cfg.tunnel_offset += sizeof(struct ipv6hdr);
+		}
+
+		if ((l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_SVLAN_VALID) && (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_CVLAN_VALID)) {
+			encap_cfg.tunnel_offset += sizeof(struct vlan_hdr) * 2;
+		} else if ((l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_SVLAN_VALID) || (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_CVLAN_VALID)) {
+			encap_cfg.tunnel_offset += sizeof(struct vlan_hdr);
+		}
+
+		if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
+			encap_cfg.tunnel_offset += PPPOE_SES_HLEN;
+		}
+
+		if (!(th->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_UDP_ZERO_CSUM_TX)) {
+			encap_cfg.l4_checksum_en = A_TRUE;
+		}
+
+		/*
+		 * VXLAN-GPE inner packet payload can be ipv4 or ipv6, to update the next protocol field based on
+		 * the inner payload, EG edit rules are configured. HW will copy the first 16B from the start of
+		 * src1 (src1_start) and update the next proto field in the selected 16B based on src3_entry config.
+		 * We are using src3 entry to edit the packet.
+		 *
+		 * src1_sel: Copy 16B from packet header data (src1_start)
+		 * src1_start: Start of packet_header_data from vxlan header i.e 14(ETH HDR)+20/40(IPv4/6 HDR)+8(UDP HDR) = 42/62 Bytes
+		 * If there are any additional vlan/PPPoe headers, the src1_start will be moved by adding the
+		 * header size (CVLAN = 4bytes, SVAL = 4+4 bytes, PPPoE = 8 Bytes)
+		 *
+		 * src3_entry: It is used to update the next protocol field and value to be updated is taken from
+		 * proto map, which is configured earlier (proto_map_data[1] for IPv4 and proto_map_data[3] for IPv6)
+		 * 	src_start: End of UDP header (offset wrt src1_start which is 0 as its already pointing to end of UDP)
+		 * 	src_width: Width of data to be updated, which is 8 bits.
+		 * 	dest_pos: Points to the VXLAN-GPE next protocol field. The position must be offset from Least significant bit
+		 * 	of the selected 16 bytes data in src1. [MSB 16--------<------------------------0 LSB].
+		 * des_pos = (16Bytes - 4 Bytes (VXLAN-GPE header word0 which is end of next proto field)) = 12Bytes (96 bits)
+		 */
+		encap_rule.src1_sel = FAL_TUNNEL_RULE_SRC1_FROM_HEADER_DATA;
+		encap_rule.src1_start = encap_cfg.tunnel_offset;
+		encap_rule.src2_sel = FAL_TUNNEL_RULE_SRC2_ZERO_DATA;
+		encap_rule.src3_sel = FAL_TUNNEL_RULE_SRC3_PROTO_MAP1;
+		encap_rule.src3_entry[0].enable = A_TRUE;
+		encap_rule.src3_entry[0].src_start = PPE_DRV_TUN_ENCAP_VXLAN_GPE_SRC_START;
+		encap_rule.src3_entry[0].src_width = PPE_DRV_TUN_ENCAP_VXLAN_GPE_SRC_WIDTH;
+		encap_rule.src3_entry[0].dest_pos = PPE_DRV_TUN_ENCAP_VXLAN_GPE_DEST_POS;
+
+		err = fal_tunnel_encap_rule_entry_set(PPE_DRV_SWITCH_ID, ptec->rule_id, &encap_rule);
+		if(err != SW_OK) {
+			ppe_drv_warn("%p: fal_tunnel_encap_rule_entry_set failed for vxlan-gpe %d\n", ptec, err);
+			return false;
+		}
+
 		encap_cfg.edit_rule_id = ptec->rule_id;
 	}
 

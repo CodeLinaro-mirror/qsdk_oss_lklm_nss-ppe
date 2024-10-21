@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -38,6 +38,13 @@
 #define PPE_DRV_TUN_ENCAP_L2TP_SRC_START	0
 #define PPE_DRV_TUN_ENCAP_L2TP_SRC_WIDTH	8
 #define PPE_DRV_TUN_ENCAP_L2TP_DEST_POS		48
+
+/*
+ * VXLAN-GPE tunnel definitions
+ */
+#define PPE_DRV_TUN_ENCAP_VXLAN_GPE_SRC_START	0
+#define PPE_DRV_TUN_ENCAP_VXLAN_GPE_SRC_WIDTH	8
+#define PPE_DRV_TUN_ENCAP_VXLAN_GPE_DEST_POS	96
 
 /*
  * ppe_drv_tun_encap
@@ -162,4 +169,5 @@ bool ppe_drv_tun_encap_hdr_ctrl_set(struct ppe_drv_tun_encap_header_ctrl hdr_ctr
 bool ppe_drv_tun_encap_hdr_ctrl_reset(uint8_t flags);
 bool ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
 bool ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
+bool ppe_drv_tun_encap_hdr_ctrl_vxlan_gpe_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
 #endif /* _PPE_DRV_TUN_ENCAP_H_ */

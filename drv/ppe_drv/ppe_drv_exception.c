@@ -18,6 +18,8 @@
 #include <fal/fal_ctrlpkt.h>
 #include "ppe_drv.h"
 
+extern int l4_checksum_exception_enable;
+
 /*
  * ppe_drv_exception_list
  *        PPE exception list to be enabled.
@@ -320,6 +322,56 @@ static void ppe_drv_exception_tun_init(struct ppe_drv *p)
 	}
 }
 #endif
+
+/*
+ * ppe_drv_exception_l4_checksum_enable()
+ *	Sets L4 exception for incorrect checksum in the packet.
+ */
+int ppe_drv_exception_l4_checksum_enable()
+{
+	fal_l3_excep_ctrl_t except_ctrl = {0};
+	sw_error_t err;
+
+	except_ctrl.l3flow_en = A_TRUE;
+	except_ctrl.l3flow_type = FAL_FLOW_HIT;
+	except_ctrl.l2flow_en = A_TRUE;
+	except_ctrl.l2flow_type = FAL_FLOW_HIT;
+
+	if (l4_checksum_exception_enable) {
+		except_ctrl.cmd = FAL_MAC_RDT_TO_CPU;
+		err = fal_sec_l3_excep_ctrl_set(PPE_DRV_SWITCH_ID, ppe_drv_exception_cc2exp(PPE_DRV_CC_UDP_CHECKSUM_ERR), &except_ctrl);
+		if (err != SW_OK) {
+			ppe_drv_warn("Failed to set UDP exception ctrl err: %d", err);
+			return -1;
+		}
+
+		err = fal_sec_l3_excep_ctrl_set(PPE_DRV_SWITCH_ID, ppe_drv_exception_cc2exp(PPE_DRV_CC_TCP_CHECKSUM_ERR), &except_ctrl);
+		if (err != SW_OK) {
+			ppe_drv_warn("Failed to set TCP exception ctrl err: %d", err);
+			except_ctrl.cmd = FAL_MAC_FRWRD;
+			fal_sec_l3_excep_ctrl_set(PPE_DRV_SWITCH_ID, ppe_drv_exception_cc2exp(PPE_DRV_CC_UDP_CHECKSUM_ERR), &except_ctrl);
+			return -1;
+		}
+
+	} else if (!l4_checksum_exception_enable){
+		except_ctrl.cmd = FAL_MAC_FRWRD;
+		err = fal_sec_l3_excep_ctrl_set(PPE_DRV_SWITCH_ID, ppe_drv_exception_cc2exp(PPE_DRV_CC_UDP_CHECKSUM_ERR), &except_ctrl);
+		if (err != SW_OK) {
+			ppe_drv_warn("Failed to set rdtcpu for UDP exception err: %d", err);
+			return -1;
+		}
+
+		err = fal_sec_l3_excep_ctrl_set(PPE_DRV_SWITCH_ID, ppe_drv_exception_cc2exp(PPE_DRV_CC_TCP_CHECKSUM_ERR), &except_ctrl);
+		if (err != SW_OK) {
+			ppe_drv_warn("Failed to set rdtcpu for TCP exception err: %d", err);
+			except_ctrl.cmd = FAL_MAC_RDT_TO_CPU;
+			fal_sec_l3_excep_ctrl_set(PPE_DRV_SWITCH_ID, ppe_drv_exception_cc2exp(PPE_DRV_CC_UDP_CHECKSUM_ERR), &except_ctrl);
+			return -1;
+		}
+	}
+
+	return 0;
+}
 
 /*
  * ppe_drv_exception_init()

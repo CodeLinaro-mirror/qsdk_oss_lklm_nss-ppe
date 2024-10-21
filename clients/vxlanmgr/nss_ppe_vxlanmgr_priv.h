@@ -64,6 +64,23 @@ struct ppe_drv_tun_cmn_ctx;
 #define NSS_PPE_VXLAN_MGR_O_DSCP_GET(x, y) (x >> y)
 
 /*
+ * VxLAN/VxLAN-GPE global variable
+ * 2^8 = 256 is the size of the hash table.
+ */
+#define NSS_PPE_VXLANMGR_HASH_TABLE_SIZE 8
+#define NSS_PPE_VXLANMGR_MAX_REMOTES 8
+
+extern int dstport;					/* Global VxLAN dst port */
+extern int dstport_gpe;					/* Global VxLAN-gpe dst port */
+extern bool inherit_ttl;				/* Global ttl inherit config for encap */
+extern bool inherit_dscp;				/* Global dscp inherit config for encap */
+extern uint8_t encap_ecn_mode;				/* Global ECN config for encap */
+extern uint8_t decap_ecn_mode;				/* Global ECN config for decap */
+extern struct nss_ppe_vxlanmgr_ctx vxlan_ctx;		/* Global VxLAN context */
+extern spinlock_t nss_ppe_vxlanmgr_tunnel_tbl_lock;	/* Global spin lock for vxlan hash table */
+extern DECLARE_HASHTABLE(nss_ppe_vxlanmgr_tunnel_tbl, NSS_PPE_VXLANMGR_HASH_TABLE_SIZE);	/* VxLAN hash table */
+
+/*
  * VXLAN global context.
  */
 struct nss_ppe_vxlanmgr_ctx {
@@ -97,6 +114,22 @@ struct nss_ppe_vxlanmgr_rtm_neigh_event_data {
 };
 
 /*
+ * FIB event data for VXLAN GPE
+ * The below data-structure is used to store the information which will be used later in the work-queue.
+ */
+struct nss_ppe_vxlanmgr_fib_event_data {
+	__be32 vni;				/* VxLAN Network Identifier */
+	uint8_t tos;				/* tos value */
+	uint8_t ttl;				/* time to live */
+	uint8_t event;				/* FIB add, delete, update event */
+	__be16 tun_flags;			/* Tunnel flags */
+	union vxlan_addr rip;			/* Remote IP address received in FIB update event */
+	union vxlan_addr sip;			/* Local IP address received in FIB update event */
+	struct net_device *parent_netdev;	/* Parent/linux netdevice of the tunnel */
+	struct list_head fib_event_list;	/* list to maintain the FIB events */
+};
+
+/*
  * VXLAN tunnel context for each tunnel (VXLAN remote).
  */
 struct nss_ppe_vxlanmgr_tun_ctx {
@@ -124,7 +157,20 @@ struct nss_ppe_vxlanmgr_nss_dev_priv {
 	int pdev_ifindex;	/* Linux-kernel/Parent netdevice index */
 };
 
-struct net_device *nss_ppe_vxlanmgr_get_parent_netdev(struct net_device *nss_dev);
+/*
+ * VxLAN database helper function
+ */
+void nss_ppe_vxlanmgr_tunnel_ctx_attach(struct nss_ppe_vxlanmgr_tun_ctx *tun_ctx);
+uint8_t nss_ppe_vxlanmgr_get_remote_count(struct net_device *dev, __be32 vni_key);
+bool nss_ppe_vxlanmgr_new_remote(__be32 vni_key, union vxlan_addr *rip);
+struct nss_ppe_vxlanmgr_tun_ctx *nss_ppe_vxlanmgr_tunnel_ctx_get_and_dettach(struct net_device* nss_dev);
+struct nss_ppe_vxlanmgr_tun_ctx *nss_ppe_vxlanmgr_get_tun_ctx_by_vni_and_rip(__be32 vni_key, union vxlan_addr *rip);
+enum nss_ppe_vxlanmgr_vp_creation nss_ppe_vxlanmgr_get_ifindex_and_vp_status(struct net_device *dev, union vxlan_addr *remote_ip, uint32_t vni, int *ifindex);
+
+/*
+ * VxLAN tunnel configuration API
+ */
+void nss_ppe_vxlanmgr_gpe_all_remotes_set_mtu(struct net_device *pdev, unsigned int mtu);
 void nss_ppe_vxlanmgr_all_remotes_set_mtu(struct net_device *pdev, unsigned int mtu);
 void nss_ppe_vxlanmgr_all_remotes_decap_enable(struct net_device *pdev);
 void nss_ppe_vxlanmgr_all_remotes_decap_disable(struct net_device *pdev);
@@ -133,4 +179,6 @@ void nss_ppe_vxlanmgr_all_remotes_join_bridge(struct net_device *pdev);
 void nss_ppe_vxlanmgr_delete_all_remotes(void);
 int nss_ppe_vxlanmgr_wq_init(void);
 int nss_ppe_vxlanmgr_wq_exit(void);
+int nss_ppe_vxlanmgr_gpe_wq_init(void);
+int nss_ppe_vxlanmgr_gpe_wq_exit(void);
 #endif /* __NSS_VXLANMGR_PPE_PRIV_H */
