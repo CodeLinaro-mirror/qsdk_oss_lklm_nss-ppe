@@ -1744,7 +1744,7 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 	int ret, profile;
 	char *map_name;
 	fal_port_t src_port;
-	a_uint32_t src_profile;
+	a_uint32_t src_profile = 0;
 	char dev[IFNAMSIZ];
 	char *start_ch_ptr = NULL;
 	char *end_ch_ptr = NULL;
