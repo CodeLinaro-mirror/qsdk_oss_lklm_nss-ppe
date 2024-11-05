@@ -1809,6 +1809,12 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 			}
 
 			src_profile = *start_ch_ptr - '0';
+			if (src_profile >= PPE_DRV_PORT_SRC_PROFILE_MAX) {
+				ppe_drv_warn("Invalid src profile: %d\n", src_profile);
+				spin_unlock_bh(&p->lock);
+				return -1;
+			}
+
 			continue;
 		}
 
