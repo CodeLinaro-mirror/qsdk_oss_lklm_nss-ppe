@@ -704,14 +704,14 @@ static void ppe_drv_tun_encap_hdr_set(struct ppe_drv_tun_encap *ptec,
 
 		memset((void *)&greh, 0, sizeof(greh));
 
-		if (th->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_L_KEY) {
+		if (th->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_ENCAP_KEY) {
 			gre_hdr_flags |= GRE_KEY;
-			gre_key = th->tun.gre.local_key;
+			gre_key = th->tun.gre.encap_key;
 
-			ppe_drv_trace("%p: GRE Local key: %d", ptec, gre_key);
+			ppe_drv_trace("%p: GRE key used for Encapsulation: %d", ptec, gre_key);
 		}
 
-		if (th->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_R_CSUM) {
+		if (th->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_ENCAP_CSUM) {
 			gre_hdr_flags |= GRE_CSUM;
 			csum_en = true;
 			ppe_drv_trace("%p: GRE O_CSUM enabled \n", ptec);
@@ -964,9 +964,9 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 		encap_cfg.l4_proto = 5; /* 0:Non;1:TCP;2:UDP;3:UDP-Lite;4:Reserved (ICMP);5:GRE; */
 
 		/*
-		 * Enable CSUM offload if Remote CSUM flag is enabled for the tunnel.
+		 * Enable CSUM offload if ENCAP CSUM flag is enabled for the tunnel.
 		 */
-		if (th->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_R_CSUM) {
+		if (th->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_ENCAP_CSUM) {
 			encap_cfg.l4_checksum_en = A_TRUE;
 		}
 

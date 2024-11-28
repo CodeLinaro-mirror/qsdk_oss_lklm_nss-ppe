@@ -163,6 +163,7 @@ struct nss_ppe_vxlanmgr_nss_dev_priv {
 void nss_ppe_vxlanmgr_tunnel_ctx_attach(struct nss_ppe_vxlanmgr_tun_ctx *tun_ctx);
 uint8_t nss_ppe_vxlanmgr_get_remote_count(struct net_device *dev, __be32 vni_key);
 bool nss_ppe_vxlanmgr_new_remote(__be32 vni_key, union vxlan_addr *rip);
+void nss_ppe_vxlanmgr_read_tunnel_config(struct net_device *pdev, struct seq_file *m);
 struct nss_ppe_vxlanmgr_tun_ctx *nss_ppe_vxlanmgr_tunnel_ctx_get_and_dettach(struct net_device* nss_dev);
 struct nss_ppe_vxlanmgr_tun_ctx *nss_ppe_vxlanmgr_get_tun_ctx_by_vni_and_rip(__be32 vni_key, union vxlan_addr *rip);
 enum nss_ppe_vxlanmgr_vp_creation nss_ppe_vxlanmgr_get_ifindex_and_vp_status(struct net_device *dev, union vxlan_addr *remote_ip, uint32_t vni, int *ifindex);

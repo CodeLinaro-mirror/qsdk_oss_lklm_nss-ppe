@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -55,5 +55,24 @@
 #define nss_ppe_gretap_trace(s, ...)  pr_info("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #endif
 #endif /* CONFIG_DYNAMIC_DEBUG */
+
+/*
+ * nss_ppe_gretap_stats
+ *	GREtap client statistics.
+ */
+struct nss_ppe_gretap_stats {
+	atomic64_t iflag_seq_err;		/* Sequence number enabled in iflag */
+	atomic64_t oflag_seq_err;		/* Sequence number enabled in oflag */
+	atomic64_t enc_lim_err;			/* Encap limit not set for v6 tunnel */
+};
+
+/*
+ * nss_ppe_gretap_ctx
+ *	Global gretap client context.
+ */
+struct nss_ppe_gretap_ctx {
+	struct nss_ppe_gretap_stats stats;	/* GREtap client statistics */
+	struct dentry *dentry;			/* Root dentry for GREtap client */
+};
 
 #endif /* __NSS_PPE_GRETAP_PRIV_H_ */

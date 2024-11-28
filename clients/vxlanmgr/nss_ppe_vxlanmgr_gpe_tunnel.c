@@ -283,11 +283,20 @@ static void nss_ppe_vxlanmgr_gpe_tunnel_header_config(struct net_device *dev, st
 	tun_hdr->tun.vxlan.src_port_min = priv->cfg.port_min;
 	tun_hdr->tun.vxlan.src_port_max = priv->cfg.port_max;
 	tun_hdr->tun.vxlan.dest_port = priv->cfg.dst_port;
-	tun_hdr->tun.vxlan.u.next_proto = 1; /* TODO: add next protocol here */
+	tun_hdr->tun.vxlan.u.next_proto = 0; /* To be updated by PPE based on inner payload */
 
 	tun_hdr_l3->proto = IPPROTO_UDP;
 	tun_hdr_l3->ttl = (tun_ctx->ttl ? : IPDEFTTL);
 	tun_hdr_l3->dscp = NSS_PPE_VXLAN_MGR_O_DSCP_GET(tun_ctx->tos, 2);
+
+	/*
+	 * Update details in tunnel context also which can be accessed in debugfs.
+	 */
+	tun_ctx->tunnel_flags = tun_hdr->tun.vxlan.flags;
+	tun_ctx->src_port_min = priv->cfg.port_min;
+	tun_ctx->src_port_max = priv->cfg.port_max;
+	tun_ctx->dest_port = priv->cfg.dst_port;
+	tun_ctx->ttl = tun_hdr_l3->ttl;
 
 	priv_flags = priv->cfg.flags;
 	if ((priv_flags & VXLAN_F_TTL_INHERIT) || inherit_ttl) {

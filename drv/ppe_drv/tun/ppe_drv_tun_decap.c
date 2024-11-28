@@ -118,8 +118,8 @@ static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 
 	decap_entry->l4_proto = IPPROTO_GRE;
 
-	if (pth->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_R_KEY) {
-		uint32_t gre_key = pth->tun.gre.remote_key;
+	if (pth->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_DECAP_KEY) {
+		uint32_t gre_key = pth->tun.gre.decap_key;
 
 		if (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
 			decap_entry->tunnel_type = FAL_TUNNEL_TYPE_GRE_TAP_OVER_IPV4;
@@ -442,7 +442,7 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 			return PPE_DRV_TUN_DECAP_INVALID_IDX;
 		}
 
-		if (pth->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_L_CSUM) {
+		if (pth->tun.gre.flags & PPE_DRV_TUN_CMN_CTX_GRE_DECAP_CSUM) {
 			/*
 			 * Enable GRE CSUM Exception.
 		 	 */

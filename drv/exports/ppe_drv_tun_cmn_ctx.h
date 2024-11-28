@@ -43,10 +43,10 @@
 /*
  * GRE flags
  */
-#define PPE_DRV_TUN_CMN_CTX_GRE_L_KEY		0x01	/**< Local key is enabled >*/
-#define PPE_DRV_TUN_CMN_CTX_GRE_R_KEY		0x02	/**< Remote key is enabled >*/
-#define PPE_DRV_TUN_CMN_CTX_GRE_L_CSUM		0x04	/**< Local checksum is enabled >*/
-#define PPE_DRV_TUN_CMN_CTX_GRE_R_CSUM		0x08	/**< Remote checksum is enabled >*/
+#define PPE_DRV_TUN_CMN_CTX_GRE_ENCAP_KEY		0x01	/**< Encap key is enabled >*/
+#define PPE_DRV_TUN_CMN_CTX_GRE_DECAP_KEY		0x02	/**< Decap key is enabled >*/
+#define PPE_DRV_TUN_CMN_CTX_GRE_ENCAP_CSUM		0x04	/**< Encap checksum is enabled >*/
+#define PPE_DRV_TUN_CMN_CTX_GRE_DECAP_CSUM		0x08	/**< Decap checksum is enabled >*/
 
 /*
  * ppe_drv_tun_cmn_ctx_encap_ecn
@@ -146,8 +146,8 @@ struct ppe_drv_tun_cmn_ctx_l2 {
  *	GRE header parameters
  */
 struct ppe_drv_tun_cmn_ctx_gretap {
-	uint32_t local_key;	/**< GRE local key >*/
-	uint32_t remote_key;	/**< GRE remote key >*/
+	uint32_t encap_key;	/**< GRE key used for encapsulation of the packet >*/
+	uint32_t decap_key;	/**< GRE key used for decapsulation of the packet>*/
 	uint16_t flags;		/**< flags to set optional fields >*/
 };
 

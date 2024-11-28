@@ -40,10 +40,10 @@
 #include <ppe_vp_public.h>
 #include "nss_ppe_gretap.h"
 
-static struct dentry *gretap_dentry;
+static struct nss_ppe_gretap_ctx global;
 
-static bool nss_gretap_stats_dentry_create(struct net_device *dev);
-static bool nss_gretap_stats_dentry_free(struct net_device *dev);
+static bool nss_gretap_stats_dentry_create(struct nss_ppe_gretap_ctx *ctx, struct net_device *dev);
+static bool nss_gretap_stats_dentry_free(struct nss_ppe_gretap_ctx *ctx, struct net_device *dev);
 
 static uint8_t encap_ecn_mode = PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_NO_UPDATE;
 module_param(encap_ecn_mode, byte, 0644);
@@ -130,13 +130,17 @@ static bool nss_ppe_gretap_src_exception(struct ppe_vp_cb_info *info, ppe_tun_da
  */
 static bool nss_ppe_gretap_flags_check_cmn(struct net_device *dev, uint16_t i_flags, uint16_t o_flags)
 {
+	struct nss_ppe_gretap_ctx *ctx = &global;
+
 	if (i_flags & TUNNEL_SEQ) {
 		nss_ppe_gretap_warning("%p:%s iflag SEQ not supported\n", dev, dev->name);
+		atomic64_inc(&ctx->stats.iflag_seq_err);
 		return false;
 	}
 
 	if (o_flags & TUNNEL_SEQ) {
 		nss_ppe_gretap_warning("%p:%s oflag SEQ not supported\n", dev, dev->name);
+		atomic64_inc(&ctx->stats.oflag_seq_err);
 		return false;
 	}
 
@@ -152,8 +156,11 @@ static bool nss_ppe_gretap_flags_check_cmn(struct net_device *dev, uint16_t i_fl
  */
 static bool nss_ppe_gretap_flags_check_v6(struct net_device *dev, struct ip6_tnl *tun)
 {
+	struct nss_ppe_gretap_ctx *ctx = &global;
+
 	if (!(tun->parms.flags & IP6_TNL_F_IGN_ENCAP_LIMIT)) {
 		nss_ppe_gretap_warning("%p:%s Encap limit should be none", dev, dev->name);
+		atomic64_inc(&ctx->stats.enc_lim_err);
 		return false;
 	}
 
@@ -173,22 +180,22 @@ static void nss_ppe_gretap_set_gre_key_flags(struct ppe_drv_tun_cmn_ctx_gretap *
 	memset(gre, 0, sizeof(struct ppe_drv_tun_cmn_ctx_gretap));
 
 	if (iflags & TUNNEL_KEY) {
-		gre->flags |= PPE_DRV_TUN_CMN_CTX_GRE_L_KEY;
-		gre->local_key = i_key;
+		gre->flags |= PPE_DRV_TUN_CMN_CTX_GRE_DECAP_KEY;
+		gre->decap_key = i_key;
 	}
 
 	if (oflags & TUNNEL_KEY) {
-		gre->flags |= PPE_DRV_TUN_CMN_CTX_GRE_R_KEY;
-		gre->remote_key = o_key;
+		gre->flags |= PPE_DRV_TUN_CMN_CTX_GRE_ENCAP_KEY;
+		gre->encap_key = o_key;
 	}
 
 	if (iflags & TUNNEL_CSUM) {
-		gre->flags |= PPE_DRV_TUN_CMN_CTX_GRE_L_CSUM;
+		gre->flags |= PPE_DRV_TUN_CMN_CTX_GRE_DECAP_CSUM;
 		nss_ppe_gretap_info("%p:ICSUM option enabled for GRE\n", gre);
 	}
 
 	if (oflags & TUNNEL_CSUM) {
-		gre->flags |= PPE_DRV_TUN_CMN_CTX_GRE_R_CSUM;
+		gre->flags |= PPE_DRV_TUN_CMN_CTX_GRE_ENCAP_CSUM;
 		nss_ppe_gretap_info("%p:OCSUM option enabled for GRE\n", gre);
 	}
 }
@@ -326,6 +333,7 @@ static bool nss_ppe_gretap_ip6_dev_parse_param(struct net_device *netdev, struct
 static int nss_ppe_gretap_dev_event(struct notifier_block  *nb,
 		unsigned long event, void  *info)
 {
+	struct nss_ppe_gretap_ctx *ctx  = &global;
 	struct net_device *netdev = netdev_notifier_info_to_dev(info);
 	bool status;
 	struct ppe_drv_tun_cmn_ctx *tun_hdr;
@@ -347,13 +355,13 @@ static int nss_ppe_gretap_dev_event(struct notifier_block  *nb,
 
 		status = ppe_tun_alloc(netdev, PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP);
 		if (status) {
-			nss_gretap_stats_dentry_create(netdev);
+			nss_gretap_stats_dentry_create(ctx, netdev);
 		}
 		break;
 
 	case NETDEV_UNREGISTER:
 		ppe_tun_free(netdev);
-		nss_gretap_stats_dentry_free(netdev);
+		nss_gretap_stats_dentry_free(ctx, netdev);
 		break;
 
 	case NETDEV_UP:
@@ -378,7 +386,7 @@ static int nss_ppe_gretap_dev_event(struct notifier_block  *nb,
 		if (!status) {
 			kfree(tun_hdr);
 			ppe_tun_free(netdev);
-			nss_gretap_stats_dentry_free(netdev);
+			nss_gretap_stats_dentry_free(ctx, netdev);
 			break;
 		}
 
@@ -475,17 +483,55 @@ static const struct file_operations nss_ppe_gretap_stats_ops = {
 };
 
 /*
+ * nss_ppe_gretap_client_stats_show()
+ *	Read GREtap client statistics.
+ *
+ * TODO: Print module parameters and other client level stats here.
+ */
+static int nss_ppe_gretap_client_stats_show(struct seq_file *m, void __attribute__((unused))*ptr)
+{
+	struct nss_ppe_gretap_ctx *ctx = (struct nss_ppe_gretap_ctx *)m->private;
+
+	seq_printf(m, "\n################ GREtap client statistics Start################\n");
+	seq_printf(m, "\tTunnel create request with iflag Sequence number: %llu\n", atomic64_read(&ctx->stats.iflag_seq_err));
+	seq_printf(m, "\tTunnel create request with oflag Sequence number: %llu\n", atomic64_read(&ctx->stats.oflag_seq_err));
+	seq_printf(m, "\tV6 tunnel create requests with non null encap limit: %llu\n", atomic64_read(&ctx->stats.enc_lim_err));
+	seq_printf(m, "\n################ GREtap Client Statistics End ################\n");
+
+	return 0;
+}
+
+/*
+ * nss_ppe_gretap_client_stats_open()
+ */
+static int nss_ppe_gretap_client_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, nss_ppe_gretap_client_stats_show, inode->i_private);
+}
+
+/*
+ * nss_ppe_gretap_client_stats_ops
+ *	File operations for GREtap client stats
+ */
+static const struct file_operations nss_ppe_gretap_client_stats_ops = {
+	.open = nss_ppe_gretap_client_stats_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release
+};
+
+/*
  * nss_gretap_stats_dentry_create()
  *	Create dentry for a given netdevice.
  */
-static bool nss_gretap_stats_dentry_create(struct net_device *dev)
+static bool nss_gretap_stats_dentry_create(struct nss_ppe_gretap_ctx *ctx, struct net_device *dev)
 {
 	char dentry_name[IFNAMSIZ];
 	struct dentry *dentry;
-	scnprintf(dentry_name, sizeof(dentry_name), "%s", dev->name);
 
+	scnprintf(dentry_name, sizeof(dentry_name), "%s", dev->name);
 	dentry = debugfs_create_file(dentry_name, S_IRUGO,
-			gretap_dentry, dev, &nss_ppe_gretap_stats_ops);
+			ctx->dentry, dev, &nss_ppe_gretap_stats_ops);
 	if (!dentry) {
 		nss_ppe_gretap_warning("%px: Debugfs file creation failed for device %s\n", dev, dev->name);
 		return false;
@@ -498,13 +544,13 @@ static bool nss_gretap_stats_dentry_create(struct net_device *dev)
  * nss_gretap_stats_dentry_free()
  *	Remove dentry for a given netdevice.
  */
-static bool nss_gretap_stats_dentry_free(struct net_device *dev)
+static bool nss_gretap_stats_dentry_free(struct nss_ppe_gretap_ctx *ctx, struct net_device *dev)
 {
 	char dentry_name[IFNAMSIZ];
 	struct dentry *dentry;
-	scnprintf(dentry_name, sizeof(dentry_name), "%s", dev->name);
 
-	dentry = debugfs_lookup(dentry_name, gretap_dentry);
+	scnprintf(dentry_name, sizeof(dentry_name), "%s", dev->name);
+	dentry = debugfs_lookup(dentry_name, ctx->dentry);
 	if (dentry) {
 		debugfs_remove(dentry);
 		nss_ppe_gretap_trace("%px: removed stats debugfs entry for dev %s", dev, dentry_name);
@@ -519,17 +565,17 @@ static bool nss_gretap_stats_dentry_free(struct net_device *dev)
  * nss_gretap_stats_dentry_deinit()
  *	Cleanup the debugfs tree.
  */
-static void nss_ppe_gretap_dentry_deinit(void)
+static void nss_ppe_gretap_dentry_deinit(struct nss_ppe_gretap_ctx *ctx)
 {
-	debugfs_remove_recursive(gretap_dentry);
-	gretap_dentry = NULL;
+	debugfs_remove_recursive(ctx->dentry);
+	ctx->dentry = NULL;
 }
 
 /*
  * nss_ppe_gretap_dentry_init()
  *	Create gretap tunnel statistics debugfs entry.
  */
-static bool nss_ppe_gretap_dentry_init(void)
+static bool nss_ppe_gretap_dentry_init(struct nss_ppe_gretap_ctx *ctx)
 {
 	/*
 	 * Initialize debugfs directory.
@@ -549,9 +595,17 @@ static bool nss_ppe_gretap_dentry_init(void)
 		return false;
 	}
 
-	gretap_dentry = debugfs_create_dir("gretap", clients);
-	if (!gretap_dentry) {
+	ctx->dentry = debugfs_create_dir("gretap", clients);
+	if (!ctx->dentry) {
 		nss_ppe_gretap_warning("gretap debugfs entry inside qca-nss-ppe/clients could not be created\n");
+		return false;
+	}
+
+	clients = debugfs_create_file("client", S_IRUGO,
+			ctx->dentry, ctx, &nss_ppe_gretap_client_stats_ops);
+	if (!clients) {
+		nss_ppe_gretap_warning("GREtap Client debugfs create failed\n");
+		debugfs_remove(ctx->dentry);
 		return false;
 	}
 
@@ -571,25 +625,26 @@ struct notifier_block nss_ppe_gretap_notifier = {
  */
 int __init nss_ppe_gretap_init_module(void)
 {
+	struct nss_ppe_gretap_ctx *ctx = &global;
 	nss_ppe_gretap_info("module (platform - IPQ95xx , %s) loaded\n",
 			NSS_PPE_GRETAP_BUILD_ID);
 
 	/*
 	 * Create the debugfs directory for statistics.
 	 */
-	if (!nss_ppe_gretap_dentry_init()) {
+	if (!nss_ppe_gretap_dentry_init(ctx)) {
 		nss_ppe_gretap_trace("Failed to initialize debugfs\n");
 		return -1;
 	}
 
 	if (encap_ecn_mode > PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_RFC4301_RFC6040_NORMAL_MODE) {
-		nss_ppe_gretap_dentry_deinit();
+		nss_ppe_gretap_dentry_deinit(ctx);
 		nss_ppe_gretap_warning("Invalid Encap ECN mode %u\n", encap_ecn_mode);
 		return -1;
 	}
 
 	if (decap_ecn_mode > PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC6040_MODE) {
-		nss_ppe_gretap_dentry_deinit();
+		nss_ppe_gretap_dentry_deinit(ctx);
 		nss_ppe_gretap_warning("Invalid Decap ECN mode %u\n", decap_ecn_mode);
 		return -1;
 	}
@@ -606,6 +661,8 @@ int __init nss_ppe_gretap_init_module(void)
  */
 void __exit nss_ppe_gretap_exit_module(void)
 {
+	struct nss_ppe_gretap_ctx *ctx = &global;
+
 	/*
 	 * deactivate all GRE PPE instances.
 	 */
@@ -614,7 +671,7 @@ void __exit nss_ppe_gretap_exit_module(void)
 	/*
 	 * De-initialize debugfs.
 	 */
-	nss_ppe_gretap_dentry_deinit();
+	nss_ppe_gretap_dentry_deinit(ctx);
 
 	/*
 	 * Unregister net device notification for standard tunnel.

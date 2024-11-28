@@ -169,6 +169,42 @@ void nss_ppe_vxlanmgr_gpe_all_remotes_set_mtu(struct net_device *pdev, unsigned 
 }
 
 /*
+ * nss_ppe_vxlanmgr_read_tunnel_config()
+ *	Read tunnel configs corresponding to the given parent netdevice.
+ */
+void nss_ppe_vxlanmgr_read_tunnel_config(struct net_device *pdev, struct seq_file *m)
+{
+	struct nss_ppe_vxlanmgr_remote_info *r_info;
+	struct nss_ppe_vxlanmgr_tun_ctx *tun_ctx;
+	unsigned bkt;
+
+	spin_lock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
+
+	seq_printf(m, "\nnss dev details:\n\n");
+	hash_for_each(nss_ppe_vxlanmgr_tunnel_tbl, bkt, tun_ctx, node) {
+		if ((tun_ctx->vp_status == NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) &&
+				(tun_ctx->parent_dev == pdev)) {
+			/*
+			 * Fill the config details.
+			 */
+			r_info = &tun_ctx->remote_info;
+			seq_printf(m, "\tvni: %u\n", (be32_to_cpu(tun_ctx->vni) >> 8));
+			seq_printf(m, "\ttos: %u\n", tun_ctx->tos);
+			seq_printf(m, "\tttl: %u\n", tun_ctx->ttl);
+			seq_printf(m, "\tnss dev: %s\n", r_info->nss_netdev->name);
+
+			if (r_info->remote_ip.sa.sa_family == AF_INET) {
+				seq_printf(m, "\tremote ip: %pI4\n\n", &r_info->remote_ip.sin.sin_addr.s_addr);
+			} else {
+				seq_printf(m, "\tremote ip: %pI6\n\n", &r_info->remote_ip.sin6.sin6_addr);
+			}
+		}
+	}
+
+	spin_unlock_bh(&nss_ppe_vxlanmgr_tunnel_tbl_lock);
+}
+
+/*
  * nss_ppe_vxlanmgr_get_ifindex_and_vp_status()
  *	Find the parent/host netdevice using the parent ndetdevice and the remote IP address.
  */
