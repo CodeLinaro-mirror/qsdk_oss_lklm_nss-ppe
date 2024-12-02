@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -57,7 +57,6 @@ MODULE_PARM_DESC(ipfrag_2tuple_hash, "RSS hash for IP fragments based on SIP & D
 bool flow_deacclr_dis = false;
 module_param(flow_deacclr_dis, bool, 0644);
 MODULE_PARM_DESC(flow_deacclr_dis, "Disable Flow deacceleration & Flush on Exception");
-
 
 uint32_t if_bm_to_offload;
 int disable_port_mtu_check = true;
@@ -428,14 +427,26 @@ EXPORT_SYMBOL(ppe_drv_fse_feature_disable);
 /*
  * ppe_drv_loopback_base_queue()
  */
-void ppe_drv_loopback_base_queue(uint8_t queue_id)
+void ppe_drv_loopback_base_queue(uint8_t queue_id, uint32_t ft_type)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
-	p->loopback_base_queue = queue_id;
-	p->loopback_enabled = true;
+
+	if (ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT) {
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_GRETAP_MAPT, queue_id,
+						PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_MAPT_GRETAP, queue_id,
+						PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+	}
+
+	p->loopback_ring_info.base_queue = queue_id;
+	p->loopback_ring_info.ft_type = ft_type;
+	p->loopback_ring_info.enabled = true;
+
 	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("loopback ring enabled queue_id %u feature type %x\n", queue_id, p->loopback_ring_info.ft_type);
 }
 EXPORT_SYMBOL(ppe_drv_loopback_base_queue);
 
@@ -490,6 +501,7 @@ EXPORT_SYMBOL(ppe_drv_core2queue_mapping);
  */
 static bool ppe_drv_loopback_sc2queue_mapping(struct ppe_drv *p, uint8_t src_profile)
 {
+	int base_queue = p->loopback_ring_info.base_queue;
 	struct net_device *upstream_dev;
 	struct ppe_drv_port *pp = NULL;
 	int next_sc_queue = -1;
@@ -510,8 +522,10 @@ static bool ppe_drv_loopback_sc2queue_mapping(struct ppe_drv *p, uint8_t src_pro
 	/*
 	 * Map loopback ring service code to queue mapping
 	 */
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING, p->loopback_base_queue, src_profile, PPE_DRV_REDIR_PROFILE_ID);
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_NEXT, next_sc_queue, src_profile, PPE_DRV_REDIR_PROFILE_ID);
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING, base_queue, src_profile,
+					PPE_DRV_REDIR_PROFILE_ID);
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_NEXT, next_sc_queue, src_profile,
+					PPE_DRV_REDIR_PROFILE_ID);
 
 	return true;
 }
@@ -1039,7 +1053,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->fse_ops = NULL;
 	p->fse_enable = false;
         p->is_wifi_fse_up = false;
-	p->loopback_enabled = false;
+	p->loopback_ring_info.enabled = false;
 
 	p->tun_gbl.tun_l2tp.l2tp_dport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
 	p->tun_gbl.tun_l2tp.l2tp_sport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
@@ -1889,7 +1903,7 @@ static int ppe_drv_upstream_dev_handler(struct ctl_table *table,
 	/*
 	 * Check if loopback ring is enabled
 	 */
-	if (!p->loopback_enabled) {
+	if (!p->loopback_ring_info.enabled) {
 		ppe_drv_warn("Loopback ring is not enabled\n");
 		return -1;
 	}
@@ -1989,7 +2003,7 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 	/*
 	 * Check if loopback ring is enabled
 	 */
-	if (!p->loopback_enabled) {
+	if (!p->loopback_ring_info.enabled) {
 		ppe_drv_warn("Loopback ring is not enabled\n");
 		return -1;
 	}

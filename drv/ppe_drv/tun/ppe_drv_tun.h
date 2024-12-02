@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -211,6 +211,7 @@ static inline bool ppe_drv_tun_is_dest_port_wifi(uint16_t dest_port)
 }
 
 bool ppe_drv_tun_global_init(struct ppe_drv *p);
+void ppe_drv_tun_loopback_gretap_rx_stats_get(uint8_t port, struct ppe_drv_port_hw_stats *vp_stats);
 bool ppe_drv_tun_check_support(uint8_t protocol);
 void ppe_drv_tun_vxlan_deconfigure(struct ppe_drv *p);
 void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn *cn);
@@ -219,3 +220,5 @@ bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *cn);
 bool ppe_drv_tun_attach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn);
 bool ppe_drv_tun_detach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn);
 struct ppe_drv_tun *ppe_drv_tun_mapt_port_tun_get(struct ppe_drv_port *tx_port, struct ppe_drv_port *rx_port);
+ppe_drv_ret_t ppe_drv_tun_gretap_to_mapt_sc(struct ppe_drv_port *tx_port, struct ppe_drv_port *rx_port,
+						ppe_drv_sc_t *service_code);

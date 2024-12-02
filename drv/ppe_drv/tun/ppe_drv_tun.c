@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,6 +20,7 @@
 #include <linux/version.h>
 #include <nat46/nat46-core.h>
 #include <nat46/nat46-netdev.h>
+#include <net/gre.h>
 
 #include <fal/fal_ip.h>
 #include <fal_tunnel.h>
@@ -241,6 +242,59 @@ static bool ppe_drv_tun_activate_mapt(struct ppe_drv_tun *ptun, struct ppe_drv_t
 	}
 
 	return true;
+}
+
+/*
+ * ppe_drv_tun_gretap_to_mapt_sc()
+ *	apply the loopback ring service code if the flow is between gretap and mapt
+ */
+ppe_drv_ret_t ppe_drv_tun_gretap_to_mapt_sc(struct ppe_drv_port *tx_port, struct ppe_drv_port *rx_port,
+						ppe_drv_sc_t *service_code)
+{
+	struct net_device *tx_dev, *rx_dev;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint32_t serv_code;
+
+	bool valid = false;
+
+	if ((tx_port == NULL) || (rx_port == NULL)) {
+		return PPE_DRV_RET_SUCCESS;
+	}
+
+	if ((tx_port->port_tun == NULL) || (rx_port->port_tun == NULL)) {
+		return PPE_DRV_RET_SUCCESS;
+	}
+
+	if ((rx_port->port_tun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) && (tx_port->port_tun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP)) {
+		/*
+		 * Packet destined to Gretap i.e packet is map-t decapsulated and to be
+		 * encapsulated with gretap.
+		 */
+		serv_code = PPE_DRV_SC_LOOPBACK_RING_MAPT_GRETAP;
+		valid = true;
+	} else if ((rx_port->port_tun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP) && (tx_port->port_tun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT)) {
+		/*
+		 * Packet destined to map-t i.e packet is gretap decapsulated and to be
+		 * encapsulated with map-t.
+		 */
+		serv_code = PPE_DRV_SC_LOOPBACK_RING_GRETAP_MAPT;
+		valid = true;
+	}
+
+	if (valid && !ppe_drv_tun_gretap_to_mapt_loopback_enabled(p)) {
+		ppe_drv_trace("gretap to mapt PPE accel not supported for flow rule tx dev %s rx dev %s\n",
+				tx_dev->name, rx_dev->name);
+		return PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD_FAIL;
+	}
+
+	if (valid) {
+		*service_code = serv_code;
+		ppe_drv_trace("gretap to mapt loopback service code %u added to flow rule tx dev %s rx dev %s\n",
+				serv_code, tx_dev->name, rx_dev->name);
+		return PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD;
+	}
+
+	return PPE_DRV_RET_SUCCESS;
 }
 
 /*
@@ -2102,6 +2156,48 @@ bool ppe_drv_tun_configure_vxlan_gpe_and_dport(uint16_t dport)
 	return true;
 }
 EXPORT_SYMBOL(ppe_drv_tun_configure_vxlan_gpe_and_dport);
+
+/*
+ * ppe_drv_tun_loopback_gretap_rx_stats_get()
+ *	Get the RX stats for corresponding gretap tunnel decap entry.
+ */
+void ppe_drv_tun_loopback_gretap_rx_stats_get(uint8_t port,  struct ppe_drv_port_hw_stats *vp_stats)
+{
+	fal_entry_counter_t decap_counter;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_tun *ptun;
+	struct ppe_drv_port *pp;
+	sw_error_t err;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_port_num(port);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		return;
+	}
+
+	ptun = ppe_drv_port_tun_get(pp);
+	if (!ptun || (ptun->th.type != PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP)) {
+		spin_unlock_bh(&p->lock);
+		return;
+	}
+
+	if (!ptun->ptdc || !ptun->xcpn_mode) {
+		spin_unlock_bh(&p->lock);
+		return;
+	}
+
+	err = fal_tunnel_decap_counter_get(PPE_DRV_SWITCH_ID, ptun->ptdc->tl_index, &decap_counter);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: failed to get decap counter stats for %x\n", p, err);
+		return;
+	}
+
+	vp_stats->rx_pkt_cnt  = decap_counter.matched_pkts;
+	vp_stats->rx_byte_cnt = decap_counter.matched_bytes;
+	spin_unlock_bh(&p->lock);
+}
 
 /*
  * ppe_drv_tun_global_init

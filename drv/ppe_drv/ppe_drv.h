@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -296,6 +296,15 @@ struct ppe_drv_tun_gbl {
 	struct ppe_drv_tun_encap_xlate_rule *gretun_encap_rule; 	/* PPE GRE-TUN EG translate rule entry */
 };
 
+/* ppe_drv_loopback_ring_info
+ *	loopback base structure
+ */
+struct ppe_drv_loopback_ring_info {
+	int base_queue;		/* Loopback base queue_id */
+	bool enabled;		/* Indicates if loopback ring is enabled */
+	uint32_t ft_type;	/* Feature type for loopback ring. only one loopback feature can be enabled at a time */
+};
+
 /*
  * ppe_drv
  *	PPE DRV base structure
@@ -385,12 +394,7 @@ struct ppe_drv {
 	bool fse_enable;			/* FSE enabled */
 	bool is_wifi_fse_up;			/* Wi-FI FSE ops registered with PPE */
 
-	/*
-	 * Loopback queue
-	 */
-	int loopback_base_queue;			/* Loopback base queue_id */
-	bool loopback_enabled;			/* Indicate if loopback configuration is done */
-
+	struct ppe_drv_loopback_ring_info loopback_ring_info;	/* Loopback information */
 	bool toggled_v4;			/* Toggled bit for v4 sync during a particular iteration */
 	bool toggled_v6;			/* Toggled bit for v6 sync during a particular iteration */
 	bool tun_toggled_v4;		        /* Tunnel specific Toggled bit for v4 sync during a particular iteration*/
@@ -420,6 +424,16 @@ static inline ppe_drv_tree_id_type_t ppe_drv_tree_id_type_get(struct ppe_drv_flo
 static inline bool ppe_drv_assist_feature_type_check(uint32_t feature, uint32_t flag)
 {
 	return !!(feature & flag);
+}
+
+/*
+ * ppe_drv_tun_gretap_to_mapt_loopback_enabled()
+ *	Check gretap to mapt loopback ring enabled.
+ */
+static inline bool ppe_drv_tun_gretap_to_mapt_loopback_enabled(struct ppe_drv *p)
+{
+	return !!(p->loopback_ring_info.enabled &&
+		(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT));
 }
 
 /*

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -977,6 +977,9 @@ EXPORT_SYMBOL(ppe_drv_port_get_vp_phys_dev);
  */
 bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_stats)
 {
+#ifdef PPE_TUNNEL_ENABLE
+	struct ppe_drv *p = &ppe_drv_gbl;
+#endif
 	fal_port_cnt_t hw_stats;
 	uint32_t v_port;
 	sw_error_t err;
@@ -1008,6 +1011,20 @@ bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_st
 	vp_stats->tx_byte_cnt = hw_stats.tx_byte_cnt;
 	vp_stats->tx_drop_pkt_cnt = hw_stats.tx_drop_pkt_cnt;
 	vp_stats->tx_drop_byte_cnt = hw_stats.tx_drop_byte_cnt;
+
+#ifdef PPE_TUNNEL_ENABLE
+	/*
+	 * for gretap to map-t loopback, post gretap decap packet
+	 * direction is changed in service code hence PPE does not
+	 * update gretap VP port RX counters. so reading it from decap
+	 * entry. We assume that gretap_to_mapt_loopback_enabled is set
+	 * only on the platform where gretap tunnel is created on LAN side
+	 * MAP-T tunnel created on WAN side always.
+	 */
+	if (ppe_drv_tun_gretap_to_mapt_loopback_enabled(p)) {
+		ppe_drv_tun_loopback_gretap_rx_stats_get(port, vp_stats);
+	}
+#endif
 
 	return true;
 }

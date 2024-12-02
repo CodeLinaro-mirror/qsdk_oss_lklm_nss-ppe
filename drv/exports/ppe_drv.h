@@ -92,6 +92,11 @@
 #define PPE_DRV_SAWF_VALID_TAG			0xAA
 #define PPE_DRV_SAWF_VALID_BIT(x)		((x >> 20) & 0x4)
 
+#define PPE_DRV_LOOPBACK_FEATURE_TYPE_DISABLED		0x0	/* loopback feature is disabled */
+#define PPE_DRV_LOOPBACK_FEATURE_TYPE_DEFAULT		0x1	/* Read dts file to enable loopback feature */
+#define PPE_DRV_LOOPBACK_FEATURE_TYPE_EXT_DDR_UPSTREAM	0x2	/* PON extended DDR upstream loopback feature */
+#define PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT	0x4	/* GRETAP to MAPT loopback feature */
+
 /*
  * ppe_drv_ip_type
  *	Types of IP addresses handled
@@ -501,6 +506,8 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_ATHTAG_MAP_ADD_FAIL,	/**< ATHTAG port mapping add failed. */
 	PPE_DRV_RET_ATHTAG_PORT_RX_CFG_FAIL,	/**< ATHTAG port RX config failed. */
 	PPE_DRV_RET_ATHTAG_PORT_TX_CFG_FAIL,	/**< ATHTAG port TX config failed. */
+	PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD,		/**< GRETAP to MAPT flow rule addition */
+	PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD_FAIL,	/**< GRETAP to MAPT flow rule addition failed. */
 } ppe_drv_ret_t;
 
 /**
@@ -528,11 +535,12 @@ int16_t ppe_drv_queue_from_core(uint8_t core);
  *	Configure loopback base queue
  *
  * @param[in] queue_id Loopback queue_id
+ * @param[in] loopback_feature_type loopback ring feature type
  *
  * @return
  * none.
  */
-void ppe_drv_loopback_base_queue(uint8_t queue_id);
+void ppe_drv_loopback_base_queue(uint8_t queue_id, uint32_t loopback_feature_type);
 
 /**
  * ppe_drv_core2queue_mapping

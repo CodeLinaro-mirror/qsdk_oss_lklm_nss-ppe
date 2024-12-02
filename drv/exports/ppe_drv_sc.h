@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -73,10 +73,15 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_DS_MLO_LINK_RO_NODE1 = 32, /* Service code when routed flow in DS with PPEDS Node 1 allocated for MLO Link */
 	PPE_DRV_SC_DS_MLO_LINK_RO_NODE2 = 33, /* Service code when routed flow in DS with PPEDS Node 2 allocated for MLO Link */
 	PPE_DRV_SC_DS_MLO_LINK_RO_NODE3 = 34, /* Service code when routed flow in DS with PPEDS Node 3 allocated for MLO Link */
-	PPE_DRV_SC_LOOPBACK_RING = 35, 	 /* Service code for EDMA LOOPBACK ring */
-	PPE_DRV_SC_LOOPBACK_RING_NEXT = 36, 	 /* Next Service code for EDMA LOOPBACK ring */
 
-	PPE_DRV_SC_VP_MPSK = 37,		 /* Service code to bypass the egress VLAN table in case of MPSK */
+	PPE_DRV_SC_VP_MPSK = 35,			/* Service code to bypass the egress VLAN table in case of MPSK */
+
+	PPE_DRV_SC_LOOPBACK_RING = 36,			/* Service code for EDMA LOOPBACK ring */
+	PPE_DRV_SC_LOOPBACK_RING_NEXT = 37,		/* Next Service code for EDMA LOOPBACK ring */
+	PPE_DRV_SC_LOOPBACK_RING_GRETAP_MAPT = 38,	/* Next Service code for EDMA LOOPBACK ring GRETAP to MAPT */
+	PPE_DRV_SC_LOOPBACK_RING_MAPT_GRETAP = 39,	/* Service code for EDMA LOOPBACK ring MAPT to GRETAP*/
+	PPE_DRV_SC_LOOPBACK_RING_NEXT_GRETAP_N_MAPT = 40,
+			/* Next Service code to dequeue packets from loopback ring and queue to GRETAP or MAPT ring */
 
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */

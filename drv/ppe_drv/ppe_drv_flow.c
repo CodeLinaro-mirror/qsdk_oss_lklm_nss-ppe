@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,7 @@
 #include <fal/fal_flow.h>
 #include <fal/fal_qos.h>
 #include "ppe_drv.h"
+#include "tun/ppe_drv_tun.h"
 
 static struct ppe_drv_flow_table_info *flow_table_info;
 
@@ -1733,6 +1734,19 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	ppe_drv_sc_t service_code = *scp;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
 	int next_core;
+#ifdef PPE_TUNNEL_ENABLE
+	ppe_drv_ret_t ret;
+#endif
+
+#ifdef PPE_TUNNEL_ENABLE
+	ret = ppe_drv_tun_gretap_to_mapt_sc(ppe_drv_v4_conn_flow_tx_port_get(pcf), ppe_drv_v4_conn_flow_rx_port_get(pcf), &service_code);
+	if (ret == PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD) {
+		*scp = service_code;
+		return true;
+	} else if (ret == PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD_FAIL) {
+		return false;
+	}
+#endif
 
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST)) {
 		/*
