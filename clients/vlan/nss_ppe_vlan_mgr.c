@@ -700,7 +700,8 @@ static void nss_ppe_vlan_mgr_deconfigure_vp(struct nss_vlan_pvt *v)
  * nss_ppe_vlan_mgr_free_vp()
  *	free the allocated vp for VLAN interface.
  */
-static void nss_ppe_vlan_mgr_free_vp(int vp_num) {
+static void nss_ppe_vlan_mgr_free_vp(int16_t vp_num)
+{
 	ppe_vp_status_t status = PPE_VP_STATUS_SUCCESS;
 
 	status = ppe_vp_free(vp_num);
@@ -710,33 +711,159 @@ static void nss_ppe_vlan_mgr_free_vp(int vp_num) {
 }
 
 /*
+ * nss_ppe_vlan_mgr_is_wlan_dev()
+ * 	API to check if the realdev is a WLAN dev.
+ */
+static bool nss_ppe_vlan_mgr_is_wlan_dev(struct net_device *dev)
+{
+	return !!dev->ieee80211_ptr;
+}
+
+#ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
+/*
+ * nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_cleanup()
+ *	Free translate context allocated to handle DL WIFI flows.
+ */
+static void nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_cleanup(struct kref *kref)
+{
+	struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *dst_xlate_ctx;
+
+	dst_xlate_ctx = container_of(kref, struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx, ref);
+
+	ppe_drv_vlan_wlanif_vp_tun_enc_destroy(dst_xlate_ctx->ptec);
+
+	spin_lock(&vlan_mgr_ctx.lock);
+	if (!list_empty(&dst_xlate_ctx->list)) {
+		list_del(&dst_xlate_ctx->list);
+	}
+	spin_unlock(&vlan_mgr_ctx.lock);
+
+	kfree(dst_xlate_ctx);
+}
+
+/*
+ * nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_setup()
+ *	Allocate and configure translate context required to handle DL flows.
+ *
+ * In the downlink direction after flow lookup and vlan translation the
+ * destination translate contxt is used to update the DEST_INFO with real wlan dev.
+ *
+ * NOTE: This API is called under global spin lock.
+ */
+static struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_setup(struct net_device *dev, int16_t vp_num) {
+	struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *xlate_ctx = NULL;
+
+	xlate_ctx = kzalloc(sizeof(struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx), GFP_ATOMIC);
+	if (!xlate_ctx) {
+		nss_ppe_vlan_mgr_warn("%px:%s:Failed to allocate memory for destination translate context for wlan vlan vp\n", dev, dev->name);
+		return NULL;
+	}
+
+	xlate_ctx->ptec = ppe_drv_vlan_wlanif_tun_enc_setup(dev, vp_num);
+	if (!xlate_ctx->ptec) {
+		nss_ppe_vlan_mgr_warn("%px:%s:Failed to setup destination xlate ctx\n", dev, dev->name);
+		kfree(xlate_ctx);
+		return NULL;
+	}
+
+	INIT_LIST_HEAD(&xlate_ctx->list);
+	xlate_ctx->vp_num = vp_num;
+	kref_init(&xlate_ctx->ref);
+	list_add_tail(&vlan_mgr_ctx.xlate_ctx_list, &xlate_ctx->list);
+	return xlate_ctx;
+}
+
+/*
+ * nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_put()
+ *	Decrement reference on WLAN VP destination translate context.
+ */
+static void nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_put(struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *dst_xlate)
+{
+	kref_put(&dst_xlate->ref, nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_cleanup);
+}
+
+/*
+ * nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_get()
+ *	Allocate/get Custom WLAN VLAN VP destination translate context.
+ */
+static struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_get(struct net_device *dev)
+{
+	struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *dst_xlate = NULL;
+	int16_t realdev_vp_num;
+
+	realdev_vp_num = ppe_drv_port_num_from_dev(dev);
+	if (realdev_vp_num == PPE_DRV_PORT_ID_INVALID) {
+		nss_ppe_vlan_mgr_warn("%px: No Port in PPE associated with dev %s\n", dev, dev->name);
+		return NULL;
+	}
+
+	spin_lock(&vlan_mgr_ctx.lock);
+	list_for_each_entry(dst_xlate, &vlan_mgr_ctx.xlate_ctx_list, list) {
+		if (dst_xlate->vp_num == realdev_vp_num) {
+			/*
+			 * Take reference on the destination translate context if already created.
+			 */
+			kref_get(&dst_xlate->ref);
+			spin_unlock(&vlan_mgr_ctx.lock);
+			nss_ppe_vlan_mgr_trace("%px: Destination xlate contecxt found for WLAN  Parent ndev %s\n", dev, dev->name);
+			return dst_xlate;
+		}
+	}
+
+	/*
+	 * Setup dst_xlate_ctx for the first VLAN created on top
+	 * of Real WLAN netdev.
+	 */
+	dst_xlate = nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_setup(dev, realdev_vp_num);
+	spin_unlock(&vlan_mgr_ctx.lock);
+
+	nss_ppe_vlan_mgr_trace("%px: First VLAN on WLAN dev %s, setting up dest xlate ctx\n", dev, dev->name);
+
+	return dst_xlate;
+}
+#endif
+
+/*
  * nss_ppe_vlan_mgr_alloc_vp()
  *	allocate vp for vlan interface.
  */
 static ppe_vp_num_t nss_ppe_vlan_mgr_alloc_vp(struct net_device *dev, struct net_device *vlan_as_vp_real_dev)
 {
+	int16_t queue_num = 0;
+	uint32_t port_num = 0;
 	struct ppe_vp_ai vpai = {0};
 	ppe_vp_num_t vp_num = NSS_PPE_VLAN_MGR_INVALID_PORT;
-	int16_t queue_num;
-	uint32_t port_num;
 
-	port_num = nss_ppe_vlan_mgr_get_port_id(vlan_as_vp_real_dev);
-	if (port_num == NSS_PPE_VLAN_MGR_INVALID_PORT) {
-		nss_ppe_vlan_mgr_warn("Invalid port number for vlan as vp real dev: %s\n", vlan_as_vp_real_dev->name);
-		return NSS_PPE_VLAN_MGR_INVALID_PORT;
+	if (!nss_ppe_vlan_mgr_is_wlan_dev(vlan_as_vp_real_dev)) {
+
+		port_num = nss_ppe_vlan_mgr_get_port_id(vlan_as_vp_real_dev);
+		if (port_num == NSS_PPE_VLAN_MGR_INVALID_PORT) {
+			nss_ppe_vlan_mgr_warn("Invalid port number for vlan as vp real dev: %s\n", vlan_as_vp_real_dev->name);
+			return NSS_PPE_VLAN_MGR_INVALID_PORT;
+		}
+
+		queue_num = ppe_drv_port_ucast_queue_get_by_port(port_num);
+		if (queue_num < 0) {
+			nss_ppe_vlan_mgr_warn("Invalid queue id for vlan as vp \
+					real dev: %s\n", vlan_as_vp_real_dev->name);
+			return NSS_PPE_VLAN_MGR_INVALID_PORT;
+		}
+
+		vpai.type = PPE_VP_TYPE_SW_L2;
+		vpai.queue_num = queue_num;
+		vpai.xmit_port = port_num;
+#ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
+	} else {
+
+		int16_t vp_num = ppe_drv_port_num_from_dev(vlan_as_vp_real_dev);
+		vpai.type = PPE_VP_TYPE_HW_L2TUN;
+		vpai.usr_type = ppe_vp_user_type_get(vp_num);
+		vpai.net_dev_type = PPE_VP_NET_DEV_TYPE_WIFI;
+#endif
 	}
 
-	queue_num = ppe_drv_port_ucast_queue_get_by_port(port_num);
-	if (queue_num < 0) {
-		nss_ppe_vlan_mgr_warn("Invalid queue id for vlan as vp real dev: %s\n", vlan_as_vp_real_dev->name);
-		return NSS_PPE_VLAN_MGR_INVALID_PORT;
-	}
-
-	vpai.queue_num = queue_num;
-	vpai.type = PPE_VP_TYPE_SW_L2;
 	vpai.dst_cb = nss_ppe_vlan_mgr_vp_dst_exception;
 	vpai.src_cb = nss_ppe_vlan_mgr_vp_src_exception;
-	vpai.xmit_port = port_num;
 
 	nss_ppe_vlan_mgr_trace("%s: port: %d, queue num: %d\n", dev->name, port_num, queue_num);
 
@@ -757,12 +884,14 @@ static ppe_vp_num_t nss_ppe_vlan_mgr_alloc_vp(struct net_device *dev, struct net
  *	Configure PPE VP for VLAN devices.
  *
  * It will allocate VP object and VP interface.
+ *
+ * TODO: Fix cleanup of resources in error cases.
  */
 static int nss_ppe_vlan_mgr_alloc_configure_ppe_vp(struct nss_vlan_pvt *v, struct net_device *dev,
 			struct net_device *vlan_as_vp_real_dev)
 {
-	ppe_drv_ret_t ret;
 	ppe_vp_num_t vp_num;
+	ppe_drv_ret_t ret;
 	int res = 0;
 
 	/*
@@ -780,6 +909,29 @@ static int nss_ppe_vlan_mgr_alloc_configure_ppe_vp(struct nss_vlan_pvt *v, struc
 		return -1;
 	}
 
+#ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
+	/*
+	 * For VP created on top of wlan netdevices,
+	 * Create a destination xlate context to update the DEST_INFO
+	 * with real WLAN VP after the vlan translation.
+	 */
+	if (nss_ppe_vlan_mgr_is_wlan_dev(vlan_as_vp_real_dev)) {
+		struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *xlate_ctx;
+
+		xlate_ctx = nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_get(vlan_as_vp_real_dev);
+		if (!xlate_ctx) {
+			nss_ppe_vlan_mgr_warn("WLAN dest xlate ctx get failed: %s\n", dev->name);
+			return -1;
+		}
+
+		if (!ppe_drv_vlan_wlanif_vp_tun_enc_ctx_attach(xlate_ctx->ptec, vp_num)) {
+			nss_ppe_vlan_mgr_warn("WLAN dest xlate setup failed: %s\n", dev->name);
+			return -1;
+		}
+
+		v->xlate_ctx = xlate_ctx;
+	}
+#endif
 	/*
 	 * Setting src interface for VLAN packets as VP interface.
 	 */
@@ -839,7 +991,7 @@ static int nss_ppe_vlan_mgr_alloc_configure_ppe_vp(struct nss_vlan_pvt *v, struc
 		return -1;
 	}
 
-	nss_ppe_vlan_mgr_trace("%s: v->port[0]: %d, v->port[vp_num - 1]: %d\n", dev->name,
+		nss_ppe_vlan_mgr_trace("%s: v->port[0]: %d, v->port[vp_num - 1]: %d\n", dev->name,
 			v->port[0], v->port[vp_num - 1]);
 	return res;
 }
@@ -1031,6 +1183,13 @@ static void nss_ppe_vlan_mgr_instance_free(struct kref *kref)
 		if (v->parent) {
 			nss_ppe_vlan_mgr_instance_deref(v->parent);
 		}
+
+#ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
+		if (v->xlate_ctx) {
+			ppe_drv_vlan_wlanif_vp_tun_enc_ctx_detach(v->xlate_ctx->ptec, v->xlate_info.port_id);
+			nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_put(v->xlate_ctx);
+		}
+#endif
 		nss_ppe_vlan_mgr_deconfigure_vp(v);
 		nss_ppe_vlan_mgr_free_vp(v->xlate_info.port_id);
 		kfree(v);
@@ -1248,6 +1407,11 @@ static bool nss_ppe_vlan_mgr_interface_supported(struct net_device *dev)
 	}
 
 result:
+	if (nss_ppe_vlan_mgr_is_wlan_dev(real_dev) && !vlan_mgr_ctx.wlan_dst_xlate_en) {
+		ret = false;
+		nss_ppe_vlan_mgr_warn("WLAN VLAN VP support not enabled: real_dev %s\n", real_dev->name);
+	}
+
 	spin_unlock(&vlan_mgr_ctx.lock);
 	nss_ppe_vlan_mgr_trace("VLAN(%s) on real dev %s with vid %d is %s\n", dev->name, real_dev->name, vid,
 			       ret ? "supported" : "not supported");
@@ -2432,6 +2596,12 @@ int __init nss_ppe_vlan_mgr_init_module(void)
 	INIT_LIST_HEAD(&vlan_mgr_ctx.list);
 	spin_lock_init(&vlan_mgr_ctx.lock);
 
+#ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
+	INIT_LIST_HEAD(&vlan_mgr_ctx.xlate_ctx_list);
+	vlan_mgr_ctx.wlan_dst_xlate_en = true;
+#else
+	vlan_mgr_ctx.wlan_dst_xlate_en = false;
+#endif
 	vlan_mgr_ctx.ctpid = ETH_P_8021Q;
 	vlan_mgr_ctx.stpid = ETH_P_8021Q;
 

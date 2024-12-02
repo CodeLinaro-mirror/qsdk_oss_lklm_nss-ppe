@@ -27,6 +27,7 @@
 #include <fal/fal_portvlan.h>
 #include "ppe_drv.h"
 #include "ppe_drv_stats.h"
+#include "tun/ppe_drv_tun_encap.h"
 
 /*
  * ppe_drv_vlan_del_untag_ingress_rule()
@@ -966,3 +967,170 @@ ppe_drv_ret_t ppe_drv_vlan_lag_slave_join(struct ppe_drv_iface *vlan_iface, stru
 }
 EXPORT_SYMBOL(ppe_drv_vlan_lag_slave_join);
 
+#ifdef PPE_TUNNEL_ENABLE
+/*
+ * ppe_drv_vlan_wlan_tun_encap_config
+ *	Configure EG_XLAT_TUN_CTRL table for vlan wlan tunnel
+ */
+static bool ppe_drv_vlan_wlan_tun_encap_config(struct ppe_drv_tun_encap *ptec, int16_t vp_num)
+{
+	sw_error_t err;
+	fal_tunnel_encap_cfg_t encap_cfg = {0};
+
+	/*
+	 * For WLAN VLAN custom tunnel, the encap entry is used to
+	 * update the dest_info only.
+	 */
+
+	/*
+	 * 0: encapsulation, 1:translation.
+	 */
+	encap_cfg.encap_type = 1;
+
+	/*
+	 * Encap entry used to update DEST_INFO.
+	 * Update the target type accordingly.
+	 */
+	encap_cfg.encap_target = FAL_TUNNEL_ENCAP_TARGET_NO_UPDATE;
+	encap_cfg.vport_en = A_TRUE;
+	encap_cfg.vport = vp_num;
+
+	/*
+	 * Configure encap entry into HW
+	 */
+	err = fal_tunnel_encap_entry_add(PPE_DRV_SWITCH_ID, ptec->tun_idx, &encap_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%px: failed to configure encap entry at %u", ptec, ptec->tun_idx);
+		return false;
+	}
+
+	ppe_drv_trace("%px:Added tunnel encap entry for vlan wlan tunnel vp_num %d tun_idx %d\n", ptec, vp_num, ptec->tun_idx);
+
+	return true;
+}
+
+/*
+ * ppe_drv_vlan_wlanif_vp_tun_enc_ctx_attach()
+ *	Attach WLAN VP to the tunnel encap context.
+ *
+ * A reference is held on encap entry on success.
+ */
+bool ppe_drv_vlan_wlanif_vp_tun_enc_ctx_attach(struct ppe_drv_tun_encap *ptec, int16_t vp_num)
+{
+	sw_error_t err;
+	uint32_t v_port;
+	fal_vport_state_t vp_state = {0};
+
+	/*
+	 * deref:ppe_drv_vlan_wlanif_vp_tun_enc_ctx_detach.
+	 */
+	ppe_drv_tun_encap_ref(ptec);
+
+	if (!ppe_drv_tun_encap_tun_idx_configure(ptec, vp_num, true)) {
+		ppe_drv_warn("%p: Failed to configure tun index for vp %d", ptec, vp_num);
+		ppe_drv_tun_encap_deref(ptec);
+		return false;
+	}
+
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, vp_num);
+
+	err = fal_vport_state_check_get(PPE_DRV_SWITCH_ID, v_port, &vp_state);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to get vp port state for port vp %d", ptec, vp_num);
+		ppe_drv_tun_encap_deref(ptec);
+		return false;
+	}
+
+	vp_state.eg_data_valid = A_TRUE;
+	vp_state.vp_active = A_TRUE;
+	err = fal_vport_state_check_set(PPE_DRV_SWITCH_ID, v_port, &vp_state);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to set vp state port vp %d", ptec, vp_num);
+		ppe_drv_tun_encap_deref(ptec);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_wlanif_vp_tun_enc_ctx_attach);
+
+/*
+ * ppe_drv_vlan_wlanif_vp_tun_enc_ctx_detach()
+ *	Detach WLAN VP from tunnel encap context
+ *
+ * Reference is decremented on tunnel encap entry on success.
+ */
+bool ppe_drv_vlan_wlanif_vp_tun_enc_ctx_detach(struct ppe_drv_tun_encap *ptec, int16_t vp_num)
+{
+	sw_error_t err;
+	fal_vport_state_t vp_state = {0};
+	uint32_t v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, vp_num);
+
+	err = fal_vport_state_check_get(PPE_DRV_SWITCH_ID, v_port, &vp_state);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to get vp port state for port vp %d", ptec, vp_num);
+		return false;
+	}
+
+	vp_state.eg_data_valid = A_FALSE;
+	vp_state.vp_active = A_FALSE;
+	err = fal_vport_state_check_set(PPE_DRV_SWITCH_ID, v_port, &vp_state);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to reset vp state port vp %d", ptec, vp_num);
+		return false;
+	}
+
+	if (!ppe_drv_tun_encap_tun_idx_configure(ptec, vp_num, false)) {
+		ppe_drv_warn("%p: Failed to disable tun id for  vp %d", ptec, vp_num);
+		return false;
+	}
+
+	/*
+	 * ref:ppe_drv_vlan_wlanif_vp_tun_enc_ctx_attach.
+	 */
+	ppe_drv_tun_encap_deref(ptec);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_wlanif_vp_tun_enc_ctx_detach);
+
+/*
+ * ppe_drv_vlan_wlanif_tun_enc_destroy()
+ *	Destroy WLAN VP tunnel encap context.
+ */
+void ppe_drv_vlan_wlanif_vp_tun_enc_destroy(struct ppe_drv_tun_encap *ptec)
+{
+	ppe_drv_tun_encap_deref(ptec);
+}
+EXPORT_SYMBOL(ppe_drv_vlan_wlanif_vp_tun_enc_destroy);
+
+/*
+ * ppe_drv_vlan_wlanif_tun_enc_setup()
+ *	Allocate and configure tunnel encap context.
+ *
+ * API to allocate and configure tunnel encap context to update
+ * DEST_INFO with WLAN Realdev vp number.
+ */
+struct ppe_drv_tun_encap *ppe_drv_vlan_wlanif_tun_enc_setup(struct net_device *dev, int16_t vp_num)
+{
+	struct ppe_drv_tun_encap *ptec = NULL;
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	ptec = ppe_drv_tun_encap_alloc(p);
+	if (!ptec) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p:%s:Failed to allocate tun encap entry for wlan vlan vp %d\n", dev, dev->name, vp_num);
+		return NULL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	if (!ppe_drv_vlan_wlan_tun_encap_config(ptec, vp_num)) {
+		ppe_drv_tun_encap_deref(ptec);
+		ppe_drv_warn("%p:%s:Failed to configure encap entry for wlan vlan vp %d\n", dev, dev->name, vp_num);
+		return NULL;
+	}
+
+	return ptec;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_wlanif_tun_enc_setup);
+#endif /* PPE_TUNNEL_ENABLE */

@@ -145,13 +145,13 @@ typedef bool(*ppe_vp_stats_callback_t)(struct net_device *, ppe_vp_hw_stats_t *)
  * ppe_vp_user_type
  *	Types of VPs user
  */
-enum ppe_vp_user_type {
+typedef enum ppe_vp_user_type {
 	PPE_VP_USER_TYPE_NONE = 0,	/**< Non VP use case >*/
 	PPE_VP_USER_TYPE_PASSIVE,	/**< VP for Passive use case */
 	PPE_VP_USER_TYPE_ACTIVE,	/**< VP for Active use case */
 	PPE_VP_USER_TYPE_DS,		/**< VP for Direct-Switch use case */
 	PPE_VP_USER_TYPE_MAX,		/**< Maximum VP User types */
-};
+} ppe_vp_user_type_t;
 
 /*
  * ppe_vp_netdev_type
@@ -325,6 +325,15 @@ extern ppe_vp_num_t ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai *vp
  */
 extern struct net_device *ppe_vp_alloc_dev(struct net_device *netdev, struct ppe_vp_ai *vpai);
 
+/*
+ * ppe_vp_user_type_get()
+ *	Get the user type associated with the PPE VP interface.
+ *
+ * @param[in] vp_num VP number.
+ *
+ * @return
+ * User type of VP.
+ */
+extern ppe_vp_user_type_t ppe_vp_user_type_get(ppe_vp_num_t vp_num);
 /** @} */ /* end_addtogroup ppe_vp_public_subsystem */
-
 #endif /* _PPE_VP_PUBLIC_H_ */

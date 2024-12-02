@@ -85,6 +85,7 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_REDIR_ENABLED = 0x100,
 	PPE_DRV_PORT_FLAG_TUN_ENDPOINT_DS = 0x200,
 	PPE_DRV_PORT_FLAG_MPSK = 0x400,
+	PPE_DRV_PORT_FLAG_TUN_ACTIVE = 0x800,
 } ppe_drv_port_flag_t;
 
 /*
@@ -223,4 +224,25 @@ static inline void ppe_drv_port_flags_clear(struct ppe_drv_port *pp, uint32_t fl
 static inline void ppe_drv_port_flags_set(struct ppe_drv_port *pp, uint32_t flags)
 {
 	pp->flags |= flags;
+}
+
+/*
+ * ppe_drv_port_tun_endpoint()
+ *	Check if port is a tunnel endpoint.
+ */
+static inline bool ppe_drv_port_tun_endpoint(struct ppe_drv_port *pp)
+{
+	return (pp->tunnel_vp_cfg == PPE_DRV_PORT_VIRTUAL_L2_TUN) ||
+			(pp->tunnel_vp_cfg == PPE_DRV_PORT_VIRTUAL_L3_TUN);
+}
+
+/*
+ * ppe_drv_port_tun_endpoint_and_inactive()
+ *	Check if port is a tunnel endpoint is inactive.
+ */
+static inline bool ppe_drv_port_tun_endpoint_and_inactive(struct ppe_drv_port *pp)
+{
+	return ppe_drv_port_tun_endpoint(pp) &&
+			!ppe_drv_port_flags_check(pp, PPE_DRV_PORT_FLAG_TUN_ACTIVE);
+
 }

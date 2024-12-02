@@ -407,6 +407,7 @@ bool ppe_drv_tun_port_encap_disable(struct ppe_drv_port *pp)
 		return false;
 	}
 
+	ppe_drv_port_flags_clear(pp, PPE_DRV_PORT_FLAG_TUN_ACTIVE);
 	return true;
 }
 
@@ -563,6 +564,8 @@ static bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_p
 		ppe_drv_warn("%p: failed to set L2 vp port state for port %d", pp, pp->port);
 		return false;
 	}
+
+	ppe_drv_port_flags_set(ptun->pp, PPE_DRV_PORT_FLAG_TUN_ACTIVE);
 
 	return true;
 }

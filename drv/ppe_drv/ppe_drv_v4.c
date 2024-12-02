@@ -211,6 +211,7 @@ static bool ppe_drv_v4_unbind_acl_policer(struct ppe_drv_v4_conn *cn)
 void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct ppe_drv_fse_rule_info *fse_info, bool is_ds)
 {
 	struct ppe_drv_port *pp;
+	struct net_device *dev;
 
 	fse_info->tuple.src_ip[0] = ppe_drv_v4_conn_flow_match_src_ip_get(conn);
 	fse_info->tuple.src_port = ppe_drv_v4_conn_flow_match_src_ident_get(conn);
@@ -220,13 +221,25 @@ void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct pp
 
 	pp = ppe_drv_v4_conn_flow_rx_port_get(conn);
 
-	fse_info->dev = ppe_drv_port_to_dev(pp);
+	dev = ppe_drv_port_to_dev(pp);
+	if (!is_vlan_dev(dev)) {
+		fse_info->vp_num = pp->port;
+		fse_info->dev = dev;
+	} else {
+		/*
+		 * Since the rule is pushed by ECM, it is safe to assume
+		 * that the parent_ndev will always be present.
+		 */
+		struct net_device *parent_ndev = vlan_dev_real_dev(dev);
+		struct ppe_drv_port *parent_ndev_pp = ppe_drv_port_from_dev(parent_ndev);
+		fse_info->vp_num = parent_ndev_pp->port;
+		fse_info->dev = parent_ndev;
+	}
+
 	fse_info->flags |= PPE_DRV_FSE_IPV4;
 	if (is_ds) {
 		fse_info->flags |= PPE_DRV_FSE_DS;
 	}
-
-	fse_info->vp_num = pp->port;
 
 	ppe_drv_trace("src_ip: %x\n", fse_info->tuple.src_ip[0]);
 	ppe_drv_trace("src_port: %x\n", fse_info->tuple.src_port);

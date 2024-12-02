@@ -20,6 +20,8 @@
 
 struct ppe_drv_iface;
 
+struct ppe_drv_tun_encap;
+
 #define PPE_DRV_MAX_VLAN 2
 
 /*
@@ -239,4 +241,59 @@ ppe_drv_ret_t ppe_drv_vlan_lag_slave_join(struct ppe_drv_iface *vlan_iface, stru
  */
 ppe_drv_ret_t ppe_drv_vlan_lag_slave_leave(struct ppe_drv_iface *vlan_iface, struct net_device *slave_dev);
 
+/*
+ * ppe_drv_vlan_wlanif_vp_tun_enc_ctx_attach
+ *	Attach WLAN VP to the tunnel encap context.
+ *
+ * @datatypes
+ * ppe_drv_tun_encap
+ *
+ * @param[in] ptec  PPE tunnel encap entry
+ * @param[in] vp_num  VP number to attach to tunnel encap entry.
+ *
+ * @return
+ * Status of the operation.
+ */
+bool ppe_drv_vlan_wlanif_vp_tun_enc_ctx_attach(struct ppe_drv_tun_encap *ptec, int16_t vp_num);
+
+/*
+ * ppe_drv_vlan_wlanif_vp_tun_enc_ctx_detach()
+ *	Detach WLAN VP from tunnel encap context.
+ *
+ * @datatypes
+ * ppe_drv_tun_encap
+ *
+ * @param[in] ptec  PPE tunnel encap entry
+ * @param[in] vp_num  VP number to detach from tunnel encap context.
+ *
+ * @return
+ * Status of the operation.
+ */
+bool ppe_drv_vlan_wlanif_vp_tun_enc_ctx_detach(struct ppe_drv_tun_encap *ptec, int16_t vp_num);
+
+/*
+ * ppe_drv_vlan_wlanif_vp_tun_enc_destroy()
+ *	Destroy WLANIF tunnel encap context.
+ *
+ * @datatypes
+ * ppe_drv_tun_encap
+ *
+ * @param[in] ptec  PPE tunnel encap entry
+ */
+void ppe_drv_vlan_wlanif_vp_tun_enc_destroy(struct ppe_drv_tun_encap *ptec);
+
+/*
+ * ppe_drv_vlan_wlanif_vp_tun_enc_setup()
+ *	Allocate and configure WLANIF tunnel encap context.
+ *
+ * @datatypes
+ * net_device
+ *
+ * @param[in] dev  WLAN realdev net device.
+ * @param[in] vp_num  VP number associated with WLAN realdev.
+ *
+ * @return
+ * A poiter to PPE tunnel encapsulation entry.
+ */
+struct ppe_drv_tun_encap *ppe_drv_vlan_wlanif_tun_enc_setup(struct net_device *dev, int16_t vp_num);
 #endif /* _PPE_DRV_VLAN_H_ */

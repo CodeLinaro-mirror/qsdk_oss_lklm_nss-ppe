@@ -681,3 +681,26 @@ struct net_device *ppe_vp_alloc_dev(struct net_device *netdev, struct ppe_vp_ai 
 	return vp_dev;
 }
 EXPORT_SYMBOL(ppe_vp_alloc_dev);
+
+/*
+ * ppe_vp_user_type_get
+ *	Get the user type associated with the vp
+ */
+ppe_vp_user_type_t ppe_vp_user_type_get(ppe_vp_num_t vp_num)
+{
+	struct ppe_vp *vp;
+	ppe_vp_user_type_t user_type = PPE_VP_USER_TYPE_NONE;
+
+	rcu_read_lock();
+	vp = ppe_vp_base_get_vp_by_port_num(vp_num);
+	if (!vp) {
+		rcu_read_unlock();
+		ppe_vp_warn("VP is NULL, cannot get VP for port num %d", vp_num);
+		return user_type;
+	}
+
+	user_type = vp->vp_user_mode;
+	rcu_read_unlock();
+	return user_type;
+}
+EXPORT_SYMBOL(ppe_vp_user_type_get);

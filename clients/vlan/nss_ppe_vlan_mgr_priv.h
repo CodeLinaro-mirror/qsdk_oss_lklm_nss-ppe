@@ -72,6 +72,22 @@
 #define NSS_PPE_VLAN_MGR_WHITESPACE		" \t\v\f\n,"
 #define NSS_PPE_VLAN_MGR_VLAN_AS_VP_MAX		16
 
+#ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
+/*
+ * nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx
+ *	Destination xlate context.
+ *
+ * Destination xlate context used to update DEST_INFO
+ * in the descriptor with the real WLAN dev.
+ */
+struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx {
+	struct list_head list;			/* List head */
+	struct ppe_drv_tun_encap *ptec;		/* Tunnel encap entry */
+	struct kref ref;			/* Reference count */
+	int16_t vp_num;				/* Real WLAN dev VP */
+};
+#endif
+
 /*
  * vlan client context
  */
@@ -85,6 +101,10 @@ struct nss_ppe_vlan_mgr_context {
 	struct ctl_table_header *sys_hdr;	/* "/pro/sys/nss/vlan_client" directory */
 	nss_ppe_vlan_mgr_br_vlan_cb_t vlan_over_bridge_cb;	/* CB to update bridge manager */
 	nss_ppe_bond_dev_get_id_cb_t bond_id_get_cb;	 /* Callback function to get bond_id */
+	bool wlan_dst_xlate_en;			/* Flag to check if WLANIF DST XLATE upport is enabled */
+#ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
+	struct list_head xlate_ctx_list;	/* List of wlanif desintaion xlate context */
+#endif
 };
 
 /*
@@ -119,5 +139,9 @@ struct nss_vlan_pvt {
 	bool is_vlan_as_vp_iface;		/* is VP created for this VLAN */
 	struct net_device *br_net_dev;		/* base dev of bridge VLAN netdev*/
 	bool is_vlan_over_bridge;		/* VLAN interface is created over bridge */
+#ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
+	struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *xlate_ctx;
+						/* wlanif desintaion xlate context */
+#endif
 };
 #endif

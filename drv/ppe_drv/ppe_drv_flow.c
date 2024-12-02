@@ -176,6 +176,16 @@ void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 		                                              & FAL_FLOW_BYTE_CNT_MASK;
 
 	/*
+	 * PPE stats are not updated for tunnel flows which are not completely accelerated in PPE to avoid
+	 * updating the stats twice once in PPE and once in Linux host path
+	 */
+	if (ppe_drv_port_tun_endpoint_and_inactive(pcf->tx_port)
+			|| ppe_drv_port_tun_endpoint_and_inactive(pcf->rx_port)) {
+		return;
+	}
+
+
+	/*
 	 * Update ppe_conn_flow packet and byte counters
 	 */
 	ppe_drv_v6_conn_flow_rx_stats_add(pcf, delta_pkts, delta_bytes);
@@ -231,6 +241,14 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	delta_pkts = (flow_cntrs.matched_pkts - pf->pkts + FAL_FLOW_PKT_CNT_MASK + 1) & FAL_FLOW_PKT_CNT_MASK;
 	delta_bytes = (flow_cntrs.matched_bytes - pf->bytes + FAL_FLOW_BYTE_CNT_MASK + 1)
 		                                              & FAL_FLOW_BYTE_CNT_MASK;
+	/*
+	 * PPE stats are not updated for tunnel flows which are not completely accelerated in PPE to avoid
+	 * updating the stats twice once in PPE and once in Linux host path
+	 */
+	if (ppe_drv_port_tun_endpoint_and_inactive(pcf->tx_port)
+			|| ppe_drv_port_tun_endpoint_and_inactive(pcf->rx_port)) {
+		return;
+	}
 
 	/*
 	 * Update ppe_conn_flow packet and byte counters
