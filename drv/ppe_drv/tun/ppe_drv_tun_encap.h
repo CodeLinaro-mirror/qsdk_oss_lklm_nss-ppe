@@ -39,6 +39,12 @@
 #define PPE_DRV_TUN_ENCAP_L2TP_SRC_WIDTH	8
 #define PPE_DRV_TUN_ENCAP_L2TP_DEST_POS		48
 
+#define PPE_DRV_TUN_ENCAP_GRE_TUN_IPV4_OFFSET	34	/* OFFSET to GRE header from start of Ethernet header for IPv4 packet */
+#define PPE_DRV_TUN_ENCAP_GRE_TUN_IPV6_OFFSET	54	/* OFFSET to GRE header from start of Ethernet header for IPv6 packet */
+#define PPE_DRV_TUN_ENCAP_GRE_TUN_SRC_START	0	/* Start position from start of GRE header */
+#define PPE_DRV_TUN_ENCAP_GRE_TUN_SRC_WIDTH	16	/* Width of GRE protocol field to be updated in GRE header */
+#define PPE_DRV_TUN_ENCAP_GRE_TUN_DEST_POS	96	/* Offset to protocol feild from LSb in bits inclusive of protocol field */
+
 /*
  * VXLAN-GPE tunnel definitions
  */
@@ -171,4 +177,5 @@ bool ppe_drv_tun_encap_hdr_ctrl_reset(uint8_t flags);
 bool ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
 bool ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
 bool ppe_drv_tun_encap_hdr_ctrl_vxlan_gpe_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
+bool ppe_drv_tun_encap_hdr_ctrl_gretun_configure(struct ppe_drv *p, struct ppe_drv_tun *tun);
 #endif /* _PPE_DRV_TUN_ENCAP_H_ */

@@ -293,6 +293,7 @@ struct ppe_drv_tun_gbl {
 	struct ppe_drv_tun_l2tp tun_l2tp;				/* L2TP global object */
 	struct ppe_drv_tun_gre_acl *gre;				/* GREtap ACL rules for checksum handling */
 	struct ppe_drv_tun_encap_xlate_rule *vxlan_gpe_encap_rule;	/* PPE VXLAN-GPE EG translate rule entry */
+	struct ppe_drv_tun_encap_xlate_rule *gretun_encap_rule; 	/* PPE GRE-TUN EG translate rule entry */
 };
 
 /*

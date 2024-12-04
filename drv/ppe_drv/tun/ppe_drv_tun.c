@@ -122,6 +122,10 @@ static void ppe_drv_tun_free(struct kref *kref)
 		p->tun_gbl.vxlan_gpe_encap_rule = NULL;
 	}
 
+	if (p->tun_gbl.gretun_encap_rule && (!(kref_read(&p->tun_gbl.gretun_encap_rule->ref)))) {
+		p->tun_gbl.gretun_encap_rule = NULL;
+	}
+
 	if (ptun->ptdcxr[PPE_DRV_TUN_DECAP_REMOTE_ENTRY]) {
 		ppe_drv_tun_decap_xlate_rule_deref(ptun->ptdcxr[PPE_DRV_TUN_DECAP_REMOTE_ENTRY]);
 	}
@@ -1714,6 +1718,91 @@ err_fail:
 EXPORT_SYMBOL(ppe_drv_tun_activate);
 
 /*
+ * ppe_drv_tun_encap_rule_id_alloc_or_ref
+ *	Allocate/Take reference on encap rule id
+ */
+static struct ppe_drv_tun_encap_xlate_rule *ppe_drv_tun_encap_rule_id_alloc_or_ref(struct ppe_drv_tun_encap_xlate_rule *ptecxr, struct ppe_drv_tun *ptun)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_tun_encap_xlate_rule *encap_rule = ptecxr;
+	uint8_t rule_id;
+
+	if (ptecxr == NULL) {
+		/*
+		 * Alloc encap EG table
+		 * Alloc is called for first instance of the tunnel only.
+		 */
+		encap_rule = ppe_drv_tun_encap_xlate_rule_alloc(p);
+		if (encap_rule == NULL) {
+			ppe_drv_warn("%p: couldn't get encap rule entry index", p);
+			return NULL;
+		}
+	} else {
+		/*
+		 * Take ref on  an already allocated encap rule instance if another tunnel of same type is active.
+		 * Reuse the same rule ID configuration as offset remain the same for additional
+		 * tunnels of the same type.
+		 */
+		ppe_drv_tun_encap_xlate_rule_ref(encap_rule);
+	}
+
+	rule_id = ppe_drv_tun_encap_xlate_rule_get_index(encap_rule);
+	ppe_drv_tun_encap_set_rule_id(ptun->ptec, rule_id);
+
+	return encap_rule;
+}
+
+/*
+ * ppe_drv_tun_encap_header_rule_configure
+ *	Encap header rule configurations for tunnels which require modification
+ */
+static bool ppe_drv_tun_encap_header_rule_configure(enum ppe_drv_tun_cmn_ctx_type type, struct ppe_drv_tun *ptun)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+
+	switch (type) {
+	case PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2:
+		ptun->ptecxr = p->tun_gbl.tun_l2tp.l2tp_encap_rule;
+		ptun->ptecxr = ppe_drv_tun_encap_rule_id_alloc_or_ref(ptun->ptecxr, ptun);
+		if (!ptun->ptecxr || !ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(p, ptun)) {
+			ppe_drv_warn("%p L2TPv2: failed to configure encap header control", p);
+			return false;
+		}
+		break;
+
+	case PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE:
+		ptun->ptecxr = p->tun_gbl.vxlan_gpe_encap_rule;
+		ptun->ptecxr = ppe_drv_tun_encap_rule_id_alloc_or_ref(ptun->ptecxr, ptun);
+		if (!ptun->ptecxr || !ppe_drv_tun_encap_hdr_ctrl_vxlan_gpe_configure(p, ptun)) {
+			ppe_drv_warn("%p VXLAN-GPE: failed to configure encap header control", p);
+			return false;
+		}
+		break;
+
+	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN:
+		ptun->ptecxr = p->tun_gbl.gretun_encap_rule;
+		ptun->ptecxr = ppe_drv_tun_encap_rule_id_alloc_or_ref(ptun->ptecxr, ptun);
+		if (!ptun->ptecxr || !ppe_drv_tun_encap_hdr_ctrl_gretun_configure(p, ptun)) {
+			ppe_drv_warn("%p GRETUN: failed to configure encap header control", p);
+			return false;;
+		}
+		break;
+
+	case PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN:
+		if (!ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(p, ptun)) {
+			ppe_drv_warn("%p VXLAN: failed to configure encap header control", p);
+			return false;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_tun_configure
  *	Allocate PPE tunnel instance and initialize objects
  */
@@ -1722,7 +1811,6 @@ bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, v
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun *ptun = NULL;
 	uint16_t decap_hwidx = PPE_DRV_TUN_DECAP_INVALID_IDX;
-	uint8_t rule_id;
 
 	struct ppe_drv_port *pp = ppe_drv_port_from_port_num(port_num);
 	if (!pp) {
@@ -1827,83 +1915,13 @@ bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, v
 		goto err_exit;
 	}
 
-	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
-		if (p->tun_gbl.tun_l2tp.l2tp_encap_rule == NULL) {
-			/*
-			 * Alloc encap EG table entry for L2TP
-			 * Alloc is called for first instance of l2tp tunnel only.
-			 */
-			 p->tun_gbl.tun_l2tp.l2tp_encap_rule = ppe_drv_tun_encap_xlate_rule_alloc(p);
-			 if (p->tun_gbl.tun_l2tp.l2tp_encap_rule == NULL) {
-				ppe_drv_warn("%p: couldn't get encap rule entry index for l2tp", p);
-				goto err_exit;
-			}
-		} else {
-			/*
-			 * Take ref on encap rule instance if another L2TP tunnel is already active.
-			 * Reuse the same rule ID configuration as offset remain the same for PPP header
-			 * protocol field for all tunnels.
-			 */
-			ppe_drv_tun_encap_xlate_rule_ref(p->tun_gbl.tun_l2tp.l2tp_encap_rule);
-		}
-
-		ptun->ptecxr = p->tun_gbl.tun_l2tp.l2tp_encap_rule;
-		rule_id = ppe_drv_tun_encap_xlate_rule_get_index(ptun->ptecxr);
-		ppe_drv_tun_encap_set_rule_id(ptun->ptec, rule_id);
-
-		/*
-		 * encap header control configuration for L2TP
-		 * protomap[1] and protomap[3] are used for ipv4 protocol
-		 * and ipv6 protocol update in PPP header
-		 */
-		if (!ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(p, ptun)) {
-			ppe_drv_warn("%p L2TP: failed to configure encap header control", p);
-			goto err_exit;
-		}
-	}
-
-	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN) {
-		/*
-		 * encap header control configuration for VXLAN.
-		 * UDP source port value is updated with a random value
-		 */
-		if (!ppe_drv_tun_encap_hdr_ctrl_vxlan_configure(p, ptun)) {
-			ppe_drv_warn("%p VXLAN: failed to configure encap header control", p);
-			goto err_exit;
-		}
-	}
-
-	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE) {
-		if (p->tun_gbl.vxlan_gpe_encap_rule == NULL) {
-			/*
-			 * Alloc encap EG table entry for VxLAN-GPE
-			 * Alloc is called for first instance of VxLAN-GPE tunnel only.
-			 */
-			 p->tun_gbl.vxlan_gpe_encap_rule = ppe_drv_tun_encap_xlate_rule_alloc(p);
-			 if (p->tun_gbl.vxlan_gpe_encap_rule == NULL) {
-				ppe_drv_warn("%p: couldn't get encap rule entry index for vxlan-gpe", p);
-				goto err_exit;
-			}
-		} else {
-			/*
-			 * Take ref on encap rule instance if another VXLAN-GPE tunnel is already active.
-			 * Deref in ppe_drv_tun_free for ptun->ptecxr which is gpe encap rule in this case.
-			 */
-			ppe_drv_tun_encap_xlate_rule_ref(p->tun_gbl.vxlan_gpe_encap_rule);
-		}
-
-		ptun->ptecxr = p->tun_gbl.vxlan_gpe_encap_rule;
-		rule_id = ppe_drv_tun_encap_xlate_rule_get_index(ptun->ptecxr);
-		ppe_drv_tun_encap_set_rule_id(ptun->ptec, rule_id);
-
-		/*
-		 * encap header control configuration for VXLAN-GPE.
-		 * UDP source port value is updated with a random value
-		 */
-		if (!ppe_drv_tun_encap_hdr_ctrl_vxlan_gpe_configure(p, ptun)) {
-			ppe_drv_warn("%p VXLAN-GPE: failed to configure encap header control", p);
-			goto err_exit;
-		}
+	/*
+	 * Configure encap header rule for tunnels which require encap header
+	 * to be updated based on inner payload
+	 */
+	if (!ppe_drv_tun_encap_header_rule_configure(pth->type, ptun)) {
+		ppe_drv_warn("%p: Tunnel encap header configuration failed for tunnel type %d", ptun, pth->type);
+		goto err_exit;
 	}
 
 	ptun->ptec->port = pp;

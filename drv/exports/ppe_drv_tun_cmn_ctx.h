@@ -90,6 +90,7 @@ enum ppe_drv_tun_cmn_ctx_type {
 	PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2,	/**< PPE Tunnel header type L2TP-V2 >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_CUST,		/**< Custom PPE Tunnel header >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE,	/**< PPE Tunnel header type VxLAN-GPE >*/
+	PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN,	/**< PPE Tunnel header type for L3 GRE Tunnel >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_MAX
 };
 

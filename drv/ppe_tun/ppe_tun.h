@@ -92,6 +92,7 @@ struct ppe_tun_accel {
 	bool ppe_tun_l2tp_accel;	/* Controls l2tp acceleration */
 	bool ppe_tun_cust_accel;	/* Controls custom tunnel acceleration */
 	bool ppe_tun_vxlan_gpe_accel;	/* Controls vxlan gpe acceleration */
+	bool ppe_tun_gretun_accel;	/* Controls gretap acceleration */
 };
 
 /*
@@ -102,6 +103,7 @@ struct ppe_tun_xcpn_mode {
 	uint8_t gretap;	/* Controls gretap exception mode */
 	uint8_t ipip6;	/* Controls ipip6 exception mode */
 	uint8_t l2tp;	/* Controls l2tp exception mode */
+	uint8_t gretun; /* Controls gretun exception mode */
 };
 
 /*

@@ -91,6 +91,14 @@ static bool ppe_tun_allow_accel(enum ppe_drv_tun_cmn_ctx_type type)
 		ppe_tun_warn("%p: PPE vxlan gpe acceleration is not enabled", ptp);
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN:
+		if (ptp->tun_accel.ppe_tun_gretun_accel) {
+			return true;
+		}
+
+		ppe_tun_warn("%p: PPE gretun acceleration is not enabled", ptp);
+		break;
+
 	default:
 		break;
 	}
@@ -625,6 +633,10 @@ bool ppe_tun_conf_accel(enum ppe_drv_tun_cmn_ctx_type type, bool action)
 		ptp->tun_accel.ppe_tun_vxlan_gpe_accel = action;
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN:
+		ptp->tun_accel.ppe_tun_gretun_accel = action;
+		break;
+
 	default:
 		ppe_tun_info("%p: Tunnel type %u is invalid", ptp, type);
 		return false;
@@ -760,12 +772,40 @@ uint8_t ppe_tun_xcpn_mode_get(enum ppe_drv_tun_cmn_ctx_type type)
 		action = ptp->xcpn_mode.l2tp;
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN:
+		action = ptp->xcpn_mode.gretun;
+		break;
+
 	default:
 		ppe_tun_info("Tunnel type %u is invalid or doesn't support xcpn mode.", type);
 
 	}
 
 	return action;
+}
+
+/*
+ * ppe_tun_get_tun_vp_type()
+ *	Return tunnel VP type from tunnel type.
+ */
+static ppe_vp_type_t ppe_tun_get_tun_vp_type(enum ppe_drv_tun_cmn_ctx_type type)
+{
+	switch (type) {
+	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN:
+		return PPE_VP_TYPE_HW_L2TUN;
+
+	case PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_MAPT:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUST:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN:
+		return PPE_VP_TYPE_HW_L3TUN;
+
+	default:
+		return PPE_VP_TYPE_MAX;
+	}
 }
 
 /*
@@ -804,13 +844,8 @@ bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type)
 	/*
 	 * Allocate PPE VP
 	 */
-	if ((type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN)) {
-		vpai.type = PPE_VP_TYPE_HW_L2TUN;
-	} else if ((type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) ||
-			(type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) || (type == PPE_DRV_TUN_CMN_CTX_TYPE_CUST) ||
-			(type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE)) {
-		vpai.type = PPE_VP_TYPE_HW_L3TUN;
-	} else {
+	vpai.type = ppe_tun_get_tun_vp_type(type);
+	if (vpai.type == PPE_VP_TYPE_MAX) {
 		ppe_tun_warn("%p: tunnel type %u is invalid", dev, type);
 		atomic_inc(&ptp->alloc_fail);
 		kfree(tun);
@@ -1196,6 +1231,54 @@ const struct file_operations ppe_tun_gretap_file_fops = {
 };
 
 /*
+ * ppe_tun_gretun_read()
+ *	gretun read handler
+ */
+static ssize_t ppe_tun_gretun_read(struct file *f, char *buf, size_t count, loff_t *offset)
+{
+	int len;
+	char lbuf[24];
+
+	len = snprintf(lbuf, sizeof(lbuf), "gretun accel %s\n", (ptp->tun_accel.ppe_tun_gretun_accel) ? ("enabled") : ("disabled"));
+
+	return simple_read_from_buffer(buf, count, offset, lbuf, len);
+}
+
+/*
+ * ppe_tun_gretun_write()
+ *	gretap write handler
+ */
+static ssize_t ppe_tun_gretun_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
+{
+	ssize_t size;
+	char data[16];
+	bool res;
+	int status;
+
+	size = simple_write_to_buffer(data, sizeof(data), offset, buffer, len);
+	if (size < 0) {
+		ppe_tun_warn("%p: Error reading the input for gretun configuration", ptp);
+		return size;
+	}
+
+	status = kstrtobool(data, &res);
+	if (status) {
+		ppe_tun_warn("%p: Error reading the input for gretun configuration", ptp);
+		return status;
+	}
+
+	ppe_tun_conf_accel(PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN, res);
+
+	return len;
+}
+
+const struct file_operations ppe_tun_gretun_file_fops = {
+	.owner = THIS_MODULE,
+	.write = ppe_tun_gretun_write,
+	.read = ppe_tun_gretun_read,
+};
+
+/*
  * ppe_tun_vxlan_read()
  *	vxlan read handler
  */
@@ -1448,6 +1531,55 @@ const struct file_operations ppe_tun_gretap_xcpn_file_fops = {
 };
 
 /*
+ * ppe_tun_xcpn_gretun_read()
+ *	gretun xcpn read handler
+ */
+static ssize_t ppe_tun_xcpn_gretun_read(struct file *f, char *buf, size_t count, loff_t *offset)
+{
+	int len;
+	char lbuf[24];
+	uint8_t xcpn_mode = ptp->xcpn_mode.gretun;
+
+	len = snprintf(lbuf, sizeof(lbuf), "Gretun xcpn mode %u \n", xcpn_mode);
+
+	return simple_read_from_buffer(buf, count, offset, lbuf, len);
+}
+
+/*
+ * ppe_tun_xcpn_gretun_write()
+ *	gretun xcpn write handler
+ */
+static ssize_t ppe_tun_xcpn_gretun_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
+{
+	ssize_t size;
+	char data[16];
+	bool res;
+	int status;
+
+	size = simple_write_to_buffer(data, sizeof(data), offset, buffer, len);
+	if (size < 0) {
+		ppe_tun_warn("%p: Error reading the input for gretun configuration", ptp);
+		return size;
+	}
+
+	status = kstrtobool(data, &res);
+	if (status) {
+		ppe_tun_warn("%p: Error reading the input for gretun configuration", ptp);
+		return status;
+	}
+
+	ptp->xcpn_mode.gretun = (uint8_t) res;
+
+	return len;
+}
+
+const struct file_operations ppe_tun_gretun_xcpn_file_fops = {
+	.owner = THIS_MODULE,
+	.write = ppe_tun_xcpn_gretun_write,
+	.read = ppe_tun_xcpn_gretun_read,
+};
+
+/*
  * ppe_tun_xcpn_ipip6_read()
  *	ipip6 xcpn read handler
  */
@@ -1621,10 +1753,12 @@ static int __init ppe_tun_module_init(void)
 	ptp->tun_accel.ppe_tun_l2tp_accel = true;
 	ptp->tun_accel.ppe_tun_cust_accel = true;
 	ptp->tun_accel.ppe_tun_vxlan_gpe_accel = true;
+	ptp->tun_accel.ppe_tun_gretun_accel = true;
 
 	ptp->xcpn_mode.gretap = PPE_TUN_XCPN_MODE_1;
 	ptp->xcpn_mode.ipip6 = PPE_TUN_XCPN_MODE_1;
 	ptp->xcpn_mode.l2tp = PPE_TUN_XCPN_MODE_1;
+	ptp->xcpn_mode.gretun = PPE_TUN_XCPN_MODE_1;
 
 
 	atomic_set(&ptp->total_free, PPE_TUN_MAX);
@@ -1677,7 +1811,9 @@ static int __init ppe_tun_module_init(void)
 	if (!debugfs_create_file("vxlan-gpe", 0644, dir, NULL, &ppe_tun_vxlan_gpe_file_fops)) {
 		ppe_tun_warn("Failed to create debugfs entry for vxlan-gpe");
 	}
-
+	if (!debugfs_create_file("gretun", 0644, dir, NULL, &ppe_tun_gretun_file_fops)) {
+		ppe_tun_warn("Failed to create debugfs entry for gretun");
+	}
 	dir = debugfs_create_dir("xcpn_mode", ptp->dentry);
 	if (!dir) {
 		ppe_tun_warn("%p: Failed to create debugfs entry for xcpn_mode", ptp);
@@ -1696,6 +1832,10 @@ static int __init ppe_tun_module_init(void)
 
 	if (!debugfs_create_file("l2tp", 0644, dir, NULL, &ppe_tun_l2tp_xcpn_file_fops)) {
 		ppe_tun_warn("failed to create debugfs entry for l2tp");
+	}
+
+	if (!debugfs_create_file("gretun", 0644, dir, NULL, &ppe_tun_gretun_xcpn_file_fops)) {
+		ppe_tun_warn("failed to create debugfs entry for gretun");
 	}
 
 	rule.cmn.cmn_flags = rule.cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_NO_RULEID;

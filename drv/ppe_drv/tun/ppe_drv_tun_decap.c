@@ -135,9 +135,9 @@ static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 		 * Configure PPE in Programable parser mode for GRETAP without key acceleration.
 		 * Lock is accquired for every succesful program parser entry allocated.
 		 */
-		pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_GRE);
+		pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_GRETAP);
 		if (!pgm) {
-			ppe_drv_warn("%p: Error getting programable parser for GRE\n", pth);
+			ppe_drv_warn("%p: Error getting programable parser for L2 GRETAP\n", pth);
 			return false;
 		}
 
@@ -150,7 +150,7 @@ static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 		 * If the tunnel configuration fails then release the reference taken on the
 		 * program parser instance.
 		 */
-		if (!ppe_drv_tun_prgm_prsr_gre_configure(pgm)) {
+		if (!ppe_drv_tun_prgm_prsr_gretap_configure(pgm)) {
 			ppe_drv_tun_prgm_prsr_deref(pgm);
 			ptdc->pgm_prsr = NULL;
 			ppe_drv_warn("%p: GRE tunnel configuration failed\n", pth);
@@ -467,6 +467,38 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 			ppe_drv_warn("%p: Failed to set vp group for GRE CSUM ACL rule", pp);
 			return PPE_DRV_TUN_DECAP_INVALID_IDX;
 		}
+	} else if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN) {
+		struct ppe_drv_tun_prgm_prsr *pgm = NULL;
+
+		/*
+		 * Configure PPE in Programable parser mode for GRETUN without key acceleration.
+		 * Lock is accquired for every succesful program parser entry allocated.
+		 */
+		pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_GRETUN);
+		if (!pgm) {
+			ppe_drv_warn("%p: Error getting programable parser for L3 GRETUN\n", pth);
+			return false;
+		}
+
+		ptdc->pgm_prsr = pgm;
+
+		/*
+		 * Configure the program parser instance to match gre tunnel without
+		 * key. If the program parser instance is already configured then this function
+		 * would simply exit.
+		 * If the tunnel configuration fails then release the reference taken on the
+		 * program parser instance.
+		 */
+		if (!ppe_drv_tun_prgm_prsr_gretun_configure(pgm)) {
+			ppe_drv_tun_prgm_prsr_deref(pgm);
+			ptdc->pgm_prsr = NULL;
+			ppe_drv_warn("%p: GRETUN tunnel configuration failed\n", pth);
+			return false;
+		}
+
+		ftde.decap_rule.l4_proto = IPPROTO_GRE;
+		ftde.decap_rule.tunnel_type = PPE_DRV_TUN_GET_TUNNEL_TYPE_FROM_PGM_TYPE(pgm->parser_idx);
+		ppe_drv_trace("%p: Configure GRETUN with Tunnel Parser : %d\n", pth, ftde.decap_rule.tunnel_type);
 	} else if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN) {
 		/*
 		 * Sanity validation for VxLAN tunnels

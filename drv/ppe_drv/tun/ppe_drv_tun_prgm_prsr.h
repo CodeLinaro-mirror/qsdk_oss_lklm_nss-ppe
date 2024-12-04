@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -66,8 +66,9 @@
  */
 enum ppe_drv_tun_prgm_prsr_mode {
 	PPE_DRV_TUN_PROGRAM_MODE_NONE,	/* Program parser not configured*/
-	PPE_DRV_TUN_PROGRAM_MODE_GRE,		/* Program parser mode GRE */
+	PPE_DRV_TUN_PROGRAM_MODE_GRETAP,	/* Program parser mode GRETAP */
 	PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2,	/* Program parser mode L2TP */
+	PPE_DRV_TUN_PROGRAM_MODE_GRETUN,	/* Program parser mode GRETUN */
 };
 
 /*
@@ -174,6 +175,16 @@ struct ppe_drv_tun_prgm_prsr_l2tp {
 };
 
 /*
+ * ppe_drv_tun_prgm_prsr_gretun
+ * 	Program Parser GRETUN tunnel specific data
+ */
+struct ppe_drv_tun_prgm_prsr_gretun {
+	struct ppe_drv_tun_prgm_prsr_prgm_udf ipv4_udf;	/* program UDF entry used for matching IPv4 GRETUN inner payload */
+	struct ppe_drv_tun_prgm_prsr_prgm_udf ipv6_udf;	/* program UDF entry used for matching IPv6 GRETUN inner payload */
+};
+
+
+/*
  * ppe_drv_tun_prgm_prsr_cfg
  *	Tunnel program parser configuration structure
  */
@@ -200,6 +211,7 @@ struct ppe_drv_tun_prgm_prsr_decap_cfg {
 	struct ppe_drv_tun_prgm_prsr_cfg prsr_cfg;	/* Program parser configuration */
 	union {
 		struct ppe_drv_tun_prgm_prsr_l2tp l2tp;	/* L2TP specific data */
+		struct ppe_drv_tun_prgm_prsr_gretun gretun; /* GRETUN specific data */
 	} data;
 };
 

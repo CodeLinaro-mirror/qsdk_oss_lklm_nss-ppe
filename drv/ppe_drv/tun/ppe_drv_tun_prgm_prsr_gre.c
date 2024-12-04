@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,37 +19,37 @@
 #include "ppe_drv_tun.h"
 
 /*
- * ppe_drv_tun_prgm_prsr_gre_deconfigure
- *     deconfigure Programmable tunnel parser for GRE decap without key
+ * ppe_drv_tun_prgm_prsr_gretap_deconfigure
+ *     deconfigure Programmable tunnel parser for GRETAP decap without key
  */
-bool ppe_drv_tun_prgm_prsr_gre_deconfigure(struct ppe_drv_tun_prgm_prsr *pgm_psr)
+bool ppe_drv_tun_prgm_prsr_gretap_deconfigure(struct ppe_drv_tun_prgm_prsr *program_parser)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 
-	ppe_drv_assert((pgm_psr->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRE), "program mode not GRE for program type : %d", pgm_psr->parser_idx);
+	ppe_drv_assert((program_parser->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRETAP), "program mode not GRE for program type : %d", program_parser->parser_idx);
 
-	if (!ppe_drv_tun_prgm_prsr_deconfigure(&pgm_psr->ctx.prsr_cfg, pgm_psr->parser_idx)) {
-		ppe_drv_warn("%p: program entry delete failed for GRE Tunnel", p);
+	if (!ppe_drv_tun_prgm_prsr_deconfigure(&program_parser->ctx.prsr_cfg, program_parser->parser_idx)) {
+		ppe_drv_warn("%p: program entry delete failed for GRETAP Tunnel", p);
 		return false;
 	}
 	return true;
 }
 
 /*
- * ppe_drv_tun_prgm_prsr_gre_configure
- *     Configure Program tunnel parser for GRE decap without key
+ * ppe_drv_tun_prgm_prsr_gretap_configure
+ *     Configure Program tunnel parser for GRETAP decap without key
  */
-bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_parser)
+bool ppe_drv_tun_prgm_prsr_gretap_configure(struct ppe_drv_tun_prgm_prsr *program_parser)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t parser_idx = program_parser->parser_idx;
 	struct ppe_drv_tun_prgm_prsr_cfg *cfg = &program_parser->ctx.prsr_cfg;
 	struct ppe_drv_tun_prgm_prsr_decap_key *key = &program_parser->ctx.key;
 
-	ppe_drv_assert((program_parser->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRE), "program mode not GRE for program type : %d", parser_idx);
+	ppe_drv_assert((program_parser->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRETAP), "program mode not GRETAP for program type : %d", parser_idx);
 
 	if (ppe_drv_tun_prgm_prsr_configured(program_parser)) {
-		ppe_drv_trace("%p: Tunnel Programable Parser is already configured for GRE", p);
+		ppe_drv_trace("%p: Tunnel Programable Parser is already configured for GRETAP", p);
 		return true;
 	}
 
@@ -68,17 +68,138 @@ bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_p
 	cfg->protocol_mask = FAL_TUNNEL_PROGRAM_GRE_PROTOCOL_MASK;
 
 	/*
-	 * Configure the program registers for GRE.
+	 * Configure the program registers for GRETAP.
 	 * position mode = 0, points to end of outer header
 	 * inner_mode = 0, configure in fix mode as its fixed outer header type
-	 * inner header type is ETHernet for a GRE packet
+	 * inner header type is ETHernet for a L2 GRETAP packet
 	 */
 	cfg->inner_mode = PPE_DRV_TUN_PRGM_PRSR_INNER_MODE_FIX;
 	cfg->pos_mode = PPE_DRV_TUN_PRGM_PRSR_POS_MODE_END;
 	cfg->conf.inner_hdr = PPE_DRV_TUN_PRGM_PRSR_INNER_HDR_ETH;
 
 	if (!ppe_drv_tun_prgm_prsr_configure(cfg, key, parser_idx)) {
-		ppe_drv_warn("%p: program entry configuration failed for GRE", p);
+		ppe_drv_warn("%p: program entry configuration failed for GRETAP", p);
+		return false;
+	}
+	return true;
+}
+
+/*
+ * ppe_drv_tun_prgm_prsr_gretun_deconfigure
+ *     deconfigure Programmable tunnel parser for L3 GRE tunnel
+ */
+bool ppe_drv_tun_prgm_prsr_gretun_deconfigure(struct ppe_drv_tun_prgm_prsr *pgm_psr)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_tun_prgm_prsr_gretun *gretun_data =  &pgm_psr->ctx.data.gretun;
+
+	ppe_drv_assert((pgm_psr->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRETUN), "program mode not GRETUN for program type : %d", pgm_psr->parser_idx);
+
+	if (!ppe_drv_tun_prgm_prsr_deconfigure(&pgm_psr->ctx.prsr_cfg, pgm_psr->parser_idx)) {
+		ppe_drv_warn("%p: program entry delete failed for L3 GRE Tunnel", p);
+		return false;
+	}
+
+	/*
+	 * delete Program UDF entry for GRETUN IPv4
+	 */
+	if (!ppe_drv_tun_prgm_prsr_prgm_udf_deconfigure(pgm_psr->parser_idx, &gretun_data->ipv4_udf)) {
+		ppe_drv_warn("%p: program UDF entry delete failed for L3 GRE Tunnel", p);
+		return false;
+	}
+
+	/*
+	 * delete Program UDF entry for GRETUN IPv6
+	 */
+	if (!ppe_drv_tun_prgm_prsr_prgm_udf_deconfigure(pgm_psr->parser_idx, &gretun_data->ipv6_udf)) {
+		ppe_drv_warn("%p: program UDF entry delete failed for L3 GRE Tunnel", p);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * ppe_drv_tun_prgm_prsr_gretun_configure
+ *     Configure Program tunnel parser for L3 GRE tunnel
+ */
+bool ppe_drv_tun_prgm_prsr_gretun_configure(struct ppe_drv_tun_prgm_prsr *program_parser)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	uint8_t parser_idx = program_parser->parser_idx;
+	struct ppe_drv_tun_prgm_prsr_cfg *cfg = &program_parser->ctx.prsr_cfg;
+	struct ppe_drv_tun_prgm_prsr_decap_key *key = &program_parser->ctx.key;
+	struct ppe_drv_tun_prgm_prsr_gretun *gretun_data =  &program_parser->ctx.data.gretun;
+	struct ppe_drv_tun_prgm_prsr_prgm_udf *ipv4_udf = &gretun_data->ipv4_udf;
+	struct ppe_drv_tun_prgm_prsr_prgm_udf *ipv6_udf = &gretun_data->ipv6_udf;
+
+	ppe_drv_assert((program_parser->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRETUN), "program mode not GRETUN for program type : %d", parser_idx);
+
+	if (ppe_drv_tun_prgm_prsr_configured(program_parser)) {
+		ppe_drv_trace("%p: Tunnel Programable Parser is already configured for GRETUN", p);
+		return true;
+	}
+
+	key->key_bitmap |= PPE_DRV_TUN_BIT(PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_SRC_IP);
+	key->key_bitmap |= PPE_DRV_TUN_BIT(PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_DEST_IP);
+	key->key_bitmap |= PPE_DRV_TUN_BIT(PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_L4_PROTO);
+
+	/*
+	 * Configure tunnel program entry for GRETUN without key
+	 */
+	cfg->ip_ver = PPE_DRV_TUN_PRGM_PRSR_IP_VER_IPV4_IPV6;
+	cfg->outer_hdr = PPE_DRV_TUN_PRGM_PRSR_OHDR_GRE;
+
+	/*
+	 * Match the 32 bit data from start of GRE header.
+	 * Match the first 16 bits which contains flags
+	 * Do not match the next 32 bits which contains protocol.
+	 * Protocol match requires UDF entries
+	 */
+	cfg->protocol = PPE_DRV_TUN_DECAP_GRETUN_CFG_PROTOCOL;
+	cfg->protocol_mask = PPE_DRV_TUN_DECAP_GRETUN_CFG_PROTOCOL_MAP;
+
+	/*
+	 * Configure the program registers for GRE.
+	 */
+	cfg->inner_mode = PPE_DRV_TUN_PRGM_PRSR_INNER_MODE_UDF;
+	cfg->pos_mode = PPE_DRV_TUN_PRGM_PRSR_POS_MODE_START;
+	cfg->pos_mode = PPE_DRV_TUN_PRGM_PRSR_POS_MODE_START;
+	cfg->conf.udf.hdr_len = PPE_DRV_TUN_DECAP_GRETUN_BASIC_HEADER_LEN;
+	cfg->conf.udf.udf_offset[0] = PPE_DRV_TUN_DECAP_GRETUN_FLAGS_OFFSET;
+	cfg->conf.udf.udf_offset[1] = PPE_DRV_TUN_DECAP_GRETUN_PROTO_OFFSET;
+
+	if (!ppe_drv_tun_prgm_prsr_configure(cfg, key, parser_idx)) {
+		ppe_drv_warn("%p: program entry configuration failed for GRETUN", p);
+		return false;
+	}
+
+	ppe_drv_tun_prgm_udf_bitmap_set(ipv4_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF0);
+	ppe_drv_tun_prgm_udf_bitmap_set(ipv4_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF1);
+
+	ipv4_udf->udf_val[0] = 0;
+	ipv4_udf->udf_val[1] = ETH_P_IP;
+	ipv4_udf->udf_mask[0] = PPE_DRV_TUN_DECAP_GRETUN_UDF_MASK;
+	ipv4_udf->udf_mask[1] = PPE_DRV_TUN_DECAP_GRETUN_UDF_MASK;
+	ipv4_udf->inner_hdr = PPE_DRV_TUN_PRGM_PRSR_INNER_HDR_IPV4;
+	ppe_drv_tun_prgm_udf_action_bitmap_set(ipv4_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_CHK_INNER_HDR_TYPE);
+	ipv4_udf->hdr_len = 0;
+	if (!ppe_drv_tun_prgm_prsr_prgm_udf_configure(parser_idx, ipv4_udf)) {
+		ppe_drv_warn("%p: program udf entry configuration failed for GRETUN", p);
+		return false;
+	}
+
+	ppe_drv_tun_prgm_udf_bitmap_set(ipv6_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF0);
+	ppe_drv_tun_prgm_udf_bitmap_set(ipv6_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF1);
+	ipv6_udf->udf_val[0] = 0;
+	ipv6_udf->udf_val[1] = ETH_P_IPV6 ;
+	ipv6_udf->udf_mask[0] = PPE_DRV_TUN_DECAP_GRETUN_UDF_MASK;
+	ipv6_udf->udf_mask[1] = PPE_DRV_TUN_DECAP_GRETUN_UDF_MASK;
+	ipv6_udf->inner_hdr = PPE_DRV_TUN_PRGM_PRSR_INNER_HDR_IPV6;
+	ppe_drv_tun_prgm_udf_action_bitmap_set(ipv6_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_CHK_INNER_HDR_TYPE);
+	ipv6_udf->hdr_len = 0;
+	if (!ppe_drv_tun_prgm_prsr_prgm_udf_configure(parser_idx, ipv6_udf)) {
+		ppe_drv_warn("%p: program udf entry configuration failed for GRETUN", p);
 		return false;
 	}
 	return true;

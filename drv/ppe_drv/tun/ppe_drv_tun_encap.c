@@ -451,6 +451,37 @@ bool ppe_drv_tun_encap_hdr_ctrl_l2tp_configure(struct ppe_drv *p, struct ppe_drv
 }
 
 /*
+ * ppe_drv_tun_encap_hdr_ctrl_gretun_configure
+ *	configure encap header control for L3 GRE tunnel
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_gretun_configure(struct ppe_drv *p, struct ppe_drv_tun *tun)
+{
+	struct ppe_drv_tun_encap_header_ctrl hdr_ctrl = {0};
+
+	/*
+	 * Configure header control global register to update GRE header protocol
+	 * for IPv4 packet proto_map_data[1] is used and for IPv6 proto_map_data[3] is used
+	 */
+	hdr_ctrl.ipv4_proto_map_data = ETH_P_IP;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP);
+	hdr_ctrl.ipv6_proto_map_data = ETH_P_IPV6;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP);
+
+	if (!ppe_drv_tun_encap_hdr_ctrl_set(hdr_ctrl)) {
+		ppe_drv_warn("%p encap header control set failed for l2tp tunnel", p);
+		return false;
+	}
+
+	/*
+	 * Set encap header control bitmap in tunnel structure.
+	 */
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP);
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP);
+
+	return true;
+}
+
+/*
  * ppe_drv_tun_encap_dump
  *	Dump contents of EG_TUN_CTRL table instance
  */
@@ -832,6 +863,18 @@ static void ppe_drv_tun_encap_hdr_set(struct ppe_drv_tun_encap *ptec,
 		memcpy((void *)tun_hdr, (void *)&vxh, sizeof(vxh));
 		tun_hdr += sizeof(vxh);
 		tun_len += sizeof(vxh);
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN) {
+		struct gre_base_hdr greh;
+		uint16_t gre_hdr_flags = 0;
+
+		memset((void *)&greh, 0, sizeof(greh));
+
+		greh.flags = gre_hdr_flags;
+
+		memcpy((void *)tun_hdr, (void *)&greh, sizeof(greh));
+		tun_hdr += sizeof(greh);
+		tun_len += sizeof(greh);
+
 		l4_offset_valid = true;
 	}
 
@@ -970,6 +1013,46 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 			encap_cfg.l4_checksum_en = A_TRUE;
 		}
 
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN) {
+		encap_cfg.payload_inner_type = FAL_TUNNEL_INNER_IP;
+		encap_cfg.l4_proto = 5; /* 0:Non;1:TCP;2:UDP;3:UDP-Lite;4:Reserved (ICMP);5:GRE; */
+		encap_cfg.encap_target = FAL_TUNNEL_ENCAP_TARGET_TUNNEL_INFO;
+		if (th->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
+			encap_cfg.tunnel_offset = PPE_DRV_TUN_ENCAP_GRE_TUN_IPV4_OFFSET;
+		} else {
+			encap_cfg.tunnel_offset = PPE_DRV_TUN_ENCAP_GRE_TUN_IPV6_OFFSET;
+		}
+
+		/*
+		 * Tunnel Offset must be configured accordingly if there are any additional
+		 * vlan or PPPoE headers
+		 */
+		if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_SVLAN_VALID) {
+			encap_cfg.tunnel_offset += sizeof(struct vlan_hdr) * 2;
+		} else if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_CVLAN_VALID) {
+			encap_cfg.tunnel_offset += sizeof(struct vlan_hdr);
+		}
+
+		if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
+			encap_cfg.tunnel_offset += PPPOE_SES_HLEN;
+		}
+
+		encap_rule.src1_sel = FAL_TUNNEL_RULE_SRC1_FROM_HEADER_DATA;
+		encap_rule.src1_start = encap_cfg.tunnel_offset;
+		encap_rule.src2_sel = FAL_TUNNEL_RULE_SRC2_ZERO_DATA;
+		encap_rule.src3_sel = FAL_TUNNEL_RULE_SRC3_PROTO_MAP1;
+		encap_rule.src3_entry[0].enable = A_TRUE;
+		encap_rule.src3_entry[0].src_start = PPE_DRV_TUN_ENCAP_GRE_TUN_SRC_START;
+		encap_rule.src3_entry[0].src_width = PPE_DRV_TUN_ENCAP_GRE_TUN_SRC_WIDTH;
+		encap_rule.src3_entry[0].dest_pos = PPE_DRV_TUN_ENCAP_GRE_TUN_DEST_POS;
+
+		err = fal_tunnel_encap_rule_entry_set(PPE_DRV_SWITCH_ID, ptec->rule_id, &encap_rule);
+		if (err != SW_OK) {
+			ppe_drv_warn("%p: fal_tunnel_encap_rule_entry_set failed %d\n", ptec, err);
+			return false;
+		}
+
+		encap_cfg.edit_rule_id = ptec->rule_id;
 	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
 		encap_cfg.ip_proto_update = 1;
 		encap_cfg.l4_checksum_en = A_TRUE;

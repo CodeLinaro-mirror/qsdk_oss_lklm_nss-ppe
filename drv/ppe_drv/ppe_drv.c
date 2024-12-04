@@ -1035,8 +1035,8 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->tun_gbl.tun_l2tp.l2tp_dport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
 	p->tun_gbl.tun_l2tp.l2tp_sport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
 	p->tun_gbl.tun_l2tp.l2tp_encap_rule = NULL;
-
 	p->tun_gbl.vxlan_gpe_encap_rule = NULL;
+	p->tun_gbl.gretun_encap_rule = NULL;
 
 #ifdef PPE_TUNNEL_ENABLE
 	/*
