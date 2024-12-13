@@ -39,6 +39,14 @@ static bool ipfrag_2tuple_hash = true;
 module_param(ipfrag_2tuple_hash, bool, 0644);
 MODULE_PARM_DESC(ipfrag_2tuple_hash, "RSS hash for IP fragments based on SIP & DIP");
 
+/*
+ * Module parameter to enable/disable Flush & Deacceleration.
+ */
+bool flow_deacclr_dis = false;
+module_param(flow_deacclr_dis, bool, 0644);
+MODULE_PARM_DESC(flow_deacclr_dis, "Disable Flow deacceleration & Flush on Exception");
+
+
 uint32_t if_bm_to_offload;
 bool disable_port_mtu_check = true;
 uint32_t static_dbg_level = 0;
@@ -443,9 +451,9 @@ static bool ppe_drv_l3_route_ctrl_init(struct ppe_drv *p)
 	 * be redirected to CPU
 	 */
 	cfg.mru_fail_action = FAL_MAC_RDT_TO_CPU;
-	cfg.mru_deacclr_en = A_TRUE;
+	cfg.mru_deacclr_en = flow_deacclr_dis ? A_FALSE : A_TRUE;
 	cfg.mtu_fail_action = FAL_MAC_RDT_TO_CPU;
-	cfg.mtu_deacclr_en = A_TRUE;
+	cfg.mtu_deacclr_en = flow_deacclr_dis ? A_FALSE : A_TRUE;
 
 	/*
 	 * Don't deaccelerate flow based on DF bit.

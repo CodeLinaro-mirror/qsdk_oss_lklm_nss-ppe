@@ -302,7 +302,9 @@ void ppe_drv_exception_init(void)
 		/*
 		 * Enable Exception
 		 */
-		except_ctrl.deacclr_en = pe->deaccel_en;
+		if (!flow_deacclr_dis)
+			except_ctrl.deacclr_en = pe->deaccel_en;
+
 		except_ctrl.cmd = pe->action;
 
 		/*
@@ -379,6 +381,8 @@ void ppe_drv_exception_init(void)
 		if (err != SW_OK) {
 			ppe_drv_warn("%p: failed to configure L3 exception: %d", p, exp_code);
 		}
+
+		memset(&except_ctrl, 0, sizeof(except_ctrl));
 	}
 
 	/*

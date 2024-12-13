@@ -215,7 +215,7 @@ bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_bu
 	 * Check if this CPU code needs flush.
 	 */
 	pcc = &p->cc[cc];
-	if (!pcc->flush) {
+	if (flow_deacclr_dis || !pcc->flush) {
 		goto done;
 	}
 
