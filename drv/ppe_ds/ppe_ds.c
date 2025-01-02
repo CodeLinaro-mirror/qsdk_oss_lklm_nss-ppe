@@ -245,6 +245,14 @@ static void ppe_ds_enable_wlan_intr(nss_dp_ppeds_handle_t *edma_handle,
 {
 	struct ppe_ds *node = nss_dp_ppeds_priv(edma_handle);
 	ppe_ds_wlan_handle_t *wlan_handle = &node->wlan_handle;
+	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
+	uint32_t prod_idx;
+
+	/*
+	 * Update tcl producer index before enabling wlan interrupt.
+	 */
+	prod_idx = dp_ops->get_rx_prod_idx(edma_handle);
+	node->wlan_ops->set_tcl_prod_idx(wlan_handle, prod_idx);
 
 	node->wlan_ops->enable_tx_consume_intr(wlan_handle, true);
 }
