@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,28 +30,19 @@
  */
 void ppe_drv_tun_encap_hdr_ctrl_entry_free(struct kref *kref)
 {
-	sw_error_t err;
-	fal_tunnel_encap_header_ctrl_t header_ctrl = {0};
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun_encap_hdr_ctrl *hdr_ctrl = p->ecap_hdr_ctrl;
-
-	err = fal_tunnel_encap_header_ctrl_get(PPE_DRV_SWITCH_ID, &header_ctrl);
-	if (err != SW_OK) {
-		ppe_drv_warn("%p: Unable to get header control configuration: %d", p, err);
-		return;
-	}
 
 	/*
 	 * Reset data to zero if ref count is zero. This will ensure the value is cleared while updating
 	 * header ctrl data in "ppe_drv_tun_encap_hdr_ctrl_reset" function
 	 */
-	hdr_ctrl->udp_sport_base = (!kref_read(&hdr_ctrl->udp_sport_base_ref)) ? 0 : header_ctrl.udp_sport_base;
-	hdr_ctrl->udp_sport_mask = (!kref_read(&hdr_ctrl->udp_sport_mask_ref)) ? 0 : header_ctrl.udp_sport_mask;
-	hdr_ctrl->ipv4_addr_map_data = (!kref_read(&hdr_ctrl->ipv4_addr_map_ref)) ? 0 : header_ctrl.proto_map_data[0];
-	hdr_ctrl->ipv4_proto_map_data = (!kref_read(&hdr_ctrl->ipv4_proto_map_ref)) ? 0 : header_ctrl.proto_map_data[1];
-	hdr_ctrl->ipv6_addr_map_data = (!kref_read(&hdr_ctrl->ipv6_addr_map_ref)) ? 0 : header_ctrl.proto_map_data[2];
-	hdr_ctrl->ipv6_proto_map_data = (!kref_read(&hdr_ctrl->ipv6_proto_map_ref)) ? 0 : header_ctrl.proto_map_data[3];
-
+	hdr_ctrl->udp_sport_base = (!kref_read(&hdr_ctrl->udp_sport_base_ref)) ? 0 : hdr_ctrl->udp_sport_base;
+	hdr_ctrl->udp_sport_mask = (!kref_read(&hdr_ctrl->udp_sport_mask_ref)) ? 0 : hdr_ctrl->udp_sport_mask;
+	hdr_ctrl->ipv4_addr_map_data = (!kref_read(&hdr_ctrl->ipv4_addr_map_ref)) ? 0 : hdr_ctrl->ipv4_addr_map_data;
+	hdr_ctrl->ipv4_proto_map_data = (!kref_read(&hdr_ctrl->ipv4_proto_map_ref)) ? 0 : hdr_ctrl->ipv4_proto_map_data;
+	hdr_ctrl->ipv6_addr_map_data = (!kref_read(&hdr_ctrl->ipv6_addr_map_ref)) ? 0 : hdr_ctrl->ipv6_addr_map_data;
+	hdr_ctrl->ipv6_proto_map_data = (!kref_read(&hdr_ctrl->ipv6_proto_map_ref)) ? 0 : hdr_ctrl->ipv6_proto_map_data;
 }
 
 /*
@@ -108,49 +99,53 @@ bool ppe_drv_tun_encap_hdr_ctrl_reset(uint8_t flags)
 	/*
 	 * udp source port configurations and proto map configurations are dereferenced when reset
 	 * request is received. It will be reset to zero once all the references are released
-	 *
 	 */
 	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_BASE;
 	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
 		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->udp_sport_base_ref);
-		header_ctrl.udp_sport_base = hdr_ctrl_orig_cfg->udp_sport_base;
 	}
 
 	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_UDP_SPORT_MASK;
 	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
 		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->udp_sport_mask_ref);
-		header_ctrl.udp_sport_mask = hdr_ctrl_orig_cfg->udp_sport_mask;
 	}
 
 	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_ADR_MAP;
 	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
 		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv4_addr_map_ref);
-		header_ctrl.proto_map_data[0] = hdr_ctrl_orig_cfg->ipv4_addr_map_data;
 	}
 
 	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP;
 	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
 		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv4_proto_map_ref);
-		header_ctrl.proto_map_data[1] = hdr_ctrl_orig_cfg->ipv4_proto_map_data;
 	}
 
 	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_ADR_MAP;
 	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
 		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv6_addr_map_ref);
-		header_ctrl.proto_map_data[2] = hdr_ctrl_orig_cfg->ipv6_addr_map_data;
 	}
 
 	hdr_ctrl_flag = PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP;
 	if (ppe_drv_tun_encap_hdr_ctrl_flag_check(flags, hdr_ctrl_flag)) {
 		ppe_drv_tun_encap_hdr_ctrl_deref(&hdr_ctrl_orig_cfg->ipv6_proto_map_ref);
-		header_ctrl.proto_map_data[3] = hdr_ctrl_orig_cfg->ipv6_proto_map_data;
 	}
+
+	/*
+	 * Set the updated details in encap header control register.
+	 */
+	header_ctrl.udp_sport_base = hdr_ctrl_orig_cfg->udp_sport_base;
+	header_ctrl.udp_sport_mask = hdr_ctrl_orig_cfg->udp_sport_mask;
+	header_ctrl.proto_map_data[0] = hdr_ctrl_orig_cfg->ipv4_addr_map_data;
+	header_ctrl.proto_map_data[1] = hdr_ctrl_orig_cfg->ipv4_proto_map_data;
+	header_ctrl.proto_map_data[2] = hdr_ctrl_orig_cfg->ipv6_addr_map_data;
+	header_ctrl.proto_map_data[3] = hdr_ctrl_orig_cfg->ipv6_proto_map_data;
 
 	err = fal_tunnel_encap_header_ctrl_set(PPE_DRV_SWITCH_ID, &header_ctrl);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: failed to configure encap header control err: %d", p, err);
 		return false;
 	}
+
 	return true;
 }
 
