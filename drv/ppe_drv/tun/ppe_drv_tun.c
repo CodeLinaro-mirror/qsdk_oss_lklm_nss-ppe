@@ -1813,6 +1813,41 @@ static bool ppe_drv_tun_encap_header_rule_configure(enum ppe_drv_tun_cmn_ctx_typ
 }
 
 /*
+ * ppe_drv_tun_mapt_csum_config()
+ *	Update checksum configuration for MAP-T tunnels.
+ *
+ * For MAP-T tunnels, checksum for packets with zero UDP checksum
+ * should be re-calculated. Update the iface config accordingly.
+ */
+static bool ppe_drv_tun_mapt_csum_config(struct ppe_drv_port *pp)
+{
+	struct ppe_drv_iface *iface = NULL;
+	struct net_device *dev = NULL;
+
+	dev = ppe_drv_port_to_dev(pp);
+	if (!dev) {
+		ppe_drv_warn("%px:Failed to get netdev from port\n", pp);
+		return false;
+	}
+
+	iface = ppe_drv_iface_get_by_dev(dev);
+	if (!iface) {
+		ppe_drv_warn("%px: Failed to get iface associated with dev %s\n", dev, dev->name);
+		return false;
+	}
+
+	/*
+	 * Recalculate checksum for MAP-T for packets with zero UDP checksum.
+	 */
+	if (!ppe_drv_iface_udp_zero_csum_action_set(iface, PPE_DRV_IFACE_ZERO_CSUM_ACTION_RECALC_MAPT)) {
+		ppe_drv_warn("%px: Failed to update PPE L3 interface config for %s\n", dev, dev->name);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_tun_configure
  *	Allocate PPE tunnel instance and initialize objects
  */
@@ -1838,6 +1873,19 @@ bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, v
 		if (!ptun) {
 			ppe_drv_warn("%p: Couldn't allocate mapt tables", p);
 			return false;
+		}
+
+		/*
+		 * Update UDP zero csum action.
+		 */
+		if (!ppe_drv_tun_mapt_csum_config(pp)) {
+			ppe_drv_warn("%p: UDP zero csum action update failed for MAPT tunnel\n", p);
+			/*
+			 * We need to free the mapt context. It is takes care by the ppe_drv_tun_deref.
+			 * Holding a lock here as the _deref function should be called under the global lock.
+			 */
+			spin_lock_bh(&p->lock);
+			goto err_exit;
 		}
 
 		return true;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -602,7 +602,7 @@ struct ppe_drv_l3_if *ppe_drv_l3_if_alloc(enum ppe_drv_l3_if_type type)
 	in_l3_if_cfg.ttl_exceed_action = FAL_MAC_RDT_TO_CPU;
 	in_l3_if_cfg.mac_addr_bitmap = 0;
 	in_l3_if_cfg.dmac_check_en = A_TRUE;
-	in_l3_if_cfg.udp_zero_csum_action = FAL_UDP_ZERO_CSUM_RECALC_MAPT;
+	in_l3_if_cfg.udp_zero_csum_action = FAL_UDP_ZERO_CSUM_FRWRD;
 	in_l3_if_cfg.vpn_id = 0;
 
 	if (fal_ip_intf_set(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &in_l3_if_cfg) != SW_OK) {

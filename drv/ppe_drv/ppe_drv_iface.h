@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -78,3 +78,5 @@ void ppe_drv_iface_l3_if_clear(struct ppe_drv_iface *iface);
 
 void ppe_drv_iface_entries_free(struct ppe_drv_iface *iface);
 struct ppe_drv_iface *ppe_drv_iface_entries_alloc(void);
+
+bool ppe_drv_iface_udp_zero_csum_action_set_internal(struct ppe_drv_iface *iface, ppe_drv_iface_zero_csum_action_t action);

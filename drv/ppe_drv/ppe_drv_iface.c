@@ -526,15 +526,19 @@ bool ppe_drv_iface_l3_if_set(struct ppe_drv_iface *iface, struct ppe_drv_l3_if *
 }
 
 /*
- * ppe_drv_iface_udp_zero_csum_action_set()
+ * ppe_drv_iface_udp_zero_csum_action_set_internal()
  *	Set zero checkscum action of a given PPE interface.
+ *
+ * This API should be called while holding the global lock.
  */
-bool ppe_drv_iface_udp_zero_csum_action_set(struct ppe_drv_iface *iface, ppe_drv_iface_zero_csum_action_t action)
+bool ppe_drv_iface_udp_zero_csum_action_set_internal(struct ppe_drv_iface *iface, ppe_drv_iface_zero_csum_action_t action)
 {
 	fal_udp_zero_csum_cmd_t fal_action;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p __maybe_unused = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *vp;
+
+	ppe_drv_assert(spin_is_locked(&p->lock), "%px: ppe drv lock is not held\n", p);
 
 	switch (action) {
 	case PPE_DRV_IFACE_ZERO_CSUM_ACTION_FRWRD:
@@ -554,33 +558,43 @@ bool ppe_drv_iface_udp_zero_csum_action_set(struct ppe_drv_iface *iface, ppe_drv
 		return false;
 	}
 
-	spin_lock_bh(&p->lock);
-
 	/*
 	 * Get the port of the PPE interface to find its L3 interface.
 	 */
 	vp = ppe_drv_iface_port_get(iface);
 	if (!vp) {
 		ppe_drv_warn("%p: failed to find the port for the interface\n", iface);
-		spin_unlock_bh(&p->lock);
 		return false;
 	}
 
 	l3_if = ppe_drv_port_find_port_l3_if(vp);
 	if (!l3_if) {
 		ppe_drv_warn("%p: failed to find L3 interface for the port: %u\n", iface, vp->port);
-		spin_unlock_bh(&p->lock);
 		return false;
 	}
 
 	if (!ppe_drv_l3_if_udp_zero_csum_action_set(l3_if, fal_action)) {
 		ppe_drv_warn("%p: failed to set action: %d for the port: %u\n", iface, fal_action, vp->port);
-		spin_unlock_bh(&p->lock);
 		return false;
 	}
 
-	spin_unlock_bh(&p->lock);
 	return true;
+}
+
+/*
+ * ppe_drv_iface_udp_zero_csum_action_set()
+ *	Set zero checkscum action of a given PPE interface.
+ */
+bool ppe_drv_iface_udp_zero_csum_action_set(struct ppe_drv_iface *iface, ppe_drv_iface_zero_csum_action_t action)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	bool status;
+
+	spin_lock_bh(&p->lock);
+	status = ppe_drv_iface_udp_zero_csum_action_set_internal(iface, action);
+	spin_unlock_bh(&p->lock);
+
+	return status;
 }
 EXPORT_SYMBOL(ppe_drv_iface_udp_zero_csum_action_set);
 
