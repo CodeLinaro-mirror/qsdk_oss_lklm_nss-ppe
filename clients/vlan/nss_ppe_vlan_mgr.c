@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2017-2018, 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -38,6 +38,9 @@ static bool vlan_as_vp_invert = false;
 module_param(vlan_as_vp_invert, bool, S_IRUGO);
 MODULE_PARM_DESC(vlan_as_vp_invert, "When set, it indicates that the vlan_as_vp_interface parameter is the list of interfaces over which the VLAN as VP interface is not required");
 
+static bool vlan_fdb_learn_dis = false;
+module_param(vlan_fdb_learn_dis, bool, S_IRUGO);
+MODULE_PARM_DESC(vlan_fdb_learn_dis, "When set, the FDB learning on related VSI will be disbaled");
 
 static char vlan_as_vp_interface[NSS_PPE_VLAN_MGR_VLAN_AS_VP_MAX * IFNAMSIZ];
 module_param_string(vlan_as_vp_interface, vlan_as_vp_interface, sizeof(vlan_as_vp_interface), 0644);
@@ -402,6 +405,18 @@ static int nss_ppe_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct ne
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		nss_ppe_vlan_mgr_trace("%s: failed to initialize, PPE updated, error = %d\n", dev->name, ret);
 		goto free_iface;
+	}
+
+	/*
+	 * Disable FDB learning based on module parameter configuration.
+	 */
+	if (vlan_fdb_learn_dis) {
+		ret = ppe_drv_vlan_fdb_learn_disable(v->iface, true);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			nss_ppe_vlan_mgr_trace("%s: failed to configure VSI FDB learning, error = %d\n",
+					dev->name, ret);
+			goto deinit_iface;
+		}
 	}
 
 	ret = ppe_drv_iface_mac_addr_set(v->iface, v->dev_addr);
@@ -848,6 +863,18 @@ static int nss_ppe_vlan_mgr_configure_ppe(struct nss_vlan_pvt *v, struct net_dev
 		nss_ppe_vlan_mgr_trace("%s: failed to initialize PPE, error = %d\n", dev->name, ret);
 		goto free_iface;
 
+	}
+
+	/*
+	 * Disable FDB learning based on module parameter configuration.
+	 */
+	if (vlan_fdb_learn_dis) {
+		ret = ppe_drv_vlan_fdb_learn_disable(v->iface, true);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			nss_ppe_vlan_mgr_trace("%s: failed to configure VSI FDB learning, error = %d\n",
+					dev->name, ret);
+			goto deinit_iface;
+		}
 	}
 
 	ret = ppe_drv_iface_mac_addr_set(v->iface, v->dev_addr);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,6 +16,7 @@
 
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
+#include <fal/fal_fdb.h>
 #include <fal/fal_rss_hash.h>
 #include <fal/fal_ip.h>
 #include <fal/fal_init.h>
@@ -788,6 +789,54 @@ void ppe_drv_vlan_deinit(struct ppe_drv_iface *iface)
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_vlan_deinit);
+
+/*
+ * ppe_drv_vlan_fdb_learn_disable()
+ *	Configure VLAN based VSI FDB learning
+ */
+ppe_drv_ret_t ppe_drv_vlan_fdb_learn_disable(struct ppe_drv_iface *vlan_iface, bool vlan_fdb_learn_dis)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_vsi *vsi;
+	fal_vsi_newaddr_lrn_t newaddr_lrn = {0};
+
+	spin_lock_bh(&p->lock);
+	vsi = ppe_drv_iface_vsi_get(vlan_iface);
+	if (!vsi) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Invalid VSI for given iface\n", vlan_iface);
+		return PPE_DRV_RET_VSI_NOT_FOUND;
+	}
+
+	/*
+	 * Set FDB learning in PPE
+	 */
+	newaddr_lrn.lrn_en = !vlan_fdb_learn_dis;
+	newaddr_lrn.action = FAL_MAC_FRWRD;
+	if (fal_vsi_newaddr_lrn_set(PPE_DRV_SWITCH_ID, vsi->index, &newaddr_lrn) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Failed to configure FDB learning %u", vlan_iface, vlan_fdb_learn_dis);
+		return PPE_DRV_RET_NEW_ADDR_LRN_FAIL;
+	}
+
+	/*
+	 * Update vsi shadow copy
+	 */
+	vsi->is_fdb_learn_enabled = !vlan_fdb_learn_dis;
+
+	/*
+	 * Flush FDB table for the VLAN vsi
+	 */
+	if (fal_fdb_entry_del_byfid(PPE_DRV_SWITCH_ID, vsi->index, FAL_FDB_DEL_STATIC) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: failed to flush existing FDB entries", vlan_iface);
+		return PPE_DRV_RET_FDB_FLUSH_VSI_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_fdb_learn_disable);
 
 /*
  * ppe_drv_vlan_init()
