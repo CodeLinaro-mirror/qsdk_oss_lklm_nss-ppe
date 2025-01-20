@@ -228,7 +228,7 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 		/*
 		 * Don't update destination information and service code in EDMA
 		 */
-		sc_cfg.field_update_bitmap = ((1 << FLD_UPDATE_DEST_INFO) | (1 << FLD_UPDATE_SERVICE_CODE));
+		sc_cfg.field_update_bitmap = ((1 << FLD_UPDATE_DEST_INFO) | (1 << FLD_UPDATE_SERVICE_CODE) | (1 << FLD_UPDATE_MAC_HDR_BYPASS));
 
 		/*
 		 * Avoid packet drop due to source port filtering for no edit service codes, in this
@@ -242,6 +242,11 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 		 * Avoid any packet editing
 		 */
 		sc_cfg.bypass_bitmap[1] |= ((1 << L2_PKT_EDIT_BYP) | (1 << L3_PKT_EDIT_BYP));
+
+		/*
+		 * Avoid packet drop due to FAKE MAC entry mismatch
+		 */
+		sc_cfg.bypass_bitmap[1] |= (1 << FAKE_MAC_DROP_BYP);
 
 		break;
 

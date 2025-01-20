@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -317,7 +317,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 			client_cb_info.skb = skb;
 			client_cb_info.ip_summed = rxi->ip_summed;
 			client_cb_info.napi = rxi->napi;
-
+			client_cb_info.fake_mac_present = rxi->fake_mac;
 			if (unlikely(!dvp->dst_cb(&client_cb_info, dvp->dst_cb_data))) {
 				ppe_vp_info("%px: Destination VP:%d  Tx dev:%s skb:%p \
 						dropped by user\n", dvp, rxi->dvp, dev->name, skb);
@@ -404,6 +404,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		client_cb_info.skb = skb;
 		client_cb_info.ip_summed = rxi->ip_summed;
 		client_cb_info.napi = rxi->napi;
+		client_cb_info.fake_mac_present = rxi->fake_mac;
 
 		/*
 		 * If not processed successfully VP receive handler would free the skb

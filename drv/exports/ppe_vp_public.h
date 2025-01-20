@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -87,6 +87,7 @@ typedef int16_t ppe_vp_num_t;
  */
 struct ppe_vp_cb_info {
 	uint8_t ip_summed;		/**< IP checksum */
+	bool fake_mac_present;		/** Fake MAC header present */
 	struct sk_buff *skb;		/**< skb */
 	struct napi_struct *napi;	/**< RX napi */
 };

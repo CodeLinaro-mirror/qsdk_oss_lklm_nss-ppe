@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -406,6 +406,16 @@ static bool ppe_tun_exception_src_cb(struct ppe_vp_cb_info *info, void *cb_data)
 
 		skb->dev = dev;
 		skb->skb_iif = dev->ifindex;
+	}
+
+	if (info->fake_mac_present) {
+		/*
+		 * Tunnel exceptioned packets are not expected to contain
+		 * fake MAC header.
+		 * Move the skb->data to skip the fake MAC header
+		 * Note: This scenario is anticipated in WLAN(Passive VP) + L3 tunnel case
+		 */
+		skb_pull_inline(skb, ETH_HLEN);
 	}
 
 	cb(info, tun->tun_data);
