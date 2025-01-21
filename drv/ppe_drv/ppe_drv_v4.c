@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -726,8 +726,7 @@ static inline void ppe_drv_v4_conn_flow_metadata_set(struct ppe_drv_v4_conn_flow
 	case PPE_DRV_TREE_ID_TYPE_SAWF:
 		pcf->flow_metadata.wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(fc_metadata->type.sawf.sawf_mark);
 		pcf->flow_metadata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_SAWF;
-		pcf->flow_metadata.tree_id_data.info.sawf_metadata.service_class = fc_metadata->type.sawf.service_class;
-		pcf->flow_metadata.tree_id_data.info.sawf_metadata.peer_id = PPE_DRV_SAWF_PEER_ID_GET(fc_metadata->type.sawf.sawf_mark);
+		pcf->flow_metadata.tree_id_data.info.value = PPE_DRV_SAWF_MARK_GET(fc_metadata->type.sawf.sawf_mark);
 		return;
 
 	case PPE_DRV_TREE_ID_TYPE_SCS:
@@ -1051,7 +1050,6 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
 				memset(&fc_metadata, 0, sizeof(fc_metadata));
 				fc_metadata.type.sawf.sawf_mark = sawf_rule->flow_mark;
-				fc_metadata.type.sawf.service_class = sawf_rule->flow_service_class;
 				ppe_drv_v4_conn_flow_metadata_set(pcf, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
 				ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
 			}
@@ -1300,7 +1298,6 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
 				memset(&fc_metadata, 0, sizeof(fc_metadata));
 				fc_metadata.type.sawf.sawf_mark = sawf_rule->return_mark;
-				fc_metadata.type.sawf.service_class = sawf_rule->return_service_class;
 				ppe_drv_v4_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
 				ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
 			}

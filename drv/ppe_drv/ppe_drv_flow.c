@@ -387,25 +387,15 @@ static bool ppe_drv_flow_v6_flow_cookie40b_get(struct ppe_drv_v6_conn_flow *pcf,
 			cookie_40b[4] = 0;
 			break;
 
-		case PPE_DRV_TREE_ID_TYPE_SAWF:
-			/*
-			 * type(5 bits) | reserved(11 bits) | svc_id(8 bits) | peer_id(16 bits)
-			 */
-			cookie_40b[0] = tree_id_data->info.sawf_metadata.peer_id & 0xFF;
-			cookie_40b[1] = (tree_id_data->info.sawf_metadata.peer_id & 0xFF00) >> 8;
-			cookie_40b[2] = tree_id_data->info.sawf_metadata.service_class & 0xFF;
-			cookie_40b[3] = 0;
-			cookie_40b[4] = tree_id_data->type << 3;
-			break;
-
 		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
 		case PPE_DRV_TREE_ID_TYPE_SCS:
 			cookie_40b[4] = tree_id_data->type << 3;
 			break;
 
+		case PPE_DRV_TREE_ID_TYPE_SAWF:
 		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
 			/*
-			 * type(5 bits) | reserved(17bits) | mlo data(18 bits)
+			 * type(5 bits) | reserved(17bits) | data(18 bits)
 			 */
 			cookie_40b[0] = tree_id_data->info.value & 0xFF;
 			cookie_40b[1] = (tree_id_data->info.value & 0xFF00) >> 8;
@@ -448,17 +438,6 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint8_
 			tree_id[2] = (tree_id_data->info.value & 0xFF0000) >> 16;
 			break;
 
-		case PPE_DRV_TREE_ID_TYPE_SAWF:
-			/*
-                         * type(4bits) | reserved(2bits) | svc_id(8bits) | peer_id(10 bits)
-                         */
-			tree_id[0] = tree_id_data->info.sawf_metadata.peer_id & 0xFF;
-			tree_id[1] = (tree_id_data->info.sawf_metadata.peer_id & 0x300) >> 8;
-			tree_id[1] |= (tree_id_data->info.sawf_metadata.service_class & 0x3F) << 2 ;
-			tree_id[2] = (tree_id_data->info.sawf_metadata.service_class & 0xC0) >> 6;
-			tree_id[2] |= tree_id_data->type << 4;
-			break;
-
 		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
 		case PPE_DRV_TREE_ID_TYPE_SCS:
 			tree_id[2] |= tree_id_data->type << 4;
@@ -466,10 +445,11 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint8_
 			tree_id[0] = 0;
 			break;
 
+		case PPE_DRV_TREE_ID_TYPE_SAWF:
 		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
 			/*
-                         * type(4 bits) | reserved (2 bits) | mlo data (18 bits)
-                         */
+			 * type(4 bits) | reserved (2 bits) | data (18 bits)
+			 */
 			tree_id[0] = tree_id_data->info.value & 0xFF;
 			tree_id[1] = (tree_id_data->info.value & 0xFF00) >> 8;
 			tree_id[2] = (tree_id_data->info.value & 0x30000) >> 16;
@@ -1507,27 +1487,16 @@ static bool ppe_drv_flow_v4_flow_cookie40b_get(struct ppe_drv_v4_conn_flow *pcf,
 
 			break;
 
-		case PPE_DRV_TREE_ID_TYPE_SAWF:
-			/*
-			 * type(5 bits) | reserved(11 bits) | svc_id(8 bits) | peer_id(16 bits)
-			 */
-			cookie_40b[0] = tree_id_data->info.sawf_metadata.peer_id & 0xFF;
-			cookie_40b[1] = (tree_id_data->info.sawf_metadata.peer_id & 0xFF00) >> 8;
-			cookie_40b[2] = tree_id_data->info.sawf_metadata.service_class & 0xFF;
-			cookie_40b[3] = 0;
-			cookie_40b[4] = tree_id_data->type << 3;
-
-			break;
-
 		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
 		case PPE_DRV_TREE_ID_TYPE_SCS:
 			cookie_40b[4] = tree_id_data->type << 3;
 
 			break;
 
+		case PPE_DRV_TREE_ID_TYPE_SAWF:
 		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
 			/*
-			 * type(5 bits) | reserved(17bits) | mlo data(18 bits)
+			 * type(5 bits) | reserved(17bits) | data(18 bits)
 			 */
 			cookie_40b[0] = tree_id_data->info.value & 0xFF;
 			cookie_40b[1] = (tree_id_data->info.value & 0xFF00) >> 8;
@@ -1570,17 +1539,6 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint8_
 			tree_id[2] = (tree_id_data->info.value & 0xFF0000) >> 16;
 			break;
 
-		case PPE_DRV_TREE_ID_TYPE_SAWF:
-			/*
-			 * type(4bits) | reserved(2bits) | svc_id(8bits) | peer_id(10 bits)
-			 */
-			tree_id[0] = tree_id_data->info.sawf_metadata.peer_id & 0xFF;
-			tree_id[1] = (tree_id_data->info.sawf_metadata.peer_id & 0x300) >> 8;
-			tree_id[1] |= (tree_id_data->info.sawf_metadata.service_class & 0x3F) << 2 ;
-			tree_id[2] = (tree_id_data->info.sawf_metadata.service_class & 0xC0) >> 6;
-			tree_id[2] |= tree_id_data->type << 4;
-			break;
-
 		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
 		case PPE_DRV_TREE_ID_TYPE_SCS:
 			tree_id[2] |= tree_id_data->type << 4;
@@ -1588,9 +1546,10 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint8_
 			tree_id[0] = 0;
 			break;
 
+		case PPE_DRV_TREE_ID_TYPE_SAWF:
 		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
 			/*
-			 * type(4 bits) | reserved (2 bits) | mlo data (18 bits)
+			 * type(4 bits) | reserved (2 bits) | data (18 bits)
 			 */
 			tree_id[0] = tree_id_data->info.value & 0xFF;
 			tree_id[1] = (tree_id_data->info.value & 0xFF00) >> 8;
