@@ -2888,6 +2888,7 @@ int nss_ppe_vlan_mgr_dsa_vp_destroy(struct net_device *dev)
 	return -1;
 
 }
+EXPORT_SYMBOL(nss_ppe_vlan_mgr_dsa_vp_destroy);
 int nss_ppe_vlan_mgr_dsa_vp_create(struct net_device *dev, struct net_device *master_dev)
 {
 	WARN_ON(1);
