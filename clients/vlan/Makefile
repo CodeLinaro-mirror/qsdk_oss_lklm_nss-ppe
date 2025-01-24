@@ -11,10 +11,8 @@ ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx))
 ccflags-y += -DNSS_VLAN_MGR_PPE_VP_TUN_SUPPORT
 endif
 
-ifeq ($(dsa-mgr),y)
-  ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx))
-  ccflags-y += -DNSS_VLAN_BASED_DSA_SUPPORT
-  endif
+ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx))
+ccflags-y += -DNSS_VLAN_BASED_DSA_SUPPORT
 endif
 
 ifneq (,$(filter $(CONFIG_BONDING),y m))
