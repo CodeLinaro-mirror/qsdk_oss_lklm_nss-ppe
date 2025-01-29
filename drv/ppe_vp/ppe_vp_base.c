@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -131,6 +131,16 @@ struct ppe_vp *ppe_vp_base_get_vp_by_idx(int16_t vp_idx)
 }
 
 /*
+ * ppe_vp_base_rcu_callback()
+ *	RCU callback post call_rcu handling.
+ */
+static void ppe_vp_base_rcu_callback(struct rcu_head *rcu) {
+	/*
+	 * Do nothing here as the VP context is already released
+	 */
+}
+
+/*
  * ppe_vp_base_free_vp()
  *	Free a VP at a certain index in the VP table.
  */
@@ -157,7 +167,7 @@ bool ppe_vp_base_free_vp(uint8_t port_num)
 	rcu_assign_pointer(pvt->vp_allocator[vp_idx], NULL);
 	pvt->active_vp--;
 	spin_unlock_bh(&pvb->lock);
-	synchronize_rcu();
+	call_rcu(&vp->rcu, ppe_vp_base_rcu_callback);
 
 	ppe_vp_info("%px: VP %px at idx %d freed", pvb, vp, vp_idx);
 	return true;

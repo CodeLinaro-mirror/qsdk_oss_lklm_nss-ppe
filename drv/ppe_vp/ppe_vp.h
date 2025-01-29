@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -63,4 +63,5 @@ struct ppe_vp {
 	void *src_cb_data;				/* Callback data */
 	uint8_t vp_user_mode;				/* VP user mode for wifi dev type */
 	bool mpsk_en;					/* Indicates if MPSK is enabled on this VP */
+	struct rcu_head rcu;				/* RCU context used for RCU callbacks */
 };
