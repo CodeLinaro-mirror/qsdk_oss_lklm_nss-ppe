@@ -206,7 +206,7 @@ EXPORT_SYMBOL(ppe_ds_ppe2tcl_wlan_handle_intr);
  */
 int ppe_ds_reo2ppe_wlan_handle_intr(void *ctxt)
 {
-	uint16_t cons_idx, prod_idx, move;
+	uint16_t cons_idx, prod_idx, move, count;
 	struct ppe_ds *node = (struct ppe_ds *)ctxt;
 	ppe_ds_wlan_handle_t *wlan_handle = &node->wlan_handle;
 	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
@@ -228,13 +228,20 @@ int ppe_ds_reo2ppe_wlan_handle_intr(void *ctxt)
 	}
 
 	/*
+	 * Count how many packets are consumed by PPE.
+	 * If it is same as prev consumer index then nothing will be added into the stats.
+	 */
+	count = (cons_idx - node->last_reo2ppe_cons_idx + reo2ppe_size) & (reo2ppe_size - 1);
+
+	/*
 	 * Move consumer index for UL
 	 */
 	if (cons_idx != node->last_reo2ppe_cons_idx) {
 		node->wlan_ops->set_reo_cons_idx(wlan_handle, cons_idx);
 		node->last_reo2ppe_cons_idx = cons_idx;
 	}
-	atomic64_add(move, &ppe_ds_node_stats[node->node_cfg_idx].rx_pkts);
+
+	atomic64_add(count, &ppe_ds_node_stats[node->node_cfg_idx].rx_pkts);
 
 	return 0;
 }
