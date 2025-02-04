@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -32,12 +32,12 @@
 #define PPE_DRV_TUN_DECAP_L2TP_PPP_CTRL_OFFSET 8	/* PPP Control field offset from end of UDP header */
 #define PPE_DRV_TUN_DECAP_L2TP_PROTOCOL_MASK 0xffffffff /* Protocol mask for L2TP program entry config */
 
-#define PPE_DRV_TUN_DECAP_GRETUN_CFG_PROTOCOL 0		/* Common 32 bit data matched for Outer header GRE */
-#define PPE_DRV_TUN_DECAP_GRETUN_CFG_PROTOCOL_MAP 0xffff0000 /* Mask to match only first 16 bit flags in GRE header */
-#define PPE_DRV_TUN_DECAP_GRETUN_BASIC_HEADER_LEN 4	/* GRE header length without optional fields */
-#define PPE_DRV_TUN_DECAP_GRETUN_FLAGS_OFFSET 0		/* Offset for flag field within GRE header from start of GRE header */
-#define PPE_DRV_TUN_DECAP_GRETUN_PROTO_OFFSET 2		/* Offset for Protocol field in GRE header from start of GRE header */
-#define PPE_DRV_TUN_DECAP_GRETUN_UDF_MASK 0xffff	/* 16 bit Mask for UDF fields for GRE tunnel */
+#define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL 0			/* Common 32 bit data matched for Outer header GRE */
+#define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL_MASK 0xffff0000 	/* Mask to match only first 16 bit flags in GRE header */
+#define PPE_DRV_TUN_DECAP_GRE_BASIC_HEADER_LEN 4		/* GRE header length without optional fields */
+#define PPE_DRV_TUN_DECAP_GRE_FLAGS_OFFSET 0			/* Offset for flag field within GRE header from start of GRE header */
+#define PPE_DRV_TUN_DECAP_GRE_PROTO_OFFSET 2			/* Offset for Protocol field in GRE header from start of GRE header */
+#define PPE_DRV_TUN_DECAP_GRE_UDF_MASK 0xffff		/* 16 bit Mask for UDF fields for GRE tunnel */
 
 /*
  * ppe_drv_tun_decap

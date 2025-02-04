@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,8 +19,6 @@
 /*
  * GRE tunnel Program Parser configure/deconfigure functions
  */
-bool ppe_drv_tun_prgm_prsr_gretap_deconfigure(struct ppe_drv_tun_prgm_prsr *program_parser);
-bool ppe_drv_tun_prgm_prsr_gretap_configure(struct ppe_drv_tun_prgm_prsr *program_parser);
-bool ppe_drv_tun_prgm_prsr_gretun_configure(struct ppe_drv_tun_prgm_prsr *program_parser);
-bool ppe_drv_tun_prgm_prsr_gretun_deconfigure(struct ppe_drv_tun_prgm_prsr *program_parser);
+bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_parser);
+bool ppe_drv_tun_prgm_prsr_gre_deconfigure(struct ppe_drv_tun_prgm_prsr *program_parser);
 #endif /* _PPE_DRV_TUN_PRGM_PRSR_GRE_H_ */
