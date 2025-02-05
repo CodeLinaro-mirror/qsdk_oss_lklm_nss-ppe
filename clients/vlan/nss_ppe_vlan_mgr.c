@@ -1451,6 +1451,11 @@ static bool nss_ppe_vlan_mgr_interface_supported(struct net_device *dev)
 	real_dev = nss_ppe_vlan_mgr_get_real_dev(dev);
 	vid = vlan->vlan_id;
 
+	if (!real_dev) {
+		nss_ppe_vlan_mgr_trace("%s unable to get the real_dev\n", dev->name);
+		return false;
+	}
+
 #ifdef NSS_VLAN_BASED_DSA_SUPPORT
 	if (nss_ppe_vlan_mgr_dsa_interface_supported(dev)) {
 		nss_ppe_vlan_mgr_trace("%s is supported as VLAN interface\n", dev->name);
@@ -1470,26 +1475,24 @@ static bool nss_ppe_vlan_mgr_interface_supported(struct net_device *dev)
 	 * if above condns are satified, then VLAN interface is not supported and set ret as false
 	 */
 	spin_lock(&vlan_mgr_ctx.lock);
-	if (real_dev) {
-		master_dev = netdev_master_upper_dev_get(real_dev);
-		if (master_dev) {
-			nss_ppe_vlan_mgr_trace("Master dev %s real dev %s VLAN %s\n", master_dev->name,
-					       real_dev->name, dev->name);
-			list_for_each_entry(v, &vlan_mgr_ctx.list, list) {
-				nss_ppe_vlan_mgr_trace("%px Iterating for VLAN interfaces vid %d vlan_over_bridge %d "
-						       " bridge name %s\n", v, v->vid, v->is_vlan_over_bridge,
-						       v->br_net_dev->name);
-				if ((v->is_vlan_over_bridge) && (v->br_net_dev == master_dev) && (vid == v->vid)) {
-					nss_ppe_vlan_mgr_trace("VLAN %s on %s is not supported\n", dev->name,
-							       real_dev->name);
-					ret = false;
-					goto result;
-				}
+	master_dev = netdev_master_upper_dev_get(real_dev);
+	if (master_dev) {
+		nss_ppe_vlan_mgr_trace("Master dev %s real dev %s VLAN %s\n", master_dev->name,
+				real_dev->name, dev->name);
+		list_for_each_entry(v, &vlan_mgr_ctx.list, list) {
+			nss_ppe_vlan_mgr_trace("%px Iterating for VLAN interfaces vid %d vlan_over_bridge %d "
+					" bridge name %s\n", v, v->vid, v->is_vlan_over_bridge,
+					v->br_net_dev->name);
+			if ((v->is_vlan_over_bridge) && (v->br_net_dev == master_dev) && (vid == v->vid)) {
+				nss_ppe_vlan_mgr_trace("VLAN %s on %s is not supported\n", dev->name,
+						real_dev->name);
+				ret = false;
+				goto result;
 			}
 		}
 	}
 
-	if (real_dev && is_vlan_dev(real_dev)) {
+	if (is_vlan_dev(real_dev)) {
 		/*
 		 * Changing the real dev for double VLAN case in VLAN over bridge scenario
 		 * For instance, creating br-wan1.100.200 over br-wan1.100
@@ -1504,7 +1507,12 @@ static bool nss_ppe_vlan_mgr_interface_supported(struct net_device *dev)
 			ret = false;
 			goto result;
 		}
+
 		real_dev = nss_ppe_vlan_mgr_get_real_dev(real_dev);
+		if (!real_dev) {
+			nss_ppe_vlan_mgr_trace("%s unable to get the real_dev for double VLAN\n", dev->name);
+			return false;
+		}
 
 		nss_ppe_vlan_mgr_trace("Double VLAN case and updated real dev as %s for dev %s", real_dev->name,
 				       dev->name);
@@ -1521,7 +1529,7 @@ static bool nss_ppe_vlan_mgr_interface_supported(struct net_device *dev)
 	 * b) VID of VLAN present in VLAN manager is same as the VLAN ID of new VLAN
 	 * if above condns are satified, then VLAN interface is not supported and set ret as false
 	 */
-	if (real_dev && netif_is_bridge_master(real_dev)) {
+	if (netif_is_bridge_master(real_dev)) {
 		/*
 		 * If PPE representation is not present for br-wan1, then not allowing to create br-wan1.100
 		 */
