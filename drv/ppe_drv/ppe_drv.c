@@ -60,11 +60,11 @@ MODULE_PARM_DESC(flow_deacclr_dis, "Disable Flow deacceleration & Flush on Excep
 
 
 uint32_t if_bm_to_offload;
-bool disable_port_mtu_check = true;
+int disable_port_mtu_check = true;
 uint32_t static_dbg_level = 0;
 static char static_dbg_level_str[PPE_DRV_STATIC_DBG_LEVEL_STR_LEN];
 uint8_t ppe_drv_redir_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7};
-static bool eth2eth_offload_if_bitmap;
+static int eth2eth_offload_if_bitmap;
 static char upstream_dev_str[PPE_DRV_UPSTREAM_DEV_LEVEL_STR_LEN];
 static char src2uni_map[PPE_DRV_SRC2UNI_LEVEL_STR_LEN];
 #ifdef PPE_DRV_PKT_PADDING_STRIP

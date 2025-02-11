@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -49,9 +49,9 @@ static bool ovs_enabled = false;
  * for all other profile
  */
 #if defined(NSS_PPE_BRIDGE_MGR_FDB_DISABLE)
-static bool fdb_disabled = true;
+static int fdb_disabled = true;
 #else
-static bool fdb_disabled = false;
+static int fdb_disabled = false;
 #endif
 
 static struct nss_ppe_bridge_mgr_context br_mgr_ctx;
@@ -1503,5 +1503,5 @@ MODULE_DESCRIPTION("NSS PPE bridge manager");
 module_param(ovs_enabled, bool, 0644);
 MODULE_PARM_DESC(ovs_enabled, "OVS bridge is enabled");
 
-module_param(fdb_disabled, bool, 0644);
+module_param(fdb_disabled, int, 0644);
 MODULE_PARM_DESC(fdb_disabled, "fdb learning is disabled");
