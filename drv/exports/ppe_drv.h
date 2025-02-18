@@ -98,6 +98,10 @@
  */
 #define PPE_DRV_SAWF_MARK_FLOW_UPDATE		0x0001
 #define PPE_DRV_SAWF_MARK_RETURN_UPDATE		0x0002
+#define PPE_DRV_SAWF_SHIFT_TAG			24
+#define PPE_DRV_SAWF_GET_TAG(x)			(x >> PPE_DRV_SAWF_SHIFT_TAG)
+#define PPE_DRV_SAWF_VALID_TAG			0xAA
+#define PPE_DRV_SAWF_VALID_BIT(x)		((x >> 20) & 0x4)
 
 /*
  * ppe_drv_ip_type

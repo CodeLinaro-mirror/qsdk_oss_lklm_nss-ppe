@@ -3525,26 +3525,31 @@ ppe_drv_ret_t ppe_drv_v4_rule_sawf_mark_update(struct ppe_drv_v4_sawf_mark_updat
 	pcr = &cn->pcr;
 
 	if (update->valid_flags & PPE_DRV_SAWF_MARK_FLOW_UPDATE) {
-		pcf->flow_metadata.wifi_qos = update->sawf_rule.flow_mark;
-		pcf->flow_metadata.tree_id_data.info.sawf_metadata.service_class = update->sawf_rule.flow_service_class;
+		pcf->flow_metadata.wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(update->sawf_rule.flow_mark);
+		pcf->flow_metadata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_SAWF;
+		pcf->flow_metadata.tree_id_data.info.value = PPE_DRV_SAWF_MARK_GET(update->sawf_rule.flow_mark);
+		ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+
+		if (!ppe_drv_flow_v4_sawf_mark_update(pcf)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px : Failed to update mark in PPE", pcf);
+			return PPE_DRV_RET_SAWF_MARK_UPDATE_FAIL;
+		}
 	}
 
 	if (update->valid_flags & PPE_DRV_SAWF_MARK_RETURN_UPDATE) {
-		pcr->flow_metadata.wifi_qos = update->sawf_rule.return_mark;
-		pcr->flow_metadata.tree_id_data.info.sawf_metadata.service_class = update->sawf_rule.return_service_class;
+		pcr->flow_metadata.wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(update->sawf_rule.return_mark);
+		pcr->flow_metadata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_SAWF;
+		pcr->flow_metadata.tree_id_data.info.value = PPE_DRV_SAWF_MARK_GET(update->sawf_rule.return_mark);
+		ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+		if (!ppe_drv_flow_v4_sawf_mark_update(pcr)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px : Failed to update mark in PPE", pcr);
+			return PPE_DRV_RET_SAWF_MARK_UPDATE_FAIL;
+		}
 	}
 
 	spin_unlock_bh(&p->lock);
-
-	if (!ppe_drv_flow_v4_sawf_mark_update(pcf)) {
-		ppe_drv_warn("%px : Failed to update mark in PPE", pcf);
-		return PPE_DRV_RET_SAWF_MARK_UPDATE_FAIL;
-	}
-
-	if (!ppe_drv_flow_v4_sawf_mark_update(pcr)) {
-		ppe_drv_warn("%px : Failed to update mark in PPE", pcr);
-		return PPE_DRV_RET_SAWF_MARK_UPDATE_FAIL;
-	}
 
 	return PPE_DRV_RET_SUCCESS;
 }

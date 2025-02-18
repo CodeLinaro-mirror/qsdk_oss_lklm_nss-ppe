@@ -489,7 +489,7 @@ static bool ppe_drv_flow_v6_vpn_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_
  */
 static void ppe_drv_flow_ds_wifi_qos_set(uint8_t *wifi_qos, uint32_t *msduq_value, bool flow_override_mode)
 {
-	bool flow_override;
+	bool flow_queue_id;
 	uint8_t tid;
 
 	/*
@@ -497,7 +497,7 @@ static void ppe_drv_flow_ds_wifi_qos_set(uint8_t *wifi_qos, uint32_t *msduq_valu
 	 *
 	 * For flow override mode, wifi qos is configured as below:
 	 * --------------------------------------------------------------------------------------
-	 * |	Who Classify (2 bits)	|	TID (3 bits)	|	Flow override (1 bit)	|
+	 * |	Who Classify (2 bits)	|	TID (3 bits)	|	Flow queue ID (1 bit)	|
 	 * --------------------------------------------------------------------------------------
 	 *
 	 * OR
@@ -513,8 +513,9 @@ static void ppe_drv_flow_ds_wifi_qos_set(uint8_t *wifi_qos, uint32_t *msduq_valu
 		 * In sawf, tid value is mapped from msduq
 		 */
 		tid = *msduq_value & PPE_DRV_FLOW_TID_MASK;
-		flow_override = *msduq_value & PPE_DRV_FLOW_FO_MASK;
-		*wifi_qos = (*msduq_value & PPE_DRV_FLOW_WC_MASK) | (tid << PPE_DRV_FLOW_TID_SHIFT) | flow_override;
+		flow_queue_id = *msduq_value & PPE_DRV_FLOW_FO_MASK;
+		*wifi_qos = (*msduq_value & PPE_DRV_FLOW_WC_MASK) | (tid << PPE_DRV_FLOW_TID_SHIFT) | flow_queue_id;
+
 		return;
 	}
 
@@ -972,19 +973,15 @@ struct ppe_drv_flow *ppe_drv_flow_v6_get(struct ppe_drv_v6_5tuple *tuple)
  */
 bool ppe_drv_flow_v6_sawf_mark_update(struct ppe_drv_v6_conn_flow *pcf)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_flow_qos_t flow_qos = {0};
 	uint16_t index;
-	bool wifi_qos_en;
+	bool wifi_qos_en = false;
 	sw_error_t err;
-
-	spin_lock_bh(&p->lock);
 
 	index = pcf->pf->index;
 
 	err = fal_flow_qos_get(PPE_DRV_SWITCH_ID, index, &flow_qos);
 	if (err != SW_OK) {
-                spin_unlock_bh(&p->lock);
                 ppe_drv_warn("%px: Failed to obtain flow qos", pcf);
                 return false;
         }
@@ -994,7 +991,6 @@ bool ppe_drv_flow_v6_sawf_mark_update(struct ppe_drv_v6_conn_flow *pcf)
 	 * Get the flow cookie corresponding to flow.
 	 */
 	if (!ppe_drv_flow_v6_flow_cookie40b_get(pcf, flow_qos.cookie_40b)) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px: Failed to obtain a valid flow cookie", pcf);
 		return false;
 	}
@@ -1006,26 +1002,24 @@ bool ppe_drv_flow_v6_sawf_mark_update(struct ppe_drv_v6_conn_flow *pcf)
 	 * Get the tree ID corresponding to flow.
 	 */
 	if (!ppe_drv_flow_v6_tree_id_get(pcf, flow_qos.tree_id)) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px: failed to obtain a valid tree ID", pcf);
 		return false;
 	}
 #endif
 
 	if (!ppe_drv_flow_v6_wifi_qos_get(pcf, &flow_qos.qos, &wifi_qos_en)) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
 		return false;
 	}
 
+	flow_qos.qos_valid = wifi_qos_en;
+
 	err = fal_flow_qos_set(PPE_DRV_SWITCH_ID, index, &flow_qos);
 	if (err != SW_OK) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px: Mark rule update failed in PPE", pcf);
 		return false;
 	}
 
-	spin_unlock_bh(&p->lock);
 	return true;
 }
 
@@ -1982,19 +1976,15 @@ struct ppe_drv_flow *ppe_drv_flow_v4_get(struct ppe_drv_v4_5tuple *tuple)
  */
 bool ppe_drv_flow_v4_sawf_mark_update(struct ppe_drv_v4_conn_flow *pcf)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_flow_qos_t flow_qos = {0};
 	uint16_t index;
-	bool wifi_qos_en;
+	bool wifi_qos_en = false;
 	sw_error_t err;
-
-	spin_lock_bh(&p->lock);
 
 	index = pcf->pf->index;
 
 	err = fal_flow_qos_get(PPE_DRV_SWITCH_ID, index, &flow_qos);
 	if (err != SW_OK) {
-                spin_unlock_bh(&p->lock);
                 ppe_drv_warn("%px: Failed to obtain flow qos", pcf);
                 return false;
         }
@@ -2004,7 +1994,6 @@ bool ppe_drv_flow_v4_sawf_mark_update(struct ppe_drv_v4_conn_flow *pcf)
 	 * Get the flow cookie corresponding to flow.
 	 */
 	if (!ppe_drv_flow_v4_flow_cookie40b_get(pcf, flow_qos.cookie_40b)) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px: failed to obtain a valid flow cookie", pcf);
 		return false;
 	}
@@ -2016,26 +2005,24 @@ bool ppe_drv_flow_v4_sawf_mark_update(struct ppe_drv_v4_conn_flow *pcf)
 	 * Get the tree ID corresponding to flow.
 	 */
 	if (!ppe_drv_flow_v4_tree_id_get(pcf, flow_qos.tree_id)) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px: Failed to obtain a valid tree ID", pcf);
 		return false;
 	}
 #endif
 
 	if (!ppe_drv_flow_v4_wifi_qos_get(pcf, &flow_qos.qos, &wifi_qos_en)) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
 		return false;
 	}
 
+	flow_qos.qos_valid = wifi_qos_en;
+
 	err = fal_flow_qos_set(PPE_DRV_SWITCH_ID, index, &flow_qos);
 	if (err != SW_OK) {
-		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px: Mark rule update failed in PPE", pcf);
 		return false;
 	}
 
-	spin_unlock_bh(&p->lock);
 	return true;
 }
 
