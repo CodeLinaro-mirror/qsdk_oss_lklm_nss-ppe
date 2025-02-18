@@ -1,23 +1,12 @@
 /*
- **************************************************************************
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- **************************************************************************
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #ifndef _NSS_PPE_DSA_MGR_H_
 #define _NSS_PPE_DSA_MGR_H_
+
+#include <net/dsa.h>
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
 #define nss_ppe_dsa_mgr_warn(s, ...) \
@@ -52,5 +41,39 @@
 		pr_info("%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 #endif /* CONFIG_DYNAMIC_DEBUG */
+
+/*
+ * dsa mgr context
+ */
+struct nss_ppe_dsa_mgr_context {
+	struct list_head list;			/* List of dsa private instance */
+	spinlock_t lock;				/* Lock to protect dsa private instance */
+};
+
+/*
+ * dsa mgr private structure
+ */
+struct nss_ppe_dsa_pvt {
+	struct list_head item;			/* List iterator */
+
+	/*
+	 * Fields for Linux information
+	 */
+	struct net_device *dev;		/* corresponding net-device */
+	uint32_t mtu;				/* mtu info */
+	uint8_t dev_addr[ETH_ALEN];		/* mac address */
+
+	unsigned int swpt_id;		/* switch port id */
+
+	struct metadata_dst	*dsa_meta; /* metadata associated with switch ports, for dsa driver
+									to find out dsa interface without atheros header */
+
+	/*
+	 * Fields for PPE information
+	 */
+	struct ppe_drv_iface *iface;		/* ppe_iface info */
+
+	struct kref ref;			/* Reference count */
+};
 
 #endif

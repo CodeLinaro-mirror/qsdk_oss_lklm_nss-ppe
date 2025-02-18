@@ -6,3 +6,7 @@ qca-nss-ppe-dsa-mgr-objs := nss_ppe_dsa_mgr.o
 
 ccflags-y += -DNSS_PPE_DSA_MGR_DEBUG_LEVEL=4
 ccflags-y += -Wall -Werror
+
+ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq54xx))
+ccflags-y += -DNSS_ATH_HDR_BASED_DSA_SUPPORT
+endif
