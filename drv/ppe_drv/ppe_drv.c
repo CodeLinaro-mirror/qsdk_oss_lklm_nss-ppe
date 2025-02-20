@@ -2018,6 +2018,12 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 			continue;
 		}
 
+		if (src_profile >= PPE_DRV_PORT_SRC_PROFILE_MAX) {
+			ppe_drv_warn("Invalid src_profile number given from omci\n");
+			spin_unlock_bh(&p->lock);
+			return -1;
+		}
+
 		end_ch_ptr = start_ch_ptr + strcspn(start_ch_ptr, NSS_PPE_DRV_WHITESPACE);
 		if (end_ch_ptr != start_ch_ptr) {
 			len = end_ch_ptr - start_ch_ptr;
