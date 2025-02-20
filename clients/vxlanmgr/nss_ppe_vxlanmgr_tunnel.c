@@ -554,6 +554,7 @@ static bool nss_ppe_vxlan_src_exception(struct ppe_vp_cb_info *info, ppe_tun_dat
 	struct net_device *dev = skb->dev;
 
 	nss_ppe_vxlanmgr_warn("%px: Dropping the skb for dev:%s", dev, dev->name);
+	dev_kfree_skb_any(skb);
 
 	return 0;
 }
