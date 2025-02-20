@@ -32,12 +32,15 @@
 #define PPE_DRV_TUN_DECAP_L2TP_PPP_CTRL_OFFSET 8	/* PPP Control field offset from end of UDP header */
 #define PPE_DRV_TUN_DECAP_L2TP_PROTOCOL_MASK 0xffffffff /* Protocol mask for L2TP program entry config */
 
-#define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL 0			/* Common 32 bit data matched for Outer header GRE */
-#define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL_MASK 0xffff0000 	/* Mask to match only first 16 bit flags in GRE header */
-#define PPE_DRV_TUN_DECAP_GRE_BASIC_HEADER_LEN 4		/* GRE header length without optional fields */
-#define PPE_DRV_TUN_DECAP_GRE_FLAGS_OFFSET 0			/* Offset for flag field within GRE header from start of GRE header */
-#define PPE_DRV_TUN_DECAP_GRE_PROTO_OFFSET 2			/* Offset for Protocol field in GRE header from start of GRE header */
+#define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL 0		/* Common 32 bit data matched for Outer header GRE */
+#define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL_MASK 0 	/* Dont Mask any fixed fields for GRE header as UDF fields would mask them */
+#define PPE_DRV_TUN_DECAP_GRE_BASIC_HEADER_LEN 4	/* GRE header length without optional fields */
+#define PPE_DRV_TUN_DECAP_GRE_FLAGS_OFFSET 0		/* Offset for flag field within GRE header from start of GRE header */
+#define PPE_DRV_TUN_DECAP_GRE_PROTO_OFFSET 2		/* Offset for Protocol field in GRE header from start of GRE header */
 #define PPE_DRV_TUN_DECAP_GRE_UDF_MASK 0xffff		/* 16 bit Mask for UDF fields for GRE tunnel */
+#define PPE_DRV_TUN_DECAP_GRE_CSUM_ENABLED 0x8000	/* Flags field match for GRE tunnel with csum enabled */
+#define PPE_DRV_TUN_DECAP_GRE_CSUM_LENGTH  2		/* GRE header checksum field length */
+#define PPE_DRV_TUN_DECAP_GRE_OFFSET_LENGTH  2		/* GRE offset field length*/
 
 /*
  * ppe_drv_tun_decap

@@ -178,9 +178,10 @@ struct ppe_drv_tun_prgm_prsr_l2tp {
  * 	Program Parser GRE tunnel specific data
  */
 struct ppe_drv_tun_prgm_prsr_gre {
-	struct ppe_drv_tun_prgm_prsr_prgm_udf ipv4_udf;	/* program UDF entry used for matching IPv4 GRETUN inner payload */
-	struct ppe_drv_tun_prgm_prsr_prgm_udf ipv6_udf;	/* program UDF entry used for matching IPv6 GRETUN inner payload */
-	struct ppe_drv_tun_prgm_prsr_prgm_udf eth_udf;	/* program UDF entry used for matching Ethernet GRETAP inner payload */
+	struct ppe_drv_tun_prgm_prsr_prgm_udf ipv4_udf;		/* program UDF entry used for matching IPv4 GRETUN inner payload */
+	struct ppe_drv_tun_prgm_prsr_prgm_udf ipv6_udf;		/* program UDF entry used for matching IPv6 GRETUN inner payload */
+	struct ppe_drv_tun_prgm_prsr_prgm_udf eth_udf;		/* program UDF entry used for matching Ethernet GRETAP inner payload */
+	struct ppe_drv_tun_prgm_prsr_prgm_udf eth_csum_udf;	/* program UDF entry used for matching Ethernet GRETAP inner payload with csum enabled */
 };
 
 

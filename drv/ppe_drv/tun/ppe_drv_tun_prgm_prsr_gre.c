@@ -58,6 +58,13 @@ bool ppe_drv_tun_prgm_prsr_gre_deconfigure(struct ppe_drv_tun_prgm_prsr *pgm_psr
 		return false;
 	}
 
+	/*
+	 * delete Program UDF entry for GRETAP + CSUM
+	 */
+	if (!ppe_drv_tun_prgm_prsr_prgm_udf_deconfigure(pgm_psr->parser_idx, &gre_data->eth_csum_udf)) {
+		ppe_drv_warn("%p: program UDF entry delete failed for L2 GRETAP Tunnel + CSUM", p);
+		return false;
+	}
 	return true;
 }
 
@@ -75,6 +82,7 @@ bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_p
 	struct ppe_drv_tun_prgm_prsr_prgm_udf *ipv4_udf = &gre_data->ipv4_udf;
 	struct ppe_drv_tun_prgm_prsr_prgm_udf *ipv6_udf = &gre_data->ipv6_udf;
 	struct ppe_drv_tun_prgm_prsr_prgm_udf *eth_udf = &gre_data->eth_udf;
+	struct ppe_drv_tun_prgm_prsr_prgm_udf *eth_csum_udf = &gre_data->eth_csum_udf;
 
 	ppe_drv_assert((program_parser->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRE), "program mode not GRE for program type : %d", parser_idx);
 
@@ -117,6 +125,9 @@ bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_p
 		return false;
 	}
 
+	/*
+	 * UDF entry to match L3 GRE tunnel with IPv4
+	 */
 	ppe_drv_tun_prgm_udf_bitmap_set(ipv4_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF0);
 	ppe_drv_tun_prgm_udf_bitmap_set(ipv4_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF1);
 
@@ -132,6 +143,9 @@ bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_p
 		return false;
 	}
 
+	/*
+	 * UDF entry to match L3 GRE tunnel with IPv6
+	 */
 	ppe_drv_tun_prgm_udf_bitmap_set(ipv6_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF0);
 	ppe_drv_tun_prgm_udf_bitmap_set(ipv6_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF1);
 	ipv6_udf->udf_val[0] = 0;
@@ -146,6 +160,9 @@ bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_p
 		return false;
 	}
 
+	/*
+	 * UDF entry to match L2 GRE tunnel without key
+	 */
 	ppe_drv_tun_prgm_udf_bitmap_set(eth_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF0);
 	ppe_drv_tun_prgm_udf_bitmap_set(eth_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF1);
 	eth_udf->udf_val[0] = 0;
@@ -160,5 +177,30 @@ bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_p
 		return false;
 	}
 
+	/*
+	 * Add additional entry in program parser UDF to match GRE without key + CSUM enabled
+	 */
+	ppe_drv_tun_prgm_udf_bitmap_set(eth_csum_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF0);
+	ppe_drv_tun_prgm_udf_bitmap_set(eth_csum_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_SET_UDF1);
+	eth_csum_udf->udf_val[0] = PPE_DRV_TUN_DECAP_GRE_CSUM_ENABLED;
+	eth_csum_udf->udf_val[1] = ETH_P_TEB;
+	eth_csum_udf->udf_mask[0] = PPE_DRV_TUN_DECAP_GRE_UDF_MASK;
+	eth_csum_udf->udf_mask[1] = PPE_DRV_TUN_DECAP_GRE_UDF_MASK;
+
+	/*
+	 * Enable header length for this UDF field as checksum field is 2 bytes
+	 * When checksum is included as per RFC offset field is also mandatory hence the total
+	 * additional length to be included would be checksum field length + offset field length.
+	 * We dont support Routing field configuration so offset field value would always be set to 0.
+	 */
+	ppe_drv_tun_prgm_udf_action_bitmap_set(eth_csum_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_CHK_HDR_LEN);
+	eth_csum_udf->hdr_len = PPE_DRV_TUN_DECAP_GRE_CSUM_LENGTH + PPE_DRV_TUN_DECAP_GRE_OFFSET_LENGTH;
+
+	ppe_drv_tun_prgm_udf_action_bitmap_set(eth_csum_udf, PPE_DRV_TUN_PRGM_PRSR_PRGM_UDF_CHK_INNER_HDR_TYPE);
+	eth_csum_udf->inner_hdr = PPE_DRV_TUN_PRGM_PRSR_INNER_HDR_ETH;
+	if (!ppe_drv_tun_prgm_prsr_prgm_udf_configure(parser_idx, eth_csum_udf)) {
+		ppe_drv_warn("%p: program udf entry configuration failed for GRETAP", p);
+		return false;
+	}
 	return true;
 }
