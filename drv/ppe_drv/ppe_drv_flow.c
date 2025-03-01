@@ -608,6 +608,17 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8
 		*wifi_qos_en = true;
 	}
 
+	/*
+	 * If the vp type is active or the flow is active vp, set the WIFI QoS enable
+	 * to indicate the PPE to set the WIFI QoS bit in the EDMA rx descriptor
+	 * so that EDMA can fill the MLO assit data in skb->mark which is needed by default
+	 * for wlan vp flows.
+	 */
+	if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP ||
+	    ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID)) {
+		*wifi_qos_en = true;
+	}
+
 	return true;
 }
 
@@ -1661,6 +1672,17 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8
 	 * QDISC valid bit) in the EDMA Rx secondary descriptor
 	 */
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+		*wifi_qos_en = true;
+	}
+
+	/*
+	 * If the vp type is active or the flow is active vp, set the WIFI QoS enable
+	 * to indicate the PPE to set the WIFI QoS bit in the EDMA rx descriptor
+	 * so that EDMA can fill the MLO assit data in skb->mark which is needed by default
+	 * for wlan vp flows.
+	 */
+	if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP ||
+	    ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID)) {
 		*wifi_qos_en = true;
 	}
 
