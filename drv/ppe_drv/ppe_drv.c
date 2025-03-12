@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -54,6 +54,7 @@ static bool eth2eth_offload_if_bitmap;
 static char upstream_dev_str[PPE_DRV_UPSTREAM_DEV_LEVEL_STR_LEN];
 static char src2uni_map[PPE_DRV_SRC2UNI_LEVEL_STR_LEN];
 
+int mac_lrn_exception_en = true;
 
 /*
  * Define the filename to be used for assertions.
@@ -1371,6 +1372,25 @@ static int ppe_drv_disable_port_mtu_check_handler(struct ctl_table *table,
 }
 
 /*
+ * ppe_drv_mac_lrn_exception_en()
+ *	API to enable/disable the exception for MAC address learn exception.
+ */
+int ppe_drv_mac_lrn_exception_en(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (!write) {
+		return ret;
+	}
+
+	ppe_drv_trace("PPE DRV MAC address learn exception %d\n", mac_lrn_exception_en);
+
+	return 0;
+}
+
+/*
  * ppe_drv_eth2eth_offload_if_bitmap_handler()
  * 	Set eth to eth offload with if bitmap config
  */
@@ -1793,6 +1813,13 @@ static struct ctl_table ppe_drv_sub[] = {
 		.maxlen         =       sizeof(char) * PPE_DRV_SRC2UNI_LEVEL_STR_LEN,
 		.mode           =       0644,
 		.proc_handler   =       ppe_drv_src2uni_handler
+	},
+	{
+		.procname	=	"mac_lrn_exception_en",
+		.data		=	&mac_lrn_exception_en,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_mac_lrn_exception_en
 	},
 	{}
 };

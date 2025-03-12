@@ -809,10 +809,14 @@ ppe_drv_ret_t ppe_drv_vlan_fdb_learn_disable(struct ppe_drv_iface *vlan_iface, b
 	}
 
 	/*
-	 * Set FDB learning in PPE
+	 * If FDB learning is enabled on the given VSI, enable new MAC address learn exception.
 	 */
 	newaddr_lrn.lrn_en = !vlan_fdb_learn_dis;
 	newaddr_lrn.action = FAL_MAC_FRWRD;
+	if (!vlan_fdb_learn_dis && mac_lrn_exception_en) {
+		newaddr_lrn.action = FAL_MAC_RDT_TO_CPU;
+	}
+
 	if (fal_vsi_newaddr_lrn_set(PPE_DRV_SWITCH_ID, vsi->index, &newaddr_lrn) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: Failed to configure FDB learning %u", vlan_iface, vlan_fdb_learn_dis);

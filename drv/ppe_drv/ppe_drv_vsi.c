@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -482,6 +482,10 @@ struct ppe_drv_vsi *ppe_drv_vsi_alloc(enum ppe_drv_vsi_type type)
 	 */
 	addr_cfg.lrn_en = 1;
 	addr_cfg.action = FAL_MAC_FRWRD;
+	if (mac_lrn_exception_en) {
+		addr_cfg.action = FAL_MAC_RDT_TO_CPU;
+	}
+
 	if (fal_vsi_newaddr_lrn_set(PPE_DRV_SWITCH_ID, vsi->index, &addr_cfg) != SW_OK) {
 		ppe_drv_l3_if_deref(l3_if);
 		ppe_drv_vsi_deref(vsi);

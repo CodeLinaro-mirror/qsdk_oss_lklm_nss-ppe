@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -430,6 +430,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_FAILURE_FLOW_CONFIGURE_FAIL,	/**< Failure due to FSE flow configuration failed */
 	PPE_DRV_RET_NO_TOP_RX_IF,			/**< Failure due to no corresponding top interface */
 	PPE_DRV_RET_INVALID_DEV_TYPE,			/**< Invalid port netdev type */
+	PPE_DRV_RET_MAC_LEARN_EXCEPT_CFG_FAIL,		/**< Failed to configure MAC learn exception. */
 } ppe_drv_ret_t;
 
 /**

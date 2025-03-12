@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -255,9 +255,14 @@ ppe_drv_ret_t ppe_drv_br_fdb_lrn_ctrl(struct ppe_drv_iface *br_iface, bool enabl
 
 	/*
 	 * Set FDB learning in PPE
+	 * If FDB learning is enabled on the given VSI, enable new MAC address learn exception.
 	 */
 	newaddr_lrn.lrn_en = enable;
 	newaddr_lrn.action = FAL_MAC_FRWRD;
+	if (enable && mac_lrn_exception_en) {
+		newaddr_lrn.action = FAL_MAC_RDT_TO_CPU;
+	}
+
 	if (fal_vsi_newaddr_lrn_set(PPE_DRV_SWITCH_ID, vsi->index, &newaddr_lrn) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: Failed to configure FDB learning %u", br_iface, enable);
