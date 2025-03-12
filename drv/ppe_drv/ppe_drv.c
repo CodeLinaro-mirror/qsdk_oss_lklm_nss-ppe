@@ -72,6 +72,7 @@ static char packet_padding[PPE_DRV_PACKET_PADDING_STR_LEN];
 #endif
 
 int l4_checksum_exception_enable = false;
+int mac_lrn_exception_en = true;
 
 /*
  * Define the filename to be used for assertions.
@@ -1683,6 +1684,25 @@ int ppe_drv_l4_checksum_exception_enable(struct ctl_table *table, int write,
 }
 
 /*
+ * ppe_drv_mac_lrn_exception_en()
+ *	API to enable/disable the exception for MAC address learn exception.
+ */
+int ppe_drv_mac_lrn_exception_en(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (!write) {
+		return ret;
+	}
+
+	ppe_drv_trace("PPE DRV MAC address learn exception %d\n", mac_lrn_exception_en);
+
+	return 0;
+}
+
+/*
  * ppe_drv_eth2eth_offload_if_bitmap_handler()
  * 	Set eth to eth offload with if bitmap config
  */
@@ -2249,6 +2269,13 @@ static struct ctl_table ppe_drv_sub[] = {
 		.maxlen		=	sizeof(int),
 		.mode		=	0644,
 		.proc_handler	=	ppe_drv_l4_checksum_exception_enable
+	},
+	{
+		.procname	=	"mac_lrn_exception_en",
+		.data		=	&mac_lrn_exception_en,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_mac_lrn_exception_en
 	},
 	{}
 };

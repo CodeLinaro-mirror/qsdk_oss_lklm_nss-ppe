@@ -43,6 +43,7 @@
 
 extern uint32_t static_dbg_level;
 extern bool flow_deacclr_dis;
+extern int mac_lrn_exception_en;
 
 /*
  * ppe_drv_static_dbg_level

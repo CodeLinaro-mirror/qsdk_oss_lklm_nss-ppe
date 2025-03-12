@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -504,6 +504,7 @@ typedef enum ppe_drv_ret {
 #endif
 	PPE_DRV_RET_HOST_QDISC_CFG_FAIL,		/**< Host Qdisc configuration failed. */
 	PPE_DRV_RET_SAWF_MARK_UPDATE_FAIL,		/**< SAWF mark update failed. */
+	PPE_DRV_RET_MAC_LEARN_EXCEPT_CFG_FAIL,		/**< Failed to configure MAC learn exception. */
 } ppe_drv_ret_t;
 
 /**
