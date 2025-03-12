@@ -54,6 +54,11 @@ static int fdb_disabled = true;
 static int fdb_disabled = false;
 #endif
 
+/*
+ * Enable FDB delete notify registration.
+ */
+static int fdb_del_notify = false;
+
 static struct nss_ppe_bridge_mgr_context br_mgr_ctx;
 
 /*
@@ -906,6 +911,79 @@ static int nss_ppe_bridge_mgr_fdb_update_callback(struct notifier_block *notifie
 }
 
 /*
+ * nss_ppe_bridge_mgr_fdb_delete_event()
+ *	Callback for FDB delete/ageing timeout events.
+ */
+static int nss_ppe_bridge_mgr_fdb_delete_event(struct notifier_block *nb,
+		unsigned long val, void *ctx)
+{
+	struct br_fdb_event *event = (struct br_fdb_event *)ctx;
+	struct nss_ppe_bridge_mgr_pvt *b_pvt = NULL;
+	struct net_device *br_dev = NULL;
+	ppe_drv_ret_t ret;
+
+	if ((val != BR_FDB_EVENT_DEL) || event->is_local) {
+		nss_ppe_bridge_mgr_trace("%px: local fdb or not delete"
+				"event MAC: %pM val: %lu dev: %s, ignore\n",
+				event, event->addr, val,
+				event->dev ? event->dev->name : NULL);
+		return NOTIFY_DONE;
+	}
+
+	nss_ppe_bridge_mgr_trace("%px: FDB delete event for MAC addr: %pM\n", event, event->addr);
+
+	if (!fdb_del_notify) {
+		nss_ppe_bridge_mgr_trace("FDB delete notify disabled\n");
+		return NOTIFY_DONE;
+	}
+
+	if (!event->br)
+		return NOTIFY_DONE;
+
+	br_dev = br_fdb_bridge_dev_get_and_hold(event->br);
+	if (!br_dev) {
+		nss_ppe_bridge_mgr_warn("%px: bridge device not found\n", event->br);
+		return NOTIFY_DONE;
+	}
+
+	nss_ppe_bridge_mgr_trace("%px: MAC: %pM, dev: %s, bridge: %s\n",
+			event, event->addr, event->dev ? event->dev->name : NULL,
+			br_dev->name);
+
+	/*
+	 * When a MAC address move from a PPE represented interface to a non-PPE represented
+	 * interface, the FDB entry in the PPE needs to be flushed.
+	 */
+	if (!nss_ppe_bridge_mgr_is_ppe(event->dev)) {
+		nss_ppe_bridge_mgr_trace("%px: dev is not a PPE interface\n", event->dev);
+		dev_put(br_dev);
+		return NOTIFY_DONE;
+	}
+
+	b_pvt = nss_ppe_bridge_mgr_find_instance(br_dev);
+	dev_put(br_dev);
+	if (!b_pvt) {
+		nss_ppe_bridge_mgr_warn("%px: bridge instance not found\n", event->br);
+		return NOTIFY_DONE;
+	}
+
+	ret = ppe_drv_br_fdb_del_bymac(b_pvt->iface, event->addr);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_bridge_mgr_warn("%px: FDB entry delete failed with MAC %pM\n",
+				b_pvt, event->addr);
+	}
+
+	return NOTIFY_DONE;
+}
+
+/*
+ * Notifier block for FDB notify
+ */
+static struct notifier_block nss_ppe_bridge_mgr_fdb_delete_nb = {
+	.notifier_call = nss_ppe_bridge_mgr_fdb_delete_event,
+};
+
+/*
  * Notifier block for FDB update
  */
 static struct notifier_block nss_ppe_bridge_mgr_fdb_update_notifier = {
@@ -1031,6 +1109,27 @@ static int nss_ppe_bridge_mgr_fdb_handler(struct ctl_table *table,
 	return ret;
 }
 
+/*
+ * nss_ppe_bridge_mgr_fdb_del_notify_handler
+ *	Enable/disable FDB notify registration.
+ */
+static int nss_ppe_bridge_mgr_fdb_del_notify_handler(struct ctl_table *table,
+						int write, void __user *buffer,
+						size_t *lenp, loff_t *ppos)
+{
+	int ret = 0;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (ret)
+		return ret;
+
+	if (!write)
+		return ret;
+
+	nss_ppe_bridge_mgr_trace("Update fdb delete notify: %d\n", fdb_del_notify);
+	return ret;
+}
+
 static struct ctl_table nss_ppe_bridge_mgr_table[] = {
 	{
 		.procname	= "add_wanif",
@@ -1052,6 +1151,13 @@ static struct ctl_table nss_ppe_bridge_mgr_table[] = {
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
 		.proc_handler   = &nss_ppe_bridge_mgr_fdb_handler,
+	},
+	{
+		.procname	= "fdb_del_notify",
+		.data           = &fdb_del_notify,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = &nss_ppe_bridge_mgr_fdb_del_notify_handler,
 	},
 	{ }
 };
@@ -1450,6 +1556,7 @@ static void __exit nss_ppe_bridge_mgr_exit_module(void)
 	ppe_drv_notifier_ops_unregister(&ppe_drv_notifier_ops_bridge_mgr);
 	nss_ppe_bridge_mgr_info("Module unloaded\n");
 	br_fdb_update_unregister_notify(&nss_ppe_bridge_mgr_fdb_update_notifier);
+	br_fdb_unregister_notify(&nss_ppe_bridge_mgr_fdb_delete_nb);
 
 	if (br_mgr_ctx.nss_ppe_bridge_mgr_header) {
 		unregister_sysctl_table(br_mgr_ctx.nss_ppe_bridge_mgr_header);
@@ -1487,6 +1594,8 @@ static int __init nss_ppe_bridge_mgr_init_module(void)
 	br_mgr_ctx.wan_netdev = NULL;
 	br_fdb_update_register_notify(&nss_ppe_bridge_mgr_fdb_update_notifier);
 	br_mgr_ctx.nss_ppe_bridge_mgr_header = register_sysctl("ppe/bridge_mgr", nss_ppe_bridge_mgr_table);
+	br_fdb_register_notify(&nss_ppe_bridge_mgr_fdb_delete_nb);
+
 #if defined(NSS_PPE_BRIDGE_MGR_OVS_ENABLE)
 	nss_ppe_bridge_mgr_ovs_init();
 #endif
