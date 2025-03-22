@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -345,6 +345,11 @@ static bool ppe_policer_create_port(struct ppe_policer_create_info *info)
 	struct ppe_policer *pol;
 	struct net_device *dev;
 
+	if ((cinfo->committed_burst_size > cinfo->peak_burst_size) || (cinfo->committed_rate > cinfo->peak_rate)) {
+		ppe_policer_warn("%p: Committed shaper parameters may not exceed peak shaper parameters", g_policer);
+		return false;
+	}
+
 	dev = dev_get_by_name(&init_net, info->name);
 	if (!dev) {
 		ppe_policer_warn("%p: failed to find valid src for dev\n", info);
@@ -373,8 +378,16 @@ static bool ppe_policer_create_port(struct ppe_policer_create_info *info)
 	port_info->meter_unit = cinfo->meter_unit;
 	port_info->cbs = cinfo->committed_burst_size;
 	port_info->cir = cinfo->committed_rate;
-	port_info->ebs = cinfo->peak_burst_size;
-	port_info->eir = cinfo->peak_rate;
+
+	if (cinfo->mode == PPE_POLICER_MODE_RFC2698) {
+		/* RFC2698 */
+		port_info->ebs = cinfo->peak_burst_size;
+		port_info->eir = cinfo->peak_rate;
+	} else {
+		/* RFC2697 and RFC4115 */
+		port_info->ebs = cinfo->peak_burst_size - cinfo->committed_burst_size;
+		port_info->eir = cinfo->peak_rate - cinfo->committed_rate;
+	}
 
 	memset(&port_info->action, 0, sizeof(struct ppe_drv_policer_rule_create_action));
 
@@ -437,6 +450,11 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
 	struct ppe_policer *pol;
 
+	if ((cinfo->committed_burst_size > cinfo->peak_burst_size) || (cinfo->committed_rate > cinfo->peak_rate)) {
+		ppe_policer_warn("%p: Committed shaper parameters may not exceed peak shaper parameters", g_policer);
+		return false;
+	}
+
 	pol = ppe_policer_rule_acl_find_by_id(info->rule_id);
 	if (pol) {
 		ppe_policer_stats_inc(&g_policer->stats.policer_acl_already_exists);
@@ -461,8 +479,16 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 	acl_info->meter_unit = cinfo->meter_unit;
 	acl_info->cbs = cinfo->committed_burst_size;
 	acl_info->cir = cinfo->committed_rate;
-	acl_info->ebs = cinfo->peak_burst_size;
-	acl_info->eir = cinfo->peak_rate;
+
+	if (cinfo->mode == PPE_POLICER_MODE_RFC2698) {
+		/* RFC2698 */
+		acl_info->ebs = cinfo->peak_burst_size;
+		acl_info->eir = cinfo->peak_rate;
+	} else {
+		/* RFC2697 and RFC4115 */
+		acl_info->ebs = cinfo->peak_burst_size - cinfo->committed_burst_size;
+		acl_info->eir = cinfo->peak_rate - cinfo->committed_rate;
+	}
 
 	memset(&acl_info->action, 0, sizeof(struct ppe_drv_policer_rule_create_action));
 

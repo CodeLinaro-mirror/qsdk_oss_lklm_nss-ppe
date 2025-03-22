@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -111,9 +111,9 @@ struct ppe_policer_action_info {
  *	ppe policer create common information
  */
 struct ppe_policer_config {
-	uint32_t committed_rate;			/**< Packets per second or bits per second */
+	uint32_t committed_rate;			/**< Packets per second or bytes per second */
 	uint32_t committed_burst_size;			/**< Bytes */
-	uint32_t peak_rate;				/**< Packets per second or bits per second */
+	uint32_t peak_rate;				/**< Packets per second or bytes per second */
 	uint32_t peak_burst_size;			/**< bytes */
 	uint32_t action_flags;				/**< Action flags */
 	bool colour_aware;		/**< Operation is colour aware */
