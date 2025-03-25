@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/platform_device.h>
@@ -439,6 +428,12 @@ void ppe_drv_loopback_base_queue(uint8_t queue_id, uint32_t ft_type)
 		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_MAPT_GRETAP, queue_id,
 						PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
 	}
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	if (ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT) {
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_NPT66_HAIRPIN_NAT, queue_id, PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+	}
+#endif
 
 	p->loopback_ring_info.base_queue = queue_id;
 	p->loopback_ring_info.ft_type = ft_type;

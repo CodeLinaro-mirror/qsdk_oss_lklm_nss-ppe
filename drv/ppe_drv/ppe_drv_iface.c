@@ -1,21 +1,13 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include "ppe_drv.h"
 #include "ppe_drv_stats.h"
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+#include "ppe_drv_nptv6_hairpin.h"
+#endif
 
 /*
  * ppe_drv_iface_free()
@@ -509,6 +501,31 @@ struct ppe_drv_l3_if *ppe_drv_iface_l3_if_get(struct ppe_drv_iface *iface)
 	return iface->l3;
 }
 
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+/*
+ * ppe_drv_iface_l3_if_nptv6_ref()
+ *	Get the nptv6 context of a given PPE interface and increment the context reference or create it
+ */
+bool ppe_drv_iface_l3_if_nptv6_ref(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_npt6 *npt6)
+{
+	struct ppe_drv_nptv6_hairpin_ctx *npt6_hp;
+
+	/*
+	 * Get the first available npt6_hp, if not present create it
+	 */
+	npt6_hp = ppe_drv_nptv6_hairpin_context_create_and_ref(pcf, npt6);
+	if (!npt6_hp) {
+		ppe_drv_info("%p, Failed to create nptv6 hairpin context", npt6);
+		return false;
+	}
+
+	ppe_drv_trace("Hairpin context created for prefix : %pI6 with l3_if_index: %d\n", npt6_hp->pfx, npt6_hp->l3_if->l3_if_index);
+
+	pcf->npt6_hp = npt6_hp;
+	return true;
+}
+#endif
+
 /*
  * ppe_drv_iface_l3_if_set()
  *	Set L3_IF of a given PPE interface
@@ -766,6 +783,9 @@ ppe_drv_ret_t ppe_drv_iface_mtu_set(struct ppe_drv_iface *iface, uint16_t mtu)
 	{
 		struct ppe_drv_vsi *vsi = ppe_drv_iface_vsi_get(iface);
 		struct ppe_drv_l3_if *l3_if;
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+		struct ppe_drv_nptv6_hairpin_ctx *npt6_hp;
+#endif
 		if (!vsi) {
 			status = PPE_DRV_RET_MTU_CFG_FAIL;
 			break;
@@ -783,6 +803,16 @@ ppe_drv_ret_t ppe_drv_iface_mtu_set(struct ppe_drv_iface *iface, uint16_t mtu)
 			status = PPE_DRV_RET_MTU_CFG_FAIL;
 			break;
 		}
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+		list_for_each_entry(npt6_hp, &iface->npt6_hp, list) {
+			if (npt6_hp && (!ppe_drv_l3_if_mtu_mru_set(npt6_hp->l3_if, mtu, mtu))) {
+				ppe_drv_warn("%p: L3_IF MTU MRU failed\n", npt6_hp);
+				status = PPE_DRV_RET_MTU_CFG_FAIL;
+				break;
+			}
+		}
+#endif
 
 		break;
 	}
@@ -960,6 +990,9 @@ ppe_drv_ret_t ppe_drv_iface_mac_addr_set(struct ppe_drv_iface *iface, uint8_t *m
 	{
 		struct ppe_drv_vsi *vsi = ppe_drv_iface_vsi_get(iface);
 		struct ppe_drv_l3_if *l3_if;
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+		struct ppe_drv_nptv6_hairpin_ctx *npt6_hp;
+#endif
 		if (!vsi) {
 			ppe_drv_warn("%p: No VSI associated with iface\n", iface);
 			status = PPE_DRV_RET_VSI_NOT_FOUND;
@@ -982,6 +1015,18 @@ ppe_drv_ret_t ppe_drv_iface_mac_addr_set(struct ppe_drv_iface *iface, uint8_t *m
 			status =  PPE_DRV_RET_MAC_ADDR_SET_CFG_FAIL;
 			break;
 		}
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+		list_for_each_entry(npt6_hp, &iface->npt6_hp, list) {
+			if (npt6_hp) {
+				if (!ppe_drv_l3_if_eg_mac_addr_set(npt6_hp->l3_if, mac_addr)) {
+					ppe_drv_warn("%p: L3_IF mac_addr failed(%p)\n", npt6_hp, vsi);
+					status =  PPE_DRV_RET_MAC_ADDR_SET_CFG_FAIL;
+					break;
+				}
+			}
+		}
+#endif
 
 		break;
 	}
@@ -1144,6 +1189,9 @@ struct ppe_drv_iface *ppe_drv_iface_alloc(enum ppe_drv_iface_type type, struct n
 	iface->vsi = NULL;
 	iface->l3 = NULL;
 	iface->cleanup_cb = NULL;
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	INIT_LIST_HEAD(&iface->npt6_hp);
+#endif
 
 	spin_unlock_bh(&p->lock);
 

@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /*
@@ -30,6 +19,10 @@
  */
 typedef ppe_drv_ret_t (*ppe_drv_iface_cleanup_cb)(struct ppe_drv_iface *iface);
 
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+struct ppe_drv_v6_conn_npt6;
+#endif
+
 /*
  * ppe_drv_iface
  *	PPE interface information
@@ -46,6 +39,9 @@ struct ppe_drv_iface {
 	uint16_t index;				/* Interface index */
 	enum ppe_drv_iface_type type;		/* Interface type */
 	ppe_drv_iface_cleanup_cb cleanup_cb;	/* cleanup callback */
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	struct list_head npt6_hp;		/* List of adhoc l3_if for hairpin nat connections */
+#endif
 };
 
 bool ppe_drv_iface_deref_internal(struct ppe_drv_iface *iface);
@@ -80,3 +76,7 @@ void ppe_drv_iface_entries_free(struct ppe_drv_iface *iface);
 struct ppe_drv_iface *ppe_drv_iface_entries_alloc(void);
 
 bool ppe_drv_iface_udp_zero_csum_action_set_internal(struct ppe_drv_iface *iface, ppe_drv_iface_zero_csum_action_t action);
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+bool ppe_drv_iface_l3_if_nptv6_ref(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_npt6 *npt6);
+#endif

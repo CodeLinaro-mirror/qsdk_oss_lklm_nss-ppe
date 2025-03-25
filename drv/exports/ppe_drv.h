@@ -96,6 +96,7 @@
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_DEFAULT		0x1	/* Read dts file to enable loopback feature */
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_EXT_DDR_UPSTREAM	0x2	/* PON extended DDR upstream loopback feature */
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT	0x4	/* GRETAP to MAPT loopback feature */
+#define PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT	0x8	/* Hairpin NAT loopback feature */
 
 /*
  * ppe_drv_ip_type
@@ -508,6 +509,9 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_ATHTAG_PORT_TX_CFG_FAIL,	/**< ATHTAG port TX config failed. */
 	PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD,		/**< GRETAP to MAPT flow rule addition */
 	PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD_FAIL,	/**< GRETAP to MAPT flow rule addition failed. */
+	PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL,		/**< Failed to destroy nptv6 context for hairpin nat. */
+	PPE_DRV_RET_HAIRPIN_LOOPBACK_FEATURE_FAIL,	/**< NPTv6 Hairpin NAT not enabled in EDMA. */
+	PPE_DRV_RET_NPTV6_HAIRPIN_FEATURE_FAIL,		/**< NPTv6 Hairpin NAT failed. */
 } ppe_drv_ret_t;
 
 /**

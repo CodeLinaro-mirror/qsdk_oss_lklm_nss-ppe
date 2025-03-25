@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/atomic.h>
@@ -49,6 +38,8 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_NOEDIT_PRIORITY_SET",	/* PPE Priority service code */
 	"PPE_DRV_SC_NOEDIT_RULE",		/* PPE noedit rule service code */
 	"PPE_DRV_SC_FMAC_BYPASS",		/* Bypass FAKE mac check in PPE */
+	"PPE_DRV_SC_NPT66_HAIRPIN_NAT",		/* Service code for Hairpin NAT loopback ring */
+	"PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT",	/* Next Service code for Hairpin NAT loopback ring */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 
@@ -268,6 +259,8 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 
 	"v6_create_fail_invalid_ds_node",	/* Create failed due to invalid DS node */
 	"v6_create_fail_uni_inner_rule",	/* Create failed due to unidirectional inner rule push */
+	"v6_create_nptv6_hairpin_fail",		/* Create failed due to nptv6 hairpin failure */
+	"v6_create_fail_invalid_nptv6_ctx",	/* Create failed due to invalid nptv6 context */
 };
 
 /*
@@ -432,6 +425,8 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 
 	"v6_create_fail_invalid_ds_node",	/* Create failed due to invalid DS node */
 	"v6_tun_create_fail_uni_inner_rule",	/* Create failed due to unidirectional inner rule push */
+	"v6_tun_create_nptv6_hairpin_fail",		/* Create failed due to nptv6 hairpin failure */
+	"v6_tun_create_fail_invalid_nptv6_ctx",	/* Create failed due to invalid nptv6 context */
 };
 
 /*

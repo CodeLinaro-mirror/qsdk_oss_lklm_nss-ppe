@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/etherdevice.h>
@@ -74,13 +63,27 @@ static inline bool ppe_drv_nexthop_vlan_match(struct ppe_drv_nexthop *nh, uint16
  * ppe_drv_nexthop_v6_l3_if_get()
  *	Return egress l3_if associated with a flow.
  */
-static inline struct ppe_drv_l3_if *ppe_drv_nexthop_v6_l3_if_get(struct ppe_drv_v6_conn_flow *pcf)
+static inline struct ppe_drv_l3_if *ppe_drv_nexthop_v6_l3_if_get(struct ppe_drv_v6_conn_flow *pcf, bool is_hairpin_nat)
 {
 	struct ppe_drv_iface *iface_vsi;
 	struct ppe_drv_iface *iface_l3;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_vsi *vsi;
 	struct ppe_drv_port *pp;
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	/*
+	 * For Hairpin NAT case, check if the flow ptr has nptv6 context and return l3_if from there
+	 */
+	if (is_hairpin_nat) {
+		if (!pcf->npt6_hp) {
+			ppe_drv_warn("%p: NPTv6 l3_if not present for this flow", pcf);
+			return NULL;
+		}
+
+		return pcf->npt6_hp->l3_if;
+	}
+#endif
 
 	/*
 	 * If top interface have l3_if use it.
@@ -125,7 +128,7 @@ static inline struct ppe_drv_l3_if *ppe_drv_nexthop_v6_l3_if_get(struct ppe_drv_
  * ppe_drv_nexthop_v6_match()
  *	Iterate through list of active nexthop to find a match.
  */
-static inline struct ppe_drv_nexthop *ppe_drv_nexthop_v6_match(struct ppe_drv_v6_conn_flow *pcf)
+static inline struct ppe_drv_nexthop *ppe_drv_nexthop_v6_match(struct ppe_drv_v6_conn_flow *pcf, bool is_hairpin_nat)
 {
 	struct ppe_drv_nexthop *nh;
 	struct ppe_drv *p = &ppe_drv_gbl;
@@ -149,7 +152,7 @@ static inline struct ppe_drv_nexthop *ppe_drv_nexthop_v6_match(struct ppe_drv_v6
 		/*
 		 * Egress L3_IF
 		 */
-		if (ppe_drv_nexthop_v6_l3_if_get(pcf) != nh->l3_if) {
+		if (ppe_drv_nexthop_v6_l3_if_get(pcf, is_hairpin_nat) != nh->l3_if) {
 			continue;
 		}
 
@@ -391,7 +394,7 @@ bool ppe_drv_nexthop_deref(struct ppe_drv_nexthop *nh)
  * ppe_drv_nexthop_v6_get_and_ref()
  *	Allocate nexthop entry if it does not exist and returns nexthop instance pointer.
  */
-struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_flow *pcf)
+struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_flow *pcf, bool is_hairpin_nat)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	uint32_t in_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
@@ -435,7 +438,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 		return NULL;
 	}
 
-	nh = ppe_drv_nexthop_v6_match(pcf);
+	nh = ppe_drv_nexthop_v6_match(pcf, is_hairpin_nat);
 	if (nh) {
 		/*
 		 * Matching nexthop, take ref and return
@@ -510,7 +513,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 		return NULL;
 	}
 
-	l3_if = ppe_drv_nexthop_v6_l3_if_get(pcf);
+	l3_if = ppe_drv_nexthop_v6_l3_if_get(pcf, is_hairpin_nat);
 	if (!l3_if) {
 		ppe_drv_nexthop_deref(nh);
 		ppe_drv_warn("%p: No egress L3 interface setup for port: %u", pcf, pp->port);

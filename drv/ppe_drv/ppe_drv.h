@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/module.h>
@@ -23,11 +12,12 @@
 #include "ppe_drv_cc.h"
 #include "ppe_drv_flow.h"
 #include "ppe_drv_host.h"
+#include "ppe_drv_l3_if.h"
 #include "ppe_drv_iface.h"
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 #include "ppe_drv_nptv6.h"
+#include "ppe_drv_nptv6_hairpin.h"
 #endif
-#include "ppe_drv_l3_if.h"
 #include "ppe_drv_nexthop.h"
 #include "ppe_drv_policer.h"
 #include "ppe_drv_port.h"
@@ -435,6 +425,18 @@ static inline bool ppe_drv_tun_gretap_to_mapt_loopback_enabled(struct ppe_drv *p
 	return !!(p->loopback_ring_info.enabled &&
 		(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT));
 }
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+/*
+ * ppe_drv_nptv6_hairpin_loopback_enabled()
+ *	Check NPTv6 Hairpin NAT loopback ring enabled.
+ */
+static inline bool ppe_drv_nptv6_hairpin_loopback_enabled(struct ppe_drv *p)
+{
+	return !!(p->loopback_ring_info.enabled &&
+		(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT));
+}
+#endif
 
 /*
  * ppe_drv_sawf_metadata

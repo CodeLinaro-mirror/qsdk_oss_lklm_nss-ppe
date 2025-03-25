@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/if_vlan.h>
@@ -29,6 +18,7 @@
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 #include "ppe_drv_nptv6.h"
+#include "ppe_drv_nptv6_hairpin.h"
 #endif
 
 /*
@@ -788,6 +778,524 @@ ppe_drv_ret_t ppe_drv_v6_policer_conn_fill(struct ppe_drv_v6_rule_create *create
 	return PPE_DRV_RET_SUCCESS;
 }
 
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+/*
+ * ppe_drv_v6_conn_fill_hairpin_flows()
+ *	Populate each direction flow object for hairpin nat.
+ */
+ppe_drv_ret_t ppe_drv_v6_conn_fill_hairpin_flows(struct ppe_drv_v6_rule_create *create, struct ppe_drv_v6_conn *cn, struct ppe_drv_port *pp_rx, struct ppe_drv_port *pp_tx)
+{
+	struct ppe_drv_v6_connection_rule *conn = &create->conn_rule;
+	struct ppe_drv_v6_5tuple *tuple = &create->tuple;
+	struct ppe_drv_pppoe_session *flow_pppoe_rule = &create->pppoe_rule.flow_session;
+	struct ppe_drv_pppoe_session *return_pppoe_rule = &create->pppoe_rule.return_session;
+	struct ppe_drv_dscp_rule *dscp_rule = &create->dscp_rule;
+	struct ppe_drv_vlan_info *vlan_primary_rule = &create->vlan_rule.primary_vlan;
+	struct ppe_drv_vlan_info *vlan_secondary_rule = &create->vlan_rule.secondary_vlan;
+	struct ppe_drv_qos_rule *qos_rule = &create->qos_rule;
+	struct ppe_drv_vp_dl_qdisc_rule *qdisc_rule = &create->qdisc_rule;
+	struct ppe_drv_service_class_rule *sawf_rule = &create->sawf_rule;
+	struct ppe_drv_v6_conn_flow *pcf_hp = &cn->pcf_hp;
+	struct ppe_drv_v6_conn_flow *pcr_hp = &cn->pcr_hp;
+	struct ppe_drv_iface *top_if_rx, *top_if_tx;
+	struct ppe_drv_flow_cookie_metadata fc_metadata = {0};
+	struct ppe_drv_top_if_rule *top_rule = &create->top_rule;
+	uint16_t valid_flags = create->valid_flags;
+	uint16_t rule_flags = create->rule_flags;
+	uint32_t sawf_tag = 0;
+	bool is_wanif;
+
+	top_if_rx = ppe_drv_iface_get_by_idx(top_rule->rx_if);
+	if (!top_if_rx) {
+		ppe_drv_warn("%p: No PPE interface corresponding to rx_if: %d", create, top_rule->rx_if);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	top_if_tx = ppe_drv_iface_get_by_idx(top_rule->tx_if);
+	if (!top_if_tx) {
+		ppe_drv_warn("%p: No PPE interface corresponding to tx_if: %d", create, top_rule->tx_if);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	/*
+	 * Prepare flow direction rule
+	 */
+	if (rule_flags & PPE_DRV_V6_RULE_FLAG_FLOW_VALID) {
+		/*
+		 * Prepare SNAT rule for flow direction
+		 */
+		ppe_drv_v6_conn_flow_conn_set(pcf_hp, cn);
+
+		/*
+		 * Set Rx and Tx port.
+		 */
+		ppe_drv_v6_conn_flow_rx_port_set(pcf_hp, pp_rx);
+		ppe_drv_v6_conn_flow_tx_port_set(pcf_hp, pp_tx);
+
+		/*
+		 * Set 5-tuple.
+		 */
+		ppe_drv_v6_conn_flow_match_protocol_set(pcf_hp, tuple->protocol);
+		ppe_drv_v6_conn_flow_match_src_ip_set(pcf_hp, conn->flow_ip_xlate);
+		ppe_drv_v6_conn_flow_match_src_ident_set(pcf_hp, conn->flow_ident_xlate);
+		ppe_drv_v6_conn_flow_match_dest_ip_set(pcf_hp, tuple->return_ip);
+		ppe_drv_v6_conn_flow_match_dest_ident_set(pcf_hp, tuple->return_ident);
+		ppe_drv_v6_conn_flow_xlate_src_ip_set(pcf_hp, conn->flow_ip_xlate);
+		ppe_drv_v6_conn_flow_xlate_src_ident_set(pcf_hp, conn->flow_ident_xlate);
+		ppe_drv_v6_conn_flow_xlate_dest_ip_set(pcf_hp, conn->return_ip_xlate);
+		ppe_drv_v6_conn_flow_xlate_dest_ident_set(pcf_hp, conn->return_ident_xlate);
+
+		/*
+		 * Host order IP addr.
+		 */
+		ppe_drv_v6_conn_flow_dump_match_src_ip_set(pcf_hp, pcf_hp->match_src_ip);
+		ppe_drv_v6_conn_flow_dump_match_dest_ip_set(pcf_hp, pcf_hp->match_dest_ip);
+		ppe_drv_v6_conn_flow_dump_xlate_src_ip_set(pcf_hp, pcf_hp->xlate_src_ip);
+		ppe_drv_v6_conn_flow_dump_xlate_dest_ip_set(pcf_hp, pcf_hp->xlate_dest_ip);
+
+		ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_FLAG_XLATE_SRC);
+
+		/*
+		 * Flow MTU and transmit MAC address.
+		 */
+		ppe_drv_v6_conn_flow_xmit_interface_mtu_set(pcf_hp, conn->return_mtu);
+		ppe_drv_v6_conn_flow_xmit_dest_mac_addr_set(pcf_hp, conn->return_mac);
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
+			ppe_drv_v6_conn_flow_egress_dscp_set(pcf_hp, dscp_rule->flow_dscp);
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
+		}
+
+		/*
+		 * VLAN over brige case
+		 */
+		if ((rule_flags & PPE_DRV_V6_RULE_TO_BRIDGE_VLAN_NETDEV) == PPE_DRV_V6_RULE_TO_BRIDGE_VLAN_NETDEV) {
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV);
+			ppe_drv_trace("%p: VLAN over bridge case from\n", pcf_hp);
+		}
+
+		/*
+		 * For VP flow if user type is DS, set conn rule VP valid.
+		 */
+		if ((rule_flags & PPE_DRV_V6_RULE_FLAG_VP_FLOW) && (pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID);
+		}
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
+			qos_rule->flow_qos_tag = (qos_rule->flow_qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_rule->flow_qos_tag;
+
+			if (qos_rule->qos_valid_flags & PPE_DRV_VALID_FLAG_FLOW_PPE_QOS) {
+				ppe_drv_v6_conn_flow_int_pri_set(pcf_hp, qos_rule->flow_int_pri);
+			} else {
+				ppe_drv_v6_conn_flow_int_pri_set(pcf_hp, qos_rule->flow_qos_tag);
+			}
+
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
+		}
+
+		/*
+		 * Check if HLOS TID info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_WIFI_TID) &&
+				(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			fc_metadata.type.mark = qos_rule->flow_qos_tag;
+			ppe_drv_v6_conn_flow_metadata_set(pcf_hp, &fc_metadata, PPE_DRV_TREE_ID_TYPE_WIFI_TID);
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+		}
+
+		/*
+		 * Check if SAWF info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
+					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->flow_mark);
+			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
+				memset(&fc_metadata, 0, sizeof(fc_metadata));
+				fc_metadata.type.sawf.sawf_mark = sawf_rule->flow_mark;
+				ppe_drv_v6_conn_flow_metadata_set(pcf_hp, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
+				ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+			}
+		}
+
+		/*
+		 * Check if SCS info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SCS) &&
+					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			memset(&fc_metadata, 0, sizeof(fc_metadata));
+			fc_metadata.type.scs.scs_mark = sawf_rule->flow_mark;
+			ppe_drv_v6_conn_flow_metadata_set(pcf_hp, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SCS);
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+		}
+
+		/*
+		 * Check if Wi-Fi tag is valid or not.
+		 */
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_WIFI_TAG) {
+			/*
+			 * If the Wi-Fi tag is valid - check if DS node information is valid
+			 * or not. If DS node is not valid and there is no explicit PPE-VP AE request,
+			 * let the flow fallback to SFE.
+			 */
+			if (!(valid_flags & PPE_DRV_V6_VALID_FLAG_FLOW_WIFI_DS) &&
+					(pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_DS) &&
+					!(rule_flags & PPE_DRV_V6_RULE_FLAG_VP_FLOW)) {
+				ppe_drv_warn("%p: Invalid DS node ID !", create);
+				return PPE_DRV_RET_FAILURE_INVALID_DS_NODE;
+			}
+
+			/*
+			 * Check if DS metadata info is valid in this direction for MLO assist and if the
+			 * interface is a Wi-Fi VP.
+			 */
+			if ((valid_flags & PPE_DRV_V6_VALID_FLAG_FLOW_WIFI_DS) &&
+						(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+				pcf_hp->wifi_rule_ds_metadata = create->wifi_rule.flow_ds_node_mdata;
+				ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLAG_FLOW_WIFI_DS);
+			}
+
+			/*
+			 * Check if Wi-Fi metadata info is valid in this direction for MLO assist and if the
+			 * interface is a wifi VP.
+			 */
+			if ((valid_flags & PPE_DRV_V6_VALID_FLAG_FLOW_WIFI_MDATA) &&
+						(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+					memset(&fc_metadata, 0, sizeof(fc_metadata));
+					fc_metadata.type.mark = create->wifi_rule.flow_mark;
+					/*
+					 * Update the mark if 11be SCS, legacy SCS/MSCS or SAWF have the valid mark.
+					 */
+					if (valid_flags & PPE_DRV_V6_VALID_FLAG_WIFI_TID)
+						fc_metadata.type.mark = qos_rule->flow_qos_tag;
+					if ((sawf_tag == PPE_DRV_SAWF_VALID_TAG) || (valid_flags & PPE_DRV_V6_VALID_FLAG_SCS))
+						fc_metadata.type.mark = sawf_rule->flow_mark;
+					ppe_drv_v6_conn_flow_metadata_set(pcf_hp, &fc_metadata, PPE_DRV_TREE_ID_TYPE_MLO_ASSIST);
+			}
+		}
+
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
+			pcf_hp->ingress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+			pcf_hp->ingress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+			pcf_hp->egress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+			pcf_hp->egress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+
+			ppe_drv_v6_flow_vlan_set(pcf_hp, vlan_primary_rule->ingress_vlan_tag,
+					vlan_primary_rule->egress_vlan_tag,
+					vlan_secondary_rule->ingress_vlan_tag,
+					vlan_secondary_rule->egress_vlan_tag);
+		}
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_PPPOE_RETURN) {
+			ppe_drv_v6_conn_flow_pppoe_session_id_set(pcf_hp, return_pppoe_rule->session_id);
+			ppe_drv_v6_conn_flow_pppoe_server_mac_set(pcf_hp, return_pppoe_rule->server_mac);
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_FLAG_PPPOE_FLOW);
+		}
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_FLOW_HOST_QDISC_VALID) {
+			if ((!qdisc_rule->flow_netdev) ||
+					(qdisc_rule->flow_flags == PPE_DRV_HOST_QDISC_INVALID)) {
+				return PPE_DRV_RET_HOST_QDISC_CFG_FAIL;
+			}
+
+			ppe_drv_v6_conn_flow_host_qdisc_info_set(pcf_hp, qdisc_rule->flow_flags,
+					qdisc_rule->flow_class_id, qdisc_rule->flow_netdev);
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID);
+			ppe_drv_trace("%p: valid_flags: 0x%0x, qdisc_flags: 0x%0x"
+					" class_id: %u, netdev name: %s\n", create, valid_flags,
+					pcf_hp->qdisc_info.flags, pcf_hp->qdisc_info.class_id,
+					pcf_hp->qdisc_info.qdisc_xmit_dev->name);
+		}
+
+		/*
+		 * Bridge + VLAN? Make sure both top interfaces are attached to same parent.
+		 * If Interface is set as wanif using "echo eth# > /proc/sys/ppe/bridge_mgr/add_wanif",
+		 * bridge interface is not set as parent of interface.
+		 * So if either of top_if_rx or top_if_tx is wanif, then avoide this check.
+		 */
+		is_wanif = ((top_if_rx->flags & PPE_DRV_IFACE_FLAG_WAN_IF_VALID) || (top_if_tx->flags & PPE_DRV_IFACE_FLAG_WAN_IF_VALID));
+		if ((rule_flags & PPE_DRV_V6_RULE_FLAG_BRIDGE_FLOW) && !is_wanif) {
+			if (!ppe_drv_iface_parent_get(top_if_rx) || !ppe_drv_iface_parent_get(top_if_tx)) {
+				ppe_drv_warn("%p: one of top's parent interface is null: top_rx_if : %d tx_if: %d",
+						create, top_rule->rx_if, top_rule->tx_if);
+				return PPE_DRV_RET_FAILURE_NOT_BRIDGE_SLAVES;
+			}
+
+			if (ppe_drv_v6_conn_flow_ingress_vlan_cnt_get(pcf_hp) || ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf_hp)) {
+				if (ppe_drv_iface_parent_get(top_if_rx) != ppe_drv_iface_parent_get(top_if_tx)) {
+					ppe_drv_warn("%p: IF not part of same bridge rx_if: %d tx_if: %d",
+							create, top_rule->rx_if, top_rule->tx_if);
+					return PPE_DRV_RET_FAILURE_NOT_BRIDGE_SLAVES;
+				}
+			}
+		}
+
+		/*
+		 * Check if destination vp is inline EIP virtual port.
+		 */
+		if (ppe_drv_port_flags_check(ppe_drv_v6_conn_flow_tx_port_get(pcf_hp), PPE_DRV_PORT_FLAG_IIPSEC)) {
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC);
+		}
+
+#ifdef PPE_DRV_SRC_INTERFACE_CHECK
+		/*
+		 * Check source interface based on rule flags.
+		 */
+		if (rule_flags & PPE_DRV_V6_RULE_FLAG_SRC_INTERFACE_CHECK) {
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK);
+		}
+#endif
+		/*
+		 * Set noedit rule
+		 */
+		if (rule_flags & PPE_DRV_V6_RULE_NOEDIT_FLOW_RULE) {
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLAG_FLOW_NO_EDIT_RULE);
+		}
+	}
+
+	/*
+	 * Prepare return direction rule
+	 */
+	if (rule_flags & PPE_DRV_V6_RULE_FLAG_RETURN_VALID) {
+		/*
+		 * Prepare DNAT return direction rule
+		 */
+		ppe_drv_v6_conn_flow_conn_set(pcr_hp, cn);
+
+		/*
+		 * Set Rx and Tx port.
+		 */
+		ppe_drv_v6_conn_flow_rx_port_set(pcr_hp, pp_tx);
+		ppe_drv_v6_conn_flow_tx_port_set(pcr_hp, pp_rx);
+
+		/*
+		 * Set 5-tuple.
+		 */
+		ppe_drv_v6_conn_flow_match_protocol_set(pcr_hp, tuple->protocol);
+		ppe_drv_v6_conn_flow_match_src_ip_set(pcr_hp, tuple->return_ip);
+		ppe_drv_v6_conn_flow_match_src_ident_set(pcr_hp, tuple->return_ident);
+		ppe_drv_v6_conn_flow_match_dest_ip_set(pcr_hp, conn->flow_ip_xlate);
+		ppe_drv_v6_conn_flow_match_dest_ident_set(pcr_hp, conn->flow_ident_xlate);
+		ppe_drv_v6_conn_flow_xlate_src_ip_set(pcr_hp, tuple->return_ip);
+		ppe_drv_v6_conn_flow_xlate_src_ident_set(pcr_hp, tuple->return_ident);
+		ppe_drv_v6_conn_flow_xlate_dest_ip_set(pcr_hp, tuple->flow_ip);
+		ppe_drv_v6_conn_flow_xlate_dest_ident_set(pcr_hp, tuple->flow_ident);
+
+		ppe_drv_v6_conn_flow_dump_match_src_ip_set(pcr_hp, pcr_hp->match_src_ip);
+		ppe_drv_v6_conn_flow_dump_match_dest_ip_set(pcr_hp, pcr_hp->match_dest_ip);
+		ppe_drv_v6_conn_flow_dump_xlate_src_ip_set(pcr_hp, pcr_hp->xlate_src_ip);
+		ppe_drv_v6_conn_flow_dump_xlate_dest_ip_set(pcr_hp, pcr_hp->xlate_dest_ip);
+
+		ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_FLAG_XLATE_DEST);
+
+		/*
+		 * Flow MTU and transmit MAC address.
+		 */
+		ppe_drv_v6_conn_flow_xmit_interface_mtu_set(pcr_hp, conn->flow_mtu);
+		ppe_drv_v6_conn_flow_xmit_dest_mac_addr_set(pcr_hp, conn->flow_mac);
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
+			ppe_drv_v6_conn_flow_egress_dscp_set(pcr_hp, dscp_rule->return_dscp);
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
+		}
+
+		/*
+		 * VLAN over bridge case
+		 */
+			if ((rule_flags & PPE_DRV_V6_RULE_FROM_BRIDGE_VLAN_NETDEV) == PPE_DRV_V6_RULE_FROM_BRIDGE_VLAN_NETDEV) {
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV);
+			ppe_drv_trace("%p: VLAN over bridge case to\n", pcr_hp);
+		}
+
+		/*
+		 * For VP flow if user type is DS, set conn rule VP valid.
+		 */
+		if ((rule_flags & PPE_DRV_V6_RULE_FLAG_VP_FLOW) && (pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID);
+		}
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
+			qos_rule->return_qos_tag = (qos_rule->return_qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_rule->return_qos_tag;
+
+			if (qos_rule->qos_valid_flags & PPE_DRV_VALID_FLAG_RETURN_PPE_QOS) {
+				ppe_drv_v6_conn_flow_int_pri_set(pcr_hp, qos_rule->return_int_pri);
+			} else {
+				ppe_drv_v6_conn_flow_int_pri_set(pcr_hp, qos_rule->return_qos_tag);
+			}
+
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
+		}
+
+		/*
+		 * Check if HLOS TID info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_WIFI_TID) &&
+				(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			fc_metadata.type.mark = qos_rule->return_qos_tag;
+			ppe_drv_v6_conn_flow_metadata_set(pcr_hp, &fc_metadata, PPE_DRV_TREE_ID_TYPE_WIFI_TID);
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+		}
+
+		/*
+		 * Check if SAWF info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SAWF) &&
+					(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			sawf_tag = PPE_DRV_SAWF_TAG_GET(sawf_rule->return_mark);
+			if (sawf_tag == PPE_DRV_SAWF_VALID_TAG) {
+				memset(&fc_metadata, 0, sizeof(fc_metadata));
+				fc_metadata.type.sawf.sawf_mark = sawf_rule->return_mark;
+				ppe_drv_v6_conn_flow_metadata_set(pcr_hp, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SAWF);
+				ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+			}
+		}
+
+		/*
+		 * Check if SCS info is valid in this direction and if the
+		 * interface is a wifi VP.
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_SCS) &&
+					(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+			memset(&fc_metadata, 0, sizeof(fc_metadata));
+			fc_metadata.type.scs.scs_mark = sawf_rule->return_mark;
+			ppe_drv_v6_conn_flow_metadata_set(pcr_hp, &fc_metadata, PPE_DRV_TREE_ID_TYPE_SCS);
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
+		}
+
+		/*
+		 * Check if Wi-Fi tag is valid or not.
+		 */
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_WIFI_TAG) {
+			/*
+			 * If the Wi-Fi tag is valid - check if DS node information is valid
+			 * or not. If DS node is not valid and there is no explicit PPE-VP AE request,
+			 * let the flow fallback to SFE.
+			 */
+			if (!(valid_flags & PPE_DRV_V6_VALID_FLAG_RETURN_WIFI_DS) &&
+					(pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_DS) &&
+					!(rule_flags & PPE_DRV_V6_RULE_FLAG_VP_FLOW)) {
+				ppe_drv_warn("%p: Invalid DS node ID !", create);
+				return PPE_DRV_RET_FAILURE_INVALID_DS_NODE;
+			}
+
+			/*
+			 * Check if DS metadata info is valid in this direction for MLO assist and if the
+			 * interface is a Wi-Fi VP.
+			 */
+			if ((valid_flags & PPE_DRV_V6_VALID_FLAG_RETURN_WIFI_DS) &&
+						(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+				pcr_hp->wifi_rule_ds_metadata = create->wifi_rule.return_ds_node_mdata;
+				ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLAG_FLOW_WIFI_DS);
+			}
+
+			/*
+			 * Check if Wi-Fi metadata info is valid in this direction for MLO assist and if the
+			 * interface is a wifi VP.
+			 */
+			if ((valid_flags & PPE_DRV_V6_VALID_FLAG_RETURN_WIFI_MDATA) &&
+						(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+					memset(&fc_metadata, 0, sizeof(fc_metadata));
+					fc_metadata.type.mark = create->wifi_rule.return_mark;
+					/*
+					 * Update the mark if 11be SCS, legacy SCS/MSCS or SAWF have the valid mark.
+					 */
+					if (valid_flags & PPE_DRV_V6_VALID_FLAG_WIFI_TID)
+						fc_metadata.type.mark = qos_rule->return_qos_tag;
+					if ((sawf_tag == PPE_DRV_SAWF_VALID_TAG) || (valid_flags & PPE_DRV_V6_VALID_FLAG_SCS))
+						fc_metadata.type.mark = sawf_rule->return_mark;
+					ppe_drv_v6_conn_flow_metadata_set(pcr_hp, &fc_metadata, PPE_DRV_TREE_ID_TYPE_MLO_ASSIST);
+			}
+		}
+
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_VLAN) {
+			pcr_hp->ingress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+			pcr_hp->ingress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+			pcr_hp->egress_vlan[0].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+			pcr_hp->egress_vlan[1].tci = PPE_DRV_VLAN_NOT_CONFIGURED;
+
+			ppe_drv_v6_flow_vlan_set(pcr_hp, vlan_primary_rule->egress_vlan_tag,
+					vlan_primary_rule->ingress_vlan_tag,
+					vlan_secondary_rule->egress_vlan_tag,
+					vlan_secondary_rule->ingress_vlan_tag);
+		}
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_PPPOE_FLOW) {
+			ppe_drv_v6_conn_flow_pppoe_session_id_set(pcr_hp, flow_pppoe_rule->session_id);
+			ppe_drv_v6_conn_flow_pppoe_server_mac_set(pcr_hp, flow_pppoe_rule->server_mac);
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_FLAG_PPPOE_FLOW);
+		}
+
+		if (valid_flags & PPE_DRV_V6_VALID_FLAG_RETURN_HOST_QDISC_VALID) {
+			if ((!qdisc_rule->return_netdev) ||
+					(qdisc_rule->return_flags == PPE_DRV_HOST_QDISC_INVALID)) {
+				return PPE_DRV_RET_HOST_QDISC_CFG_FAIL;
+			}
+
+			ppe_drv_v6_conn_flow_host_qdisc_info_set(pcr_hp, qdisc_rule->return_flags,
+					qdisc_rule->return_class_id, qdisc_rule->return_netdev);
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID);
+			ppe_drv_trace("%p: valid_flags: 0x%0x, qdisc_flags: 0x%0x"
+					" class_id: %u, netdev name: %s\n", create, valid_flags,
+					pcr_hp->qdisc_info.flags, pcr_hp->qdisc_info.class_id,
+					pcr_hp->qdisc_info.qdisc_xmit_dev->name);
+		}
+
+		/*
+		 * Bridge + VLAN? Make sure both top interfaces are attached to same parent.
+		 * If Interface is set as wanif using "echo eth# > /proc/sys/ppe/bridge_mgr/add_wanif",
+		 * bridge interface is not set as parent of interface.
+		 * So if either of top_if_rx or top_if_tx is wanif, then avoide this check.
+		 */
+		is_wanif = ((top_if_rx->flags & PPE_DRV_IFACE_FLAG_WAN_IF_VALID) || (top_if_tx->flags & PPE_DRV_IFACE_FLAG_WAN_IF_VALID));
+		if ((rule_flags & PPE_DRV_V6_RULE_FLAG_BRIDGE_FLOW) && !is_wanif) {
+			if (!ppe_drv_iface_parent_get(top_if_rx) || !ppe_drv_iface_parent_get(top_if_tx)) {
+				ppe_drv_warn("%p: one of top's parent interface is null: top_rx_if : %d tx_if: %d",
+						create, top_rule->rx_if, top_rule->tx_if);
+				return PPE_DRV_RET_FAILURE_NOT_BRIDGE_SLAVES;
+			}
+
+			if (ppe_drv_v6_conn_flow_ingress_vlan_cnt_get(pcr_hp) || ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcr_hp)) {
+				if (ppe_drv_iface_parent_get(top_if_rx) != ppe_drv_iface_parent_get(top_if_tx)) {
+					ppe_drv_warn("%p: IF not part of same bridge rx_if: %d tx_if: %d",
+							create, top_rule->rx_if, top_rule->tx_if);
+					return PPE_DRV_RET_FAILURE_NOT_BRIDGE_SLAVES;
+				}
+			}
+		}
+
+		/*
+		 * Check if destination vp is inline EIP virtual port.
+		 */
+		if (ppe_drv_port_flags_check(ppe_drv_v6_conn_flow_tx_port_get(pcr_hp), PPE_DRV_PORT_FLAG_IIPSEC)) {
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC);
+		}
+
+#ifdef PPE_DRV_SRC_INTERFACE_CHECK
+		/*
+		 * Check source interface based on rule flags.
+		 */
+		if (rule_flags & PPE_DRV_V6_RULE_FLAG_SRC_INTERFACE_CHECK) {
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_FLAG_SRC_INTERFACE_CHECK);
+		}
+#endif
+		/*
+		 * Set noedit rule
+		 */
+		if (rule_flags & PPE_DRV_V6_RULE_NOEDIT_RETURN_RULE) {
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLAG_FLOW_NO_EDIT_RULE);
+		}
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+}
+#endif
+
 /*
  * ppe_drv_v6_conn_fill()
  *	Populate each direction flow object.
@@ -818,6 +1326,9 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 	struct ppe_drv_comm_stats *comm_stats;
 	struct ppe_drv_port *pp_rx, *pp_tx;
 	struct ppe_drv *p = &ppe_drv_gbl;
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	ppe_drv_ret_t ret;
+#endif
 
 	comm_stats = &p->stats.comm_stats[flow_type];
 	/*
@@ -901,9 +1412,20 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 	 */
 	if ((!ppe_drv_v6_addr_equal(tuple->flow_ip, conn->flow_ip_xlate)) &&
 		(!ppe_drv_v6_addr_equal(tuple->return_ip, conn->return_ip_xlate))) {
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+		if (!ppe_drv_nptv6_hairpin_loopback_enabled(p)) {
+			ppe_drv_warn("%p: Hairpin feature not enabled in EDMA", p);
+			return PPE_DRV_RET_HAIRPIN_LOOPBACK_FEATURE_FAIL;
+		}
+		cn->is_hairpin_nat = true;
+		pcf->flags |= PPE_DRV_V6_CONN_FLAG_HAIRPIN_FLOW;
+		pcr->flags |= PPE_DRV_V6_CONN_FLAG_HAIRPIN_FLOW;
+		ppe_drv_trace("SNAT and DNAT both, NPTv6 Hairpin NAT\n");
+#else
 		ppe_drv_stats_inc(&comm_stats->v6_create_fail_snat_dnat);
 		ppe_drv_warn("%p: Invalid Tx IF: %d", create, conn->tx_if);
 		return PPE_DRV_RET_FAILURE_SNAT_DNAT_SIMUL;
+#endif
 	}
 
 	/*
@@ -928,8 +1450,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 		ppe_drv_v6_conn_flow_match_dest_ident_set(pcf, tuple->return_ident);
 		ppe_drv_v6_conn_flow_xlate_src_ip_set(pcf, conn->flow_ip_xlate);
 		ppe_drv_v6_conn_flow_xlate_src_ident_set(pcf, conn->flow_ident_xlate);
-		ppe_drv_v6_conn_flow_xlate_dest_ip_set(pcf, conn->return_ip_xlate);
-		ppe_drv_v6_conn_flow_xlate_dest_ident_set(pcf, conn->return_ident_xlate);
+		if (cn->is_hairpin_nat) {
+			ppe_drv_v6_conn_flow_xlate_dest_ip_set(pcf, tuple->return_ip);
+			ppe_drv_v6_conn_flow_xlate_dest_ident_set(pcf, tuple->return_ident);
+		} else {
+			ppe_drv_v6_conn_flow_xlate_dest_ip_set(pcf, conn->return_ip_xlate);
+			ppe_drv_v6_conn_flow_xlate_dest_ident_set(pcf, conn->return_ident_xlate);
+		}
 
 		/*
 		 * Host order IP addr.
@@ -1185,8 +1712,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 		ppe_drv_v6_conn_flow_match_dest_ident_set(pcr, conn->flow_ident_xlate);
 		ppe_drv_v6_conn_flow_xlate_src_ip_set(pcr, tuple->return_ip);
 		ppe_drv_v6_conn_flow_xlate_src_ident_set(pcr, tuple->return_ident);
-		ppe_drv_v6_conn_flow_xlate_dest_ip_set(pcr, tuple->flow_ip);
-		ppe_drv_v6_conn_flow_xlate_dest_ident_set(pcr, tuple->flow_ident);
+		if (cn->is_hairpin_nat) {
+			ppe_drv_v6_conn_flow_xlate_dest_ip_set(pcr, conn->flow_ip_xlate);
+			ppe_drv_v6_conn_flow_xlate_dest_ident_set(pcr, conn->flow_ident_xlate);
+		} else {
+			ppe_drv_v6_conn_flow_xlate_dest_ip_set(pcr, tuple->flow_ip);
+			ppe_drv_v6_conn_flow_xlate_dest_ident_set(pcr, tuple->flow_ident);
+		}
 
 		ppe_drv_v6_conn_flow_dump_match_src_ip_set(pcr, pcr->match_src_ip);
 		ppe_drv_v6_conn_flow_dump_match_dest_ip_set(pcr, pcr->match_dest_ip);
@@ -1410,6 +1942,14 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 	}
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	if (cn->is_hairpin_nat) {
+		ret = ppe_drv_v6_conn_fill_hairpin_flows(create, cn, pp_rx, pp_tx);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("%p: NPTv6 Hairpin NAT Feature failed", create);
+			return PPE_DRV_RET_NPTV6_HAIRPIN_FEATURE_FAIL;
+		}
+	}
+
 	/*
 	 * Copy NPTv6 related info into Connection object.
 	 */
@@ -1423,6 +1963,8 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 		cn->npt6.pfx_return = NULL;
 		cn->npt6.iid_flow = NULL;
 		cn->npt6.iid_return = NULL;
+		cn->npt6.iid_hp_flow = NULL;
+		cn->npt6.iid_hp_return = NULL;
 	}
 #endif
 
@@ -1470,7 +2012,7 @@ bool ppe_drv_v6_if_walk(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_top_if_
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_iface *eg_vsi_if = NULL;
 	struct ppe_drv_iface *eg_l3_if = NULL;
-	struct ppe_drv_iface *iface, *top_iface = NULL, *top_rx_iface = NULL;
+	struct ppe_drv_iface *iface, *top_iface = NULL, *top_rx_iface = NULL, *top_tx_iface = NULL;
 	struct ppe_drv_iface *tx_port_if = NULL, *rx_port_if = NULL;
 	struct ppe_drv_iface *top_iface_parent = NULL;
 	struct ppe_drv_vsi *vlan_vsi;
@@ -1527,6 +2069,15 @@ bool ppe_drv_v6_if_walk(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_top_if_
 	top_rx_iface = ppe_drv_iface_get_by_idx(top_if->rx_if);
 	if (!top_rx_iface) {
 		ppe_drv_warn("%p: No PPE interface corresponding to top rx interface\n", p);
+		return false;
+	}
+
+	/*
+	 * Should have a valid top tx interface.
+	 */
+	top_tx_iface = ppe_drv_iface_get_by_idx(top_if->tx_if);
+	if (!top_tx_iface) {
+		ppe_drv_warn("%p: No PPE interface corresponding to top tx interface\n", p);
 		return false;
 	}
 
@@ -1630,6 +2181,19 @@ bool ppe_drv_v6_if_walk(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_top_if_
 	} else {
 		ppe_drv_trace("Using port's l3 if");
 		ppe_drv_v6_conn_flow_in_l3_if_set_and_ref(pcf, rx_port_if);
+	}
+
+	/*
+	 * If top tx interface is valid, use egress l3 if of that iface.
+	 */
+	if ((top_tx_iface) && (ppe_drv_iface_l3_if_get(top_tx_iface))) {
+		ppe_drv_trace("Using top tx iface's l3 if");
+		ppe_drv_v6_conn_flow_eg_l3_if_set(pcf, top_tx_iface);
+		ppe_drv_v6_conn_flow_eg_l3_if_ref(top_tx_iface);
+	} else {
+		ppe_drv_trace("Using port's l3 if");
+		ppe_drv_v6_conn_flow_eg_l3_if_set(pcf, tx_port_if);
+		ppe_drv_v6_conn_flow_eg_l3_if_ref(tx_port_if);
 	}
 
 	return true;
@@ -1811,7 +2375,7 @@ static bool ppe_drv_v6_flow_del(struct ppe_drv_v6_conn_flow *pcf)
  * ppe_drv_v6_flow_add()
  *	Adds an entry into the flow table and returns the flow index.
  */
-static struct ppe_drv_flow *ppe_drv_v6_flow_add(struct ppe_drv_v6_conn_flow *pcf)
+static struct ppe_drv_flow *ppe_drv_v6_flow_add(struct ppe_drv_v6_conn_flow *pcf, bool is_hairpin_nat)
 {
 	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_nexthop *nh = NULL;
@@ -1835,7 +2399,8 @@ static struct ppe_drv_flow *ppe_drv_v6_flow_add(struct ppe_drv_v6_conn_flow *pcf
 	if (!(ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) ||
 		ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST) ||
 		ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST))) {
-		nh = ppe_drv_nexthop_v6_get_and_ref(pcf);
+
+		nh = ppe_drv_nexthop_v6_get_and_ref(pcf, is_hairpin_nat);
 		if (!nh) {
 			ppe_drv_warn("%p: unable to allocate nexthop", pcf);
 			return NULL;
@@ -1923,9 +2488,11 @@ static struct ppe_drv_flow *ppe_drv_v6_flow_add(struct ppe_drv_v6_conn_flow *pcf
 	/*
 	 * Now the QOS mapping is set, mark the flow entry as valid.
 	 */
-	if (!ppe_drv_flow_valid_set(flow, true)) {
-		ppe_drv_warn("%p: flow entry valid set failed for flow: %p", pcf, flow);
-		goto flow_add_fail;
+	if (!is_hairpin_nat) {
+		if (!ppe_drv_flow_valid_set(flow, true)) {
+			ppe_drv_warn("%p: flow entry valid set failed for flow: %p", pcf, flow);
+			goto flow_add_fail;
+		}
 	}
 
 	/*
@@ -2067,12 +2634,40 @@ static struct ppe_drv_nptv6_prefix *ppe_drv_v6_prefix_add_ref(struct ppe_drv_v6_
 }
 
 /*
+ * ppe_drv_v6_hairpin_prefix_add_ref()
+ *	Adds an entry into the prefix table
+ */
+static struct ppe_drv_nptv6_prefix *ppe_drv_v6_hairpin_prefix_add_ref(struct ppe_drv_v6_conn_flow *flow_ptr,
+					struct ppe_drv_v6_conn_npt6 *npt6, bool hairpin_flow)
+{
+	/*
+	 * check for an existing entry in the prefix table.
+	 * If the entry is not found for the given L3 interface, add an entry.
+	 */
+	if ((npt6->nptv6_flags & NF_CT_NPTV6_EXT_SNPT) || (npt6->nptv6_flags & NF_CT_NPTV6_EXT_DNPT)) {
+		return ppe_drv_nptv6_hairpin_add_prefix_entry_ref(flow_ptr, npt6, hairpin_flow);
+	}
+
+	ppe_drv_warn("Packet doesn't belong to Hairpin NPTv6 flows\n");
+	return NULL;
+}
+
+/*
  * ppe_drv_v6_prefix_dref()
  *	Release the reference on entry from the prefix table.
  */
 static bool ppe_drv_v6_prefix_dref(struct ppe_drv_v6_conn_flow *flow, struct ppe_drv_nptv6_prefix *pfx)
 {
 	return ppe_drv_nptv6_prefix_entry_deref(flow, pfx);
+}
+
+/*
+ * ppe_drv_v6_hairpin_prefix_dref()
+ *	Release the reference on entry from the prefix table.
+ */
+static bool ppe_drv_v6_hairpin_prefix_dref(struct ppe_drv_v6_conn_flow *flow, struct ppe_drv_nptv6_prefix *pfx)
+{
+	return ppe_drv_nptv6_hairpin_prefix_entry_deref(flow, pfx);
 }
 
 /*
@@ -2090,12 +2685,35 @@ static struct ppe_drv_nptv6_iid *ppe_drv_v6_iid_add(struct ppe_drv_v6_conn_flow 
 }
 
 /*
+ * ppe_drv_v6_hairpin_iid_add()
+ *	Add and entry into the IID table.
+ */
+static struct ppe_drv_nptv6_iid *ppe_drv_v6_hairpin_iid_add(struct ppe_drv_v6_conn_flow *flow_ptr,
+				struct ppe_drv_v6_conn_npt6 *npt6, bool is_dnat)
+{
+	/*
+	 * check for an existing entry in the IID table.
+	 * If the entry is not found for the given flow index, add an entry.
+	 */
+	return ppe_drv_nptv6_hairpin_add_iid_entry(flow_ptr, npt6, is_dnat);
+}
+
+/*
  * ppe_drv_v6_iid_del()
  *	Delete the entries from the IID table.
  */
 static bool ppe_drv_v6_iid_del(struct ppe_drv_v6_conn_flow *flow, struct ppe_drv_nptv6_iid *iid)
 {
 	return ppe_drv_nptv6_del_iid_entry(flow, iid);
+}
+
+/*
+ * ppe_drv_v6_hairpin_iid_del()
+ *	Delete the entries from the IID table.
+ */
+static bool ppe_drv_v6_hairpin_iid_del(struct ppe_drv_v6_conn_flow *flow, struct ppe_drv_nptv6_iid *iid)
+{
+	return ppe_drv_nptv6_hairpin_del_iid_entry(flow, iid);
 }
 #endif
 
@@ -2108,6 +2726,10 @@ void ppe_drv_v6_conn_sync_one(struct ppe_drv_v6_conn *cn, struct ppe_drv_v6_conn
 {
 	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	struct ppe_drv_v6_conn_flow *pcf_hp = &cn->pcf_hp;
+	struct ppe_drv_v6_conn_flow *pcr_hp = &cn->pcr_hp;
+#endif
 
 	/*
 	 * Fill 5-tuple connection rule from ppe_drv_v6_conn_flow to cns.
@@ -2119,35 +2741,67 @@ void ppe_drv_v6_conn_sync_one(struct ppe_drv_v6_conn *cn, struct ppe_drv_v6_conn
 	ppe_drv_v6_conn_flow_match_dest_ip_get(pcf, cns->return_ip);
 	ppe_drv_v6_conn_flow_xlate_src_ip_get(pcf, cns->flow_ip_xlate);
 	cns->flow_ident_xlate = ppe_drv_v6_conn_flow_xlate_src_ident_get(pcf);
-	ppe_drv_v6_conn_flow_xlate_dest_ip_get(pcf, cns->return_ip_xlate);
-	cns->return_ident_xlate = ppe_drv_v6_conn_flow_xlate_dest_ident_get(pcf);
+	if (cn->is_hairpin_nat) {
+		ppe_drv_v6_conn_flow_match_src_ip_get(pcr, cns->return_ip_xlate);
+		cns->return_ident_xlate = ppe_drv_v6_conn_flow_match_src_ident_get(pcr);
+	} else {
+		ppe_drv_v6_conn_flow_xlate_dest_ip_get(pcf, cns->return_ip_xlate);
+		cns->return_ident_xlate = ppe_drv_v6_conn_flow_xlate_dest_ident_get(pcf);
+	}
 
 	/*
 	 * Fill reason for sync
 	 */
 	cns->reason = reason;
 
-	/*
-	 * Update stats for each direction
-	 */
-	ppe_drv_v6_conn_flow_rx_stats_get(pcf, &cns->flow_rx_packet_count, &cns->flow_rx_byte_count);
-	ppe_drv_v6_conn_flow_tx_stats_get(pcf, &cns->flow_tx_packet_count, &cns->flow_tx_byte_count);
-	ppe_drv_v6_conn_flow_rx_stats_sub(pcf, cns->flow_rx_packet_count, cns->flow_rx_byte_count);
-	ppe_drv_v6_conn_flow_tx_stats_sub(pcf, cns->flow_tx_packet_count, cns->flow_tx_byte_count);
+	if (cn->is_hairpin_nat) {
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+		/*
+		 * Update stats for each direction
+		 */
+		ppe_drv_v6_conn_flow_rx_stats_get(pcf_hp, &cns->flow_rx_packet_count, &cns->flow_rx_byte_count);
+		ppe_drv_v6_conn_flow_tx_stats_get(pcf_hp, &cns->flow_tx_packet_count, &cns->flow_tx_byte_count);
+		ppe_drv_v6_conn_flow_rx_stats_sub(pcf_hp, cns->flow_rx_packet_count, cns->flow_rx_byte_count);
+		ppe_drv_v6_conn_flow_tx_stats_sub(pcf_hp, cns->flow_tx_packet_count, cns->flow_tx_byte_count);
 
-	/*
-	 * Update the status for return flow, if it exist.
-	 */
-	if (ppe_drv_v6_conn_flags_check(cn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
-		ppe_drv_v6_conn_flow_rx_stats_get(pcr, &cns->return_rx_packet_count, &cns->return_rx_byte_count);
-		ppe_drv_v6_conn_flow_tx_stats_get(pcr, &cns->return_tx_packet_count, &cns->return_tx_byte_count);
-		ppe_drv_v6_conn_flow_rx_stats_sub(pcr, cns->return_rx_packet_count, cns->return_rx_byte_count);
-		ppe_drv_v6_conn_flow_tx_stats_sub(pcr, cns->return_tx_packet_count, cns->return_tx_byte_count);
+		/*
+		 * Update the status for return flow, if it exist.
+		 */
+		if (ppe_drv_v6_conn_flags_check(cn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
+			ppe_drv_v6_conn_flow_rx_stats_get(pcr_hp, &cns->return_rx_packet_count, &cns->return_rx_byte_count);
+			ppe_drv_v6_conn_flow_tx_stats_get(pcr_hp, &cns->return_tx_packet_count, &cns->return_tx_byte_count);
+			ppe_drv_v6_conn_flow_rx_stats_sub(pcr_hp, cns->return_rx_packet_count, cns->return_rx_byte_count);
+			ppe_drv_v6_conn_flow_tx_stats_sub(pcr_hp, cns->return_tx_packet_count, cns->return_tx_byte_count);
+		} else {
+			cns->return_rx_packet_count = 0;
+			cns->return_rx_byte_count = 0;
+			cns->return_tx_packet_count = 0;
+			cns->return_tx_byte_count = 0;
+		}
+#endif
 	} else {
-		cns->return_rx_packet_count = 0;
-		cns->return_rx_byte_count = 0;
-		cns->return_tx_packet_count = 0;
-		cns->return_tx_byte_count = 0;
+		/*
+		 * Update stats for each direction
+		 */
+		ppe_drv_v6_conn_flow_rx_stats_get(pcf, &cns->flow_rx_packet_count, &cns->flow_rx_byte_count);
+		ppe_drv_v6_conn_flow_tx_stats_get(pcf, &cns->flow_tx_packet_count, &cns->flow_tx_byte_count);
+		ppe_drv_v6_conn_flow_rx_stats_sub(pcf, cns->flow_rx_packet_count, cns->flow_rx_byte_count);
+		ppe_drv_v6_conn_flow_tx_stats_sub(pcf, cns->flow_tx_packet_count, cns->flow_tx_byte_count);
+
+		/*
+		 * Update the status for return flow, if it exist.
+		 */
+		if (ppe_drv_v6_conn_flags_check(cn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
+			ppe_drv_v6_conn_flow_rx_stats_get(pcr, &cns->return_rx_packet_count, &cns->return_rx_byte_count);
+			ppe_drv_v6_conn_flow_tx_stats_get(pcr, &cns->return_tx_packet_count, &cns->return_tx_byte_count);
+			ppe_drv_v6_conn_flow_rx_stats_sub(pcr, cns->return_rx_packet_count, cns->return_rx_byte_count);
+			ppe_drv_v6_conn_flow_tx_stats_sub(pcr, cns->return_tx_packet_count, cns->return_tx_byte_count);
+		} else {
+			cns->return_rx_packet_count = 0;
+			cns->return_rx_byte_count = 0;
+			cns->return_tx_packet_count = 0;
+			cns->return_tx_byte_count = 0;
+		}
 	}
 }
 
@@ -2408,6 +3062,136 @@ ppe_drv_ret_t ppe_drv_v6_mc_create(struct ppe_drv_v6_rule_create *create)
 	return PPE_DRV_RET_FAILURE_NOT_SUPPORTED;
 }
 
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+/*
+ * ppe_drv_v6_flush_hairpin_flow()
+ *	Flush a connection entry in PPE for hairpin flows.
+ */
+ppe_drv_ret_t ppe_drv_v6_flush_hairpin_flow(struct ppe_drv_v6_conn *cn)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
+	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
+	struct ppe_drv_v6_conn_flow *pcf_hp = &cn->pcf_hp;
+	struct ppe_drv_v6_conn_flow *pcr_hp = &cn->pcr_hp;
+	struct ppe_drv_v6_conn_npt6 *npt6 = &cn->npt6;
+
+	/*
+	 * Flushing flow direction flows.
+	 */
+	if (pcf && !ppe_drv_v6_flow_del(pcf)) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of flow failed: %p", p, pcf);
+		return PPE_DRV_RET_FAILURE_FLUSH_FAIL;
+	}
+
+	if (npt6 && npt6->iid_flow && !(ppe_drv_v6_hairpin_iid_del(pcf, npt6->iid_flow))) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of IID entry failed", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->pfx_flow && !(ppe_drv_v6_hairpin_prefix_dref(pcf, npt6->pfx_flow))) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of prefix entry failed", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (pcf_hp && !ppe_drv_v6_flow_del(pcf_hp)) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of return flow failed for SNAT flow: %p", p, pcf_hp);
+		return PPE_DRV_RET_FAILURE_FLUSH_FAIL;
+	}
+
+	if (npt6 && npt6->iid_hp_flow && !(ppe_drv_v6_hairpin_iid_del(pcf_hp, npt6->iid_hp_flow))) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of IID entry failed for hairpin nat SNAT flow", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->pfx_return && !(ppe_drv_v6_hairpin_prefix_dref(pcf_hp, npt6->pfx_return))) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of prefix entry failed", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	/*
+	 * Find the other flow associated with this connection.
+	 */
+	cn = ppe_drv_v6_conn_flow_conn_get(pcf);
+	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
+	pcr_hp = &cn->pcr_hp;
+
+	/*
+	 * Flushing return direction flows.
+	 */
+	if (pcr && !ppe_drv_v6_flow_del(pcr)) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of return flow failed: %p", p, pcr);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->iid_return && !(ppe_drv_v6_hairpin_iid_del(pcr, npt6->iid_return))) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of IID entry failed", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (pcr_hp && !ppe_drv_v6_flow_del(pcr_hp)) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of return flow failed for DNAT flow: %p", p, pcr_hp);
+		return PPE_DRV_RET_FAILURE_FLUSH_FAIL;
+	}
+
+	if (npt6 && npt6->iid_hp_return && !(ppe_drv_v6_hairpin_iid_del(pcr_hp, npt6->iid_hp_return))) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
+		ppe_drv_warn("%p: deletion of IID entry failed for hairpin nat DNAT flow", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	/*
+	 * Release references on nptv6 hairpin context.
+	 */
+	if (pcf && ppe_drv_nptv6_hairpin_destroy(pcf)) {
+		ppe_drv_warn("%p: deletion of npt6_hp failed\n", p);
+		return PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL;
+	}
+
+	if (pcr && ppe_drv_nptv6_hairpin_destroy(pcr)) {
+		ppe_drv_warn("%p: deletion of npt6_hp failed\n", p);
+		return PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL;
+	}
+
+	if (pcf_hp && ppe_drv_nptv6_hairpin_destroy(pcf_hp)) {
+		ppe_drv_warn("%p: deletion of npt6_hp failed\n", p);
+		return PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL;
+	}
+
+	if (pcr_hp && ppe_drv_nptv6_hairpin_destroy(pcr_hp)) {
+		ppe_drv_warn("%p: deletion of npt6_hp failed\n", p);
+		return PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL;
+	}
+
+	/*
+	 * Release references on interfaces.
+	 */
+	if (pcf_hp) {
+		ppe_drv_v6_if_walk_release(pcf_hp);
+	}
+	if (pcr_hp) {
+		ppe_drv_v6_if_walk_release(pcr_hp);
+	}
+	if (pcf) {
+		ppe_drv_v6_if_walk_release(pcf);
+	}
+	if (pcr) {
+		ppe_drv_v6_if_walk_release(pcr);
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+}
+#endif
+
 /*
  * ppe_drv_v6_flush()
  *	Flush a connection entry in PPE.
@@ -2419,13 +3203,26 @@ ppe_drv_ret_t ppe_drv_v6_flush(struct ppe_drv_v6_conn *cn)
 	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	struct ppe_drv_v6_conn_npt6 *npt6 = &cn->npt6;
+	ppe_drv_ret_t ret;
 #endif
+
 	/*
 	 * Update stats
 	 */
 	ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_req);
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	if (cn->is_hairpin_nat) {
+		ret = ppe_drv_v6_flush_hairpin_flow(cn);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("%p: Flush of hairpin flow failed", p);
+			return ret;
+		}
+
+		list_del(&cn->list);
+		return PPE_DRV_RET_SUCCESS;
+	}
+
 	if (npt6 && npt6->iid_flow && !(ppe_drv_v6_iid_del(pcf, npt6->iid_flow))) {
 		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
 		ppe_drv_warn("%p: deletion of IID entry failed", p);
@@ -2802,7 +3599,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 		ppe_drv_trace("calling flow add for flow\n");
 		pcf = &cn->pcf;
 		ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);
-		pcf->pf = ppe_drv_v6_flow_add(pcf);
+		pcf->pf = ppe_drv_v6_flow_add(pcf, false);
 		if (!pcf->pf) {
 			ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail);
 			ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
@@ -2822,7 +3619,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 		ppe_drv_trace("calling return add for flow\n");
 		pcr = &cn->pcr;
 		ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);
-		pcr->pf = ppe_drv_v6_flow_add(pcr);
+		pcr->pf = ppe_drv_v6_flow_add(pcr, false);
 		if (!pcr->pf) {
 			/*
 			 * Destroy the offloaded flow entry
@@ -2852,6 +3649,131 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 }
 EXPORT_SYMBOL(ppe_drv_v6_policer_flow_create);
 
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+/*
+ * ppe_drv_v6_delete_hairpin_flow()
+ *	Destroy a connection entry in PPE for hairpin flows.
+ */
+ppe_drv_ret_t ppe_drv_v6_delete_hairpin_flow(struct ppe_drv_v6_conn *cn, struct ppe_drv_v6_conn_flow *pcf)
+{
+	struct ppe_drv_comm_stats *comm_stats;
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
+	struct ppe_drv_v6_conn_flow *pcf_hp = &cn->pcf_hp;
+	struct ppe_drv_v6_conn_flow *pcr_hp = &cn->pcr_hp;
+	struct ppe_drv_v6_conn_npt6 *npt6 = &cn->npt6;
+
+	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_FLOW];
+
+	/*
+	 * Delete the flow direction flows.
+	 */
+	if (!ppe_drv_v6_flow_del(pcf)) {
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_fail);
+		ppe_drv_warn("%p: deletion of flow failed: %p", p, pcf);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->iid_flow && !(ppe_drv_v6_hairpin_iid_del(pcf, npt6->iid_flow))) {
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_fail);
+		ppe_drv_warn("%p: deletion of IID entry failed", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->pfx_flow && !(ppe_drv_v6_hairpin_prefix_dref(pcf, npt6->pfx_flow))) {
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_fail);
+		ppe_drv_warn("%p: deletion of prefix entry failed", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (!ppe_drv_v6_flow_del(pcf_hp)) {
+		ppe_drv_warn("%p: deletion of return flow failed for SNAT flow: %p", p, pcf_hp);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->iid_hp_flow && !(ppe_drv_v6_hairpin_iid_del(pcf_hp, npt6->iid_hp_flow))) {
+		ppe_drv_warn("%p: deletion of IID entry failed for hairpin nat SNAT flow", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->pfx_return && !(ppe_drv_v6_hairpin_prefix_dref(pcf_hp, npt6->pfx_return))) {
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_fail);
+		ppe_drv_warn("%p: deletion of prefix entry failed", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	/*
+	 * Find the other flow associated with this connection.
+	 */
+	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
+
+	/*
+	 * Delete the return direction flows.
+	 */
+	if (!ppe_drv_v6_flow_del(pcr)) {
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_fail);
+		ppe_drv_warn("%p: deletion of return flow failed: %p", p, pcr);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->iid_return && !(ppe_drv_v6_hairpin_iid_del(pcr, npt6->iid_return))) {
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_fail);
+		ppe_drv_warn("%p: deletion of IID entry failed", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (!ppe_drv_v6_flow_del(pcr_hp)) {
+		ppe_drv_warn("%p: deletion of return flow failed for DNAT flow: %p", p, pcr_hp);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	if (npt6 && npt6->iid_hp_return && !(ppe_drv_v6_hairpin_iid_del(pcr_hp, npt6->iid_hp_return))) {
+		ppe_drv_warn("%p: deletion of IID entry failed for hairpin nat DNAT flow", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
+	/*
+	 * Release references on nptv6 hairpin context.
+	 */
+	if (pcf && ppe_drv_nptv6_hairpin_destroy(pcf)) {
+		ppe_drv_warn("%p: deletion of npt6_hp failed\n", p);
+		return PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL;
+	}
+
+	if (pcr && ppe_drv_nptv6_hairpin_destroy(pcr)) {
+		ppe_drv_warn("%p: deletion of npt6_hp failed\n", p);
+		return PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL;
+	}
+
+	if (pcf_hp && ppe_drv_nptv6_hairpin_destroy(pcf_hp)) {
+		ppe_drv_warn("%p: deletion of npt6_hp failed\n", p);
+		return PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL;
+	}
+
+	if (pcr_hp && ppe_drv_nptv6_hairpin_destroy(pcr_hp)) {
+		ppe_drv_warn("%p: deletion of npt6_hp failed\n", p);
+		return PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL;
+	}
+
+	/*
+	 * Release references on interfaces.
+	 */
+	if (pcf_hp) {
+		ppe_drv_v6_if_walk_release(pcf_hp);
+	}
+	if (pcr_hp) {
+		ppe_drv_v6_if_walk_release(pcr_hp);
+	}
+	if (pcf) {
+		ppe_drv_v6_if_walk_release(pcf);
+	}
+	if (pcr) {
+		ppe_drv_v6_if_walk_release(pcr);
+	}
+	return PPE_DRV_RET_SUCCESS;
+}
+#endif
+
 /*
  * ppe_drv_v6_destroy()
  *	Destroy a connection entry in PPE.
@@ -2865,13 +3787,12 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy)
 	struct ppe_drv_v6_conn_flow *pcr;
 	struct ppe_drv_v6_conn_sync *cns;
 	struct ppe_drv_v6_conn *cn;
+	ppe_drv_ret_t ret __maybe_unused;
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	struct ppe_drv_v6_conn_npt6 *npt6;
 #endif
 
 #ifdef PPE_TUNNEL_ENABLE
-	ppe_drv_ret_t ret;
-
 	/*
 	 * Check if the destroy rule is for tunnel (outer rule)
 	 */
@@ -2906,7 +3827,18 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy)
 
 	pcf = flow->pcf.v6;
 	cn = ppe_drv_v6_conn_flow_conn_get(pcf);
+
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	if (cn->is_hairpin_nat) {
+		ret = ppe_drv_v6_delete_hairpin_flow(cn, pcf);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: deletion of hairpin flow failed", p);
+			return ret;
+		}
+		goto done;
+	}
+
 	npt6 = &cn->npt6;
 	if (npt6 && npt6->iid_flow && !(ppe_drv_v6_iid_del(pcf, npt6->iid_flow))) {
 		spin_unlock_bh(&p->lock);
@@ -2966,6 +3898,10 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy)
 	 * Release references on interfaces.
 	 */
 	ppe_drv_v6_if_walk_release(pcr);
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+done:
+#endif
 
 	/*
 	 * Delete connection entry to the active connection list.
@@ -3072,7 +4008,7 @@ ppe_drv_ret_t ppe_drv_v6_rfs_create(struct ppe_drv_v6_rule_create *create)
 	/*
 	 * Add flow direction flow entry
 	 */
-	pcf->pf = ppe_drv_v6_flow_add(pcf);
+	pcf->pf = ppe_drv_v6_flow_add(pcf, false);
 	if (!pcf->pf) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_rfs_fail);
 		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
@@ -3183,7 +4119,7 @@ ppe_drv_ret_t ppe_drv_v6_assist_rule_create(struct ppe_drv_v6_rule_create *creat
 	/*
 	 * Add flow direction flow entry
 	 */
-	pcf->pf = ppe_drv_v6_flow_add(pcf);
+	pcf->pf = ppe_drv_v6_flow_add(pcf, false);
 	if (!pcf->pf) {
 		ppe_drv_stats_inc(&comm_stats->v6_assist_rule_create_fail);
 		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
@@ -3351,6 +4287,394 @@ bool ppe_drv_v6_fse_flow_configure(struct ppe_drv_v6_rule_create *create, struct
 	return true;
 }
 
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+/*
+ * ppe_drv_v6_create_hairpin()
+ *	Adds a connection entry in PPE for NPTv6 Hairpin flow.
+ */
+static ppe_drv_ret_t ppe_drv_v6_create_hairpin(struct ppe_drv_v6_conn *cn, struct ppe_drv_v6_rule_create *create)
+{
+	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv_v6_conn_flow *pcf = NULL;
+	struct ppe_drv_v6_conn_flow *pcr = NULL;
+	struct ppe_drv_v6_conn_flow *pcf_hp = NULL;
+	struct ppe_drv_v6_conn_flow *pcr_hp = NULL;
+	struct ppe_drv_comm_stats *comm_stats;
+	struct ppe_drv_top_if_rule top_if;
+	struct ppe_drv_v6_conn_npt6 *npt6 = NULL;
+	ppe_drv_ret_t ret;
+
+	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_FLOW];
+
+	/*
+	 * Ensure either direction flow is not already offloaded by us.
+	 */
+	if (ppe_drv_v6_flow_check(&cn->pcf) || ppe_drv_v6_flow_check(&cn->pcr)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_collision);
+		ppe_drv_warn("%p: create collision detected: %p", p, create);
+		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
+		goto fail;
+	}
+
+	if (ppe_drv_v6_flow_check(&cn->pcf_hp) || ppe_drv_v6_flow_check(&cn->pcr_hp)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_collision);
+		ppe_drv_warn("%p: create collision detected: %p", p, create);
+		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
+		goto fail;
+	}
+
+	/*
+	 * Perform interface hierarchy walk and obtain egress L3_If and egress VSI
+	 * for each direction.
+	 */
+	top_if.rx_if = create->top_rule.rx_if;
+	top_if.tx_if = create->top_rule.tx_if;
+	if (!ppe_drv_v6_if_walk(&cn->pcf, &top_if, create->conn_rule.tx_if, create->conn_rule.rx_if)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_if_hierarchy);
+		ppe_drv_warn("%p: create failed invalid interface hierarchy: %p", p, create);
+		ret = PPE_DRV_RET_FAILURE_INVALID_HIERARCHY;
+		goto fail;
+	}
+
+	/*
+	 * Reverse the top interfaces for return direction.
+	 */
+	top_if.rx_if = create->top_rule.tx_if;
+	top_if.tx_if = create->top_rule.rx_if;
+	if (!ppe_drv_v6_if_walk(&cn->pcr, &top_if, create->conn_rule.rx_if, create->conn_rule.tx_if)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_if_hierarchy);
+		ppe_drv_warn("%p: create failed invalid interface hierarchy: %p", p, create);
+		ret = PPE_DRV_RET_FAILURE_INVALID_HIERARCHY;
+		goto fail;
+	}
+
+	/*
+	 * For Hairpin NAT the top interface will be br-lan.
+	 */
+	top_if.rx_if = create->top_rule.rx_if;
+	top_if.tx_if = create->top_rule.rx_if;
+	if (!ppe_drv_v6_if_walk(&cn->pcf_hp, &top_if, create->conn_rule.tx_if, create->conn_rule.rx_if)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_if_hierarchy);
+		ppe_drv_warn("%p: create failed invalid interface hierarchy for SNAT PCF: %p", p, create);
+		ret = PPE_DRV_RET_FAILURE_INVALID_HIERARCHY;
+		goto fail;
+	}
+
+	/*
+	 * For Hairpin NAT the top interface will be br-lan.
+	 */
+	top_if.rx_if = create->top_rule.rx_if;
+	top_if.tx_if = create->top_rule.rx_if;
+	if (!ppe_drv_v6_if_walk(&cn->pcr_hp, &top_if, create->conn_rule.rx_if, create->conn_rule.tx_if)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_if_hierarchy);
+		ppe_drv_warn("%p: create failed invalid interface hierarchy for DNAT PCF: %p", p, create);
+		ret = PPE_DRV_RET_FAILURE_INVALID_HIERARCHY;
+		goto fail;
+	}
+
+	pcf = &cn->pcf;
+	pcr = &cn->pcr;
+	pcf_hp = &cn->pcf_hp;
+	pcr_hp = &cn->pcr_hp;
+
+	npt6 = &cn->npt6;
+
+	/*
+	 * Adding l3_if into nptv6 hairpin context
+	 */
+	if (!ppe_drv_iface_l3_if_nptv6_ref(pcf_hp, npt6)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_invalid_nptv6_ctx);
+		ppe_drv_warn("%p: No reference found for npt6_hp", pcf_hp);
+		goto fail;
+	}
+
+	if (!ppe_drv_iface_l3_if_nptv6_ref(pcr_hp, npt6)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_invalid_nptv6_ctx);
+		ppe_drv_warn("%p: No reference found for npt6_hp", pcr_hp);
+		goto fail;
+	}
+
+	if (!ppe_drv_iface_l3_if_nptv6_ref(pcf, npt6)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_invalid_nptv6_ctx);
+		ppe_drv_warn("%p: No reference found for npt6_hp", pcf);
+		goto fail;
+	}
+
+	if (!ppe_drv_iface_l3_if_nptv6_ref(pcr, npt6)) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail_invalid_nptv6_ctx);
+		ppe_drv_warn("%p: No reference found for npt6_hp", pcr);
+		goto fail;
+	}
+
+	/*
+	 * Add flow direction flow entry
+	 */
+	pcf_hp->pf = ppe_drv_v6_flow_add(pcf_hp, true);
+	if (!pcf_hp->pf) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf_hp);
+		ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
+		goto fail;
+	}
+
+	pcr_hp->pf = ppe_drv_v6_flow_add(pcr_hp, true);
+	if (!pcr_hp->pf) {
+		/*
+		 * Destroy the offloaded flow entry
+		 */
+		ppe_drv_v6_flow_del(pcf_hp);
+		pcf_hp->pf = NULL;
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcr_hp);
+		ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
+		goto fail;
+	}
+
+	pcf->pf = ppe_drv_v6_flow_add(pcf, true);
+	if (!pcf->pf) {
+		/*
+		 * Destroy the offloaded flow entry
+		 */
+		ppe_drv_v6_flow_del(pcf_hp);
+		ppe_drv_v6_flow_del(pcr_hp);
+		pcf_hp->pf = NULL;
+		pcr_hp->pf = NULL;
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
+		ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
+		goto fail;
+	}
+
+	pcr->pf = ppe_drv_v6_flow_add(pcr, true);
+	if (!pcr->pf) {
+		/*
+		 * Destroy the offloaded flow entry
+		 */
+		ppe_drv_v6_flow_del(pcf);
+		ppe_drv_v6_flow_del(pcf_hp);
+		ppe_drv_v6_flow_del(pcr_hp);
+		pcf->pf = NULL;
+		pcf_hp->pf = NULL;
+		pcr_hp->pf = NULL;
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: acceleration of return direction failed: %p", p, pcr);
+		ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
+		goto fail;
+	}
+
+	pcf->conn = cn;
+	pcr->conn = cn;
+	pcf_hp->conn = cn;
+	pcr_hp->conn = cn;
+
+	/*
+	 * Add the Flow prefix entry into prefix table
+	 */
+	npt6->pfx_flow = ppe_drv_v6_hairpin_prefix_add_ref(pcf, npt6, false);
+	if (!npt6->pfx_flow) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: Egress Prefix table entry failed: %p", p, npt6);
+		ret = PPE_DRV_RET_FAILURE_PREFIX_ADD_FAIL;
+		goto fail;
+	}
+
+	/*
+	 * Add the Return prefix entry into prefix table
+	 */
+	npt6->pfx_return = ppe_drv_v6_hairpin_prefix_add_ref(pcf_hp, npt6, true);
+	if (!npt6->pfx_return) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: Ingress Prefix table entry failed: %p", p, npt6);
+		ret = PPE_DRV_RET_FAILURE_PREFIX_ADD_FAIL;
+		goto fail;
+	}
+
+	/*
+	 * Add the flow direction IID table entry for SNAT flow
+	 */
+	npt6->iid_hp_flow = ppe_drv_v6_hairpin_iid_add(pcf_hp, npt6, true);
+	if (!npt6->iid_hp_flow) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: Flow direction IID table entry failed: %p", p, npt6);
+		ret = PPE_DRV_RET_FAILURE_IID_ADD_FAIL;
+		goto fail;
+	}
+
+	/*
+	 * Add the flow direction IID table entry for DNAT flow
+	 */
+	npt6->iid_hp_return = ppe_drv_v6_hairpin_iid_add(pcr_hp, npt6, true);
+	if (!npt6->iid_hp_return) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: Flow direction IID table entry failed: %p", p, npt6);
+		ret = PPE_DRV_RET_FAILURE_IID_ADD_FAIL;
+		goto fail;
+	}
+
+	/*
+	 * Add the flow direction IID table entry
+	 */
+	npt6->iid_flow = ppe_drv_v6_hairpin_iid_add(pcf, npt6, false);
+	if (!npt6->iid_flow) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: Flow direction IID table entry failed: %p", p, npt6);
+		ret = PPE_DRV_RET_FAILURE_IID_ADD_FAIL;
+		goto fail;
+	}
+
+	/*
+	 * Add the return direction IID table entry
+	 */
+	npt6->iid_return = ppe_drv_v6_hairpin_iid_add(pcr, npt6, false);
+	if (!npt6->iid_return) {
+		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+		ppe_drv_warn("%p: return direction IID table entry failed: %p", p, npt6);
+		ret = PPE_DRV_RET_FAILURE_IID_ADD_FAIL;
+		goto fail;
+	}
+
+	if (!ppe_drv_flow_valid_set(pcf_hp->pf, true)) {
+		ppe_drv_warn("%p: flow entry valid set failed for flow: %p", pcf_hp, pcf_hp->pf);
+		goto fail;
+	}
+
+	if (!ppe_drv_flow_valid_set(pcr_hp->pf, true)) {
+		ppe_drv_warn("%p: flow entry valid set failed for flow: %p", pcr_hp, pcr_hp->pf);
+		goto fail;
+	}
+
+	if (!ppe_drv_flow_valid_set(pcf->pf, true)) {
+		ppe_drv_warn("%p: flow entry valid set failed for flow: %p", pcf, pcf->pf);
+		goto fail;
+	}
+
+	if (!ppe_drv_flow_valid_set(pcr->pf, true)) {
+		ppe_drv_warn("%p: flow entry valid set failed for flow: %p", pcr, pcr->pf);
+		goto fail;
+	}
+
+	npt6->conn = cn;
+
+	/*
+	 * We maintain reference per connection on main ppe context.
+	 * Dereference: connection destroy.
+	 *
+	 * TODO: check if this needed
+	 */
+	/* ppe_drv_ref(p); */
+
+	/*
+	 * Add corresponding FSE rule for a Wi-Fi flow.
+	 */
+	if (ppe_drv_v6_fse_interface_check(pcf)) {
+		if (!ppe_drv_v6_fse_flow_configure(create, pcf, pcr)) {
+			ppe_drv_stats_inc(&comm_stats->v6_create_fse_fail);
+			ret = PPE_DRV_RET_FAILURE_FLOW_CONFIGURE_FAIL;
+			ppe_drv_trace("%p: FSE V6 flow table programming failed\n", p);
+			goto fail;
+		}
+
+		ppe_drv_stats_inc(&comm_stats->v6_create_fse_success);
+	}
+
+	/*
+	 * Add connection entry to the active connection list.
+	 */
+	list_add(&cn->list, &p->conn_v6);
+
+	return PPE_DRV_RET_SUCCESS;
+
+fail:
+	if (pcf && pcf->pf) {
+		ppe_drv_v6_flow_del(pcf);
+
+		if (npt6 && npt6->iid_flow) {
+			ppe_drv_v6_hairpin_iid_del(pcf, npt6->iid_flow);
+		}
+
+		if (npt6 && npt6->pfx_flow) {
+			ppe_drv_v6_hairpin_prefix_dref(pcf, npt6->pfx_flow);
+		}
+
+		if (pcf->npt6_hp) {
+			ppe_drv_nptv6_hairpin_destroy(pcf);
+		}
+	}
+
+	if (pcf_hp && pcf_hp->pf) {
+		ppe_drv_v6_flow_del(pcf_hp);
+
+		if (npt6) {
+			if (npt6->iid_hp_flow) {
+				ppe_drv_v6_hairpin_iid_del(pcf_hp, npt6->iid_hp_flow);
+			}
+
+			if (npt6->pfx_return) {
+				ppe_drv_v6_hairpin_prefix_dref(pcf_hp, npt6->pfx_return);
+			}
+		}
+
+		if (pcf_hp->npt6_hp) {
+			ppe_drv_nptv6_hairpin_destroy(pcf_hp);
+		}
+	}
+
+	if (pcr && pcr->pf) {
+		ppe_drv_v6_flow_del(pcr);
+
+		if (npt6 && npt6->iid_return) {
+			ppe_drv_v6_hairpin_iid_del(pcr, npt6->iid_return);
+		}
+
+		if (pcr->npt6_hp) {
+			ppe_drv_nptv6_hairpin_destroy(pcr);
+		}
+	}
+
+	if (pcr_hp && pcr_hp->pf) {
+		ppe_drv_v6_flow_del(pcr_hp);
+
+		if (npt6 && npt6->iid_hp_return) {
+			ppe_drv_v6_hairpin_iid_del(pcr_hp, npt6->iid_hp_return);
+		}
+
+		if (pcr_hp->npt6_hp) {
+			ppe_drv_nptv6_hairpin_destroy(pcr_hp);
+		}
+	}
+
+	/*
+	 * Free Hairpin flow direction references.
+	 */
+	if (pcf_hp) {
+		ppe_drv_v6_if_walk_release(pcf_hp);
+	}
+
+	/*
+	 * Free Hairpin return direction references.
+	 */
+	if (pcr_hp) {
+		ppe_drv_v6_if_walk_release(pcr_hp);
+	}
+
+	/*
+	 * Free flow direction references.
+	 */
+	if (pcf) {
+		ppe_drv_v6_if_walk_release(pcf);
+	}
+
+	/*
+	 * Free return direction references.
+	 */
+	if (pcr) {
+		ppe_drv_v6_if_walk_release(pcr);
+	}
+
+	return ret;
+}
+#endif
+
 /*
  * ppe_drv_v6_create()
  *	Adds a connection entry in PPE.
@@ -3448,6 +4772,23 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 		goto fail;
 	}
 
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	/*
+	 * Create 2 extra flows for NPTv6 Hairpin NAT case, 1 in each direction
+	 */
+	if (cn->is_hairpin_nat) {
+		ret = ppe_drv_v6_create_hairpin(cn, create);
+		spin_unlock_bh(&p->lock);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_stats_inc(&comm_stats->v6_create_fail);
+			ppe_drv_warn("%p: Hairpin NAT connection object creation failed: %p", p, create);
+			kfree(cn);
+		}
+
+		return ret;
+	}
+#endif
+
 	/*
 	 * Ensure either direction flow is not already offloaded by us.
 	 */
@@ -3490,7 +4831,7 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 	/*
 	 * Add flow direction flow entry
 	 */
-	pcf->pf = ppe_drv_v6_flow_add(pcf);
+	pcf->pf = ppe_drv_v6_flow_add(pcf, false);
 	if (!pcf->pf) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_fail);
 		ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
@@ -3498,7 +4839,7 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 		goto fail;
 	}
 
-	pcr->pf = ppe_drv_v6_flow_add(pcr);
+	pcr->pf = ppe_drv_v6_flow_add(pcr, false);
 	if (!pcr->pf) {
 		/*
 		 * Destroy the offloaded flow entry

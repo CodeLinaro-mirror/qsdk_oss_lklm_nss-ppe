@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <fal/fal_servcode.h>
@@ -304,6 +293,16 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 
 	case PPE_DRV_SC_LOOPBACK_RING_NEXT_GRETAP_N_MAPT:
 		sc_cfg.bypass_bitmap[0] = (1 << FLOW_SERVICE_CODE_BYP) | (1 << FLOW_LOOKUP_BYP);
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+
+	case PPE_DRV_SC_NPT66_HAIRPIN_NAT:
+		sc_cfg.bypass_bitmap[1] = ((1 << L2_PKT_EDIT_BYP) | (1 << L2_SOURCE_SEC_BYP));
+		break;
+
+	case PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT:
+		sc_cfg.bypass_bitmap[0] = (1 << MY_MAC_CHECK_BYP) | (1 << FLOW_SERVICE_CODE_BYP);
+		sc_cfg.bypass_bitmap[1] = ((1 << FDB_LEARN_BYP) | (1 << L2_SOURCE_SEC_BYP) | (1 << FDB_REFRESH_BYP));
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
@@ -714,6 +713,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_RING_MAPT_GRETAP, PPE_DRV_SC_LOOPBACK_RING_NEXT_GRETAP_N_MAPT,
 				PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_VP_MPSK, PPE_DRV_SC_VP_MPSK, PPE_DRV_PORT_CPU);
-
+	ppe_drv_sc_config(PPE_DRV_SC_NPT66_HAIRPIN_NAT, PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT, PPE_DRV_SC_BYPASS_ALL, PPE_DRV_PORT_CPU);
 	return sc;
 }

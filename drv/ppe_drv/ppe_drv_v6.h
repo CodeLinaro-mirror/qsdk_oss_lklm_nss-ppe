@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /*
@@ -74,6 +63,9 @@
 					/* Flow is pushed from SFE */
 #define PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID	0x00200000
 					/* Flow has the host Qdisc related information */
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+#define PPE_DRV_V6_CONN_FLAG_HAIRPIN_FLOW 0x00400000	/* Flow direction for hairpin nat */
+#endif
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*
@@ -86,6 +78,8 @@ struct ppe_drv_v6_conn_npt6 {
 	struct ppe_drv_nptv6_prefix *pfx_return;	/* Return prefix pointer */
 	struct ppe_drv_nptv6_iid *iid_flow;		/* IID pointer for the flow direction */
 	struct ppe_drv_nptv6_iid *iid_return;		/* IID pointer for the return direction */
+	struct ppe_drv_nptv6_iid *iid_hp_flow;		/* IID pointer for the hairpin packet in flow direction */
+	struct ppe_drv_nptv6_iid *iid_hp_return;	/* IID pointer for the hairpin packet in return direction */
 	uint32_t src_pfx[4];				/* Source Prefix of NPTv6 rule */
 	uint32_t dst_pfx[4];				/* Destination Prefix of NPTv6 rule */
 	uint16_t nptv6_flags;				/* NPTv6 specific flags */
@@ -112,6 +106,9 @@ struct ppe_drv_v6_conn_flow {
 	uint32_t xlate_dest_ip[4];		/* Address after destination translation */
 	uint32_t xlate_dest_ident;		/* Port/connection ident after destination translation */
 	uint8_t xmit_dest_mac_addr[ETH_ALEN];	/* Destination MAC address after forwarding */
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	struct ppe_drv_nptv6_hairpin_ctx *npt6_hp;	/* Context for NPTv6 Hairpin NAT */
+#endif
 
 	/*
 	 * Host order
@@ -200,10 +197,13 @@ struct ppe_drv_v6_conn {
 	struct ppe_drv_v6_conn_flow pcf;	/* flow object for flow direction */
 	struct ppe_drv_v6_conn_flow pcr;	/* flow object for return direction */
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	struct ppe_drv_v6_conn_flow pcf_hp;	/* flow object for Hairpin Packet in flow direction */
+	struct ppe_drv_v6_conn_flow pcr_hp;	/* flow object for Hairpin Packet in return direction */
 	struct ppe_drv_v6_conn_npt6 npt6;	/* Object to store NPTv6 rule info */
 #endif
 	uint32_t flags;				/* connection flags */
 	bool toggle;				/* Used during stats sync */
+	bool is_hairpin_nat;			/* If the connection is Hairpin NAT */
 };
 
 /*
@@ -832,6 +832,15 @@ static inline void ppe_drv_v6_conn_flow_eg_l3_if_set(struct ppe_drv_v6_conn_flow
 }
 
 /*
+ * ppe_drv_v6_conn_flow_eg_l3_if_ref()
+ *	Sets egress L3_IF interface.
+ */
+static inline void ppe_drv_v6_conn_flow_eg_l3_if_ref(struct ppe_drv_iface *eg_l3_if)
+{
+	kref_get(&eg_l3_if->ref);
+}
+
+/*
  * ppe_drv_v6_conn_flow_eg_vsi_if_set()
  *	Sets egress VSI interface.
  */
@@ -998,3 +1007,7 @@ bool ppe_drv_v6_if_walk(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_top_if_
 bool ppe_drv_v6_fse_flow_configure(struct ppe_drv_v6_rule_create *create, struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_flow *pcr);
 void ppe_drv_fill_fse_v6_tuple_info(struct ppe_drv_v6_conn_flow *conn, struct ppe_drv_fse_rule_info *fse_info, bool is_ds);
 bool ppe_drv_v6_fse_interface_check(struct ppe_drv_v6_conn_flow *pcf);
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+ppe_drv_ret_t ppe_drv_v6_flush_hairpin_flow(struct ppe_drv_v6_conn *cn);
+ppe_drv_ret_t ppe_drv_v6_delete_hairpin_flow(struct ppe_drv_v6_conn *cn, struct ppe_drv_v6_conn_flow *pcf);
+#endif
