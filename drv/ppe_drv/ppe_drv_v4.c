@@ -215,6 +215,7 @@ static bool ppe_drv_v4_unbind_acl_policer(struct ppe_drv_v4_conn *cn)
 void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct ppe_drv_fse_rule_info *fse_info, bool is_ds)
 {
 	struct ppe_drv_port *pp;
+	struct ppe_drv_port *tx_port;
 	struct net_device *dev;
 
 	fse_info->tuple.src_ip[0] = ppe_drv_v4_conn_flow_match_src_ip_get(conn);
@@ -224,8 +225,11 @@ void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct pp
 	fse_info->tuple.protocol = ppe_drv_v4_conn_flow_match_protocol_get(conn);
 
 	pp = ppe_drv_v4_conn_flow_rx_port_get(conn);
+	tx_port = ppe_drv_v4_conn_flow_tx_port_get(conn);
+	fse_info->macid = tx_port->port;
 
 	dev = ppe_drv_port_to_dev(pp);
+
 	if (!is_vlan_dev(dev)) {
 		fse_info->vp_num = pp->port;
 		fse_info->dev = dev;
@@ -252,6 +256,7 @@ void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct pp
 	ppe_drv_trace("protocol: %x\n", fse_info->tuple.protocol);
 	ppe_drv_trace("dev: %s\n", fse_info->dev->name);
 	ppe_drv_trace("vp_num: %d\n", fse_info->vp_num);
+	ppe_drv_trace("macid: %u\n", fse_info->macid);
 }
 
 /*
