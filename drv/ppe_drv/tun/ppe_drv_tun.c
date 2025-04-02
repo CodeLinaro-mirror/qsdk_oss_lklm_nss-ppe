@@ -377,9 +377,17 @@ struct ppe_drv_tun *ppe_drv_tun_mapt_port_tun_get(struct ppe_drv_port *tx_port, 
 {
 	struct ppe_drv_tun *ptun;
 
-	ptun = ppe_drv_port_tun_get(tx_port) ? ppe_drv_port_tun_get(tx_port) : ppe_drv_port_tun_get(rx_port);
+	ptun = ppe_drv_port_tun_get(tx_port);
+	if (ptun && (ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT)) {
+		return ptun;
+	}
 
-	return (ptun && (ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT)) ? ptun : NULL;
+        ptun = ppe_drv_port_tun_get(rx_port);
+        if (ptun && (ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT)) {
+                return ptun;
+        }
+
+	return NULL;
 }
 
 /*
@@ -767,12 +775,13 @@ bool ppe_drv_tun_attach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn)
 		sport = pcf->xlate_src_ident;
 		dport = pcf->xlate_dest_ident;
 	} else {
-		ip4.saddr = htonl(pcf->xlate_dest_ip);
-		ip4.daddr = htonl(pcf->xlate_src_ip);
-		sport = pcf->xlate_dest_ident;
-		dport = pcf->xlate_src_ident;
+		ip4.saddr = htonl(pcr->xlate_src_ip);
+		ip4.daddr = htonl(pcr->xlate_dest_ip);
+		sport = pcr->xlate_src_ident;
+		dport = pcr->xlate_dest_ident;
 	}
 
+	ppe_drv_trace("flow_dir: %d, src: %pI4, dip: %pI4, sport: %d, dport: %d\n",is_flow_dir, &ip4.saddr, &ip4.daddr, sport, dport);
 	/*
 	 * xlate_4_to_6 expects the arguments to be in network byte order(big endian).
 	 * Source/Dest ip and port details in pcf are stored in little endian.
@@ -816,6 +825,8 @@ bool ppe_drv_tun_attach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn)
 		ppe_drv_flow_v4_attach_mapt_v6_conn(pcr, pcf_v6, len_adjust);
 		ppe_drv_flow_v4_attach_mapt_v6_conn(pcf, pcr_v6, len_adjust);
 	}
+
+	ppe_drv_trace("IPv6, src: %pI6, dip: %pI6, sport: %d, dport: %d\n", saddr_v6, daddr_v6, sport, dport);
 
 	return true;
 }
