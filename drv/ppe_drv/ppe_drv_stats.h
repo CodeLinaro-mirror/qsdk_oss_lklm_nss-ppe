@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -142,6 +142,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_assist_rule_create_rfs_fail_conn;	/* No of v4 assist rule create rfs failure */
 	atomic64_t v4_assist_rule_create_priority_fail_conn;	/* No of v4 assist rule create rfs failure */
 	atomic64_t v4_create_priority_req;		/* No of v4 Priority Assist create requests */
+	atomic64_t v4_assist_rule_destroy_fail_not_rfs_rule;			/* No of v4 assist rule delete request failure due to race condition */
 
 	atomic64_t v4_create_policer_req;		/* No of v4 Policer create requests */
 	atomic64_t v4_create_policer_fail;		/* No of v4 Policer create failure */
@@ -219,6 +220,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_assist_rule_create_rfs_fail_conn;	/* No of v6 assist rule create rfs failure */
 	atomic64_t v6_assist_rule_create_priority_fail_conn;	/* No of v6 assist rule create priority failure */
 	atomic64_t v6_create_priority_req;		/* No of v6 Priority Assist create requests */
+	atomic64_t v6_assist_rule_destroy_fail_not_rfs_rule;			/* No of v6 assist rule delete request failure due to race condition */
 
 	atomic64_t v6_create_policer_req;		/* No of v6 Policer create requests */
 	atomic64_t v6_create_policer_fail;		/* No of v6 Policer create failure */
