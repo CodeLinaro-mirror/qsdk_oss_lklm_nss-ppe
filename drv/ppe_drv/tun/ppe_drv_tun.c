@@ -630,6 +630,7 @@ struct ppe_drv_tun_l3_if *ppe_drv_tun_port_tl_l3_if_get(struct ppe_drv_tun *ptun
 	 */
 	ptun_l3_if = ppe_drv_port_tl_l3_if_get_n_ref(pp);
 	if (ptun_l3_if) {
+		ppe_drv_trace("%p: Reuse TL-L3 IF at index %u, xmit_port = %u\n", ptun, ptun_l3_if->index, xmit_port);
 		return ptun_l3_if;
 	}
 
@@ -642,9 +643,14 @@ struct ppe_drv_tun_l3_if *ppe_drv_tun_port_tl_l3_if_get(struct ppe_drv_tun *ptun
 		return NULL;
 	}
 
-	ppe_drv_tun_l3_if_configure(ptun_l3_if);
+	if(!ppe_drv_tun_l3_if_configure(ptun_l3_if)) {
+		ppe_drv_warn("%p: Tun l3 if configure failed for index %u,xmit port = %u", ptun, ptun_l3_if->index, xmit_port);
+		ppe_drv_tun_l3_if_deref(ptun_l3_if);
+		return NULL;
+	}
 
 	ppe_drv_port_tl_l3_if_attach(pp, ptun_l3_if);
+	ppe_drv_trace("%p: TL_L3_IF succesfully attached/configured index %u,xmit port = %u", ptun, ptun_l3_if->index, xmit_port);
 
 	return ptun_l3_if;
 }
@@ -693,6 +699,8 @@ bool ppe_drv_tun_decap_xmitport_cfg_set(struct ppe_drv_tun *ptun, uint16_t xmit_
 		ppe_drv_warn("%p: unable to set xmit port %d", ptun, xmit_port);
 		return false;
 	}
+
+	ppe_drv_trace("%p: port intf set successful for tl_l3_if valid = %d, index = %d,xmit port = %u", ptun, port_tnl_cfg.l3_if.l3_if_valid, tl_l3_if_idx, xmit_port);
 
 	return true;
 }
@@ -1643,7 +1651,10 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	/*
 	 * Set TL_L3_IDX and transmit mac address in TL_PORT_VP_TBL
 	 */
-	ppe_drv_tun_decap_xmitport_cfg_set(ptun, xmit_port, l2_hdr, tl_l3_if_idx);
+	if (!ppe_drv_tun_decap_xmitport_cfg_set(ptun, xmit_port, l2_hdr, tl_l3_if_idx)) {
+		ppe_drv_warn("%p: Failed to set xmit port configurations for tun %d of type %d", ptun, ptun->tun_idx, pth->type);
+		goto err_fail;
+	}
 
 	if (pth->type != PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
 		ppe_drv_tun_decap_set_tl_l3_idx(ptun->ptdc, tl_l3_if_idx);

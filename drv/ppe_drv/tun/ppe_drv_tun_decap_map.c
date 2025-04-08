@@ -211,6 +211,8 @@ done:
 		return false;
 	}
 
+	ppe_drv_trace("port num: %d mapt decap entry configured tl_l3_if index %d, is_local %d", port_num, ptdcm->tl_l3_if_idx, ip_to_me);
+
 	/*
 	 * Store mapt decap index for further use.
 	 */
