@@ -22,7 +22,7 @@
  */
 ppe_drv_ret_t ppe_drv_lag_leave(struct ppe_drv_iface *lag_iface, struct net_device *member)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *member_iface;
 	struct ppe_drv_port *pp;
 	struct ppe_drv_l3_if *l3_if;
@@ -88,7 +88,7 @@ EXPORT_SYMBOL(ppe_drv_lag_leave);
  */
 ppe_drv_ret_t ppe_drv_lag_join(struct ppe_drv_iface *lag_iface, struct net_device *member)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *member_iface;
 	struct ppe_drv_port *pp;
 	struct ppe_drv_l3_if *l3_if;
@@ -151,7 +151,7 @@ EXPORT_SYMBOL(ppe_drv_lag_join);
  */
 ppe_drv_ret_t ppe_drv_lag_deinit(struct ppe_drv_iface *lag_iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 
 	ppe_drv_assert(lag_iface->type == PPE_DRV_IFACE_TYPE_LAG,
@@ -184,7 +184,7 @@ EXPORT_SYMBOL(ppe_drv_lag_deinit);
  */
 ppe_drv_ret_t ppe_drv_lag_init(struct ppe_drv_iface *lag_iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 
 	ppe_drv_assert(lag_iface->type == PPE_DRV_IFACE_TYPE_LAG,

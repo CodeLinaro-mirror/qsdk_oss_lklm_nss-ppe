@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -68,7 +68,7 @@
 /*
  * Global Structure to hold tunnel statistics and driver queue selection.
  */
-static struct nss_capwapmgr_global global;
+static struct nss_capwapmgr_global *global;
 
 /*
  * Lock to handle acl configuration.
@@ -226,7 +226,7 @@ static struct rtnl_link_stats64 *nss_capwapmgr_get_tunnel_stats(struct net_devic
 	atomic_long_set(&dev->rx_dropped, 0);
 #endif
 	memset(stats, 0, sizeof (struct rtnl_link_stats64));
-	nss_capwapmgr_fill_up_stats(stats, &global.tunneld_stats);
+	nss_capwapmgr_fill_up_stats(stats, &global->tunneld_stats);
 
 	for (i = NSS_DYNAMIC_IF_START; i <= (NSS_DYNAMIC_IF_START + NSS_MAX_DYNAMIC_INTERFACES); i++) {
 		if (nss_capwap_get_stats(i, &tstats) == false) {
@@ -1529,8 +1529,8 @@ static bool nss_capwapmgr_trustsec_rx_vp_unconfig(void)
 	/*
 	 * Get the vp num and internel netdev from the global structure.
 	 */
-	int_ndev = global.trustsec_rx_internal_ndev;
-	vp_num = global.trustsec_rx_vp_num;
+	int_ndev = global->trustsec_rx_internal_ndev;
+	vp_num = global->trustsec_rx_vp_num;
 
 	/*
 	 * Free the VP interface associated with the tunnel.
@@ -1543,7 +1543,7 @@ static bool nss_capwapmgr_trustsec_rx_vp_unconfig(void)
 			return false;
 		}
 
-		global.trustsec_rx_vp_num = 0;
+		global->trustsec_rx_vp_num = 0;
 
 		/*
 		 * Send vp unconfig message to trustsec rx node in nss fw.
@@ -1569,7 +1569,7 @@ static bool nss_capwapmgr_trustsec_rx_vp_unconfig(void)
 	 */
 	if (int_ndev) {
 		free_netdev(int_ndev);
-		global.trustsec_rx_internal_ndev = NULL;
+		global->trustsec_rx_internal_ndev = NULL;
 	}
 
 	return true;
@@ -1611,19 +1611,19 @@ static bool nss_capwapmgr_trustsec_rx_vp_config(void)
 	nss_tx_status_t nss_status;
 
 	spin_lock(&nss_capwapmgr_acl_spinlock);
-	if (global.trustsec_rx_vp_configured) {
+	if (global->trustsec_rx_vp_configured) {
 		spin_unlock(&nss_capwapmgr_acl_spinlock);
 		nss_capwapmgr_info("Trusec rx vp already configured\n");
 		return true;
 	}
 
-	if (global.trustsec_rx_vp_config_in_progress) {
+	if (global->trustsec_rx_vp_config_in_progress) {
 		spin_unlock(&nss_capwapmgr_acl_spinlock);
 		nss_capwapmgr_info("Trusec rx vp config in progress\n");
 		return false;
 	}
 
-	global.trustsec_rx_vp_config_in_progress = true;
+	global->trustsec_rx_vp_config_in_progress = true;
 	spin_unlock(&nss_capwapmgr_acl_spinlock);
 
 	int_ndev = alloc_netdev(0, "trustsecint",
@@ -1656,12 +1656,12 @@ static bool nss_capwapmgr_trustsec_rx_vp_config(void)
 		goto fail2;
 	}
 
-	global.trustsec_rx_internal_ndev = int_ndev;
-	global.trustsec_rx_vp_num = vp_num;
+	global->trustsec_rx_internal_ndev = int_ndev;
+	global->trustsec_rx_vp_num = vp_num;
 
 	spin_lock(&nss_capwapmgr_acl_spinlock);
-	global.trustsec_rx_vp_configured = true;
-	global.trustsec_rx_vp_config_in_progress = false;
+	global->trustsec_rx_vp_configured = true;
+	global->trustsec_rx_vp_config_in_progress = false;
 	spin_unlock(&nss_capwapmgr_acl_spinlock);
 	return true;
 fail2:
@@ -1669,7 +1669,7 @@ fail2:
 fail1:
 	free_netdev(int_ndev);
 	spin_lock(&nss_capwapmgr_acl_spinlock);
-	global.trustsec_rx_vp_config_in_progress = false;
+	global->trustsec_rx_vp_config_in_progress = false;
 	spin_unlock(&nss_capwapmgr_acl_spinlock);
 
 	return false;
@@ -1695,7 +1695,7 @@ static bool nss_capwapmgr_trustsec_rx_acl_config(void)
 		return false;
 	}
 
-	vp_num = global.trustsec_rx_vp_num;
+	vp_num = global->trustsec_rx_vp_num;
 	/*
 	 * Create the acl list to handle trustsec_traffic.
 	 */
@@ -1790,9 +1790,9 @@ static bool nss_capwapmgr_dscp_acl_init(void)
 	 */
 	for (i = 0; i < NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT; i++) {
 		for (j = 0; j < NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST; j++) {
-			global.acl_list[i].rule[j].uid = uid++;
-			global.acl_list[i].rule[j].rule_id = j;
-			global.acl_list[i].rule[j].list_id = i;
+			global->acl_list[i].rule[j].uid = uid++;
+			global->acl_list[i].rule[j].rule_id = j;
+			global->acl_list[i].rule[j].list_id = i;
 		}
 	}
 
@@ -1975,8 +1975,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_trustsec_rx_acl_rule_unbind(int32_t 
 	sw_error_t sw_err;
 	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
 	uint32_t list_id = NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID;
-	atomic_t *tunnel_count = &global.trustsec_tunnel_count[port_num - 1];
-	atomic_t *acl_req_count = &global.trustsec_acl_rule_create_req;
+	atomic_t *tunnel_count = &global->trustsec_tunnel_count[port_num - 1];
+	atomic_t *acl_req_count = &global->trustsec_acl_rule_create_req;
 
 	/*
 	 * Unbind the acl rule if its the last tunnel to be assocaited to the specific port.
@@ -2011,8 +2011,8 @@ static nss_capwapmgr_status_t nss_capwapmgr_trustsec_rx_acl_rule_bind(int32_t po
 	sw_error_t sw_err;
 	uint32_t dev_id = NSS_CAPWAPMGR_DEV_ID;
 	uint32_t list_id = NSS_CAPWAPMGR_ACL_TRUSTSEC_LIST_ID;
-	atomic_t *tunnel_count = &global.trustsec_tunnel_count[port_num - 1];
-	atomic_t *acl_req_count = &global.trustsec_acl_rule_create_req;
+	atomic_t *tunnel_count = &global->trustsec_tunnel_count[port_num - 1];
+	atomic_t *acl_req_count = &global->trustsec_acl_rule_create_req;
 
 	/*
 	 * Configure the trustsec rx vp and acl related objects when this api
@@ -2319,7 +2319,7 @@ static nss_capwapmgr_status_t nss_capwapmgr_tunnel_create_common(struct net_devi
 		 * Enable ppe to host mode.
 		 * This mode is not supported for trustsec enabled tunnels.
 		 */
-		if (global.ppe2host) {
+		if (global->ppe2host) {
 			vpai.src_cb = &nss_capwapmgr_receive_pkt_ppe_vp;
 			vpai.src_cb_data = (void*)dev;
 			capwap_rule->enabled_features |= NSS_CAPWAPMGR_FEATURE_PPE_TO_HOST_ENABLED;
@@ -2750,7 +2750,7 @@ static ssize_t nss_capwapmgr_ppe2host_read(struct file *f, char *buf, size_t cou
 	int len;
 	char lbuf[26];
 
-	len = snprintf(lbuf, sizeof(lbuf), "capwap ppe2host %s\n", (global.ppe2host) ? ("enabled") : ("disabled"));
+	len = snprintf(lbuf, sizeof(lbuf), "capwap ppe2host %s\n", (global->ppe2host) ? ("enabled") : ("disabled"));
 
 	return simple_read_from_buffer(buf, count, offset, lbuf, len);
 }
@@ -2778,7 +2778,7 @@ static ssize_t nss_capwapmgr_ppe2host_write(struct file *f, const char *buffer, 
 		return status;
 	}
 
-	global.ppe2host = res;
+	global->ppe2host = res;
 	return len;
 }
 
@@ -2816,15 +2816,15 @@ static bool nss_capwapmgr_dentry_init(void)
 		return false;
 	}
 
-	global.capwap_dentry = debugfs_create_dir("capwap", clients);
-	if (!global.capwap_dentry) {
+	global->capwap_dentry = debugfs_create_dir("capwap", clients);
+	if (!global->capwap_dentry) {
 		nss_capwapmgr_warn("Failed to create capwap debugfs under qca-nss-ppe/clients/");
 		return false;
 	}
 
-	if (!debugfs_create_file("ppe2host", (S_IRUGO | S_IWUSR), global.capwap_dentry, NULL, &nss_capwapmgr_ppe2host_file_fops)) {
+	if (!debugfs_create_file("ppe2host", (S_IRUGO | S_IWUSR), global->capwap_dentry, NULL, &nss_capwapmgr_ppe2host_file_fops)) {
 		nss_capwapmgr_warn("Failed to create debugfs entry for ppe2host");
-		debugfs_remove_recursive(global.capwap_dentry);
+		debugfs_remove_recursive(global->capwap_dentry);
 		return false;
 	}
 
@@ -3842,11 +3842,11 @@ nss_capwapmgr_status_t nss_capwapmgr_tunnel_destroy(struct net_device *dev, uint
 	}
 
 	if (nss_capwap_get_stats(if_num_inner, &stats)) {
-		nss_capwapmgr_tunnel_save_stats(&global.tunneld_stats, &stats);
+		nss_capwapmgr_tunnel_save_stats(&global->tunneld_stats, &stats);
 	}
 
 	if (nss_capwap_get_stats(if_num_outer, &stats)) {
-		nss_capwapmgr_tunnel_save_stats(&global.tunneld_stats, &stats);
+		nss_capwapmgr_tunnel_save_stats(&global->tunneld_stats, &stats);
 	}
 
 	/*
@@ -4100,12 +4100,12 @@ nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_destroy(uint8_t id)
 	uint8_t rule_nr = NSS_CAPWAPMGR_RULE_NR;
 	uint8_t group_id = NSS_CAPWAPMGR_GROUP_ID;
 	uint8_t i, j, list_id, v4_rule_id, v6_rule_id, dscp_value, dscp_mask;
-	atomic_t *acl_req_count = &global.dscp_acl_rule_create_req;
+	atomic_t *acl_req_count = &global->dscp_acl_rule_create_req;
 
 	for (i = 0; i < NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT; i++) {
 		for (j = 0; j < NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST; j++) {
-			if (global.acl_list[i].rule[j].uid == id) {
-				acl_rule = &global.acl_list[i].rule[j];
+			if (global->acl_list[i].rule[j].uid == id) {
+				acl_rule = &global->acl_list[i].rule[j];
 				goto found;
 			}
 		}
@@ -4193,7 +4193,7 @@ nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_create(uint8_t dscp_value, uint8_
 	int8_t err, fail_dscp;
 	int8_t uid = -1;
 	uint32_t v_port;
-	atomic_t *acl_req_count = &global.dscp_acl_rule_create_req;
+	atomic_t *acl_req_count = &global->dscp_acl_rule_create_req;
 
 	if (atomic_inc_return(acl_req_count) == 1) {
 		if(!nss_capwapmgr_dscp_acl_init()) {
@@ -4223,13 +4223,13 @@ nss_capwapmgr_status_t nss_capwapmgr_dscp_rule_create(uint8_t dscp_value, uint8_
 	 */
 	for (i = 0; i < NSS_CAPWAPMGR_ACL_DSCP_LIST_CNT; i++) {
 		for (j = 0; j < NSS_CAPWAPMGR_ACL_DSCP_RULES_PER_LIST; j++) {
-			if (global.acl_list[i].rule[j].in_use) {
+			if (global->acl_list[i].rule[j].in_use) {
 				continue;
 			}
 
-			uid = global.acl_list[i].rule[j].uid;
-			rid = global.acl_list[i].rule[j].rule_id;
-			lid = global.acl_list[i].rule[j].list_id;
+			uid = global->acl_list[i].rule[j].uid;
+			rid = global->acl_list[i].rule[j].rule_id;
+			lid = global->acl_list[i].rule[j].list_id;
 			goto found;
 		}
 	}
@@ -4292,7 +4292,7 @@ found:
 	 * Redirect trustsec + dscp packets to the trustsec VP
 	 */
 	FAL_ACTION_FLG_SET(acl_rule->action_flg, FAL_ACL_ACTION_REDPT);
-	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, global.trustsec_rx_vp_num);
+	v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, global->trustsec_rx_vp_num);
 	acl_rule->ports = v_port;
 
 	/*
@@ -4364,9 +4364,9 @@ found:
 	/*
 	 * Set ACL as in_use and save dscp value and mask.
 	 */
-	global.acl_list[lid].rule[rid].in_use = true;
-	global.acl_list[lid].rule[rid].dscp_value = dscp_value;
-	global.acl_list[lid].rule[rid].dscp_mask = dscp_mask;
+	global->acl_list[lid].rule[rid].in_use = true;
+	global->acl_list[lid].rule[rid].dscp_value = dscp_value;
+	global->acl_list[lid].rule[rid].dscp_mask = dscp_mask;
 
 	/*
 	 * Prioritize packets with the dscp value is dscp_value for non trustsec packets.
@@ -4474,6 +4474,15 @@ int __init nss_capwapmgr_init_module(void)
 	nss_capwapmgr_info("module (platform - IPQ9574, %s) loaded\n",
 			   NSS_PPE_BUILD_ID);
 
+	/*
+	* Allocate global pointer for nss_capwapmgr_global
+	*/
+	global = kzalloc(sizeof(struct nss_capwapmgr_global), GFP_KERNEL);
+	if(!global) {
+		nss_capwapmgr_warn("Failed to allocate nss_capwapmgr_global structure\n");
+		return -EINVAL;
+	}
+
 #if defined(NSS_CAPWAPMGR_ONE_NETDEV)
 	/*
 	 * In this code, we create a single netdev for all the CAPWAP
@@ -4482,6 +4491,7 @@ int __init nss_capwapmgr_init_module(void)
 	nss_capwapmgr_ndev = nss_capwapmgr_netdev_create();
 	if (!nss_capwapmgr_ndev) {
 		nss_capwapmgr_warn("Couldn't create capwap interface\n");
+		kfree(global);
 		return -1;
 	}
 #endif
@@ -4490,12 +4500,14 @@ int __init nss_capwapmgr_init_module(void)
 	}
 
 	register_netdevice_notifier(&nss_capwapmgr_netdev_notifier);
-	memset(&global.tunneld_stats, 0, sizeof(struct nss_capwap_tunnel_stats));
+	memset(&global->tunneld_stats, 0, sizeof(struct nss_capwap_tunnel_stats));
 
 	/*
 	 * ppe2host is disabled by default.
 	 */
-	global.ppe2host = false;
+	global->ppe2host = false;
+
+	nss_ppe_capwapmgr_minidump_log(global, sizeof(struct nss_capwapmgr_global), "nss_capwapmgr_global");
 
 	return 0;
 }
@@ -4534,13 +4546,17 @@ void __exit nss_capwapmgr_exit_module(void)
 
 	nss_capwapmgr_ndev = NULL;
 #endif
-	if (global.capwap_dentry) {
-		debugfs_remove_recursive(global.capwap_dentry);
+	if (global->capwap_dentry) {
+		debugfs_remove_recursive(global->capwap_dentry);
 	}
 
 	unregister_netdevice_notifier(&nss_capwapmgr_netdev_notifier);
 
 	nss_capwapmgr_trustsec_rx_vp_unconfig();
+
+	nss_ppe_capwapmgr_minidump_free(global, "nss_capwapmgr_global");
+	kfree(global);
+
 	nss_capwapmgr_info("module unloaded\n");
 }
 

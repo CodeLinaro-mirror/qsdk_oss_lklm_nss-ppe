@@ -891,6 +891,7 @@ static void nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx_cleanup(struct kref *kref)
 	}
 	spin_unlock(&vlan_mgr_ctx.lock);
 
+	nss_ppe_vlan_mgr_minidump_free(dst_xlate_ctx, "nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx");
 	kfree(dst_xlate_ctx);
 }
 
@@ -918,6 +919,8 @@ static struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx *nss_ppe_vlan_mgr_wlanif_dst
 		kfree(xlate_ctx);
 		return NULL;
 	}
+
+	nss_ppe_vlan_mgr_minidump_log(xlate_ctx, sizeof(struct nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx), "nss_ppe_vlan_mgr_wlanif_dst_xlate_ctx");
 
 	INIT_LIST_HEAD(&xlate_ctx->list);
 	xlate_ctx->vp_num = vp_num;
@@ -1345,6 +1348,7 @@ static void nss_ppe_vlan_mgr_instance_free(struct kref *kref)
 #endif
 		nss_ppe_vlan_mgr_deconfigure_vp(v);
 		nss_ppe_vlan_mgr_free_vp(v->xlate_info.port_id);
+		nss_ppe_vlan_mgr_minidump_free(v, "nss_vlan_pvt");
 		kfree(v);
 		return;
 	}
@@ -1409,6 +1413,7 @@ static void nss_ppe_vlan_mgr_instance_free(struct kref *kref)
 		ppe_drv_iface_deref(v->iface);
 		v->iface = NULL;
 	}
+	nss_ppe_vlan_mgr_minidump_free(v, "nss_vlan_pvt");
 	kfree(v);
 }
 
@@ -1757,6 +1762,7 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(struct net_device *
 	}
 
 vlan_over_bridge:
+	nss_ppe_vlan_mgr_minidump_log(v, sizeof(*v), "nss_vlan_pvt");
 	v->mtu = dev->mtu;
 	ether_addr_copy(v->dev_addr, dev->dev_addr);
 	v->ifindex = dev->ifindex;
@@ -2794,6 +2800,8 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_dsa_create_instance(struct net_devi
 		kfree(v);
 		return NULL;
 	}
+
+	nss_ppe_vlan_mgr_minidump_log(v, sizeof(*v), "nss_vlan_pvt");
 
 	v->mtu = dev->mtu;
 	ether_addr_copy(v->dev_addr, dev->dev_addr);

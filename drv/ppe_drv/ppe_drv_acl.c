@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -88,7 +88,7 @@ static int16_t ppe_drv_acl_list_id_get(ppe_drv_acl_ipo_t type)
 {
 	int16_t id;
 	int16_t list_id_start, list_id_end;
-	struct ppe_drv_acl *acl = ppe_drv_gbl.acl;
+	struct ppe_drv_acl *acl = ppe_drv_gbl->acl;
 
 	if (type == PPE_DRV_ACL_IPO) {
 		list_id_start = PPE_DRV_ACL_LIST_ID_IPO_START;
@@ -114,7 +114,7 @@ static int16_t ppe_drv_acl_list_id_get(ppe_drv_acl_ipo_t type)
  */
 static void ppe_drv_acl_list_id_return(int16_t id)
 {
-	struct ppe_drv_acl *acl = ppe_drv_gbl.acl;
+	struct ppe_drv_acl *acl = ppe_drv_gbl->acl;
 
 	acl->list_id[id].ctx = NULL;
 	acl->list_id[id].list_id_state = PPE_DRV_ACL_LIST_ID_FREE;
@@ -136,7 +136,7 @@ void ppe_drv_acl_destroy(struct ppe_drv_acl_ctx *ctx)
 	 * Update the used slice bitmap in the row.
 	 */
 	sw_error_t error;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	if (ctx->rule_valid) {
@@ -987,7 +987,7 @@ void ppe_drv_acl_stats_update(struct ppe_drv_acl_ctx *ctx)
  */
 void ppe_drv_acl_sc_return(uint8_t sc)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 	uint8_t i;
 
@@ -1012,7 +1012,7 @@ EXPORT_SYMBOL(ppe_drv_acl_sc_return);
  */
 uint8_t ppe_drv_acl_sc_get()
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 	uint8_t i;
 
@@ -1038,7 +1038,7 @@ EXPORT_SYMBOL(ppe_drv_acl_sc_get);
  */
 bool ppe_drv_acl_process_skbuff(struct ppe_drv_acl_metadata *acl_info, struct sk_buff *skb)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = NULL;
 	ppe_drv_acl_rule_callback_t acl_rule_cb = NULL;
 	void *app_data = NULL;
@@ -1070,7 +1070,7 @@ EXPORT_SYMBOL(ppe_drv_acl_process_skbuff);
  */
 void ppe_drv_acl_hw_info_get(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_acl_hw_info *hw_info)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	hw_info->hw_rule_id = ctx->fal_rule.hw_info.hw_rule_id;
@@ -1088,7 +1088,7 @@ ppe_drv_ret_t ppe_drv_acl_configure(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 {
 	sw_error_t error;
 	fal_acl_bind_obj_t bind_obj;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	if (!ppe_drv_acl_fill(ctx, info)) {
@@ -1138,7 +1138,7 @@ EXPORT_SYMBOL(ppe_drv_acl_configure);
  */
 bool ppe_drv_acl_enable_mirror_capture_core(uint8_t core_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 	ppe_drv_acl_mirror_core_select_cb_t mirror_core_cb;
 	void *mirror_core_app_data;
@@ -1205,7 +1205,7 @@ struct ppe_drv_acl_ctx *ppe_drv_acl_alloc(ppe_drv_acl_ipo_t type, uint8_t num_sl
 	sw_error_t error;
 	int16_t list_id = -1;
 	struct ppe_drv_acl_ctx *ctx = NULL;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 
 	ctx = ppe_drv_acl_ctx_alloc();
@@ -1287,7 +1287,7 @@ EXPORT_SYMBOL(ppe_drv_acl_alloc);
  */
 void ppe_drv_acl_get_hw_stats(struct ppe_drv_acl_ctx *ctx, uint64_t *pkts, uint64_t *bytes)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	*pkts = atomic64_read(&ctx->total_pkts);
@@ -1302,7 +1302,7 @@ EXPORT_SYMBOL(ppe_drv_acl_get_hw_stats);
  */
 void ppe_drv_acl_mirror_core_select_unregister_cb(void)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 
 	spin_lock_bh(&p->lock);
@@ -1318,7 +1318,7 @@ EXPORT_SYMBOL(ppe_drv_acl_mirror_core_select_unregister_cb);
  */
 void ppe_drv_acl_mirror_core_select_register_cb(ppe_drv_acl_mirror_core_select_cb_t cb, void *app_data)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 
 	spin_lock_bh(&p->lock);
@@ -1334,7 +1334,7 @@ EXPORT_SYMBOL(ppe_drv_acl_mirror_core_select_register_cb);
  */
 void ppe_drv_acl_rule_unregister_cb()
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 
 	spin_lock_bh(&p->lock);
@@ -1350,7 +1350,7 @@ EXPORT_SYMBOL(ppe_drv_acl_rule_unregister_cb);
  */
 void ppe_drv_acl_rule_register_cb(ppe_drv_acl_rule_callback_t acl_cb, void *app_data)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 
 	spin_lock_bh(&p->lock);
@@ -1366,7 +1366,7 @@ EXPORT_SYMBOL(ppe_drv_acl_rule_register_cb);
  */
 void ppe_drv_acl_flow_unregister_cb()
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 
 	spin_lock_bh(&p->lock);
@@ -1383,7 +1383,7 @@ EXPORT_SYMBOL(ppe_drv_acl_flow_unregister_cb);
  */
 void ppe_drv_acl_flow_register_cb(ppe_drv_acl_flow_callback_t add_cb, ppe_drv_acl_flow_callback_t del_cb, void *app_data)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl = p->acl;
 
 	spin_lock_bh(&p->lock);
@@ -1400,7 +1400,8 @@ EXPORT_SYMBOL(ppe_drv_acl_flow_register_cb);
  */
 void ppe_drv_acl_entries_free(struct ppe_drv_acl *acl)
 {
-	vfree(acl);
+	nss_ppe_drv_minidump_free(acl, "ppe_drv_acl");
+	kfree(acl);
 }
 
 /*
@@ -1409,16 +1410,18 @@ void ppe_drv_acl_entries_free(struct ppe_drv_acl *acl)
  */
 struct ppe_drv_acl *ppe_drv_acl_entries_alloc(void)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_acl *acl;
 	uint8_t i;
 	int id;
 
-	acl = vzalloc(sizeof(struct ppe_drv_acl));
+	acl = kzalloc(sizeof(struct ppe_drv_acl), GFP_KERNEL);
 	if (!acl) {
 		ppe_drv_warn("%p: Failed to allocate ACL table entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(acl, sizeof(struct ppe_drv_acl), "ppe_drv_acl");
 
 	/*
 	 * Initialize list_id.

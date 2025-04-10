@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -23,6 +23,10 @@
 
 #include <net/vxlan.h>
 #include <nss_ppe_vxlanmgr.h>
+
+#ifdef CONFIG_QCA_MINIDUMP
+#include <soc/qcom/ctx-save.h>
+#endif
 
 #define NSS_PPE_VXLANMGR_DST_PORT_MIN 1
 #define NSS_PPE_VXLANMGR_DST_PORT_MAX 65535
@@ -156,6 +160,28 @@ struct nss_ppe_vxlanmgr_tun_ctx {
 struct nss_ppe_vxlanmgr_nss_dev_priv {
 	int pdev_ifindex;	/* Linux-kernel/Parent netdevice index */
 };
+
+/*
+ * nss_ppe_vxlanmgr_minidump_log()
+ *	To log data structures into minidump output
+ */
+static inline void nss_ppe_vxlanmgr_minidump_log(void *start_addr, uint64_t size, const char *name) {
+#ifdef CONFIG_QCA_MINIDUMP
+	if (minidump_add_segments((uint64_t)(uintptr_t)(start_addr), size, QCA_WDT_LOG_DUMP_TYPE_MOD, name, MINIDUMP_CRASH_TYPE_NSS, "qca_nss_ppe_vxlanmgr") != 0)
+		pr_warn("minidump_log failed for structure type %s at address %p\n", name, start_addr);
+#endif
+}
+
+/*
+ * nss_ppe_vxlanmgr_minidump_free()
+ *	To unregister data structures from minidump tlv
+ */
+static inline void nss_ppe_vxlanmgr_minidump_free(void *start_addr, const char *name) {
+#ifdef CONFIG_QCA_MINIDUMP
+	if (minidump_remove_segments((uint64_t)(uintptr_t)(start_addr)) != 0)
+		pr_warn("minidump_free failed for structure %s at address %p\n", name, start_addr);
+#endif
+}
 
 /*
  * VxLAN database helper function

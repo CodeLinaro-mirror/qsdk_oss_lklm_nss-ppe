@@ -24,7 +24,7 @@
  */
 bool ppe_drv_tun_prgm_prsr_gre_deconfigure(struct ppe_drv_tun_prgm_prsr *pgm_psr)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_tun_prgm_prsr_gre *gre_data =  &pgm_psr->ctx.data.gre;
 
 	ppe_drv_assert((pgm_psr->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_GRE), "program mode not GRE for program type : %d", pgm_psr->parser_idx);
@@ -74,7 +74,7 @@ bool ppe_drv_tun_prgm_prsr_gre_deconfigure(struct ppe_drv_tun_prgm_prsr *pgm_psr
  */
 bool ppe_drv_tun_prgm_prsr_gre_configure(struct ppe_drv_tun_prgm_prsr *program_parser)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint8_t parser_idx = program_parser->parser_idx;
 	struct ppe_drv_tun_prgm_prsr_cfg *cfg = &program_parser->ctx.prsr_cfg;
 	struct ppe_drv_tun_prgm_prsr_decap_key *key = &program_parser->ctx.key;

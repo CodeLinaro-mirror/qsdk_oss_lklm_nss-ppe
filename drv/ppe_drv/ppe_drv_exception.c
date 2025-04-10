@@ -379,7 +379,7 @@ int ppe_drv_exception_l4_checksum_enable()
  */
 void ppe_drv_exception_init(void)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	const uint8_t exception_max = ppe_drv_exception_max();
 	const uint8_t l4_except_max = ppe_drv_exception_tcpflag_max();
 	fal_l4_excep_parser_ctrl tcp_except_ctrl = {0};

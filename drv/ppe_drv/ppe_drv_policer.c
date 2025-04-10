@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -34,7 +34,7 @@
  */
 static void ppe_drv_policer_acl_dump(struct ppe_drv_policer_acl *pol)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_policer_config_t pol_cfg = {0};
 	fal_policer_action_t action = {0};
 	sw_error_t err = SW_OK;
@@ -96,7 +96,7 @@ static void ppe_drv_policer_acl_dump(struct ppe_drv_policer_acl *pol)
  */
 static void ppe_drv_policer_port_dump(struct ppe_drv_policer_port *pol)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_policer_config_t pol_cfg = {0};
 	fal_policer_action_t action = {0};
 	sw_error_t err = SW_OK;
@@ -170,7 +170,7 @@ static void ppe_drv_policer_port_free(struct ppe_drv_policer_port *pol)
 {
 	fal_policer_config_t pol_cfg = {0};
 	fal_policer_action_t action = {0};
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	sw_error_t err = SW_OK;
 
 	err = fal_port_policer_entry_set(PPE_DRV_SWITCH_ID, pol->index, &pol_cfg, &action);
@@ -192,7 +192,7 @@ static void ppe_drv_policer_acl_free(struct ppe_drv_policer_acl *pol)
 {
 	fal_policer_config_t pol_cfg = {0};
 	fal_policer_action_t action = {0};
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	sw_error_t err = SW_OK;
 
 	err = fal_acl_policer_entry_set(PPE_DRV_SWITCH_ID, pol->acl_index, &pol_cfg, &action);
@@ -213,7 +213,7 @@ static void ppe_drv_policer_acl_free(struct ppe_drv_policer_acl *pol)
  */
 uint16_t ppe_drv_policer_get_policer_id(struct ppe_drv_policer_acl *ctx)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint16_t index;
 
 	spin_lock_bh(&p->lock);
@@ -230,7 +230,7 @@ EXPORT_SYMBOL(ppe_drv_policer_get_policer_id);
  */
 uint16_t ppe_drv_policer_get_port_id(struct ppe_drv_policer_port *ctx)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint16_t index;
 
 	spin_lock_bh(&p->lock);
@@ -247,7 +247,7 @@ EXPORT_SYMBOL(ppe_drv_policer_get_port_id);
  */
 void ppe_drv_policer_user2hw_id_map(struct ppe_drv_policer_acl *acl_ctx, int index)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_policer_ctx *ctx = p->pol_ctx;
 
 	spin_lock_bh(&p->lock);
@@ -262,7 +262,7 @@ EXPORT_SYMBOL(ppe_drv_policer_user2hw_id_map);
  */
 int ppe_drv_policer_user2hw_id(int index)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_policer_ctx *ctx = p->pol_ctx;
 	int hw_index;
 
@@ -279,7 +279,7 @@ int ppe_drv_policer_user2hw_id(int index)
  */
 void ppe_drv_policer_port_destroy(struct ppe_drv_policer_port *ctx)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	if (!ctx->in_use) {
@@ -299,7 +299,7 @@ EXPORT_SYMBOL(ppe_drv_policer_port_destroy);
  */
 void ppe_drv_policer_acl_destroy(struct ppe_drv_policer_acl *ctx)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	if (!ctx->in_use) {
@@ -322,7 +322,7 @@ struct ppe_drv_policer_port *ppe_drv_policer_port_create(struct ppe_drv_policer_
 	struct ppe_drv_policer_rule_create_port_info *pinfo = &create->msg.port_info;
 	struct ppe_drv_policer_rule_create_action *rule_action = &pinfo->action;
 	struct ppe_drv_policer_port *pol = NULL;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 
 	sw_error_t err = SW_OK;
@@ -452,7 +452,7 @@ struct ppe_drv_policer_acl *ppe_drv_policer_acl_create(struct ppe_drv_policer_ru
 	struct ppe_drv_policer_rule_create_acl_info *ainfo = &create->msg.acl_info;
 	struct ppe_drv_policer_rule_create_action *rule_action = &ainfo->action;
 	struct ppe_drv_policer_acl *pol = NULL;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_policer_config_t pol_cfg = {0};
 	fal_policer_action_t action = {0};
 	sw_error_t err = SW_OK;
@@ -563,7 +563,7 @@ EXPORT_SYMBOL(ppe_drv_policer_acl_create);
  */
 void ppe_drv_policer_flow_unregister_cb(void)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_policer_ctx *ctx = p->pol_ctx;
 
 	spin_lock_bh(&p->lock);
@@ -580,7 +580,7 @@ EXPORT_SYMBOL(ppe_drv_policer_flow_unregister_cb);
  */
 void ppe_drv_policer_flow_register_cb(ppe_drv_policer_flow_callback_t add_cb, ppe_drv_policer_flow_callback_t del_cb, void *app_data)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_policer_ctx *ctx = p->pol_ctx;
 
 	spin_lock_bh(&p->lock);
@@ -597,7 +597,8 @@ EXPORT_SYMBOL(ppe_drv_policer_flow_register_cb);
  */
 void ppe_drv_policer_entries_free(struct ppe_drv_policer_ctx *ctx)
 {
-	vfree(ctx);
+	nss_ppe_drv_minidump_free(ctx, "ppe_drv_policer_ctx");
+	kfree(ctx);
 }
 
 /*
@@ -609,14 +610,16 @@ struct ppe_drv_policer_ctx *ppe_drv_policer_entries_alloc(void)
 	struct ppe_drv_policer_ctx *pol;
 	struct ppe_drv_policer_acl *acl;
 	struct ppe_drv_policer_port *port;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint16_t i;
 
-	pol = vzalloc(sizeof(struct ppe_drv_policer_ctx));
+	pol = kzalloc(sizeof(struct ppe_drv_policer_ctx), GFP_KERNEL);
 	if (!pol) {
 		ppe_drv_warn("%p: failed to allocate policer entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(pol, sizeof(struct ppe_drv_policer_ctx), "ppe_drv_policer_ctx");
 
 	/*
 	 * Initialize interface values

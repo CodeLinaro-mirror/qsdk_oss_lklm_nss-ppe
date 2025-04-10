@@ -74,7 +74,7 @@ bool ppe_drv_iface_deref_internal(struct ppe_drv_iface *iface)
  */
 bool ppe_drv_iface_deref(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	bool ret;
 
 	spin_lock_bh(&p->lock);
@@ -91,7 +91,7 @@ EXPORT_SYMBOL(ppe_drv_iface_deref);
  */
 struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 
 	if (idx < 0 || idx >= p->iface_num) {
@@ -133,7 +133,7 @@ EXPORT_SYMBOL(ppe_drv_iface_get_type);
  */
 struct net_device *ppe_drv_dev_get_by_iface_idx(ppe_drv_iface_t index)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 	struct net_device *dev = NULL;
 
@@ -162,7 +162,7 @@ EXPORT_SYMBOL(ppe_drv_dev_get_by_iface_idx);
  */
 ppe_drv_iface_t ppe_drv_iface_idx_get_by_dev(struct net_device *dev)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 	int i, index = -1;
 
@@ -190,7 +190,7 @@ EXPORT_SYMBOL(ppe_drv_iface_idx_get_by_dev);
  */
 struct ppe_drv_iface *ppe_drv_iface_get_by_dev(struct net_device *dev)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 	int i, index = -1;
 
@@ -225,7 +225,7 @@ EXPORT_SYMBOL(ppe_drv_iface_get_by_dev);
  */
 struct ppe_drv_iface *ppe_drv_iface_get_by_dev_internal(struct net_device *dev)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 	int i, index = -1;
 
@@ -276,7 +276,7 @@ struct ppe_drv_iface *ppe_drv_iface_base_get(struct ppe_drv_iface *iface)
  */
 void ppe_drv_iface_base_set(struct ppe_drv_iface *iface, struct ppe_drv_iface *base_if)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	if (iface->base_if) {
 		ppe_drv_warn("%p: base_if already set for iface(%p)\n", p, iface);
@@ -318,7 +318,7 @@ struct ppe_drv_iface *ppe_drv_iface_parent_get(struct ppe_drv_iface *iface)
  */
 bool ppe_drv_iface_parent_set(struct ppe_drv_iface *iface, struct ppe_drv_iface *parent)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	if (iface->parent) {
 		ppe_drv_warn("%p: parent already set for iface(%p)\n", p, iface);
@@ -385,7 +385,7 @@ struct ppe_drv_port *ppe_drv_iface_port_get(struct ppe_drv_iface *iface)
  */
 bool ppe_drv_iface_port_set(struct ppe_drv_iface *iface, struct ppe_drv_port *port)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	if (iface->port) {
 		ppe_drv_warn("%p: port already set for iface(%p)\n", p, iface);
@@ -551,7 +551,7 @@ bool ppe_drv_iface_l3_if_set(struct ppe_drv_iface *iface, struct ppe_drv_l3_if *
 bool ppe_drv_iface_udp_zero_csum_action_set_internal(struct ppe_drv_iface *iface, ppe_drv_iface_zero_csum_action_t action)
 {
 	fal_udp_zero_csum_cmd_t fal_action;
-	struct ppe_drv *p __maybe_unused = &ppe_drv_gbl;
+	struct ppe_drv *p __maybe_unused = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *vp;
 
@@ -604,7 +604,7 @@ bool ppe_drv_iface_udp_zero_csum_action_set_internal(struct ppe_drv_iface *iface
  */
 bool ppe_drv_iface_udp_zero_csum_action_set(struct ppe_drv_iface *iface, ppe_drv_iface_zero_csum_action_t action)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	bool status;
 
 	spin_lock_bh(&p->lock);
@@ -621,7 +621,7 @@ EXPORT_SYMBOL(ppe_drv_iface_udp_zero_csum_action_set);
  */
 ppe_drv_ret_t ppe_drv_iface_eip_set(struct ppe_drv_iface *iface, ppe_drv_eip_service_t type, uint32_t features)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *vp;
 	int32_t queue_id;
 
@@ -688,7 +688,7 @@ EXPORT_SYMBOL(ppe_drv_iface_eip_set);
  */
 ppe_drv_ret_t ppe_drv_iface_mtu_disable(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	ppe_drv_ret_t status = PPE_DRV_RET_SUCCESS;
 
 	spin_lock_bh(&p->lock);
@@ -773,7 +773,7 @@ EXPORT_SYMBOL(ppe_drv_iface_mtu_disable);
  */
 ppe_drv_ret_t ppe_drv_iface_mtu_set(struct ppe_drv_iface *iface, uint16_t mtu)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	ppe_drv_ret_t status = PPE_DRV_RET_SUCCESS;
 
 	spin_lock_bh(&p->lock);
@@ -876,7 +876,7 @@ EXPORT_SYMBOL(ppe_drv_iface_mtu_set);
  */
 ppe_drv_ret_t ppe_drv_iface_mac_addr_clear(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	ppe_drv_ret_t status = PPE_DRV_RET_SUCCESS;
 
 	spin_lock_bh(&p->lock);
@@ -980,7 +980,7 @@ EXPORT_SYMBOL(ppe_drv_iface_mac_addr_clear);
  */
 ppe_drv_ret_t ppe_drv_iface_mac_addr_set(struct ppe_drv_iface *iface, uint8_t *mac_addr)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	ppe_drv_ret_t status = PPE_DRV_RET_SUCCESS;
 
 	spin_lock_bh(&p->lock);
@@ -1099,7 +1099,7 @@ EXPORT_SYMBOL(ppe_drv_iface_mac_addr_set);
  */
 ppe_drv_ret_t ppe_drv_iface_ucast_queue_get(struct ppe_drv_iface *iface, uint8_t *queue_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 
 	spin_lock_bh(&p->lock);
@@ -1123,7 +1123,7 @@ EXPORT_SYMBOL(ppe_drv_iface_ucast_queue_get);
  */
 ppe_drv_ret_t ppe_drv_iface_ucast_queue_set(struct ppe_drv_iface *iface, uint8_t queue_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 
 	spin_lock_bh(&p->lock);
@@ -1153,7 +1153,7 @@ EXPORT_SYMBOL(ppe_drv_iface_ucast_queue_set);
  */
 struct ppe_drv_iface *ppe_drv_iface_alloc(enum ppe_drv_iface_type type, struct net_device *dev)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface = NULL;
 	uint16_t i;
 
@@ -1205,7 +1205,7 @@ EXPORT_SYMBOL(ppe_drv_iface_alloc);
  */
 bool ppe_drv_iface_check_if_vp_flow(ppe_drv_iface_t rx_if)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *rx_pp = NULL;
 	struct ppe_drv_iface *if_rx;
 
@@ -1241,7 +1241,7 @@ EXPORT_SYMBOL(ppe_drv_iface_check_if_vp_flow);
 bool ppe_drv_iface_check_flow_offload_enabled(ppe_drv_iface_t rx_if,
 						ppe_drv_iface_t tx_if)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *tx_pp = NULL;
 	struct ppe_drv_port *rx_pp = NULL;
 	struct ppe_drv_iface *if_rx, *if_tx;
@@ -1324,7 +1324,7 @@ EXPORT_SYMBOL(ppe_drv_iface_check_flow_offload_enabled);
  */
 ppe_drv_iface_t ppe_drv_iface_get_index(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	ppe_drv_iface_t index;
 
 	spin_lock_bh(&p->lock);
@@ -1340,7 +1340,8 @@ ppe_drv_iface_t ppe_drv_iface_get_index(struct ppe_drv_iface *iface)
  */
 void ppe_drv_iface_entries_free(struct ppe_drv_iface *iface)
 {
-	vfree(iface);
+	nss_ppe_drv_minidump_free(iface, "ppe_drv_iface");
+	kfree(iface);
 }
 
 /*
@@ -1350,14 +1351,16 @@ void ppe_drv_iface_entries_free(struct ppe_drv_iface *iface)
 struct ppe_drv_iface *ppe_drv_iface_entries_alloc()
 {
 	struct ppe_drv_iface *iface;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint16_t i;
 
-	iface = vzalloc(sizeof(struct ppe_drv_iface) * p->iface_num);
+	iface = kzalloc(sizeof(struct ppe_drv_iface) * p->iface_num, GFP_KERNEL);
 	if (!iface) {
 		ppe_drv_warn("%p: failed to allocate interface entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(iface, sizeof(struct ppe_drv_iface) * p->iface_num, "ppe_drv_iface");
 
 	/*
 	 * Initialize interface values

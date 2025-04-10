@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -29,7 +29,7 @@
  */
 static void ppe_drv_pppoe_dump(struct ppe_drv_pppoe *pppoe)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_pppoe_session_t pppoe_cfg;
 	sw_error_t err;
 
@@ -342,7 +342,7 @@ struct ppe_drv_l3_if *ppe_drv_pppoe_l3_if_get_and_ref(struct ppe_drv_pppoe *pppo
  */
 struct ppe_drv_l3_if *ppe_drv_pppoe_find_l3_if(uint16_t session_id, uint8_t *smac)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_pppoe *pppoe;
 	uint16_t i = 0;
 
@@ -371,7 +371,7 @@ struct ppe_drv_l3_if *ppe_drv_pppoe_find_l3_if(uint16_t session_id, uint8_t *sma
  */
 struct ppe_drv_pppoe *ppe_drv_pppoe_find_session(uint16_t session_id, uint8_t *smac)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_pppoe *pppoe;
 	uint16_t i = 0;
 
@@ -395,7 +395,7 @@ struct ppe_drv_pppoe *ppe_drv_pppoe_find_session(uint16_t session_id, uint8_t *s
  */
 struct ppe_drv_pppoe *ppe_drv_pppoe_find_session_by_tl_l3_if(struct ppe_drv_tun_l3_if *tl_l3_if)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_pppoe *pppoe;
 	uint16_t i = 0;
 
@@ -419,7 +419,7 @@ struct ppe_drv_pppoe *ppe_drv_pppoe_find_session_by_tl_l3_if(struct ppe_drv_tun_
 struct ppe_drv_pppoe *ppe_drv_pppoe_alloc(uint16_t session_id, uint8_t *smac)
 {
 	struct ppe_drv_pppoe *pppoe = NULL, *walk;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint16_t i = 0;
 
 	/*
@@ -474,7 +474,8 @@ struct ppe_drv_pppoe *ppe_drv_pppoe_alloc(uint16_t session_id, uint8_t *smac)
  */
 void ppe_drv_pppoe_entries_free(struct ppe_drv_pppoe *pppoe)
 {
-	vfree(pppoe);
+	nss_ppe_drv_minidump_free(pppoe, "ppe_drv_pppoe");
+	kfree(pppoe);
 }
 
 /*
@@ -483,15 +484,17 @@ void ppe_drv_pppoe_entries_free(struct ppe_drv_pppoe *pppoe)
  */
 struct ppe_drv_pppoe *ppe_drv_pppoe_entries_alloc()
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_pppoe *pppoe;
 	uint16_t i;
 
-	pppoe = vzalloc(sizeof(struct ppe_drv_pppoe) * p->pppoe_session_max);
+	pppoe = kzalloc(sizeof(struct ppe_drv_pppoe) * p->pppoe_session_max, GFP_KERNEL);
 	if (!pppoe) {
 		ppe_drv_warn("%p: failed to allocate pppoe entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(pppoe, sizeof(struct ppe_drv_pppoe) * p->pppoe_session_max, "ppe_drv_pppoe");
 
 	for (i = 0; i < p->pppoe_session_max; i++) {
 		pppoe[i].index = i;

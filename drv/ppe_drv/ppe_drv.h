@@ -31,6 +31,10 @@
 #include "ppe_drv_flow_dump.h"
 #include "ppe_drv_if_map.h"
 
+#ifdef CONFIG_QCA_MINIDUMP
+#include <soc/qcom/ctx-save.h>
+#endif
+
 extern uint32_t static_dbg_level;
 extern bool flow_deacclr_dis;
 extern int mac_lrn_exception_en;
@@ -467,8 +471,30 @@ struct ppe_drv_flow_cookie_metadata {
 	}type;
 };
 
+/*
+ * nss_ppe_drv_minidump_log()
+ *	To log data structures into minidump output
+ */
+static inline void nss_ppe_drv_minidump_log(void *start_addr, uint64_t size, const char *name) {
+#ifdef CONFIG_QCA_MINIDUMP
+	if (minidump_add_segments((uint64_t)(uintptr_t)(start_addr), size, QCA_WDT_LOG_DUMP_TYPE_MOD, name, MINIDUMP_CRASH_TYPE_NSS, "qca_nss_ppe") != 0)
+		pr_warn("minidump_log failed for structure type %s at address %p\n", name, start_addr);
+#endif
+}
+
+/*
+ * nss_ppe_drv_minidump_free()
+ *	To unregister data structures from minidump tlv
+ */
+static inline void nss_ppe_drv_minidump_free(void *start_addr, const char *name) {
+#ifdef CONFIG_QCA_MINIDUMP
+	if (minidump_remove_segments((uint64_t)(uintptr_t)(start_addr)) != 0)
+		pr_warn("minidump_free failed for structure %s at address %p\n", name, start_addr);
+#endif
+}
+
 extern int ppe_drv_get_vxlan_dport(void);
 extern int ppe_drv_get_vxlan_gpe_dport(void);
 void ppe_drv_fse_ops_free(struct kref *kref);
-extern struct ppe_drv ppe_drv_gbl;
+extern struct ppe_drv *ppe_drv_gbl;
 extern uint32_t if_bm_to_offload;

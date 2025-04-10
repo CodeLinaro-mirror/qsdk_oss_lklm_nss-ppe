@@ -40,7 +40,7 @@
 #include <ppe_vp_public.h>
 #include "nss_ppe_gre.h"
 
-static struct nss_ppe_gre_ctx global;
+static struct nss_ppe_gre_ctx *global;
 
 static bool nss_gre_stats_dentry_create(struct nss_ppe_gre_ctx *ctx, struct net_device *dev);
 static bool nss_gre_stats_dentry_free(struct nss_ppe_gre_ctx *ctx, struct net_device *dev);
@@ -104,7 +104,7 @@ static bool nss_ppe_gretun_src_exception(struct ppe_vp_cb_info *info, ppe_tun_da
 {
 	struct sk_buff *skb = info->skb;
 	int ret;
-	struct nss_ppe_gre_ctx *ctx = &global;
+	struct nss_ppe_gre_ctx *ctx = global;
 	unsigned char *data = skb->data;
 
 	skb_reset_network_header(skb);
@@ -142,7 +142,7 @@ static bool nss_ppe_gretun_src_exception(struct ppe_vp_cb_info *info, ppe_tun_da
  */
 static bool nss_ppe_gretap_src_exception(struct ppe_vp_cb_info *info, ppe_tun_data *tun_data)
 {
-	struct nss_ppe_gre_ctx *ctx = &global;
+	struct nss_ppe_gre_ctx *ctx = global;
 
 	struct sk_buff *skb = info->skb;
 	struct net_device *dev = skb->dev;
@@ -177,7 +177,7 @@ static bool nss_ppe_gretap_src_exception(struct ppe_vp_cb_info *info, ppe_tun_da
  */
 static bool nss_ppe_gre_flags_check_cmn(struct net_device *dev, uint16_t i_flags, uint16_t o_flags, enum ppe_drv_tun_cmn_ctx_type type)
 {
-	struct nss_ppe_gre_ctx *ctx = &global;
+	struct nss_ppe_gre_ctx *ctx = global;
 
 	/*
 	 * Currently GRE tunnel offload with KEY and CSUM flags are not supported in PPE
@@ -220,7 +220,7 @@ static bool nss_ppe_gre_flags_check_cmn(struct net_device *dev, uint16_t i_flags
  */
 static bool nss_ppe_gre_flags_check_v6(struct net_device *dev, struct ip6_tnl *tun, enum ppe_drv_tun_cmn_ctx_type type)
 {
-	struct nss_ppe_gre_ctx *ctx = &global;
+	struct nss_ppe_gre_ctx *ctx = global;
 
 	if (!(tun->parms.flags & IP6_TNL_F_IGN_ENCAP_LIMIT)) {
 		nss_ppe_gre_warning("%p:%s Encap limit should be none", dev, dev->name);
@@ -407,7 +407,7 @@ static bool nss_ppe_gre_ip6_dev_parse_param(struct net_device *netdev, struct pp
 static int nss_ppe_gre_dev_event(struct notifier_block  *nb,
 		unsigned long event, void  *info)
 {
-	struct nss_ppe_gre_ctx *ctx  = &global;
+	struct nss_ppe_gre_ctx *ctx  = global;
 	struct net_device *netdev = netdev_notifier_info_to_dev(info);
 	bool status;
 	struct ppe_drv_tun_cmn_ctx *tun_hdr;
@@ -724,7 +724,16 @@ struct notifier_block nss_ppe_gre_notifier = {
  */
 int __init nss_ppe_gre_init_module(void)
 {
-	struct nss_ppe_gre_ctx *ctx = &global;
+	/*
+	* Allocate nss_ppe_gre_ctx
+	*/
+	global = kzalloc(sizeof(struct nss_ppe_gre_ctx), GFP_KERNEL);
+	if(!global) {
+		nss_ppe_gre_warning("Failed to allocate global ppe_drv structure\n");
+		return -1;
+	}
+
+	struct nss_ppe_gre_ctx *ctx = global;
 	nss_ppe_gre_info("GRE module with build id %s loaded\n",
 			NSS_PPE_GRE_BUILD_ID);
 
@@ -733,23 +742,28 @@ int __init nss_ppe_gre_init_module(void)
 	 */
 	if (!nss_ppe_gre_dentry_init(ctx)) {
 		nss_ppe_gre_trace("Failed to initialize debugfs\n");
+		kfree(ctx);
 		return -1;
 	}
 
 	if (encap_ecn_mode > PPE_DRV_TUN_CMN_CTX_ENCAP_ECN_RFC4301_RFC6040_NORMAL_MODE) {
 		nss_ppe_gre_dentry_deinit(ctx);
 		nss_ppe_gre_warning("Invalid Encap ECN mode %u\n", encap_ecn_mode);
+		kfree(ctx);
 		return -1;
 	}
 
 	if (decap_ecn_mode > PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC6040_MODE) {
 		nss_ppe_gre_dentry_deinit(ctx);
 		nss_ppe_gre_warning("Invalid Decap ECN mode %u\n", decap_ecn_mode);
+		kfree(ctx);
 		return -1;
 	}
 
 	register_netdevice_notifier(&nss_ppe_gre_notifier);
 	nss_ppe_gre_trace("gre PPE driver registered\n");
+
+	nss_ppe_gre_minidump_log(ctx, sizeof(struct nss_ppe_gre_ctx), "nss_ppe_gre_ctx");
 
 	return 0;
 }
@@ -760,7 +774,7 @@ int __init nss_ppe_gre_init_module(void)
  */
 void __exit nss_ppe_gre_exit_module(void)
 {
-	struct nss_ppe_gre_ctx *ctx = &global;
+	struct nss_ppe_gre_ctx *ctx = global;
 
 	/*
 	 * deactivate all GRE PPE instances.
@@ -777,6 +791,9 @@ void __exit nss_ppe_gre_exit_module(void)
 	 * Unregister net device notification for standard tunnel.
 	 */
 	unregister_netdevice_notifier(&nss_ppe_gre_notifier);
+
+	nss_ppe_gre_minidump_free(ctx, "nss_ppe_gre_ctx");
+	kfree(ctx);
 
 	nss_ppe_gre_info("gre module unloaded\n");
 }

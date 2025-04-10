@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -288,7 +288,8 @@ struct ppe_drv_tun_decap_xlate_rule *ppe_drv_tun_decap_xlate_rule_alloc(struct p
  */
 void ppe_drv_tun_decap_xlate_rule_entries_free(struct ppe_drv_tun_decap_xlate_rule *decap_xlate_rules)
 {
-	vfree(decap_xlate_rules);
+	nss_ppe_drv_minidump_free(decap_xlate_rules, "ppe_drv_tun_decap_xlate_rule");
+	kfree(decap_xlate_rules);
 }
 
 /*
@@ -302,11 +303,14 @@ struct ppe_drv_tun_decap_xlate_rule *ppe_drv_tun_decap_xlate_rule_entries_alloc(
 
 	ppe_drv_assert(!p->decap_xlate_rules, "%p: Decap xlate rules already allocated", p);
 
-	decap_xlate_rules = vzalloc(sizeof(struct ppe_drv_tun_decap_xlate_rule) * PPE_DRV_TUN_DCAP_XLTE_RULE_MAX_ENTRIES);
+	decap_xlate_rules = kzalloc(sizeof(struct ppe_drv_tun_decap_xlate_rule) * PPE_DRV_TUN_DCAP_XLTE_RULE_MAX_ENTRIES, GFP_KERNEL);
 	if (!decap_xlate_rules) {
 		ppe_drv_warn("%p: decap xlate entries allocation failed", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(decap_xlate_rules, sizeof(struct ppe_drv_tun_decap_xlate_rule) * PPE_DRV_TUN_DCAP_XLTE_RULE_MAX_ENTRIES,
+							"ppe_drv_tun_decap_xlate_rule");
 
 	for (index = 0; index < PPE_DRV_TUN_DCAP_XLTE_RULE_MAX_ENTRIES; index++) {
 		decap_xlate_rules[index].index = index;
