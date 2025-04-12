@@ -2526,6 +2526,13 @@ ppe_drv_ret_t ppe_drv_v4_assist_rule_destroy(struct ppe_drv_v4_rule_destroy *des
 	}
 
 	pcf = flow->pcf.v4;
+	if (unlikely(!ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST))) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&comm_stats->v4_assist_rule_destroy_fail_not_rfs_rule);
+		ppe_drv_warn("%p: Non RFS connections should not be deleted from here.", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
 	cn = ppe_drv_v4_conn_flow_conn_get(pcf);
 
 	if (!ppe_drv_v4_flow_del(pcf)) {

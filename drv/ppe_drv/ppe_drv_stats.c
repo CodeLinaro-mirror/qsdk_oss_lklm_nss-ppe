@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -159,6 +159,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_assist_rule_create_rfs_fail_conn",	/* no of v4 assist rule create rfs failure */
 	"v4_assist_rule_create_priority_fail_conn",	/* no of v4 assist rule create priority failure */
 	"v4_create_priority_req",		/* no of v4 priority assist create requests */
+	"v4_assist_rule_destroy_fail_not_rfs_rule",			/* No of v4 assist rule delete request failure due to race condition */
 
 	"v4_create_policer_req",			/* No of v4 Policer create requests */
 	"v4_create_policer_fail",			/* No of v4 Policer create failure */
@@ -236,6 +237,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_assist_rule_create_rfs_fail_conn",	/* No of v6 assist rule create rfs failure */
 	"v6_assist_rule_create_priority_fail_conn",	/* No of v6 assist rule create priority failure */
 	"v6_create_priority_req",		/* No of v6 Priority Assist create requests */
+	"v6_assist_rule_destroy_fail_not_rfs_rule",			/* No of v6 assist rule delete request failure due to race condition */
 
 	"v6_create_policer_req",			/* No of v6 Policer create requests */
 	"v6_create_policer_fail",			/* No of v6 Policer create failure */
@@ -319,6 +321,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_assist_rule_create_rfs_fail_conn",	/* no of v4 assist rule create failure */
 	"v4_tun_create_priority_req",			/* No of v4 Priority create requests */
 	"v4_tun_create_priority_fail_conn",		/* No of v4 Priority failure due to connection not found */
+	"v4_tun_assist_rule_destroy_fail_not_rfs_rule",			/* No of v4 assist rule delete request failure due to race condition */
 
 
 	"v4_tun_create_policer_req",			/* No of v4 Policer create requests */
@@ -397,6 +400,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_assist_rule_create_rfs_fail_conn",	/* no of v6 assist rule create failure */
 	"v6_tun_create_priority_req",			/* No of v6 Priority create requests */
 	"v6_tun_create_priority_fail_conn",		/* No of v6 Priority failure due to connection not found */
+	"v6_tun_assist_rule_destroy_fail_not_rfs_rule",			/* No of v6 assist rule delete request failure due to race condition */
 
 	"v6_tun_create_fse_success",			/* No of v6 Wi-Fi FSE rule create failure */
 	"v6_tun_create_fse_fail",			/* No of v6 Wi-Fi FSE rule create failure */
