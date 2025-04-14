@@ -630,9 +630,10 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	}
 
 	/*
-	 * SC required when its a bridge flow.
+	 * SC required when its a bridge flow or fdb learning is disabled.
 	 */
-	if ((sc == PPE_DRV_SC_NONE) && ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+	if ((sc == PPE_DRV_SC_NONE) &&
+			(ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) || !port_rx->is_fdb_learn_enabled)) {
 		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
@@ -1378,9 +1379,10 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	}
 
 	/*
-	 * SC required when its a bridge flow.
+	 * SC required when its a bridge flow or fdb learning is disabled.
 	 */
-	if ((sc == PPE_DRV_SC_NONE) && ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+	if ((sc == PPE_DRV_SC_NONE) &&
+			(ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) || !port_rx->is_fdb_learn_enabled)) {
 		sc = PPE_DRV_SC_VLAN_FILTER_BYPASS;
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: Bridge flow requires multiple service codes existing:%u new:%u",
