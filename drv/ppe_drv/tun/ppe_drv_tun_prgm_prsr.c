@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -29,8 +29,8 @@ static void ppe_drv_tun_prgm_prsr_entry_free(struct kref *kref)
 	struct ppe_drv_tun_prgm_prsr *pgm =  container_of(kref, struct ppe_drv_tun_prgm_prsr, ref);
 
 	switch (pgm->ctx.mode) {
-	case PPE_DRV_TUN_PROGRAM_MODE_GRETAP:
-		if (!ppe_drv_tun_prgm_prsr_gretap_deconfigure(pgm)) {
+	case PPE_DRV_TUN_PROGRAM_MODE_GRE:
+		if (!ppe_drv_tun_prgm_prsr_gre_deconfigure(pgm)) {
 			ppe_drv_warn("%p: error deleting tunnel progamable parser entry for type: %d, mode %d", pgm, pgm->parser_idx, pgm->ctx.mode);
 		}
 		break;
@@ -39,12 +39,6 @@ static void ppe_drv_tun_prgm_prsr_entry_free(struct kref *kref)
 		if (!ppe_drv_tun_prgm_prsr_l2tp_deconfigure(pgm)){
 			ppe_drv_warn("%p: error deleting tunnel progamable parser entry for type: %d, mode %d",
 					pgm, pgm->parser_idx, pgm->ctx.mode);
-		}
-		break;
-
-	case PPE_DRV_TUN_PROGRAM_MODE_GRETUN:
-		if (!ppe_drv_tun_prgm_prsr_gretun_deconfigure(pgm)) {
-			ppe_drv_warn("%p: error deleting tunnel progamable parser entry for type: %d, mode %d", pgm, pgm->parser_idx, pgm->ctx.mode);
 		}
 		break;
 
