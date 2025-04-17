@@ -116,16 +116,50 @@ static bool nss_ppe_mapt_dev_stats_update(struct net_device *dev, ppe_tun_hw_sta
  */
 static bool nss_ppe_mapt_src_exception(struct ppe_vp_cb_info *info, ppe_tun_data *tun_data)
 {
-	struct sk_buff *skb = info->skb;
-	struct net_device *dev = skb->dev;
+	struct net_device *mapt_dev, *phys_dev;
+	const struct ethhdr *eth;
+	struct sk_buff *skb;
 	int ret;
 
-	skb->protocol = eth_type_trans(skb, dev);
+	skb = info->skb;
+	mapt_dev = skb->dev;
+
+	/*
+	 * In case of loopback ring for MAP-T to GRETAP
+	 * acceleration (MAP-T encap direction),
+	 * when MAP-T rule is not present
+	 * it is possible that V4 packet can come to
+	 * host post NAT with MAP-T VP RX path. xmit
+	 * these packets using dev_queue_xmit
+	 */
+	eth = (struct ethhdr *)skb->data;
+	if (eth->h_proto == htons(ETH_P_IP)) {
+		skb->protocol = eth_type_trans(skb, mapt_dev);
+		skb_reset_network_header(skb);
+		skb_set_transport_header(skb, sizeof(struct iphdr));
+		skb->pkt_type = PACKET_HOST;
+		dev_queue_xmit(skb);
+		return true;
+	}
+
+	/*
+	 * Map-T is a special case where during RX packet exception,
+	 * packet comes with tunnel dev instead of physical dev.
+	 */
+	phys_dev = info->phys_dev;
+	if (!phys_dev) {
+		nss_ppe_mapt_warning("no phys_dev excpetion packet dropped\n");
+		dev_kfree_skb_any(skb);
+		return true;
+	}
+
+	skb->protocol = eth_type_trans(skb, phys_dev);
+	skb->skb_iif = phys_dev->ifindex;
 	skb_reset_network_header(skb);
 
 	ret = netif_receive_skb(skb);
 	if (ret != NET_RX_SUCCESS) {
-		nss_ppe_mapt_warning("%p: excpetion packet dropped\n", dev);
+		nss_ppe_mapt_warning("%p: excpetion packet dropped\n", phys_dev);
 	}
 
 	return true;

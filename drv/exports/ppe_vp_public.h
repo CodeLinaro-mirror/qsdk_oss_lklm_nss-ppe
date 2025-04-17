@@ -90,6 +90,7 @@ struct ppe_vp_cb_info {
 	bool fake_mac_present;		/** Fake MAC header present */
 	struct sk_buff *skb;		/**< skb */
 	struct napi_struct *napi;	/**< RX napi */
+	struct net_device *phys_dev;	/**< Physical dev for tunnel */
 };
 
 /**

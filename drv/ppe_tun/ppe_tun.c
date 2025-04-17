@@ -393,20 +393,8 @@ static bool ppe_tun_exception_src_cb(struct ppe_vp_cb_info *info, void *cb_data)
 		goto free_skb;
 	}
 
-	/*
-	 * Map-T is a special case where during exception,
-	 * packet comes with tunnel dev instead of physical dev.
-	 */
-	if (tun->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
-		dev = tun->phys_dev;
-		if (unlikely(!dev)) {
-			ppe_tun_deref(tun);
-			goto free_skb;
-		}
 
-		skb->dev = dev;
-		skb->skb_iif = dev->ifindex;
-	}
+	info->phys_dev = tun->phys_dev;
 
 	if (info->fake_mac_present) {
 		/*
