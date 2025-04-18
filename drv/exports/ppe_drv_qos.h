@@ -1,18 +1,7 @@
 /*
  * Copyright (c) 2017, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /**
@@ -30,8 +19,11 @@
 
 #define PPE_DRV_QOS_PORT_MAX	8		/**< Maximum ports for QoS. */
 #define PPE_DRV_QOS_DRR_WEIGHT_MAX	1024	/**< Maximum DRR weight for QoS schedulers. */
-#define PPE_DRV_QOS_PRIORITY_MAX	7	/**< Maximum priority for QoS schedulers. */
+#define PPE_DRV_QOS_PRIORITY_MAX	8	/**< Maximum priority for QoS schedulers. */
 #define PPE_DRV_QOS_MCAST_QUEUE_MAX	1 	/**< Maximum multicast queues per port for QoS. */
+
+#define PPE_DRV_QOS_TCONT_MAX 32	/**<Maximum T-conts supported. */
+#define PPE_DRV_QOS_TCONT_L0_RES_MAX 128	/**<Maximum PQs and L0 DRRs reserved for T-conts. */
 
 /**
  * Queues in PPE are assigned blocks of memory (not packets).
@@ -51,6 +43,7 @@ enum ppe_drv_qos_res_type {
 	PPE_DRV_QOS_RES_TYPE_L0_SP,		/**< Level 0 strict priority resource.*/
 	PPE_DRV_QOS_RES_TYPE_L1_CDRR,		/**< Level 1 C-DRR.*/
 	PPE_DRV_QOS_RES_TYPE_L1_EDRR,		/**< Level 1 E-DRR.*/
+	PPE_DRV_QOS_RES_TYPE_L1_SP,		/**< Level 1 strict priority resource.*/
 	PPE_DRV_QOS_RES_TYPE_MAX		/**< Maximum resource type. */
 };
 typedef enum ppe_drv_qos_res_type ppe_drv_qos_res_type_t;
@@ -113,8 +106,11 @@ struct ppe_drv_qos_queue {
 				/**< Minimum threshold. */
 	uint32_t max_th[PPE_DRV_QOS_QUEUE_COLOR_MAX];
 				/**< Maximum threshold. */
+	uint32_t resume_off[PPE_DRV_QOS_QUEUE_COLOR_MAX];
+				/**< Resume offset for each color. */
 	bool color_en;		/**< Enable color mode. */
 	bool red_en;		/**< Enable RED algorithm. */
+	bool backpressure_en;	/**< Enable backpressure. */
 };
 
 /**
@@ -169,6 +165,7 @@ struct ppe_drv_qos_res {
 	struct ppe_drv_qos_shaper shaper;	/**< PPE HW shaper parameters. */
 	struct ppe_drv_qos_scheduler scheduler;	/**< PPE HW scheduler parameters. */
 	uint32_t l0spid;			/**< Level 0 SP Id. */
+	uint32_t l1spid;			/**< Level 1 SP Id. */
 };
 
 /**
@@ -307,9 +304,9 @@ void ppe_drv_qos_queue_stats_reset(uint32_t qid);
  * @param[in] qid      Queue ID.
  *
  * @return
- * None.
+ * Status of the QoS queue disable operation.
  */
-void ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid);
+ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid);
 
 /**
  * ppe_drv_qos_queue_enable
@@ -318,9 +315,25 @@ void ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid);
  * @param[in] qid      Queue ID.
  *
  * @return
- * None.
+ * Status of the QoS queue enable operation.
  */
-void ppe_drv_qos_queue_enable(uint32_t qid);
+ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid);
+
+/**
+ * ppe_drv_qos_tcont_set
+ *	Sets T-cont configuration for a queue in PPE.
+ *
+ * @datatypes
+ * ppe_drv_qos_res
+ *
+ * @param[in] res       Pointer to the QoS resource.
+ * @param[in] tcont_id  T-cont ID of the port.
+ * @param[in] valid     Is T-cont valid?
+ *
+ * @return
+ * Status of the QoS T-cont configuration operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_tcont_set(struct ppe_drv_qos_res *res, uint32_t tcont_id, bool valid);
 
 /**
  * ppe_drv_qos_l1_scheduler_set
@@ -549,6 +562,17 @@ void ppe_drv_qos_port_bm_control_enable(uint32_t port_id, bool set);
  */
 ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port *port);
 
+/**
+ * ppe_drv_qos_pon_port_get
+ *	Gets the PON port ID.
+ *
+ * @datatypes
+ * None
+ *
+ * @return
+ * PON port ID.
+ */
+uint32_t ppe_drv_qos_pon_port_get(void);
 /** @} */ /* end_addtogroup ppe_drv_qos_subsystem */
 
 #endif /* _PPE_DRV_V4_H_ */

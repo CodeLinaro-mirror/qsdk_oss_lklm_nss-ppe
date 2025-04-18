@@ -41,6 +41,8 @@ qca-nss-ppe-netlink-objs += nss_ppenl_dot1p.o
 qca-nss-ppe-netlink-objs += nss_ppenl_gemport.o
 ccflags-y += -DNSS_PPE_FEATURE_GEMPORT
 ccflags-y += -DCONFIG_NSS_PPENL_GEM_PORT=1
+ccflags-y += -DCONFIG_NSS_PPENL_PON_PORT=1
+ccflags-y += -DNSS_PPE_PON_SUPPORT
 endif
 
 obj-m += qca-nss-ppe-netlink.o

@@ -60,6 +60,8 @@ endif
 
 ifeq ($(PPE_QOS_ENABLED), y)
 qca-nss-ppe-rule-objs += ppe_qos/ppe_qos.o
+qca-nss-ppe-rule-objs += ppe_qos/ppe_qos_dump.o
+qca-nss-ppe-rule-objs += ppe_qos/ppe_qos_stats.o
 ccflags-y += -DPPE_QOS_DEBUG_LEVEL=3
 endif
 
