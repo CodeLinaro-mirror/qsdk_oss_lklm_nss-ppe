@@ -91,6 +91,7 @@ struct ppe_vp_cb_info {
 	struct sk_buff *skb;		/**< skb */
 	struct napi_struct *napi;	/**< RX napi */
 	struct net_device *phys_dev;	/**< Physical dev for tunnel */
+	uint32_t flow_idx;		/**< Flow index of a packet */
 };
 
 /**

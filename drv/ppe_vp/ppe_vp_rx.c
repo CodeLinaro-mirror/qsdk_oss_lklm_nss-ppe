@@ -226,8 +226,11 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		 */
 		if (likely(dvp->flags & PPE_VP_FLAG_VP_FAST_XMIT)) {
 			struct ethhdr *ethh;
-
-			if (likely(flow_idx == PPE_VP_FLOW_IDX_FOR_NO_QDISC)) {
+			/*
+			 * Check if valid flow index and valid Qdisc info is received
+			 */
+			if (likely((flow_idx == PPE_VP_FLOW_IDX_FOR_NO_QDISC))
+					|| !(rxi->qdisc_valid)) {
 				if (unlikely(!dev_fast_xmit_vp(skb, dev))) {
 					atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
 
@@ -318,6 +321,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 			client_cb_info.ip_summed = rxi->ip_summed;
 			client_cb_info.napi = rxi->napi;
 			client_cb_info.fake_mac_present = rxi->fake_mac;
+			client_cb_info.flow_idx = rxi->flow_idx;
 			if (unlikely(!dvp->dst_cb(&client_cb_info, dvp->dst_cb_data))) {
 				ppe_vp_info("%px: Destination VP:%d  Tx dev:%s skb:%p \
 						dropped by user\n", dvp, rxi->dvp, dev->name, skb);
