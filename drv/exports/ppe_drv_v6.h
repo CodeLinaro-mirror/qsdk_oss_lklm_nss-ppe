@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -52,21 +52,23 @@
 /*
  * v6 rule flags
  */
-#define PPE_DRV_V6_RULE_FLAG_BRIDGE_FLOW		0x0001	/**< Bridge Flow */
-#define PPE_DRV_V6_RULE_FLAG_ROUTED_FLOW		0x0002	/**< Rule is for a routed connection */
-#define PPE_DRV_V6_RULE_FLAG_DSCP_MARKING		0x0004  /**< Rule creation for DSCP marking */
-#define PPE_DRV_V6_RULE_FLAG_VLAN_MARKING		0x0008	/**< Rule creation for VLAN marking */
-#define PPE_DRV_V6_RULE_FLAG_FLOW_VALID			0x0010	/**< Rule creation for flow direction */
-#define PPE_DRV_V6_RULE_FLAG_RETURN_VALID		0x0020	/**< Rule creation for return direction */
-#define PPE_DRV_V6_RULE_FLAG_PPPOE_VALID		0x0040	/**< Rule creation for PPPoe */
-#define PPE_DRV_V6_RULE_FLAG_DS_FLOW			0x0080	/**< Rule creation for DS flow */
-#define PPE_DRV_V6_RULE_FLAG_VP_FLOW			0x0100	/**< Rule creation for VP flow */
-#define PPE_DRV_V6_RULE_FLAG_SRC_INTERFACE_CHECK	0x0200	/**< Rule creation for source interface check */
-#define PPE_DRV_V6_RULE_TO_BRIDGE_VLAN_NETDEV		0x0400  /**< VLAN over bridge in egress direction */
-#define PPE_DRV_V6_RULE_FROM_BRIDGE_VLAN_NETDEV		0x0800  /**< VLAN over bridge in ingress direction */
-#define PPE_DRV_V6_RULE_NOEDIT_FLOW_RULE		0x1000  /**< Noedit rule creation for flow direction */
-#define PPE_DRV_V6_RULE_NOEDIT_RETURN_RULE		0x2000  /**< Noedit rule creation for return direction */
-#define PPE_DRV_V6_RULE_FLAG_PASSIVE_FLOW		0x4000	/**< Rule creation for passive flow */
+#define PPE_DRV_V6_RULE_FLAG_BRIDGE_FLOW		0x00000001	/**< Bridge Flow */
+#define PPE_DRV_V6_RULE_FLAG_ROUTED_FLOW		0x00000002	/**< Rule is for a routed connection */
+#define PPE_DRV_V6_RULE_FLAG_DSCP_MARKING		0x00000004	/**< Rule creation for DSCP marking */
+#define PPE_DRV_V6_RULE_FLAG_VLAN_MARKING		0x00000008	/**< Rule creation for VLAN marking */
+#define PPE_DRV_V6_RULE_FLAG_FLOW_VALID			0x00000010	/**< Rule creation for flow direction */
+#define PPE_DRV_V6_RULE_FLAG_RETURN_VALID		0x00000020	/**< Rule creation for return direction */
+#define PPE_DRV_V6_RULE_FLAG_PPPOE_VALID		0x00000040	/**< Rule creation for PPPoe */
+#define PPE_DRV_V6_RULE_FLAG_DS_FLOW			0x00000080	/**< Rule creation for DS flow */
+#define PPE_DRV_V6_RULE_FLAG_VP_FLOW			0x00000100	/**< Rule creation for VP flow */
+#define PPE_DRV_V6_RULE_FLAG_SRC_INTERFACE_CHECK	0x00000200	/**< Rule creation for source interface check */
+#define PPE_DRV_V6_RULE_TO_BRIDGE_VLAN_NETDEV		0x00000400	/**< VLAN over bridge in egress direction */
+#define PPE_DRV_V6_RULE_FROM_BRIDGE_VLAN_NETDEV		0x00000800	/**< VLAN over bridge in ingress direction */
+#define PPE_DRV_V6_RULE_NOEDIT_FLOW_RULE		0x00001000	/**< Noedit rule creation for flow direction */
+#define PPE_DRV_V6_RULE_NOEDIT_RETURN_RULE		0x00002000	/**< Noedit rule creation for return direction */
+#define PPE_DRV_V6_RULE_FLAG_PASSIVE_FLOW		0x00004000	/**< Rule creation for passive flow */
+#define PPE_DRV_V6_RULE_ORIG_FLOW_SW_MDATA_VALID	0x00008000	/**< Rule creation for Socket Offload Orig flows */
+#define PPE_DRV_V6_RULE_RET_FLOW_SW_MDATA_VALID		0x00010000	/**< Rule creation for Socket Offload Ret flows */
 
 /*
  * v6 valid flags
@@ -150,7 +152,7 @@ struct ppe_drv_v6_rule_create {
 	 * Request
 	 */
 	uint16_t valid_flags;				/**< Bit flags associated with the validity of parameters. */
-	uint16_t rule_flags;				/**< Bit flags associated with the rule. */
+	uint32_t rule_flags;				/**< Bit flags associated with the rule. */
 	struct ppe_drv_v6_5tuple tuple;			/**< Holds values of the 5 tuple. */
 	struct ppe_drv_v6_connection_rule conn_rule;	/**< Basic connection-specific data. */
 	struct ppe_drv_src_mac_rule src_mac_rule;           /**< Source MAC address rule. */
@@ -164,6 +166,12 @@ struct ppe_drv_v6_rule_create {
 	struct ppe_drv_wifi_mdata_rule wifi_rule;	/**< Wi-Fi metadata rule ID information. */
 	struct ppe_drv_nptv6_rule npt6_rule;		/**< NPTv6 configured rule. */
 	struct ppe_drv_vp_dl_qdisc_rule qdisc_rule;	/**< Qdisc rule information. */
+
+	/*
+	 * Response.
+	 */
+	uint16_t flow_index_orig;			/**< Flow index for Original flow */
+	uint16_t flow_index_ret;			/**< FLow index for Return flow. */
 };
 
 /**

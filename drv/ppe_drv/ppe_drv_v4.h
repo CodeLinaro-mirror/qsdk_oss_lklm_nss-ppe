@@ -77,6 +77,9 @@
 #define PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID	0x00200000
 					/* Flow has host Qdisc information in it */
 
+#define PPE_DRV_V4_CONN_FLAG_FLOW_SW_MDATA_VALID	0x00800000
+					/* Flow has valid flow idx set*/
+
 /*
  * ppe_drv_v4_addr_equal()
  *	compare ipv4 address

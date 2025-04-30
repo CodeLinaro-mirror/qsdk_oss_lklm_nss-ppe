@@ -67,6 +67,9 @@
 #define PPE_DRV_V6_CONN_FLAG_HAIRPIN_FLOW 0x00400000	/* Flow direction for hairpin nat */
 #endif
 
+#define PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID	0x00800000
+					/* Flow has valid flow idx set*/
+
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*
  * ppe_drv_v6_conn_npt6

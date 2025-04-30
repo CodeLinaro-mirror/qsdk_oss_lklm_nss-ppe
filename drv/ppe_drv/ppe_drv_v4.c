@@ -854,7 +854,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 	struct ppe_drv_v4_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v4_conn_flow *pcr = &cn->pcr;
 	uint16_t valid_flags = create->valid_flags;
-	uint16_t rule_flags = create->rule_flags;
+	uint32_t rule_flags = create->rule_flags;
 	uint32_t sawf_tag = 0;
 	bool is_wanif;
 	struct ppe_drv_flow_cookie_metadata fc_metadata = {0};
@@ -1194,6 +1194,13 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		if (rule_flags & PPE_DRV_V4_RULE_NOEDIT_FLOW_RULE) {
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_NO_EDIT_RULE);
 		}
+
+		/*
+		 * Socket Offload rule
+		 */
+		if (rule_flags & PPE_DRV_V4_RULE_ORIG_FLOW_SW_MDATA_VALID) {
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_SW_MDATA_VALID);
+		}
 	}
 
 	/*
@@ -1443,6 +1450,13 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		 */
 		if (rule_flags & PPE_DRV_V4_RULE_NOEDIT_RETURN_RULE) {
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_NO_EDIT_RULE);
+		}
+
+		/*
+		 * Socket Offload rule
+		 */
+		if (rule_flags & PPE_DRV_V4_RULE_RET_FLOW_SW_MDATA_VALID) {
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_SW_MDATA_VALID);
 		}
 
 		ppe_drv_v4_conn_flags_set(cn, PPE_DRV_V4_CONN_FLAG_RETURN_VALID);
@@ -3441,6 +3455,8 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 	 */
 	pcf->conn = cn;
 	pcr->conn = cn;
+	create->flow_index_orig = pcf->pf->index;
+	create->flow_index_ret = pcr->pf->index;
 
 #ifdef PPE_TUNNEL_ENABLE
 	if (ppe_drv_tun_mapt_port_tun_get(pcf->tx_port, pcf->rx_port)) {

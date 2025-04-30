@@ -621,6 +621,15 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8
 		*wifi_qos_en = true;
 	}
 
+	/*
+	 * If the flow contains the SW Metadata to be valid, set the WIFI Qos enable
+	 * to indicate the PPE to set the WIFI Qos bit in the EDMA rx descriptor
+	 * to retrieve the flow_index for the flow.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID)) {
+		*wifi_qos_en = true;
+	}
+
 	return true;
 }
 
@@ -1682,6 +1691,15 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8
 	 */
 	if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP ||
 	    ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID)) {
+		*wifi_qos_en = true;
+	}
+
+	/*
+	 * If the flow contains the SW Metadata to be valid, set the WIFI Qos enable
+	 * to indicate the PPE to set the WIFI Qos bit in the EDMA rx descriptor
+	 * to retrieve the flow_index for the flow.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_SW_MDATA_VALID)) {
 		*wifi_qos_en = true;
 	}
 
