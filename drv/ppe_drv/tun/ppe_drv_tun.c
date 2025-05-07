@@ -854,7 +854,34 @@ bool ppe_drv_tun_attach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn)
 	tuple.protocol = pcf->match_protocol;
 
 	if (!ppe_drv_tun_v6_get_conn_flow(&tuple, &pcf_v6, &pcr_v6)) {
-		ppe_drv_trace("%p: could not find flow v6 entry\n", pp);
+		/*
+		 * In case of MAPT, the inner rule should be active
+		 * only when corresponding outer mapt rules exists.
+		 * In following scenario
+		 * a. Assume one MAPT connection is already acclerated in PPE.
+		 * b. if ECM detects new connection packet in WAN to LAN
+		 *   Direction. V6 rule will be pushed first and then V4 rule.
+		 * c. the MAPT outer rule will not be pushed to PPE till
+		 *   Inner rule is not offloaded to PPE.
+		 * d. Now just when new UDP inner flow is pushed to PPE
+		 *   the UDP flow gets accelerated whether corresponding
+		 *   outer UDP mapt present in PPE or not.
+		 * e. So we need to suspend the inner flow in PPE till outer flow is
+		 *   pushed to PPE.
+		 */
+		if (pcf) {
+			if (!ppe_drv_flow_accel_suspend(pcf->pf)) {
+				ppe_drv_warn("%p: failed to suspend flow for pcf\n", pp);
+			}
+		}
+
+		if (pcr) {
+			if (!ppe_drv_flow_accel_suspend(pcr->pf)) {
+				ppe_drv_warn("%p: failed to suspend flow for pcr\n", pp);
+			}
+		}
+
+		ppe_drv_trace("%p: could not find flow v6 entry suspend v4 flow\n", pp);
 		return false;
 	}
 
@@ -982,10 +1009,28 @@ static bool ppe_drv_tun_detach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6
 		}
 		is_flow_dir = false;
 	}
+
 	if (!ppe_drv_tun_mapt_translate_v6_to_v4(is_flow_dir, netdev, conn_tun_v6, &pcf_v4, &pcr_v4)) {
 		ppe_drv_trace("%p: cant find pcf v4 corresponding to pcf v6 \n", pp);
 		return false;
 	}
+
+	/*
+	 * In case of MAPT, the inner rule should be active
+	 * only when corresponding outer mapt rules exists.
+	 */
+	if (pcf_v4) {
+		if (!ppe_drv_flow_accel_suspend(pcf_v4->pf)) {
+			ppe_drv_warn("%p: failed to suspend flow for pcf_v4\n", pp);
+		}
+	}
+
+	if (pcr_v4) {
+		if (!ppe_drv_flow_accel_suspend(pcr_v4->pf)) {
+			ppe_drv_warn("%p: failed to suspend flow for pcr_v4\n", pp);
+		}
+	}
+
 	ppe_drv_flow_v4_detach_mapt_v6_conn(pcf_v4);
 	ppe_drv_flow_v4_detach_mapt_v6_conn(pcr_v4);
 
@@ -1011,7 +1056,6 @@ bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6)
 	bool is_flow_dir = true;
 
 	ptun = ppe_drv_tun_mapt_port_tun_get(pcf->tx_port, pcf->rx_port);
-
 	if (!ptun) {
 		return false;
 	}
@@ -1050,6 +1094,20 @@ bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6)
 			ppe_drv_flow_v4_attach_mapt_v6_conn(pcf_v4, pcr, len_adjust);
 		}
 	}
+
+	/*
+	 * In case of MAPT, the inner rule should be active
+	 * only when corresponding outer mapt rules exists.
+	 * Resume the inner flow if it is suspended.
+	 */
+	if (ppe_drv_flow_accel_resume(pcf_v4->pf) != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("%p: failed to resume flow for pcf_v4\n", pp);
+	}
+
+	if (ppe_drv_flow_accel_resume(pcr_v4->pf) != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("%p: failed to resume flow for pcr_v4\n", pp);
+	}
+
 
 	return true;
 }
