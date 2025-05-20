@@ -771,7 +771,7 @@ bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_h
 	 * Set exception mode.
 	 */
 	action = ppe_tun_xcpn_mode_get(tun->type);
-	if (action && !ppe_drv_port_xcpn_mode_set(tun->vp_num, action)) {
+	if (!ppe_drv_port_xcpn_mode_set(tun->vp_num, action)) {
 		ppe_tun_warn("%p: xcpn_mode set failed for dev %s", ptp, dev->name);
 		ppe_tun_deref(tun);
 		return false;
