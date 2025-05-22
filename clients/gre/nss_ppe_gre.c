@@ -148,12 +148,13 @@ static bool nss_ppe_gretap_src_exception(struct ppe_vp_cb_info *info, ppe_tun_da
 	struct net_device *dev = skb->dev;
 	int ret;
 
-	skb->protocol = eth_type_trans(skb, dev);
-	/*
-	 * Packet type is updated to PACKET_OTHERHOST in eth_type_trans. Since the packet
-	 * is already decapsulated set it to PACKET_HOST for futher processing
-	 */
 	skb->pkt_type = PACKET_HOST;
+
+	/*
+	 * Packet type would be updated to "PACKET_OTHERHOST" by eth_type_trans()
+	 * for packets which are not destined to tunnel netdevice
+	 */
+	skb->protocol = eth_type_trans(skb, dev);
 	skb_reset_network_header(skb);
 
 	/*
