@@ -1052,22 +1052,20 @@ bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6)
 		return false;
 	}
 
-	/*
-	 * PPE offload expects rules to be pushed in both forward and reverse direction.
-	 * In case of Wifi device in Passive VP mode the inner rule push is undirectional.
-	 * We dont support ppe offload for Mapt tunnel in those cases. So exit returning false.
-	 */
-	if (!pcf_v4->pf || !pcr_v4->pf) {
-		ppe_drv_warn("%p: Inner Rule pushed only in one direction\n", pp);
-		return false;
-	}
-
 	if (is_flow_dir) {
-		ppe_drv_flow_v4_attach_mapt_v6_conn(pcf_v4, pcf, len_adjust);
-		ppe_drv_flow_v4_attach_mapt_v6_conn(pcr_v4, pcr, len_adjust);
+		if (pcf_v4) {
+			ppe_drv_flow_v4_attach_mapt_v6_conn(pcf_v4, pcf, len_adjust);
+		}
+		if (pcr_v4) {
+			ppe_drv_flow_v4_attach_mapt_v6_conn(pcr_v4, pcr, len_adjust);
+		}
 	} else {
-		ppe_drv_flow_v4_attach_mapt_v6_conn(pcr_v4, pcf, len_adjust);
-		ppe_drv_flow_v4_attach_mapt_v6_conn(pcf_v4, pcr, len_adjust);
+		if (pcr_v4) {
+			ppe_drv_flow_v4_attach_mapt_v6_conn(pcr_v4, pcf, len_adjust);
+		}
+		if (pcf_v4) {
+			ppe_drv_flow_v4_attach_mapt_v6_conn(pcf_v4, pcr, len_adjust);
+		}
 	}
 
 	return true;
@@ -1779,10 +1777,6 @@ skip_tunnel_activation:
 
 			if (!ppe_drv_tun_attach_mapt_v6_to_v4(cn_v6)) {
 				ppe_drv_trace("%p: MAP-T v6 to v4 attach failed", ptun);
-				ppe_drv_stats_inc(&comm_stats->v6_create_fail_uni_inner_rule);
-				list_del(&cn_v6->list);
-				ppe_drv_tun_deref(ptun);
-				goto err_fail;
 			}
 		}
 	} else if (cn_v4) {
