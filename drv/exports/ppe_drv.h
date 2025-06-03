@@ -664,6 +664,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_TUN_RPS_DESTROY_RULE_FAIL,		/**< RPS Destroy Rule return failed */
 	PPE_DRV_RET_FAILURE_NON_PASSTH_ESP_SPI_FLOW,	/**< IPSEC SPI based pass through is enabled. */
 	PPE_DRV_RET_VLAN_VPN_MODE_SET_FAIL,		/**< Failure to set the vlan mode */
+	PPE_DRV_RET_ACCEL_RESUME_FAIL,			/**< Failed to resume the accel. */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 

@@ -2945,6 +2945,11 @@ bool ppe_drv_flow_del(struct ppe_drv_flow *pf)
 		pf->unidir_info.flow_cfg = NULL;
 	}
 
+	if (pf->flow_cfg) {
+		kfree(pf->flow_cfg);
+		pf->flow_cfg = NULL;
+	}
+
 	ppe_drv_trace("%p: flow_tbl entry deleted at index: %u", pf, pf->index);
 	return true;
 }
@@ -3811,4 +3816,122 @@ uint32_t ppe_drv_flow_get_qos_tag(int32_t flow_index)
 	}
 
 	return PPE_DRV_HOST_QDISC_INVALID;
+}
+
+/*
+ * ppe_drv_flow_accel_suspend()
+ * 	flow is not offloaded to PPE.
+ */
+bool ppe_drv_flow_accel_suspend(struct ppe_drv_flow *pf)
+{
+	fal_flow_entry_t flow_cfg = {0};
+	void *flow_cfg_ctx;
+	sw_error_t err;
+
+	if (!pf) {
+		ppe_drv_warn("pf for flow suspend is NULL\n");
+		return false;
+	}
+
+	/*
+	 * Do not proceed if the accel is already suspended
+	 * or software context for flow config is allocated.
+	 */
+	if (pf->flow_cfg) {
+		ppe_drv_warn("%p: flow entry %u is already suspended\n", pf, flow_cfg.entry_id);
+		return true;
+	}
+
+	/*
+	 * fetch the flow_cfg from FAL.
+	 */
+	flow_cfg.entry_id = pf->index;
+	flow_cfg.entry_type = pf->entry_type;
+	err = fal_flow_entry_get(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_INDEX, &flow_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to get flow entry %u\n", pf, flow_cfg.entry_id);
+		return false;
+	}
+
+	/*
+	 * If fwd_type is already RDT_TO_CPU, skip the accel suspension.
+	 */
+	if (flow_cfg.fwd_type == FAL_FLOW_RDT_TO_CPU) {
+		ppe_drv_warn("%p: flow entry %u is already RDT_TO_CPU\n", pf, flow_cfg.entry_id);
+		return true;
+	}
+
+	/*
+	 * Maintain a s/w context for flow_cfg
+	 */
+	flow_cfg_ctx = kmalloc(sizeof(fal_flow_entry_t), GFP_ATOMIC);
+	if (!flow_cfg_ctx) {
+		ppe_drv_warn("%p: Failed to allocate memory of flow_cfg for flow entry %u\n", pf, flow_cfg.entry_id);
+		return false;
+	}
+
+	memcpy((fal_flow_entry_t *)flow_cfg_ctx, &flow_cfg, sizeof(fal_flow_entry_t));
+
+	/*
+	 * Update the flow forward type.
+	 */
+	flow_cfg.fwd_type = FAL_FLOW_RDT_TO_CPU;
+	err = fal_flow_entry_add(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_KEY, &flow_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: flow entry %u suspend failed\n", pf, flow_cfg.entry_id);
+		kfree(flow_cfg_ctx);
+		return false;
+	}
+
+	ppe_drv_trace("%p: flow entry %u is suspended\n", pf, flow_cfg.entry_id);
+	pf->flow_cfg = flow_cfg_ctx;
+	return true;
+}
+
+/*
+ * ppe_drv_flow_accel_resume()
+ *      flow is offloaded to PPE.
+ */
+ppe_drv_ret_t ppe_drv_flow_accel_resume(struct ppe_drv_flow *pf)
+{
+	sw_error_t err;
+	fal_flow_entry_t *flow_cfg;
+
+	if (!pf) {
+		ppe_drv_warn("pf for flow resume is NULL\n");
+		return PPE_DRV_RET_ACCEL_RESUME_FAIL;
+	}
+
+	/*
+	 * Do not proceed if the flow is accelerated
+	 * or there is no sw context for flow config.
+	 */
+	flow_cfg = (fal_flow_entry_t *)pf->flow_cfg;
+	if (!flow_cfg) {
+		ppe_drv_warn("%p: flow not suspended / already resumed / already RDT_TO_CPU\n", pf);
+		return PPE_DRV_RET_ACCEL_RESUME_FAIL;
+	}
+
+	/*
+	 * Update the flow in FAL based on the ppe flow's local context.
+	 * This restores the original forwarding type that was captured and saved
+	 * in pf->flow_cfg before suspension, thereby resuming acceleration.
+	 */
+	err = fal_flow_entry_add(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_KEY, flow_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: flow entry %u resume failed", pf, flow_cfg->entry_id);
+		pf->flow_cfg = NULL;
+		kfree(flow_cfg);
+		return PPE_DRV_RET_ACCEL_RESUME_FAIL;
+	}
+
+	ppe_drv_trace("%p: flow entry %u is resumed with fwd_type %u\n", pf, flow_cfg->entry_id, flow_cfg->fwd_type);
+
+	/*
+	 * Free the s/w context memory for flow_cfg.
+	 */
+	pf->flow_cfg = NULL;
+	kfree(flow_cfg);
+
+	return PPE_DRV_RET_SUCCESS;
 }
