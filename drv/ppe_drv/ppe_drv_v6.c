@@ -353,12 +353,10 @@ ppe_drv_ret_t ppe_drv_v6_rfs_conn_fill(struct ppe_drv_v6_rule_create *create,  s
 	struct ppe_drv_v6_5tuple *tuple = &create->tuple;
 	struct ppe_drv_iface *if_rx, *if_tx, *top_rx_iface;
 	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
-	uint16_t rule_flags = create->rule_flags;
+	uint32_t rule_flags = create->rule_flags;
 	struct ppe_drv_comm_stats *comm_stats;
 	struct ppe_drv_port *pp_rx, *pp_tx;
 	struct ppe_drv *p = ppe_drv_gbl;
-	uint32_t rule_flags = create->rule_flags;
-	uint16_t valid_flags = create->valid_flags;
 
 	comm_stats = &p->stats.comm_stats[flow_type];
 
@@ -649,7 +647,7 @@ ppe_drv_ret_t ppe_drv_v6_policer_conn_fill(struct ppe_drv_v6_rule_create *create
 	struct ppe_drv_iface *if_rx, *if_tx, *top_rx_iface;
 	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
-	uint16_t rule_flags = create->rule_flags;
+	uint32_t rule_flags = create->rule_flags;
 	struct ppe_drv_comm_stats *comm_stats;
 	struct ppe_drv_port *pp_rx, *pp_tx;
 	struct ppe_drv *p = ppe_drv_gbl;
@@ -803,7 +801,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill_hairpin_flows(struct ppe_drv_v6_rule_create *
 	struct ppe_drv_flow_cookie_metadata fc_metadata = {0};
 	struct ppe_drv_top_if_rule *top_rule = &create->top_rule;
 	uint16_t valid_flags = create->valid_flags;
-	uint16_t rule_flags = create->rule_flags;
+	uint32_t rule_flags = create->rule_flags;
 	uint32_t sawf_tag = 0;
 	bool is_wanif;
 
@@ -1321,7 +1319,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
 	uint16_t valid_flags = create->valid_flags;
-	uint16_t rule_flags = create->rule_flags;
+	uint32_t rule_flags = create->rule_flags;
 	uint32_t sawf_tag = 0;
 	bool is_wanif;
 	struct ppe_drv_flow_cookie_metadata fc_metadata = {0};
@@ -4870,7 +4868,7 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 
 	pcf->conn = cn;
 	pcr->conn = cn;
-	create->flow_index_orig = pcr->pf->index;
+	create->flow_index_orig = pcf->pf->index;
 	create->flow_index_ret = pcr->pf->index;
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT

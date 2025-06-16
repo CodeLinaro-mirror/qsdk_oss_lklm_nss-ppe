@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -86,7 +86,7 @@ struct ppe_rfs_ipv4_connection_rule {
  */
 struct ppe_rfs_ipv4_rule_create_msg {
 	u16 valid_flags;				/**< Bit flags associated with paramater validity. */
-	u16 rule_flags;					/**< Bit flags associated with the rule. */
+	u32 rule_flags;					/**< Bit flags associated with the rule. */
 	struct ppe_rfs_ipv4_5tuple tuple;		/**< Holds values of 5-tuple. */
 	struct ppe_rfs_ipv4_connection_rule conn_rule;  /**< Basic connection-specific data. */
 	struct ppe_rfs_qos_rule qos_rule;			/**< Holds qos tag information */
@@ -134,7 +134,7 @@ struct ppe_rfs_ipv6_connection_rule {
  */
 struct ppe_rfs_ipv6_rule_create_msg {
 	u16 valid_flags;				/**< Bit flags associated with parameter validity. */
-	u16 rule_flags;					/**< Bit flags associated with the rule. */
+	u32 rule_flags;					/**< Bit flags associated with the rule. */
 	struct ppe_rfs_ipv6_5tuple tuple;		/**< Holds values of the ppe_ipv6_5tuple tuple. */
 	struct ppe_rfs_ipv6_connection_rule conn_rule;	/**< Basic connection-specific data. */
 	struct ppe_rfs_qos_rule qos_rule;			/**< Holds qos tag information */
