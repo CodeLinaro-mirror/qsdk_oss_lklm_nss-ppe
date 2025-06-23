@@ -178,7 +178,7 @@ static int nss_ppe_dsa_mgr_change_addr(struct net_device *slave_dev)
 	ether_addr_copy(dsa_pvt->dev_addr, slave_dev->dev_addr);
 	spin_unlock(&g_dsa_ctx.lock);
 
-	nss_ppe_dsa_mgr_warn("%s: MAC changed to %pM, updated PPE\n", slave_dev->name, slave_dev->dev_addr);
+	nss_ppe_dsa_mgr_trace("%s: MAC changed to %pM, updated PPE\n", slave_dev->name, slave_dev->dev_addr);
 	nss_ppe_dsa_mgr_instance_deref(dsa_pvt);
 
 	return NOTIFY_DONE;
@@ -223,7 +223,7 @@ static int nss_ppe_dsa_mgr_change_mtu(struct net_device *slave_dev)
 	}
 	spin_unlock(&g_dsa_ctx.lock);
 
-	nss_ppe_dsa_mgr_warn("%s: MTU changed to %d, PPE updated\n", slave_dev->name, slave_dev->mtu);
+	nss_ppe_dsa_mgr_trace("%s: MTU changed to %d, PPE updated\n", slave_dev->name, slave_dev->mtu);
 	nss_ppe_dsa_mgr_instance_deref(dsa_pvt);
 
 	return NOTIFY_DONE;
@@ -318,7 +318,7 @@ static int nss_ppe_dsa_mgr_alloc_ppe_vp(struct nss_ppe_dsa_pvt *dsa_pvt,
 
 	pp_id = ppe_drv_iface_port_idx_get(base_if);
 	if (pp_id == -1) {
-		nss_ppe_dsa_mgr_info("%px: %s:%d is not valid port\n", master_dev, master_dev->name, pp_id);
+		nss_ppe_dsa_mgr_warn("%px: %s:%d is not valid port\n", master_dev, master_dev->name, pp_id);
 		return -1;
 	}
 
@@ -446,7 +446,7 @@ static int nss_ppe_dsa_mgr_changeaddr_event(struct netdev_notifier_info *info, s
 {
 	struct net_device *slave = dp->slave;
 
-	nss_ppe_dsa_mgr_info("slave:%s, proto: %d, MAC Addr change requested.\n", slave->name,
+	nss_ppe_dsa_mgr_trace("slave:%s, proto: %d, MAC Addr change requested.\n", slave->name,
 		dp->cpu_dp->tag_ops->proto);
 
 	if (DSA_TAG_PROTO_QCA_8021Q == dp->cpu_dp->tag_ops->proto) {
@@ -469,7 +469,7 @@ static int nss_ppe_dsa_mgr_changemtu_event(struct netdev_notifier_info *info, st
 {
 	struct net_device *slave = dp->slave;
 
-	nss_ppe_dsa_mgr_info("slave:%s, idx:%u, proto:%d. \n", slave->name,
+	nss_ppe_dsa_mgr_trace("slave:%s, idx:%u, proto:%d. \n", slave->name,
 		dp->index, dp->cpu_dp->tag_ops->proto);
 
 	if (DSA_TAG_PROTO_QCA_8021Q == dp->cpu_dp->tag_ops->proto) {
@@ -620,11 +620,11 @@ static int nss_ppe_dsa_mgr_dsa_event_nb(struct notifier_block *unused,
 		case DSA_NOTIFIER_TAG_CHG:
 			struct dsa_notifier_tag_proto_chg *info = (struct dsa_notifier_tag_proto_chg *)ptr;
 
-			nss_ppe_dsa_mgr_info("%s, proto: %d.\n", info->info.dev->name, info->proto);
+			nss_ppe_dsa_mgr_trace("%s, proto: %d.\n", info->info.dev->name, info->proto);
 			return nss_ppe_dsa_mgr_tag_proto_change(info->info.dev, info->proto);
 
 		default:
-			nss_ppe_dsa_mgr_info("DSA event %lu is not supported\n", event);
+			nss_ppe_dsa_mgr_warn("DSA event %lu is not supported\n", event);
 	}
 
 	return NOTIFY_DONE;
