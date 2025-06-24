@@ -14,7 +14,7 @@
  */
 static void ppe_drv_sc_dump(ppe_drv_sc_t sc)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_servcode_config_t sc_cfg = {0};
 	sw_error_t err;
 
@@ -51,7 +51,7 @@ static void ppe_drv_sc_dump(ppe_drv_sc_t sc)
  */
 sw_error_t ppe_drv_sc_in_service_tbl_dest_port(ppe_drv_sc_t sc, uint8_t redir_port)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_servcode_config_t sc_cfg = {0};
 	sw_error_t err;
 
@@ -104,7 +104,7 @@ void ppe_drv_sc_ucast_queue_set(ppe_drv_sc_t sc, uint8_t queue_id, uint8_t src_p
  */
 static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_servcode_config_t sc_cfg = {0};
 	sw_error_t err;
 
@@ -429,7 +429,7 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
  */
 bool ppe_drv_sc_process_skbuff(struct ppe_drv_sc_metadata *sc, struct sk_buff *skb)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_sc *psc;
 	ppe_drv_sc_callback_t cb;
 	struct ppe_drv_sc_vp_info *vp_info;
@@ -508,7 +508,7 @@ EXPORT_SYMBOL(ppe_drv_sc_process_skbuff);
  */
 void ppe_drv_sc_unregister_cb(ppe_drv_sc_t sc)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_sc *psc;
 
 	spin_lock_bh(&p->lock);
@@ -528,7 +528,7 @@ EXPORT_SYMBOL(ppe_drv_sc_unregister_cb);
  */
 void ppe_drv_sc_register_cb(ppe_drv_sc_t sc, ppe_drv_sc_callback_t cb, void *app_data)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_sc *psc;
 
 	ppe_drv_assert(cb, "%p: cannot register null cb for sc %u", p, sc);
@@ -551,7 +551,7 @@ EXPORT_SYMBOL(ppe_drv_sc_register_cb);
  */
 void ppe_drv_sc_unregister_vp_cb(ppe_drv_sc_t sc, uint16_t vp_num)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_sc *psc;
 	struct ppe_drv_sc_vp_info *vp_info;
 
@@ -588,7 +588,7 @@ EXPORT_SYMBOL(ppe_drv_sc_unregister_vp_cb);
  */
 bool ppe_drv_sc_register_vp_cb(ppe_drv_sc_t sc, ppe_drv_sc_callback_t cb, void *app_data, uint16_t vp_num)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_sc *psc;
 	struct ppe_drv_sc_vp_info *vp_info;
 
@@ -637,7 +637,8 @@ EXPORT_SYMBOL(ppe_drv_sc_register_vp_cb);
  */
 void ppe_drv_sc_entries_free(struct ppe_drv_sc *sc)
 {
-	vfree(sc);
+	nss_ppe_drv_minidump_free(sc, "ppe_drv_sc");
+	kfree(sc);
 }
 
 /*
@@ -646,15 +647,17 @@ void ppe_drv_sc_entries_free(struct ppe_drv_sc *sc)
  */
 struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_sc *sc;
 	ppe_drv_sc_t acl_sc;
 
-	sc = vzalloc(sizeof(struct ppe_drv_sc) * p->sc_num);
+	sc = kzalloc(sizeof(struct ppe_drv_sc) * p->sc_num, GFP_KERNEL);
 	if (!sc) {
 		ppe_drv_warn("%p: Failed to allocate service code table entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(sc, sizeof(struct ppe_drv_sc) * p->sc_num, "ppe_drv_sc");
 
 	/*
 	 * Initialize service codes

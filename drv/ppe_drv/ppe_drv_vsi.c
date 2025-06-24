@@ -33,7 +33,7 @@ static void ppe_drv_vsi_dump(struct ppe_drv_vsi *vsi)
 	fal_vsi_member_t mem_cfg = {0};
 	fal_vsi_newaddr_lrn_t new_addr_cfg = {0};
 	fal_vsi_stamove_t stamove_cfg = {0};
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	sw_error_t err;
 
 	err = fal_ip_vsi_intf_get(PPE_DRV_SWITCH_ID, vsi->index, &vsi_cfg);
@@ -424,7 +424,7 @@ void ppe_drv_vsi_mc_disable(struct ppe_drv_vsi *vsi)
  */
 struct ppe_drv_vsi *ppe_drv_vsi_alloc(enum ppe_drv_vsi_type type)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_vsi *vsi = NULL;
 	struct ppe_drv_l3_if *l3_if;
 	fal_vsi_member_t vsi_mem_cfg = {0};
@@ -526,7 +526,8 @@ struct ppe_drv_vsi *ppe_drv_vsi_alloc(enum ppe_drv_vsi_type type)
  */
 void ppe_drv_vsi_entries_free(struct ppe_drv_vsi *vsi)
 {
-	vfree(vsi);
+	nss_ppe_drv_minidump_free(vsi, "ppe_drv_vsi");
+	kfree(vsi);
 }
 
 /*
@@ -536,14 +537,16 @@ void ppe_drv_vsi_entries_free(struct ppe_drv_vsi *vsi)
 struct ppe_drv_vsi *ppe_drv_vsi_entries_alloc()
 {
 	struct ppe_drv_vsi *vsi;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint16_t i;
 
-	vsi = vzalloc(sizeof(struct ppe_drv_vsi) * p->vsi_num);
+	vsi = kzalloc(sizeof(struct ppe_drv_vsi) * p->vsi_num, GFP_KERNEL);
 	if (!vsi) {
 		ppe_drv_warn("%p: failed to allocate vsi entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(vsi, sizeof(struct ppe_drv_vsi) * p->vsi_num, "ppe_drv_vsi");
 
 	for (i = 0; i < p->vsi_num; i++) {
 		vsi[i].index = i;

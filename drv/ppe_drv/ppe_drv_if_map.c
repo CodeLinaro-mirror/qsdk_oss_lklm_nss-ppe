@@ -202,7 +202,7 @@ int ppe_drv_if_map_write(struct ppe_drv_if_map_instance *mfi, char *name, char *
  */
 int ppe_drv_if_map_dump_get(struct ppe_drv_if_map_instance *mfi)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 	struct ppe_drv_stats_if_map *stats;
 	int i, active_if = 0, j = 0;

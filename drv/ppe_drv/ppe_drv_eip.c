@@ -22,7 +22,7 @@
  */
 ppe_drv_ret_t ppe_drv_eip_deinit(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 
@@ -62,7 +62,7 @@ EXPORT_SYMBOL(ppe_drv_eip_deinit);
  */
 ppe_drv_ret_t ppe_drv_eip_init(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 

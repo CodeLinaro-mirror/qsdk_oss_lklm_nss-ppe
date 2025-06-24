@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -109,7 +109,7 @@ void ppe_drv_tun_udf_entry_ref(struct ppe_drv_tun_udf  *pgm_udf)
  */
 struct ppe_drv_tun_udf *ppe_drv_tun_udf_entry_configure(struct ppe_drv_tun_udf_profile *udf_pf)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_tunnel_udf_profile_entry_t entry = {0};
 	struct ppe_drv_tun_udf *udf_entry = NULL;
 	struct ppe_drv_tun_udf_data *udf_data;
@@ -190,7 +190,8 @@ struct ppe_drv_tun_udf *ppe_drv_tun_udf_entry_alloc(struct ppe_drv *p)
  */
 void ppe_drv_tun_udf_free(struct ppe_drv_tun_udf *pgm_udf)
 {
-	vfree(pgm_udf);
+	nss_ppe_drv_minidump_free(pgm_udf, "ppe_drv_tun_udf");
+	kfree(pgm_udf);
 }
 
 /*
@@ -204,11 +205,13 @@ struct ppe_drv_tun_udf *ppe_drv_tun_udf_alloc(struct ppe_drv *p)
 
 	ppe_drv_assert(!p->pgm_udf, "%p: tunnel udf entries already allocated", p);
 
-	pgm_udf = vzalloc(sizeof(struct ppe_drv_tun_udf) * PPE_DRV_TUN_UDF_PROFILE_ID_MAX);
+	pgm_udf = kzalloc(sizeof(struct ppe_drv_tun_udf) * PPE_DRV_TUN_UDF_PROFILE_ID_MAX, GFP_KERNEL);
 	if (!pgm_udf) {
 		ppe_drv_warn("%p: failed to allocate tunnel udf entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(pgm_udf, sizeof(struct ppe_drv_tun_udf) * PPE_DRV_TUN_UDF_PROFILE_ID_MAX, "ppe_drv_tun_udf");
 
 	for (index = 0; index < PPE_DRV_TUN_UDF_PROFILE_ID_MAX; index++) {
 		pgm_udf[index].udf_index = index;

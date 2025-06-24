@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -19,6 +19,10 @@
 
 #ifndef __NSS_CAPWAPMGR_H
 #define __NSS_CAPWAPMGR_H
+
+#ifdef CONFIG_QCA_MINIDUMP
+#include <soc/qcom/ctx-save.h>
+#endif
 
 #if (NSS_CAPWAPMGR_DEBUG_LEVEL < 1)
 #define nss_capwapmgr_assert(c, s, ...)
@@ -189,5 +193,27 @@ struct nss_capwapmgr_global {
 	struct dentry *capwap_dentry;		/* Dentry to enable/disable ppe to host mode */
 	bool ppe2host;				/* ppe2host configuration */
 };
+
+/*
+ * nss_ppe_capwapmgr_minidump_log()
+ *	To log data structures into minidump output
+ */
+static inline void nss_ppe_capwapmgr_minidump_log(void *start_addr, uint64_t size, const char *name) {
+#ifdef CONFIG_QCA_MINIDUMP
+	if (minidump_add_segments((uint64_t)(uintptr_t)(start_addr), size, QCA_WDT_LOG_DUMP_TYPE_MOD, name, MINIDUMP_CRASH_TYPE_NSS, "qca_nss_ppe_capwapmgr") != 0)
+		pr_warn("minidump_log failed for structure type %s at address %p\n", name, start_addr);
+#endif
+}
+
+/*
+ * nss_ppe_capwapmgr_minidump_free()
+ *	To unregister data structures from minidump tlv
+ */
+static inline void nss_ppe_capwapmgr_minidump_free(void *start_addr, const char *name) {
+#ifdef CONFIG_QCA_MINIDUMP
+	if (minidump_remove_segments((uint64_t)(uintptr_t)(start_addr)) != 0)
+		pr_warn("minidump_free failed for structure %s at address %p\n", name, start_addr);
+#endif
+}
 
 #endif /* __NSS_CAPWAPMGR_H */

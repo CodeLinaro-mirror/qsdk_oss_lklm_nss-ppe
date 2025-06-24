@@ -24,7 +24,7 @@
  */
 bool ppe_drv_tun_prgm_prsr_l2tp_deconfigure(struct ppe_drv_tun_prgm_prsr *program)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_tun_prgm_prsr_l2tp *l2tp_data =  &program->ctx.data.l2tp;
 
 	ppe_drv_assert((program->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2), "program mode not L2TP for program type : %d", program->parser_idx);
@@ -64,7 +64,7 @@ bool ppe_drv_tun_prgm_prsr_l2tp_deconfigure(struct ppe_drv_tun_prgm_prsr *progra
  */
 bool ppe_drv_tun_l2tp_prgm_prsr_configure(struct ppe_drv_tun_prgm_prsr *program)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint8_t program_type = program->parser_idx;
 	struct ppe_drv_tun_prgm_prsr_l2tp *l2tp_data =  &program->ctx.data.l2tp;
 	struct ppe_drv_tun_prgm_prsr_cfg *cfg = &program->ctx.prsr_cfg;
@@ -243,8 +243,8 @@ bool ppe_drv_tun_l2tp_prgm_prsr_configure(struct ppe_drv_tun_prgm_prsr *program)
 bool ppe_drv_tun_l2tp_port_set(uint16_t sport, uint16_t dport)
 {
 	if (!ppe_drv_tun_prgm_prsr_type_allocated(PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2)) {
-		ppe_drv_gbl.tun_gbl.tun_l2tp.l2tp_sport = sport;
-		ppe_drv_gbl.tun_gbl.tun_l2tp.l2tp_dport = dport;
+		ppe_drv_gbl->tun_gbl.tun_l2tp.l2tp_sport = sport;
+		ppe_drv_gbl->tun_gbl.tun_l2tp.l2tp_dport = dport;
 		return true;
 	}
 
@@ -258,8 +258,8 @@ EXPORT_SYMBOL(ppe_drv_tun_l2tp_port_set);
  */
 bool ppe_drv_tun_l2tp_port_get(uint16_t *sport, uint16_t *dport)
 {
-	*sport = ppe_drv_gbl.tun_gbl.tun_l2tp.l2tp_sport;
-	*dport = ppe_drv_gbl.tun_gbl.tun_l2tp.l2tp_dport;
+	*sport = ppe_drv_gbl->tun_gbl.tun_l2tp.l2tp_sport;
+	*dport = ppe_drv_gbl->tun_gbl.tun_l2tp.l2tp_dport;
 
 	return true;
 }

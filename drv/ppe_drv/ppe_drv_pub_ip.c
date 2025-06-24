@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,7 +26,7 @@
  */
 static void ppe_drv_pub_ip_dump(struct ppe_drv_pub_ip *pub_ip)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_ip_pub_addr_t pub_ip_cfg;
 	sw_error_t err;
 
@@ -96,7 +96,7 @@ struct ppe_drv_pub_ip *ppe_drv_pub_ip_ref(struct ppe_drv_pub_ip *pub_ip)
  */
 struct ppe_drv_pub_ip *ppe_drv_pub_ip_get_and_ref(uint32_t ip_addr)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_pub_ip *pub_ip;
 	fal_ip_pub_addr_t pub_ip_cfg;
 	int32_t free_index = -1;
@@ -161,7 +161,8 @@ struct ppe_drv_pub_ip *ppe_drv_pub_ip_get_and_ref(uint32_t ip_addr)
  */
 void ppe_drv_pub_ip_entries_free(struct ppe_drv_pub_ip *pub_ip)
 {
-	vfree(pub_ip);
+	nss_ppe_drv_minidump_free(pub_ip, "ppe_drv_pub_ip");
+	kfree(pub_ip);
 }
 
 /*
@@ -171,14 +172,16 @@ void ppe_drv_pub_ip_entries_free(struct ppe_drv_pub_ip *pub_ip)
 struct ppe_drv_pub_ip *ppe_drv_pub_ip_entries_alloc()
 {
 	struct ppe_drv_pub_ip *pub_ip;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint16_t i;
 
-	pub_ip = vzalloc(sizeof(struct ppe_drv_pub_ip) * p->pub_ip_num);
+	pub_ip = kzalloc(sizeof(struct ppe_drv_pub_ip) * p->pub_ip_num, GFP_KERNEL);
 	if (!pub_ip) {
 		ppe_drv_warn("%p: failed to allocate pub_ip entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(pub_ip, sizeof(struct ppe_drv_pub_ip) * p->pub_ip_num, "ppe_drv_pub_ip");
 
 	for (i = 0; i < p->pub_ip_num; i++) {
 		pub_ip[i].index = i;

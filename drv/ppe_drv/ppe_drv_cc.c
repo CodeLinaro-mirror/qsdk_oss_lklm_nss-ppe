@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -27,7 +27,7 @@
  */
 static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_flow *flow;
 	struct ppe_drv_v4_conn_flow *pcf;
 	struct ppe_drv_v4_conn_flow *pcr;
@@ -114,7 +114,7 @@ static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys)
  */
 static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_flow *flow;
 	struct ppe_drv_v6_conn_flow *pcf;
 	struct ppe_drv_v6_conn_flow *pcr;
@@ -200,7 +200,7 @@ static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys)
  */
 bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_buff *skb)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_cc *pcc;
 	struct flow_keys keys = {0};
 	ppe_drv_cc_callback_t cb;
@@ -303,7 +303,7 @@ EXPORT_SYMBOL(ppe_drv_cc_process_skbuff);
  */
 void ppe_drv_cc_unregister_cb(ppe_drv_cc_t cc)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_cc *pcc;
 
 	spin_lock_bh(&p->lock);
@@ -323,7 +323,7 @@ EXPORT_SYMBOL(ppe_drv_cc_unregister_cb);
  */
 void ppe_drv_cc_register_cb(ppe_drv_cc_t cc, ppe_drv_cc_callback_t cb, void *app_data)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_cc *pcc;
 
 	ppe_drv_assert(cb, "%p: cannot register null cb for cc %u", p, cc);
@@ -346,7 +346,8 @@ EXPORT_SYMBOL(ppe_drv_cc_register_cb);
  */
 void ppe_drv_cc_entries_free(struct ppe_drv_cc *cc)
 {
-	vfree(cc);
+	nss_ppe_drv_minidump_free(cc, "ppe_drv_cc");
+	kfree(cc);
 }
 
 /*
@@ -355,17 +356,19 @@ void ppe_drv_cc_entries_free(struct ppe_drv_cc *cc)
  */
 struct ppe_drv_cc *ppe_drv_cc_entries_alloc(void)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_cc *cc;
 	struct ppe_drv_cc *pcc;
 	const uint8_t max_exception = ppe_drv_exception_max();
 	uint8_t cpu_code, i;
 
-	cc = vzalloc(sizeof(struct ppe_drv_cc) * PPE_DRV_CC_MAX);
+	cc = kzalloc(sizeof(struct ppe_drv_cc) * PPE_DRV_CC_MAX, GFP_KERNEL);
 	if (!cc) {
 		ppe_drv_warn("%p: Failed to allocate cpu code table entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(cc, sizeof(struct ppe_drv_cc) * PPE_DRV_CC_MAX, "ppe_drv_cc");
 
 	/*
 	 * Enable cpu code for which connection flush would be attempted.

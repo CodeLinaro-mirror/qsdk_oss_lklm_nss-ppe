@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -198,7 +198,8 @@ struct ppe_drv_tun_l3_if *ppe_drv_tun_l3_if_alloc(struct ppe_drv *p)
  */
 void ppe_drv_tun_l3_if_entries_free(struct ppe_drv_tun_l3_if *ptun_l3_if)
 {
-	vfree(ptun_l3_if);
+	nss_ppe_drv_minidump_free(ptun_l3_if, "ppe_drv_tun_l3_if");
+	kfree(ptun_l3_if);
 }
 
 /*
@@ -212,11 +213,14 @@ struct ppe_drv_tun_l3_if *ppe_drv_tun_l3_if_entries_alloc(struct ppe_drv *p)
 
 	ppe_drv_assert(!p->ptun_l3_if, "%p: TL L3 interface already allocated", p);
 
-	ptun_l3_if = vzalloc(sizeof(struct ppe_drv_tun_l3_if) * PPE_DRV_TUN_L3_IF_MAX_ENTRIES);
+	ptun_l3_if = kzalloc(sizeof(struct ppe_drv_tun_l3_if) * PPE_DRV_TUN_L3_IF_MAX_ENTRIES, GFP_KERNEL);
 	if (!ptun_l3_if) {
 		ppe_drv_warn("%p: failed to allocate tun_l3_if entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(ptun_l3_if, sizeof(struct ppe_drv_tun_l3_if) * PPE_DRV_TUN_L3_IF_MAX_ENTRIES,
+							"ppe_drv_tun_l3_if");
 
 	for (index = 0; index < PPE_DRV_TUN_L3_IF_MAX_ENTRIES; index++) {
 		ptun_l3_if[index].index = index;

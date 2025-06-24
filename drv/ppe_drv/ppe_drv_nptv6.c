@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -62,7 +62,7 @@ static bool ppe_drv_nptv6_prefix_deref(struct ppe_drv_nptv6_prefix *pfx)
 struct ppe_drv_nptv6_prefix *ppe_drv_nptv6_add_prefix_entry_ref(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_flow *pcr,
 				struct ppe_drv_v6_conn_npt6 *npt6, bool is_flow)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_ip6_addr_t trans_ip = { 0 };
 	struct ppe_drv_nptv6_prefix *pfx;
 	struct ppe_drv_iface *in_l3_if = NULL;
@@ -156,7 +156,7 @@ struct ppe_drv_nptv6_prefix *ppe_drv_nptv6_add_prefix_entry_ref(struct ppe_drv_v
  */
 bool ppe_drv_nptv6_prefix_entry_deref(struct ppe_drv_v6_conn_flow *flow, struct ppe_drv_nptv6_prefix *px)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *in_l3_if = NULL;
 	struct ppe_drv_nptv6_prefix *pfx;
 	uint32_t l3_if;
@@ -190,7 +190,7 @@ bool ppe_drv_nptv6_prefix_entry_deref(struct ppe_drv_v6_conn_flow *flow, struct 
 struct ppe_drv_nptv6_iid *ppe_drv_nptv6_add_iid_entry(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_flow *pcr,
 						struct ppe_drv_v6_conn_npt6 *npt6, bool is_flow)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_flow_npt66_iid_calc_t iid_cal = {0};
 	fal_flow_npt66_iid_t iid = {0};
 	struct ppe_drv_nptv6_iid *iid_entry;
@@ -346,7 +346,7 @@ struct ppe_drv_nptv6_iid *ppe_drv_nptv6_add_iid_entry(struct ppe_drv_v6_conn_flo
  */
 bool ppe_drv_nptv6_del_iid_entry(struct ppe_drv_v6_conn_flow *flow, struct ppe_drv_nptv6_iid *iid)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *in_l3_if = NULL;
 	struct ppe_drv_nptv6_iid *iid_entry;
 	struct ppe_drv_nptv6_prefix *pfx;
@@ -393,7 +393,8 @@ bool ppe_drv_nptv6_del_iid_entry(struct ppe_drv_v6_conn_flow *flow, struct ppe_d
  */
 void ppe_drv_nptv6_prefix_entries_free(struct ppe_drv_nptv6_prefix *pfx)
 {
-	vfree(pfx);
+	nss_ppe_drv_minidump_free(pfx, "ppe_drv_nptv6_prefix");
+	kfree(pfx);
 }
 
 /*
@@ -404,13 +405,16 @@ struct ppe_drv_nptv6_prefix *ppe_drv_nptv6_prefix_entries_alloc()
 {
 	uint16_t i;
 	struct ppe_drv_nptv6_prefix *pfx;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
-	pfx = vzalloc(sizeof(struct ppe_drv_nptv6_prefix) * p->prefix_num);
+	pfx = kzalloc(sizeof(struct ppe_drv_nptv6_prefix) * p->prefix_num, GFP_KERNEL);
 	if (!pfx) {
 		ppe_drv_warn("%p: failed to allocate prefix Table entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(pfx, sizeof(struct ppe_drv_nptv6_prefix) * p->prefix_num,
+							"ppe_drv_nptv6_prefix");
 
 	/*
 	 * Assign prefix index values to the prefix entries
@@ -428,7 +432,8 @@ struct ppe_drv_nptv6_prefix *ppe_drv_nptv6_prefix_entries_alloc()
  */
 void ppe_drv_nptv6_iid_entries_free(struct ppe_drv_nptv6_iid *iid)
 {
-	vfree(iid);
+	nss_ppe_drv_minidump_free(iid, "ppe_drv_nptv6_iid");
+	kfree(iid);
 }
 
 /*
@@ -439,13 +444,16 @@ struct ppe_drv_nptv6_iid *ppe_drv_nptv6_iid_entries_alloc()
 {
 	uint16_t i;
 	struct ppe_drv_nptv6_iid *iid;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
-	iid = vzalloc(sizeof(struct ppe_drv_nptv6_iid) * p->iid_num);
+	iid = kzalloc(sizeof(struct ppe_drv_nptv6_iid) * p->iid_num, GFP_KERNEL);
 	if (!iid) {
 		ppe_drv_warn("%p: failed to allocate IID entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(iid, sizeof(struct ppe_drv_nptv6_iid) * p->iid_num,
+							"ppe_drv_nptv6_iid");
 
 	/*
 	 * Assign IID index values to the IID entries

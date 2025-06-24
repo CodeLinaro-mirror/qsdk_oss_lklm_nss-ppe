@@ -68,7 +68,7 @@ static ppe_drv_ret_t ppe_drv_vp_cleanup(struct ppe_drv_iface *iface)
  */
 ppe_drv_ret_t ppe_drv_vp_deinit(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	ppe_drv_ret_t ret;
 
 	/*
@@ -96,7 +96,7 @@ EXPORT_SYMBOL(ppe_drv_vp_deinit);
  */
 ppe_drv_ret_t ppe_drv_vp_cfg_update(struct ppe_drv_iface *iface, struct ppe_drv_vp_info *info)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 
 	spin_lock_bh(&p->lock);
@@ -152,7 +152,7 @@ EXPORT_SYMBOL(ppe_drv_vp_cfg_update);
  */
 ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_info *info)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 	uint8_t tunnel_vp_cfg = 0;

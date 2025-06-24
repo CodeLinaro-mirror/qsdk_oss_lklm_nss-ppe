@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -89,7 +89,7 @@ static void ppe_drv_host_delete(struct kref *kref)
  */
 struct ppe_drv_host *ppe_drv_host_v6_add(struct ppe_drv_v6_conn_flow *pcf)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_host_entry_t host_cfg = {0};
 	struct ppe_drv_host *host;
 	uint32_t addr[4];
@@ -129,7 +129,7 @@ struct ppe_drv_host *ppe_drv_host_v6_add(struct ppe_drv_v6_conn_flow *pcf)
  */
 struct ppe_drv_host *ppe_drv_host_v4_add(struct ppe_drv_v4_conn_flow *pcf)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_host_entry_t host_cfg = {0};
 	struct ppe_drv_host *host;
 	sw_error_t err;
@@ -192,7 +192,8 @@ struct ppe_drv_host *ppe_drv_host_ref(struct ppe_drv_host *host)
  */
 void ppe_drv_host_entries_free(struct ppe_drv_host *host)
 {
-	vfree(host);
+	nss_ppe_drv_minidump_free(host, "ppe_drv_host");
+	kfree(host);
 }
 
 /*
@@ -203,13 +204,15 @@ struct ppe_drv_host *ppe_drv_host_entries_alloc()
 {
 	uint16_t i;
 	struct ppe_drv_host *host;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
-	host = vzalloc(sizeof(struct ppe_drv_host) * p->host_num);
+	host = kzalloc(sizeof(struct ppe_drv_host) * p->host_num, GFP_KERNEL);
 	if (!host) {
 		ppe_drv_warn("%p: failed to allocate host entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(host, sizeof(struct ppe_drv_host) * p->host_num, "ppe_drv_host");
 
 	for (i = 0; i < p->host_num; i++) {
 		host[i].index = i;

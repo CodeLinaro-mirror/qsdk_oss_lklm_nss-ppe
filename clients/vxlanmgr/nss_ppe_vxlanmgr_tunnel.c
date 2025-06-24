@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -297,6 +297,7 @@ static void nss_ppe_vxlanmgr_tunnel_destroy(struct nss_ppe_vxlanmgr_tun_ctx *tun
 	 * Delete the tunnel in UNSUCCESS case.
 	 */
 	if (tun_ctx->vp_status != NSS_PPE_VXLANMGR_VP_CREATION_SUCCESS) {
+		nss_ppe_vxlanmgr_minidump_free(tun_ctx, "nss_ppe_vxlanmgr_tun_ctx");
 		kfree(tun_ctx);
 		return;
 	}
@@ -320,6 +321,9 @@ static void nss_ppe_vxlanmgr_tunnel_destroy(struct nss_ppe_vxlanmgr_tun_ctx *tun
 	rtnl_unlock();
 
 	free_netdev(dev);
+
+	nss_ppe_vxlanmgr_minidump_free(tun_ctx->tun_hdr, "ppe_drv_tun_cmn_ctx");
+	nss_ppe_vxlanmgr_minidump_free(tun_ctx, "nss_ppe_vxlanmgr_tun_ctx");
 
 	kfree(tun_ctx->tun_hdr);
 	kfree(tun_ctx);
@@ -710,6 +714,8 @@ static void nss_ppe_vxlanmgr_rtm_newneigh_handler(struct nss_ppe_vxlanmgr_rtm_ne
 		return;
 	}
 
+	nss_ppe_vxlanmgr_minidump_log(tun_ctx, sizeof(struct nss_ppe_vxlanmgr_tun_ctx), "nss_ppe_vxlanmgr_tun_ctx");
+
 	pdev_priv = netdev_priv(pdev);
 	tun_ctx->vni = vxlan_vni_field(pdev_priv->cfg.vni);
 	tun_ctx->parent_dev = pdev;
@@ -763,6 +769,8 @@ static void nss_ppe_vxlanmgr_rtm_newneigh_handler(struct nss_ppe_vxlanmgr_rtm_ne
 		goto dealloc_tunnel;
 	}
 
+	nss_ppe_vxlanmgr_minidump_log(tun_ctx->tun_hdr, sizeof(struct ppe_drv_tun_cmn_ctx), "ppe_drv_tun_cmn_ctx");
+
 	/*
 	 * configure PPE tunnel in VXLANMgr locally.
 	 */
@@ -801,6 +809,7 @@ deconfig_tun_hdr:
 	ppe_tun_deconfigure(nss_netdev);
 
 dealloc_tun_hdr:
+	nss_ppe_vxlanmgr_minidump_free(tun_ctx->tun_hdr, "ppe_drv_tun_cmn_ctx");
 	kfree(tun_ctx->tun_hdr);
 
 dealloc_tunnel:
