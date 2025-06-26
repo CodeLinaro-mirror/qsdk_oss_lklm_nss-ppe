@@ -131,7 +131,7 @@ static inline struct ppe_drv_l3_if *ppe_drv_nexthop_v6_l3_if_get(struct ppe_drv_
 static inline struct ppe_drv_nexthop *ppe_drv_nexthop_v6_match(struct ppe_drv_v6_conn_flow *pcf, bool is_hairpin_nat)
 {
 	struct ppe_drv_nexthop *nh;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint32_t inner_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint32_t outer_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint8_t vlan_cnt = ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf);
@@ -242,7 +242,7 @@ static inline struct ppe_drv_l3_if *ppe_drv_nexthop_v4_l3_if_get(struct ppe_drv_
 static inline struct ppe_drv_nexthop *ppe_drv_nexthop_v4_match(struct ppe_drv_v4_conn_flow *pcf)
 {
 	struct ppe_drv_nexthop *nh;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint32_t inner_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint32_t outer_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint8_t vlan_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
@@ -322,7 +322,7 @@ static inline struct ppe_drv_nexthop *ppe_drv_nexthop_v4_match(struct ppe_drv_v4
 static void ppe_drv_nexthop_free(struct kref *kref)
 {
 	struct ppe_drv_nexthop *nh = container_of(kref, struct ppe_drv_nexthop, ref);
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_ip_nexthop_t fal_nh = {0};
 	sw_error_t err;
 
@@ -396,7 +396,7 @@ bool ppe_drv_nexthop_deref(struct ppe_drv_nexthop *nh)
  */
 struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_flow *pcf, bool is_hairpin_nat)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint32_t in_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint32_t out_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint8_t vlan_cnt = ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf);
@@ -588,7 +588,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
  */
 struct ppe_drv_nexthop *ppe_drv_nexthop_v6_bridge_flow_get_and_ref(struct ppe_drv_v6_conn_flow *pcf)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint32_t in_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint32_t out_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint8_t vlan_cnt = ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf);
@@ -685,7 +685,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_bridge_flow_get_and_ref(struct ppe_dr
  */
 struct ppe_drv_nexthop *ppe_drv_nexthop_v4_bridge_flow_get_and_ref(struct ppe_drv_v4_conn_flow *pcf)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint32_t in_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint32_t out_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint8_t vlan_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
@@ -781,7 +781,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_bridge_flow_get_and_ref(struct ppe_dr
  */
 struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_flow *pcf)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint32_t in_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint32_t out_vlan = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint8_t vlan_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
@@ -988,7 +988,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
  */
 void ppe_drv_nexthop_entries_free(struct ppe_drv_nexthop *nexthop)
 {
-	struct ppe_drv *p __maybe_unused = ppe_drv_gbl;
+	struct ppe_drv *p __maybe_unused = &ppe_drv_gbl;
 
 	ppe_drv_assert(list_empty(&p->nh_active), "%p: there should not be any active nexthop entries ", p);
 	ppe_drv_assert(!list_empty(&p->nh_free), "%p: there should be free nexthop entries ", p);
@@ -1000,8 +1000,7 @@ void ppe_drv_nexthop_entries_free(struct ppe_drv_nexthop *nexthop)
 	/*
 	 * Release memory
 	 */
-	nss_ppe_drv_minidump_free(nexthop, "ppe_drv_nexthop");
-	kfree(nexthop);
+	vfree(nexthop);
 }
 
 /*
@@ -1010,17 +1009,15 @@ void ppe_drv_nexthop_entries_free(struct ppe_drv_nexthop *nexthop)
  */
 struct ppe_drv_nexthop *ppe_drv_nexthop_entries_alloc()
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_nexthop *nexthop;
 	uint16_t i;
 
-	nexthop = kzalloc(sizeof(struct ppe_drv_nexthop) * p->nexthop_num, GFP_KERNEL);
+	nexthop = vzalloc(sizeof(struct ppe_drv_nexthop) * p->nexthop_num);
 	if (!nexthop) {
 		ppe_drv_warn("%p: failed to allocate nexthop entries", p);
 		return NULL;
 	}
-
-	nss_ppe_drv_minidump_log(nexthop, sizeof(struct ppe_drv_nexthop) * p->nexthop_num, "ppe_drv_nexthop");
 
 	/*
 	 * Initialize active and free list

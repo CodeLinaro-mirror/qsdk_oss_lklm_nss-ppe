@@ -177,7 +177,7 @@ int ppe_flow_dump_v6_get(struct ppe_drv_flow_dump_instance *fdi, struct list_hea
 {
 	int result;
 
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_v6_conn *cn;
 	struct ppe_drv_v6_conn_flow *pcf;
 	struct ppe_drv_v6_conn_flow *pcr;
@@ -561,7 +561,7 @@ int ppe_flow_dump_v4_get(struct ppe_drv_flow_dump_instance *fdi, struct list_hea
 {
 	int result;
 
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_v4_conn *cn;
 	struct ppe_drv_v4_conn_flow *pcf_v4;
 	struct ppe_drv_v4_conn_flow *pcr_v4;
@@ -982,7 +982,7 @@ static bool ppe_drv_flow_dump_v6_get(struct ppe_drv_flow_dump_instance *fdi, str
 static int ppe_drv_flow_dump_dev_open(struct inode *inode, struct file *file)
 {
 	struct ppe_drv_flow_dump_instance *fdi;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	ppe_drv_info("flow_dump open\n");
 

@@ -127,7 +127,7 @@ void ppe_drv_flow_stats_clear(struct ppe_drv_flow *pf)
  */
 void ppe_drv_flow_sawf_sc_stats_add(uint8_t service_class, uint32_t delta_pkts, uint32_t delta_bytes)
 {
-	struct ppe_drv_stats_sawf_sc *sawf_sc_stats = &ppe_drv_gbl->stats.sawf_sc_stats[service_class];
+	struct ppe_drv_stats_sawf_sc *sawf_sc_stats = &ppe_drv_gbl.stats.sawf_sc_stats[service_class];
 
 	atomic64_add(delta_pkts, &sawf_sc_stats->rx_packets);
 	atomic64_add(delta_bytes, &sawf_sc_stats->rx_bytes);
@@ -917,7 +917,7 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
  */
 struct ppe_drv_flow *ppe_drv_flow_v6_get(struct ppe_drv_v6_5tuple *tuple)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_flow_host_entry_t flow_host = {0};
 	fal_flow_entry_t *flow_cfg = &flow_host.flow_entry;
 	fal_host_entry_t *host_cfg = &flow_host.host_entry;
@@ -1065,7 +1065,7 @@ bool ppe_drv_flow_v6_sawf_mark_update(struct ppe_drv_v6_conn_flow *pcf)
 struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_nexthop *nh,
 					struct ppe_drv_host *host, bool entry_valid)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_stats_sawf_sc *sawf_sc_stats;
 	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 	fal_flow_entry_t flow_cfg = {0};
@@ -1945,7 +1945,7 @@ bool ppe_drv_flow_del(struct ppe_drv_flow *pf)
  */
 struct ppe_drv_flow *ppe_drv_flow_v4_get(struct ppe_drv_v4_5tuple *tuple)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_flow_host_entry_t flow_host = {0};
 	fal_flow_entry_t *flow_cfg = &flow_host.flow_entry;
 	fal_host_entry_t *host_cfg = &flow_host.host_entry;
@@ -2093,7 +2093,7 @@ bool ppe_drv_flow_v4_sawf_mark_update(struct ppe_drv_v4_conn_flow *pcf)
 struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_nexthop *nh,
 					struct ppe_drv_host *host, bool entry_valid)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_stats_sawf_sc *sawf_sc_stats;
 	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->flow_metadata.tree_id_data);
 	fal_flow_entry_t flow_cfg = {0};
@@ -2527,8 +2527,7 @@ static void ppe_drv_flow_table_free(void)
 void ppe_drv_flow_entries_free(struct ppe_drv_flow *flow)
 {
 	ppe_drv_flow_table_free();
-	nss_ppe_drv_minidump_free(flow, "ppe_drv_flow");
-	kfree(flow);
+	vfree(flow);
 }
 
 /*
@@ -2560,9 +2559,9 @@ struct ppe_drv_flow *ppe_drv_flow_entries_alloc()
 {
 	uint16_t i;
 	struct ppe_drv_flow *flow;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
-	flow = kzalloc(sizeof(struct ppe_drv_flow) * p->flow_num, GFP_KERNEL);
+	flow = vzalloc(sizeof(struct ppe_drv_flow) * p->flow_num);
 	if (!flow) {
 		ppe_drv_warn("%p: failed to allocate flow entries", p);
 		return NULL;
@@ -2573,11 +2572,9 @@ struct ppe_drv_flow *ppe_drv_flow_entries_alloc()
 	 */
 	if (!ppe_drv_flow_table_alloc(p)) {
 		ppe_drv_warn("%p: failed to allocate flow table space\n", p);
-		kfree(flow);
+		vfree(flow);
 		return NULL;
 	}
-
-	nss_ppe_drv_minidump_log(flow, sizeof(struct ppe_drv_flow) * p->flow_num, "ppe_drv_flow");
 
 	/*
 	 * Assign flow index values to the flow entries
