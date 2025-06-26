@@ -101,8 +101,6 @@ static void nss_ppe_pppoe_mgr_remove_session(struct nss_ppe_pppoe_mgr_session_en
 
 	hash_del_rcu(&entry->hash_list);
 	synchronize_rcu();
-
-	nss_ppe_pppoe_mgr_minidump_free(entry, "nss_ppe_pppoe_mgr_session_entry");
 	kfree(entry);
 }
 
@@ -122,8 +120,6 @@ static struct nss_ppe_pppoe_mgr_session_entry *nss_ppe_pppoe_mgr_add_session(str
 		nss_ppe_pppoe_mgr_warn("%px: failed to allocate pppoe session entry\n", dev);
 		return NULL;
 	}
-
-	nss_ppe_pppoe_mgr_minidump_log(entry, sizeof(struct nss_ppe_pppoe_mgr_session_entry), "nss_ppe_pppoe_mgr_session_entry");
 
 	entry->iface = iface;
 	info = &entry->info;

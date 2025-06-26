@@ -204,7 +204,7 @@ static void ppe_drv_port_dump(struct ppe_drv_port *pp)
  */
 static inline struct ppe_drv_port *ppe_drv_port_get_free_port(enum ppe_drv_port_type type)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint16_t i;
 
 	/*
@@ -978,7 +978,7 @@ EXPORT_SYMBOL(ppe_drv_port_get_vp_phys_dev);
 bool ppe_drv_port_get_vp_stats(int16_t port, struct ppe_drv_port_hw_stats *vp_stats)
 {
 #ifdef PPE_TUNNEL_ENABLE
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 #endif
 	fal_port_cnt_t hw_stats;
 	uint32_t v_port;
@@ -1061,7 +1061,7 @@ EXPORT_SYMBOL(ppe_drv_port_clear_hw_vp_stats);
  */
 struct ppe_drv_port *ppe_drv_port_from_tl_l3_if(struct ppe_drv_tun_l3_if *tl_l3_if)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp;
 	uint16_t i;
 
@@ -1087,7 +1087,7 @@ struct ppe_drv_port *ppe_drv_port_from_tl_l3_if(struct ppe_drv_tun_l3_if *tl_l3_
  */
 struct ppe_drv_port *ppe_drv_port_from_dev(struct net_device *dev)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 	uint16_t i;
 
@@ -1130,7 +1130,7 @@ struct ppe_drv_port *ppe_drv_port_from_dev_and_ref(struct net_device *dev)
  */
 struct ppe_drv_port *ppe_drv_port_from_port_num(uint16_t port_num)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 
 	if (port_num >= PPE_DRV_PORTS_MAX) {
@@ -1161,7 +1161,7 @@ uint16_t ppe_drv_port_num_get(struct ppe_drv_port *pp)
  */
 int32_t ppe_drv_port_num_from_dev(struct net_device *dev)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 
 	spin_lock_bh(&p->lock);
@@ -1192,7 +1192,7 @@ static bool ppe_drv_port_rfs_enabled(struct ppe_drv_port *pp)
 bool ppe_drv_port_check_rfs_support(struct net_device *dev)
 {
 	struct ppe_drv_port *pp = NULL;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	pp = ppe_drv_port_from_dev(dev);
@@ -1230,7 +1230,7 @@ EXPORT_SYMBOL(ppe_drv_port_check_rfs_support);
 void ppe_drv_port_clear_policer_support(struct net_device *dev)
 {
 	struct ppe_drv_port *pp = NULL;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	pp = ppe_drv_port_from_dev(dev);
@@ -1254,7 +1254,7 @@ EXPORT_SYMBOL(ppe_drv_port_clear_policer_support);
 void ppe_drv_port_set_policer_support(struct net_device *dev)
 {
 	struct ppe_drv_port *pp = NULL;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	pp = ppe_drv_port_from_dev(dev);
@@ -1280,7 +1280,7 @@ EXPORT_SYMBOL(ppe_drv_port_set_policer_support);
 bool ppe_drv_port_check_policer_support(struct net_device *dev)
 {
 	struct ppe_drv_port *pp = NULL;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	bool policer_en = false;
 
 	spin_lock_bh(&p->lock);
@@ -1340,7 +1340,7 @@ struct ppe_drv_tun *ppe_drv_port_tun_get(struct ppe_drv_port *pp)
  */
 struct net_device *ppe_drv_port_num_to_dev(uint8_t port_num)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct net_device *dev = NULL;
 	struct ppe_drv_port *pp;
 
@@ -1919,7 +1919,7 @@ EXPORT_SYMBOL(ppe_drv_port_xcpn_mode_set);
  */
 int16_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 	uint8_t i;
 
@@ -1941,7 +1941,7 @@ int16_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata)
  */
 int16_t ppe_drv_port_metadata_to_enq_vp(uint8_t port_metadata)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t ret;
 
 	spin_lock_bh(&p->lock);
@@ -1958,7 +1958,7 @@ EXPORT_SYMBOL(ppe_drv_port_metadata_to_enq_vp);
  */
 int16_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 	int16_t enq_vp;
 
@@ -1979,7 +1979,7 @@ int16_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata)
  */
 int16_t ppe_drv_port_metadata_to_pri_prof(uint8_t port_metadata)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t ret;
 
 	spin_lock_bh(&p->lock);
@@ -2007,7 +2007,7 @@ static void ppe_drv_port_enq_vp_deinit(struct kref *kref)
  */
 bool ppe_drv_port_enq_vp_free(int16_t enq_vp)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 
 	if (enq_vp < PPE_DRV_PORT_ENQ_VP_START ||
@@ -2031,7 +2031,7 @@ bool ppe_drv_port_enq_vp_free(int16_t enq_vp)
  */
 void ppe_drv_port_enq_vp_init()
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t i;
 	uint8_t pri_prof_idx = PPE_DRV_PORT_EVP_PRI_PROF_START;
 
@@ -2052,7 +2052,7 @@ void ppe_drv_port_enq_vp_init()
  */
 bool ppe_drv_port_enq_vp_metadata_set(int16_t enq_vp, uint8_t evp_metadata)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 
 	if (enq_vp < PPE_DRV_PORT_ENQ_VP_START ||
@@ -2072,7 +2072,7 @@ bool ppe_drv_port_enq_vp_metadata_set(int16_t enq_vp, uint8_t evp_metadata)
  */
 int8_t ppe_drv_port_enq_vp_to_pri_prof(int16_t enq_vp)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 
 	if (enq_vp < PPE_DRV_PORT_ENQ_VP_START ||
@@ -2094,7 +2094,7 @@ int8_t ppe_drv_port_enq_vp_to_pri_prof(int16_t enq_vp)
  */
 int16_t ppe_drv_port_enq_vp_alloc(void)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint8_t i;
 
 	/*
@@ -2159,7 +2159,7 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 {
 	uint32_t port;
 	sw_error_t err;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 	fal_port_cnt_cfg_t cntr = {0};
 	fal_vport_state_t vp_state = {0};
@@ -2340,7 +2340,7 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 struct ppe_drv_port *ppe_drv_port_phy_alloc(uint8_t port_num, struct net_device *dev)
 {
 	sw_error_t err;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
 	fal_port_cnt_cfg_t cntr = {0};
 	fal_vport_state_t vp_state = {0};
@@ -2480,8 +2480,7 @@ struct ppe_drv_port *ppe_drv_port_phy_alloc(uint8_t port_num, struct net_device 
  */
 void ppe_drv_port_entries_free(struct ppe_drv_port *port)
 {
-	nss_ppe_drv_minidump_free(port, "ppe_drv_port");
-	kfree(port);
+	vfree(port);
 }
 
 /*
@@ -2490,17 +2489,15 @@ void ppe_drv_port_entries_free(struct ppe_drv_port *port)
  */
 struct ppe_drv_port *ppe_drv_port_entries_alloc(void)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *port;
 	uint16_t i;
 
-	port = kzalloc(sizeof(struct ppe_drv_port) * p->port_num, GFP_KERNEL);
+	port = vzalloc(sizeof(struct ppe_drv_port) * p->port_num);
 	if (!port) {
 		ppe_drv_warn("%p: failed to allocate port entries", p);
 		return NULL;
 	}
-
-	nss_ppe_drv_minidump_log(port, sizeof(struct ppe_drv_port) * p->port_num, "ppe_drv_port");
 
 	for (i = 0; i < p->port_num; i++) {
 		port[i].port = i;

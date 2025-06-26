@@ -41,7 +41,7 @@ bool ppe_drv_vlan_del_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_d
 {
 	fal_vlan_trans_adv_rule_t xlt_rule = {0};
 	fal_vlan_trans_adv_action_t xlt_action = {0};
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_port_t fal_port;
 	sw_error_t err;
 
@@ -82,7 +82,7 @@ bool ppe_drv_vlan_add_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_d
 {
 	fal_vlan_trans_adv_rule_t xlt_rule = {0};
 	fal_vlan_trans_adv_action_t xlt_action = {0};
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_port_t fal_port;
 	sw_error_t err;
 
@@ -121,7 +121,7 @@ bool ppe_drv_vlan_add_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_d
  */
 ppe_drv_ret_t ppe_drv_vlan_tpid_set(uint16_t ctpid, uint16_t stpid, uint32_t mask)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	fal_tpid_t tpid;
 
@@ -151,7 +151,7 @@ EXPORT_SYMBOL(ppe_drv_vlan_tpid_set);
  */
 ppe_drv_ret_t ppe_drv_vlan_port_role_set(struct ppe_drv_iface *iface, uint32_t port_id, fal_port_qinq_role_t *mode)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_port_t fal_port;
 
 	spin_lock_bh(&p->lock);
@@ -242,7 +242,7 @@ void ppe_drv_vlan_egress_rule_action_set_vp(fal_vlan_trans_adv_rule_t *xlt_rule,
  */
 ppe_drv_ret_t ppe_drv_vlan_as_vp_del_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_vlan_trans_adv_rule_t xlt_rule = {0};
 	fal_vlan_trans_adv_action_t xlt_action = {0};
 	fal_port_t fal_port, base_f_port;
@@ -365,7 +365,7 @@ ppe_drv_ret_t ppe_drv_vlan_as_vp_add_xlate_rules(struct ppe_drv_iface *iface, st
 {
 	fal_vlan_trans_adv_rule_t xlt_rule = {0};
 	fal_vlan_trans_adv_action_t xlt_action = {0};
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_port_t fal_port, base_f_port;
 	struct ppe_drv_iface *base_if;
 	struct net_device *base_dev;
@@ -507,7 +507,7 @@ EXPORT_SYMBOL(ppe_drv_vlan_as_vp_add_xlate_rules);
  */
 ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_vlan_trans_adv_rule_t xlt_rule;	/* VLAN Translation Rule */
 	fal_vlan_trans_adv_action_t xlt_action;	/* VLAN Translation Action */
 	struct ppe_drv_vsi *vsi;
@@ -594,7 +594,7 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 {
 	fal_vlan_trans_adv_rule_t xlt_rule;
 	fal_vlan_trans_adv_action_t xlt_action;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_vsi *vsi;
 	int vsi_idx, ret, rc;
 	fal_port_t fal_port;
@@ -692,7 +692,7 @@ ppe_drv_ret_t ppe_drv_vlan_over_bridge_del_ig_rule(struct ppe_drv_iface *slave_i
 	fal_vlan_trans_adv_action_t xlt_action = {0};
 	fal_vlan_trans_adv_rule_t xlt_rule =  {0};
 	struct ppe_drv_vsi *vsi;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	vsi = ppe_drv_iface_vsi_get(vlan_iface);
@@ -764,7 +764,7 @@ ppe_drv_ret_t ppe_drv_vlan_over_bridge_add_ig_rule(struct ppe_drv_iface *slave_i
 	fal_port_t fal_port;
 	fal_vlan_trans_adv_action_t xlt_action = {0};
 	fal_vlan_trans_adv_rule_t xlt_rule = {0};
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_vsi *vsi;
 
 	spin_lock_bh(&p->lock);
@@ -832,7 +832,7 @@ EXPORT_SYMBOL(ppe_drv_vlan_over_bridge_add_ig_rule);
  */
 void ppe_drv_vlan_deinit(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_iface *port_if;
 	struct ppe_drv_vsi *vsi;
 	struct ppe_drv_port *pp;
@@ -878,7 +878,7 @@ EXPORT_SYMBOL(ppe_drv_vlan_deinit);
 ppe_drv_ret_t ppe_drv_vlan_init(struct ppe_drv_iface *ppe_iface, struct net_device *base_dev, uint32_t vlan_id, bool vlan_over_bridge)
 {
 	struct ppe_drv_iface *base_if, *port_if;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_vsi *vsi;
 	struct ppe_drv_port *pp;
@@ -955,7 +955,7 @@ EXPORT_SYMBOL(ppe_drv_vlan_init);
  */
 ppe_drv_ret_t ppe_drv_vlan_lag_slave_leave(struct ppe_drv_iface *vlan_iface, struct net_device *slave_dev)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 	struct ppe_drv_port *port;
 	struct ppe_drv_vsi *vsi;
@@ -1000,7 +1000,7 @@ EXPORT_SYMBOL(ppe_drv_vlan_lag_slave_leave);
  */
 ppe_drv_ret_t ppe_drv_vlan_lag_slave_join(struct ppe_drv_iface *vlan_iface, struct net_device *slave_dev)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_iface *iface;
 	struct ppe_drv_port *port;
 	struct ppe_drv_vsi *vsi;
@@ -1185,7 +1185,7 @@ EXPORT_SYMBOL(ppe_drv_vlan_wlanif_vp_tun_enc_destroy);
 struct ppe_drv_tun_encap *ppe_drv_vlan_wlanif_tun_enc_setup(struct net_device *dev, int16_t vp_num)
 {
 	struct ppe_drv_tun_encap *ptec = NULL;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	ptec = ppe_drv_tun_encap_alloc(p);

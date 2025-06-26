@@ -73,7 +73,7 @@ static struct ppe_drv_tun *ppe_drv_tun_ref(struct ppe_drv_tun *ptun)
 static void ppe_drv_tun_free(struct kref *kref)
 {
 	struct ppe_drv_tun *ptun = container_of(kref, struct ppe_drv_tun, ref);
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	if (ptun->pp) {
 		ppe_drv_port_tun_set(ptun->pp, NULL);
@@ -252,7 +252,7 @@ ppe_drv_ret_t ppe_drv_tun_gretap_to_mapt_sc(struct ppe_drv_port *tx_port, struct
 						ppe_drv_sc_t *service_code)
 {
 	struct net_device *tx_dev, *rx_dev;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint32_t serv_code;
 
 	bool valid = false;
@@ -502,7 +502,7 @@ bool ppe_drv_tun_port_reset_physical_port(struct ppe_drv_port *pp)
  */
 uint8_t ppe_drv_tun_xmit_port_get(uint8_t xmit_port)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	while (xmit_port >= PPE_DRV_PHYSICAL_MAX) {
 		xmit_port = p->port[xmit_port].xmit_port;
@@ -518,7 +518,7 @@ uint8_t ppe_drv_tun_xmit_port_get(uint8_t xmit_port)
 static bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_port, int16_t enq_vp)
 {
 	sw_error_t err;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_vport_state_t vp_state = {0};
 	struct ppe_drv_port *pp = ptun->pp;
 	uint32_t v_port = FAL_PORT_ID(FAL_PORT_TYPE_VPORT, pp->port);
@@ -644,7 +644,7 @@ static bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_p
 struct ppe_drv_tun_l3_if *ppe_drv_tun_pppoe_tl_l3_if_get(struct ppe_drv_tun *ptun, struct ppe_drv_pppoe *pppoe)
 {
 	struct ppe_drv_tun_l3_if *ptun_l3_if;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	ptun_l3_if = ppe_drv_pppoe_tl_l3_if_get(pppoe);
 	if (ptun_l3_if) {
@@ -674,7 +674,7 @@ struct ppe_drv_tun_l3_if *ppe_drv_tun_pppoe_tl_l3_if_get(struct ppe_drv_tun *ptu
 struct ppe_drv_tun_l3_if *ppe_drv_tun_port_tl_l3_if_get(struct ppe_drv_tun *ptun, uint16_t xmit_port)
 {
 	struct ppe_drv_tun_l3_if *ptun_l3_if;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp;
 
 	/*
@@ -1079,7 +1079,7 @@ bool ppe_drv_tun_attach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6)
  */
 void ppe_drv_tun_v6_conn_tun_del(struct ppe_drv_tun *ptun)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_v6_conn_flow *pcf, *pcr;
 	struct ppe_drv_v6_conn *cn, *cn_tmp;
 	struct ppe_drv_tun *cn_ptun;
@@ -1146,7 +1146,7 @@ void ppe_drv_tun_v6_conn_tun_del(struct ppe_drv_tun *ptun)
  */
 void ppe_drv_tun_v4_conn_tun_del(struct ppe_drv_tun *ptun)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_v4_conn_flow *pcf, *pcr;
 	struct ppe_drv_v4_conn *cn, *tmp_cn;
 	struct ppe_drv_tun *cn_ptun;
@@ -1206,7 +1206,7 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 {
 	ppe_drv_ret_t ret = PPE_DRV_RET_SUCCESS;
 	struct ppe_drv_tun_cmn_ctx *pth;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp;
 	struct ppe_drv_tun *ptun;
 	struct ppe_drv_v4_conn_sync *cns_v4 = NULL;
@@ -1435,7 +1435,7 @@ void ppe_drv_tun_vxlan_deconfigure(struct ppe_drv *p)
 bool ppe_drv_tun_deconfigure(uint16_t port_num)
 {
 	struct ppe_drv_tun_cmn_ctx *pth = NULL;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun *ptun;
 	struct ppe_drv_port *pp;
 
@@ -1473,7 +1473,7 @@ EXPORT_SYMBOL(ppe_drv_tun_deconfigure);
  */
 bool ppe_drv_tun_decap_disable_by_port_num(uint16_t port_num)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp;
 	struct ppe_drv_tun *ptun;
 
@@ -1499,7 +1499,7 @@ EXPORT_SYMBOL(ppe_drv_tun_decap_disable_by_port_num);
  */
 bool ppe_drv_tun_decap_enable_by_port_num(uint16_t port_num)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_port *pp;
 	struct ppe_drv_tun *ptun;
 
@@ -1530,7 +1530,7 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	struct ppe_drv_v4_conn *cn_v4 = NULL;
 	struct ppe_drv_v6_conn *cn_v6 = NULL;
 	struct ppe_drv_pppoe *pppoe = NULL;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun_cmn_ctx *pth;
 	bool dc_cfg_status = false;
 	struct ppe_drv_tun *ptun;
@@ -1806,7 +1806,7 @@ EXPORT_SYMBOL(ppe_drv_tun_activate);
  */
 static struct ppe_drv_tun_encap_xlate_rule *ppe_drv_tun_encap_rule_id_alloc_or_ref(struct ppe_drv_tun_encap_xlate_rule *ptecxr, struct ppe_drv_tun *ptun)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun_encap_xlate_rule *encap_rule = ptecxr;
 	uint8_t rule_id;
 
@@ -1841,7 +1841,7 @@ static struct ppe_drv_tun_encap_xlate_rule *ppe_drv_tun_encap_rule_id_alloc_or_r
  */
 static bool ppe_drv_tun_encap_header_rule_configure(enum ppe_drv_tun_cmn_ctx_type type, struct ppe_drv_tun *ptun)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 
 	switch (type) {
 	case PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2:
@@ -1929,7 +1929,7 @@ static bool ppe_drv_tun_mapt_csum_config(struct ppe_drv_port *pp)
  */
 bool ppe_drv_tun_configure(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, void *add_cb, void *del_cb)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun *ptun = NULL;
 	uint16_t decap_hwidx = PPE_DRV_TUN_DECAP_INVALID_IDX;
 
@@ -2084,7 +2084,7 @@ bool ppe_drv_tun_configure_vxlan_and_dport(uint16_t dport)
 	fal_vxlan_type_t type = FAL_VXLAN;
 	sw_error_t err;
 
-	ppe_drv_gbl->vxlan_dport = dport;
+	ppe_drv_gbl.vxlan_dport = dport;
 
 	/*
 	 * VxLAN Decap port number match for IPV4 tunnel.
@@ -2119,7 +2119,7 @@ EXPORT_SYMBOL(ppe_drv_tun_configure_vxlan_and_dport);
  */
 bool ppe_drv_tun_configure_vxlan_gpe_and_dport(uint16_t dport)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_tunnel_udp_entry_t ftue = {0};
 	fal_vxlan_type_t type = FAL_VXLAN_GPE;
 	sw_error_t err;
@@ -2164,7 +2164,7 @@ EXPORT_SYMBOL(ppe_drv_tun_configure_vxlan_gpe_and_dport);
 void ppe_drv_tun_loopback_gretap_rx_stats_get(uint8_t port,  struct ppe_drv_port_hw_stats *vp_stats)
 {
 	fal_entry_counter_t decap_counter;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	struct ppe_drv_tun *ptun;
 	struct ppe_drv_port *pp;
 	sw_error_t err;

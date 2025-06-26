@@ -30,7 +30,7 @@
  */
 static void ppe_drv_l3_if_dump(struct ppe_drv_l3_if *l3_if)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_intf_macaddr_t mac_cfg = {0};
 	fal_intf_entry_t l3_if_cfg = {0};
 #ifdef PPE_TUNNEL_ENABLE
@@ -158,7 +158,7 @@ static void ppe_drv_l3_if_free(struct kref *kref)
 static bool ppe_drv_l3_if_ig_mac_addr_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr)
 {
 	sw_error_t err;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_intf_macaddr_t mac_cfg = {0};
 
 	mac_cfg.direction = FAL_IP_INGRESS;
@@ -302,7 +302,7 @@ bool ppe_drv_l3_if_eg_mac_addr_clear(struct ppe_drv_l3_if *l3_if)
 bool ppe_drv_l3_if_mac_addr_set(struct ppe_drv_l3_if *l3_if, const uint8_t *mac_addr)
 {
 	sw_error_t err;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_intf_macaddr_t mac_cfg = {0};
 
 	/*
@@ -571,7 +571,7 @@ bool ppe_drv_l3_if_udp_zero_csum_action_set(struct ppe_drv_l3_if *l3_if, fal_udp
 struct ppe_drv_l3_if *ppe_drv_l3_if_alloc(enum ppe_drv_l3_if_type type)
 {
 	struct ppe_drv_l3_if *l3_if = NULL;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	fal_intf_entry_t in_l3_if_cfg = { 0 };
 	uint16_t i;
 
@@ -713,8 +713,7 @@ uint16_t ppe_drv_l3_if_get_index(struct ppe_drv_l3_if *l3_if)
  */
 void ppe_drv_l3_if_entries_free(struct ppe_drv_l3_if *l3_if)
 {
-	nss_ppe_drv_minidump_free(l3_if, "ppe_drv_l3_if");
-	kfree(l3_if);
+	vfree(l3_if);
 }
 
 /*
@@ -724,16 +723,14 @@ void ppe_drv_l3_if_entries_free(struct ppe_drv_l3_if *l3_if)
 struct ppe_drv_l3_if *ppe_drv_l3_if_entries_alloc()
 {
 	struct ppe_drv_l3_if *l3_if;
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = &ppe_drv_gbl;
 	uint16_t i;
 
-	l3_if = kzalloc(sizeof(struct ppe_drv_l3_if) * p->l3_if_num, GFP_KERNEL);
+	l3_if = vzalloc(sizeof(struct ppe_drv_l3_if) * p->l3_if_num);
 	if (!l3_if) {
 		ppe_drv_warn("%p: failed to allocate l3_if entries", p);
 		return NULL;
 	}
-
-	nss_ppe_drv_minidump_log(l3_if, sizeof(struct ppe_drv_l3_if) * p->l3_if_num, "ppe_drv_l3_if");
 
 	/*
 	 * Initialize interface values

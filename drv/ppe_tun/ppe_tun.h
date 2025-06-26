@@ -21,10 +21,6 @@
 #include <ppe_drv_sc.h>
 #include <ppe_tun.h>
 
-#ifdef CONFIG_QCA_MINIDUMP
-#include <soc/qcom/ctx-save.h>
-#endif
-
 /*
  * PPE Tunnel debug macros
  */
@@ -145,27 +141,4 @@ struct ppe_tun_priv {
 	atomic_t free_pending;			/* Number of tunnel delete pending */
 	atomic_t alloc_fail;			/* Number of tunnel alloc fails */
 };
-
-/*
- * nss_ppe_tun_minidump_log()
- *	To log data structures into minidump output
- */
-static inline void nss_ppe_tun_minidump_log(void *start_addr, uint64_t size, const char *name) {
-#ifdef CONFIG_QCA_MINIDUMP
-	if (minidump_add_segments((uint64_t)(uintptr_t)(start_addr), size, QCA_WDT_LOG_DUMP_TYPE_MOD, name, MINIDUMP_CRASH_TYPE_NSS, "qca_nss_ppe_tun") != 0)
-		pr_warn("minidump_log failed for structure type %s at address %p\n", name, start_addr);
-#endif
-}
-
-/*
- * nss_ppe_tun_minidump_free()
- *	To unregister data structures from minidump tlv
- */
-static inline void nss_ppe_tun_minidump_free(void *start_addr, const char *name) {
-#ifdef CONFIG_QCA_MINIDUMP
-	if (minidump_remove_segments((uint64_t)(uintptr_t)(start_addr)) != 0)
-		pr_warn("minidump_free failed for structure %s at address %p\n", name, start_addr);
-#endif
-}
-
 #endif /* _PPE_TUN_H_ */
