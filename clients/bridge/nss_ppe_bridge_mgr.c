@@ -79,6 +79,7 @@ static void nss_ppe_bridge_mgr_delete_instance(struct nss_ppe_bridge_mgr_pvt *b_
 		b_pvt->iface = NULL;
 	}
 
+	nss_ppe_bridge_mgr_minidump_free(b_pvt, "nss_ppe_bridge_mgr_pvt");
 	kfree(b_pvt);
 }
 
@@ -116,6 +117,8 @@ static struct nss_ppe_bridge_mgr_pvt *nss_ppe_bridge_mgr_create_instance(struct 
 		kfree(br);
 		return NULL;
 	}
+
+	nss_ppe_bridge_mgr_minidump_log(br, sizeof(*br), "nss_ppe_bridge_mgr_pvt");
 
 	INIT_LIST_HEAD(&br->list);
 	return br;

@@ -28,7 +28,7 @@
 static void ppe_drv_tun_gre_acl_free(struct kref *kref)
 {
 	struct ppe_drv_tun_gre_acl *gre = container_of(kref, struct ppe_drv_tun_gre_acl, ref);
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	sw_error_t error;
 
 	if (gre->acl_vpid_en) {

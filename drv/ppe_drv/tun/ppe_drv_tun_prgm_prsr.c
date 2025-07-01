@@ -86,7 +86,7 @@ void ppe_drv_tun_prgm_prsr_ref(struct ppe_drv_tun_prgm_prsr *pgm)
  */
 bool ppe_drv_tun_prgm_prsr_deconfigure(struct ppe_drv_tun_prgm_prsr_cfg *prsr_cfg, uint8_t parser_idx)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_tunnel_decap_key_t ptdkcfg =  {0};
 	fal_tunnel_program_entry_t pgm = {0};
 	fal_tunnel_program_cfg_t cfg = {0};
@@ -136,7 +136,7 @@ bool ppe_drv_tun_prgm_prsr_deconfigure(struct ppe_drv_tun_prgm_prsr_cfg *prsr_cf
  */
 bool ppe_drv_tun_prgm_prsr_configure(struct ppe_drv_tun_prgm_prsr_cfg *prsr_cfg, struct ppe_drv_tun_prgm_prsr_decap_key *key, uint8_t parser_idx)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_tunnel_decap_key_t ptdkcfg =  {0};
 	fal_tunnel_program_entry_t pgm = {0};
 	fal_tunnel_program_cfg_t cfg = {0};
@@ -245,7 +245,7 @@ bool ppe_drv_tun_prgm_prsr_prgm_udf_fill(fal_tunnel_program_udf_t *fal_udf, stru
  */
 bool ppe_drv_tun_prgm_prsr_prgm_udf_deconfigure(uint8_t parser_idx, struct ppe_drv_tun_prgm_prsr_prgm_udf *udf)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_tunnel_program_udf_t fal_udf = {0};
 	sw_error_t err;
 
@@ -266,7 +266,7 @@ bool ppe_drv_tun_prgm_prsr_prgm_udf_deconfigure(uint8_t parser_idx, struct ppe_d
  */
 bool ppe_drv_tun_prgm_prsr_prgm_udf_configure(uint8_t parser_idx, struct ppe_drv_tun_prgm_prsr_prgm_udf *udf)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_tunnel_program_udf_t fal_udf = {0};
 	sw_error_t err;
 
@@ -296,7 +296,7 @@ bool ppe_drv_tun_prgm_prsr_configured(struct ppe_drv_tun_prgm_prsr *pgm)
  */
 bool ppe_drv_tun_prgm_prsr_type_allocated(enum ppe_drv_tun_prgm_prsr_mode prsr_mode)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_tun_prgm_prsr *pgm = p->pgm;
 	int i;
 
@@ -320,7 +320,7 @@ bool ppe_drv_tun_prgm_prsr_type_allocated(enum ppe_drv_tun_prgm_prsr_mode prsr_m
  */
 struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun_prgm_prsr_mode mode)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_tun_prgm_prsr *pgm = p->pgm;
 	int i, free_index = -1;
 
@@ -362,7 +362,8 @@ struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun
  */
 void ppe_drv_tun_prgm_prsr_free(struct ppe_drv_tun_prgm_prsr *program_parser)
 {
-	vfree(program_parser);
+	nss_ppe_drv_minidump_free(program_parser, "ppe_drv_tun_prgm_prsr");
+	kfree(program_parser);
 }
 
 /*
@@ -376,11 +377,13 @@ struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_alloc(struct ppe_drv *p)
 
 	ppe_drv_assert(!p->pgm, "%p: tunnel program parser entries already allocated", p);
 
-	pgm = vzalloc(sizeof(struct ppe_drv_tun_prgm_prsr) * PPE_DRV_TUN_PRGM_PRSR_MAX);
+	pgm = kzalloc(sizeof(struct ppe_drv_tun_prgm_prsr) * PPE_DRV_TUN_PRGM_PRSR_MAX, GFP_KERNEL);
 	if (!pgm) {
 		ppe_drv_warn("%p: failed to allocate program parser entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(pgm, sizeof(struct ppe_drv_tun_prgm_prsr) * PPE_DRV_TUN_PRGM_PRSR_MAX, "ppe_drv_tun_prgm_prsr");
 
 	for (index = 0; index < PPE_DRV_TUN_PRGM_PRSR_MAX; index++) {
 		pgm[index].parser_idx = index;

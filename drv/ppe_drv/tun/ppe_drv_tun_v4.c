@@ -92,7 +92,7 @@ void ppe_drv_tun_v4_port_stats_update(struct ppe_drv_v4_conn *cn)
  */
 struct ppe_drv_v4_conn *ppe_drv_v4_conn_tun_conn_get(struct ppe_drv_v4_5tuple *tuple)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_v4_conn *cn;
 
 	list_for_each_entry(cn, &p->conn_tun_v4, list) {
@@ -200,7 +200,7 @@ static bool ppe_drv_v4_vxlan_gpe_tunnel(struct ppe_drv_v4_rule_create *create, s
  */
 bool ppe_drv_v4_l2tp_tunnel(struct ppe_drv_tun *ptun, int8_t protocol, uint32_t flow_ident, uint32_t return_ident)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	if (ptun->th.type != PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
 		return false;
@@ -237,7 +237,7 @@ bool ppe_drv_v4_gre_tunnel(struct ppe_drv_tun *ptun, uint8_t protocol)
  */
 bool ppe_drv_v4_tun_allow_tunnel_create(struct ppe_drv_v4_rule_create *create)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_tun *port_tun;
 	struct net_device *dev;
 
@@ -376,7 +376,7 @@ ppe_drv_ret_t ppe_drv_v4_tun_del_ce_validate(void *vdestroy_rule, struct ppe_drv
 	ppe_drv_ret_t ret = PPE_DRV_RET_SUCCESS;
 	struct ppe_drv_v4_conn_flow *pcf, *pcr;
 	struct ppe_drv_comm_stats *comm_stats;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_v4_conn *cn;
 	struct ppe_drv_v4_conn_sync *cns;
 
@@ -423,7 +423,7 @@ ppe_drv_ret_t ppe_drv_v4_tun_del_ce_notify(struct ppe_drv_v4_rule_destroy *destr
 {
 	struct ppe_drv_v4_conn_flow *pcf, *pcr;
 	struct ppe_drv_comm_stats *comm_stats;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	ppe_drv_tun_del_ce_callback_t del_cb;
 	struct ppe_drv_v4_conn *cn;
 	struct ppe_drv_tun *tun;
@@ -473,7 +473,7 @@ ppe_drv_ret_t ppe_drv_v4_tun_add_ce_notify(struct ppe_drv_v4_rule_create *create
 	struct ppe_drv_port *pp_port;
 	struct ppe_drv_tun *port_tun;
 	ppe_drv_tun_add_ce_callback_t add_cb;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint8_t vp_num;
 	uint8_t status;
 
@@ -517,7 +517,7 @@ ppe_drv_ret_t ppe_drv_v4_tun_add_ce_notify(struct ppe_drv_v4_rule_create *create
  */
 ppe_drv_ret_t ppe_drv_v4_tun_add_ce_validate(void *vcreate_rule, struct ppe_drv_v4_conn *cn)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_v4_conn_flow *pcf = NULL;
 	struct ppe_drv_v4_conn_flow *pcr = NULL;
 	struct ppe_drv_top_if_rule top_if;
@@ -613,7 +613,7 @@ fail:
  */
 bool ppe_drv_tun_v4_fse_entry_del(struct ppe_drv_v4_conn_flow *pcf,  struct ppe_drv_v4_conn_flow *pcr)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_comm_stats *comm_stats;
         struct ppe_drv_fse_rule_info fse_info = {0};
         struct ppe_drv_v4_conn_flow *fse_cn = NULL;
@@ -657,7 +657,7 @@ bool ppe_drv_tun_v4_fse_entry_del(struct ppe_drv_v4_conn_flow *pcf,  struct ppe_
  */
 bool ppe_drv_tun_v4_fse_entry_add(void *vcreate_rule, struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_v4_conn_flow *pcr)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_comm_stats *comm_stats;
 	struct ppe_drv_v4_rule_create *create = (struct ppe_drv_v4_rule_create *)vcreate_rule;
 

@@ -257,7 +257,8 @@ void ppe_drv_tun_decap_map_entries_free(struct ppe_drv *p)
 		return;
 	}
 
-	vfree(p->decap_map_entries);
+	nss_ppe_drv_minidump_free(p->decap_map_entries, "ppe_drv_tun_decap");
+	kfree(p->decap_map_entries);
 }
 
 /*
@@ -271,11 +272,14 @@ struct ppe_drv_tun_decap *ppe_drv_tun_decap_map_entries_alloc(struct ppe_drv *p)
 
 	ppe_drv_assert(!p->decap_map_entries, "%p: Decap MAP entries already allocated", p);
 
-	decap_map_entries = vzalloc(sizeof(struct ppe_drv_tun_decap) * PPE_DRV_TUN_DECAP_MAP_MAX_ENTRY);
+	decap_map_entries = kzalloc(sizeof(struct ppe_drv_tun_decap) * PPE_DRV_TUN_DECAP_MAP_MAX_ENTRY, GFP_KERNEL);
 	if (!decap_map_entries) {
 		ppe_drv_warn("%p: failed to allocate ppe_drv_tun_decap entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(decap_map_entries, sizeof(struct ppe_drv_tun_decap) * PPE_DRV_TUN_DECAP_MAP_MAX_ENTRY,
+							"ppe_drv_tun_decap");
 
 	for (index = 0; index < PPE_DRV_TUN_DECAP_MAP_MAX_ENTRY; index++) {
 		decap_map_entries[index].index = index;

@@ -57,7 +57,7 @@ bool ppe_drv_nptv6_hairpin_deref(struct ppe_drv_nptv6_hairpin_ctx *npt6_hp)
  */
 struct ppe_drv_nptv6_hairpin_ctx *ppe_drv_nptv6_hairpin_context_create_and_ref(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_npt6 *npt6)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *iface = NULL;
 	struct ppe_drv_nptv6_hairpin_ctx *npt6_hp;
 	struct ppe_drv_l3_if *l3_if = NULL;
@@ -211,7 +211,7 @@ static bool ppe_drv_nptv6_hairpin_prefix_deref(struct ppe_drv_nptv6_prefix *pfx)
 struct ppe_drv_nptv6_prefix *ppe_drv_nptv6_hairpin_add_prefix_entry_ref(struct ppe_drv_v6_conn_flow *pcf,
 				struct ppe_drv_v6_conn_npt6 *npt6, bool hairpin_flow)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_ip6_addr_t trans_ip = { 0 };
 	struct ppe_drv_nptv6_prefix *pfx;
 	struct ppe_drv_nptv6_hairpin_ctx *npt6_hp;
@@ -281,7 +281,7 @@ struct ppe_drv_nptv6_prefix *ppe_drv_nptv6_hairpin_add_prefix_entry_ref(struct p
  */
 bool ppe_drv_nptv6_hairpin_prefix_entry_deref(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_nptv6_prefix *px)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_nptv6_prefix *pfx;
 	struct ppe_drv_l3_if *l3_if;
 	uint16_t l3_if_index;
@@ -314,7 +314,7 @@ bool ppe_drv_nptv6_hairpin_prefix_entry_deref(struct ppe_drv_v6_conn_flow *pcf, 
  */
 struct ppe_drv_nptv6_iid *ppe_drv_nptv6_hairpin_add_iid_entry(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_v6_conn_npt6 *npt6, bool dnat_flow)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_flow_npt66_iid_calc_t iid_cal = {0};
 	fal_flow_npt66_iid_t iid = {0};
 	struct ppe_drv_nptv6_iid *iid_entry;
@@ -400,7 +400,7 @@ struct ppe_drv_nptv6_iid *ppe_drv_nptv6_hairpin_add_iid_entry(struct ppe_drv_v6_
  */
 bool ppe_drv_nptv6_hairpin_del_iid_entry(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_nptv6_iid *iid)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_nptv6_iid *iid_entry;
 	struct ppe_drv_nptv6_prefix *pfx;

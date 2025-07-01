@@ -21,7 +21,7 @@ ppe_drv_ret_t ppe_drv_athtag_del_vp_mapping(struct ppe_drv_iface *iface, unsigne
 	fal_athtag_rx_cfg_t ppe_rx_cfg = {.athtag_type = 0};
 	uint32_t ppe_vp = 0, ppe_pp = 0;
 	struct ppe_drv_iface *base_if = NULL;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	int ret;
 
 	struct net_device *base_dev = dsa_port_to_master(dsa_port_from_netdev(iface->dev));
@@ -105,7 +105,7 @@ ppe_drv_ret_t ppe_drv_athtag_add_vp_mapping(struct ppe_drv_iface *iface, unsigne
 	fal_athtag_rx_cfg_t ppe_rx_cfg = {.athtag_type = 0};
 	uint32_t ppe_vp = 0, ppe_pp = 0;
 	struct ppe_drv_iface *base_if = NULL;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	int ret;
 
 	struct net_device *base_dev = dsa_port_to_master(dsa_port_from_netdev(iface->dev));

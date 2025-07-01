@@ -25,7 +25,7 @@
  */
 ppe_drv_ret_t ppe_drv_br_fdb_del_bymac(struct ppe_drv_iface *br_iface, uint8_t *mac_addr)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_fdb_entry_t entry = {0};
 	struct ppe_drv_vsi *vsi;
 	sw_error_t err;
@@ -60,7 +60,7 @@ EXPORT_SYMBOL(ppe_drv_br_fdb_del_bymac);
 ppe_drv_ret_t ppe_drv_br_fdb_add(struct ppe_drv_iface *br_iface,
 		uint8_t *mac_addr, bool is_static, uint32_t port_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_fdb_entry_t entry = {0};
 	struct ppe_drv_vsi *vsi;
 	sw_error_t err;
@@ -100,7 +100,7 @@ EXPORT_SYMBOL(ppe_drv_br_fdb_add);
 ppe_drv_ret_t ppe_drv_br_flush_fdb(struct ppe_drv_iface *port_iface,
 		bool only_dynamic, bool del_by_port)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 	sw_error_t err;
 	uint32_t del_fdb_flag;
@@ -160,7 +160,7 @@ EXPORT_SYMBOL(ppe_drv_br_flush_fdb);
  */
 ppe_drv_ret_t ppe_drv_br_set_ageing_time(uint32_t ageing_time)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	sw_error_t err;
 
 	/* Check Ageing time max which is 20 bit value */
@@ -191,7 +191,7 @@ EXPORT_SYMBOL(ppe_drv_br_set_ageing_time);
 ppe_drv_ret_t ppe_drv_br_port_set_learning(struct ppe_drv_iface *port_iface,
 		bool lrn_enable)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 	sw_error_t err;
 
@@ -224,7 +224,7 @@ EXPORT_SYMBOL(ppe_drv_br_port_set_learning);
  */
 ppe_drv_ret_t ppe_drv_br_fdb_lrn_ctrl(struct ppe_drv_iface *br_iface, bool enable)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_vsi_newaddr_lrn_t newaddr_lrn = {0};
 	fal_vsi_stamove_t sta_move = {0};
 	struct ppe_drv_vsi *vsi;
@@ -294,7 +294,7 @@ EXPORT_SYMBOL(ppe_drv_br_fdb_lrn_ctrl);
  */
 ppe_drv_ret_t ppe_drv_br_stp_state_set(struct ppe_drv_iface *br_iface, struct net_device *member, fal_stp_state_t state)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *member_iface;
 	struct ppe_drv_port *pp;
 
@@ -347,7 +347,7 @@ EXPORT_SYMBOL(ppe_drv_br_stp_state_set);
 void ppe_drv_br_wanif_clear(struct net_device *member)
 {
 	struct ppe_drv_iface *member_iface;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	/*
 	 * Check if member net-device is a known PPE interface.
@@ -372,7 +372,7 @@ EXPORT_SYMBOL(ppe_drv_br_wanif_clear);
 void ppe_drv_br_wanif_set(struct net_device *member)
 {
 	struct ppe_drv_iface *member_iface;
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	/*
 	 * Check if member net-device is a known PPE interface.
@@ -396,7 +396,7 @@ EXPORT_SYMBOL(ppe_drv_br_wanif_set);
  */
 ppe_drv_ret_t ppe_drv_br_leave(struct ppe_drv_iface *br_iface, struct net_device *member)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *member_iface;
 	struct ppe_drv_vsi *vsi;
 	struct ppe_drv_port *pp;
@@ -486,7 +486,7 @@ EXPORT_SYMBOL(ppe_drv_br_leave);
  */
 ppe_drv_ret_t ppe_drv_br_join(struct ppe_drv_iface *br_iface, struct net_device *member)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *member_iface;
 	struct ppe_drv_vsi *vsi;
 	struct ppe_drv_port *pp;
@@ -567,7 +567,7 @@ EXPORT_SYMBOL(ppe_drv_br_join);
  */
 ppe_drv_ret_t ppe_drv_br_deinit(struct ppe_drv_iface *br_iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_vsi *vsi;
 
 	ppe_drv_assert(br_iface->type == PPE_DRV_IFACE_TYPE_BRIDGE,
@@ -611,7 +611,7 @@ EXPORT_SYMBOL(ppe_drv_br_deinit);
  */
 ppe_drv_ret_t ppe_drv_br_init(struct ppe_drv_iface *br_iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_vsi *vsi;
 	struct ppe_drv_l3_if *l3_if;
 

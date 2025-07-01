@@ -23,7 +23,7 @@
  */
 ppe_drv_ret_t ppe_drv_pppoe_session_deinit(struct ppe_drv_iface *pppoe_iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_pppoe *pppoe;
 	struct ppe_drv_l3_if *l3_if;
 
@@ -103,7 +103,7 @@ EXPORT_SYMBOL(ppe_drv_pppoe_session_deinit);
 ppe_drv_ret_t ppe_drv_pppoe_session_init(struct ppe_drv_iface *pppoe_iface, struct net_device *base_dev,
 		uint16_t session_id, uint8_t *server_mac, uint8_t *local_mac)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_iface *base_iface;
 	struct ppe_drv_pppoe *pppoe;
 	struct ppe_drv_l3_if *l3_if;

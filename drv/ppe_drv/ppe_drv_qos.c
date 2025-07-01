@@ -47,7 +47,7 @@ typedef enum ppe_drv_qos_frame_mode ppe_drv_qos_frame_mode_t;
  */
 void ppe_drv_qos_int_pri_callback_unregister()
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	p->int_pri_get_cb = NULL;
@@ -61,7 +61,7 @@ EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_unregister);
  */
 void ppe_drv_qos_queue_info_callback_unregister()
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	p->queue_info_get_cb = NULL;
@@ -75,7 +75,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_info_callback_unregister);
  */
 void ppe_drv_qos_queue_info_callback_register(ppe_drv_qos_queue_info_callback_t cb)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	/*
 	 * TODO: Return error in case cb is NULL
@@ -93,7 +93,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_info_callback_register);
  */
 void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	/*
 	 * TODO: Return error in case cb is NULL
@@ -111,7 +111,7 @@ EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_register);
  */
 bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info* pq_info)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	int8_t ret = 0;
 
 	spin_lock_bh(&p->lock);
@@ -131,7 +131,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_info_get);
   */
 int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t handle_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint8_t int_pri = 0;
 
 	spin_lock_bh(&p->lock);
@@ -151,7 +151,7 @@ EXPORT_SYMBOL(ppe_drv_qos_int_pri_get);
  */
 void ppe_drv_qos_queue_stats_get(uint32_t qid, bool is_red, struct ppe_drv_qos_q_stat *stats)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_queue_stats_t info;
 
 	spin_lock_bh(&p->lock);
@@ -179,7 +179,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_stats_get);
  */
 void ppe_drv_qos_queue_stats_reset(uint32_t qid)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	fal_queue_counter_cleanup(0, qid);
@@ -195,7 +195,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_stats_reset);
  */
 void ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	/*
 	 * Disable queue enqueue, dequeue and flush the queue.
@@ -216,7 +216,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_disable);
  */
 void ppe_drv_qos_queue_enable(uint32_t qid)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	/*
 	 * Enable queue enqueue and dequeue.
@@ -236,7 +236,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_enable);
  */
 ppe_drv_ret_t ppe_drv_qos_l1_scheduler_set(struct ppe_drv_qos_res *res, uint32_t port_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_qos_scheduler_cfg_t l1cfg = {0};
 
 	if (res->scheduler.drr_weight >= PPE_DRV_QOS_DRR_WEIGHT_MAX) {
@@ -279,7 +279,7 @@ EXPORT_SYMBOL(ppe_drv_qos_l1_scheduler_set);
  */
 ppe_drv_ret_t ppe_drv_qos_l0_scheduler_reset(struct ppe_drv_qos_res *res, uint32_t port_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_qos_scheduler_cfg_t l0cfg = {0};
 
 	/*
@@ -313,7 +313,7 @@ EXPORT_SYMBOL(ppe_drv_qos_l0_scheduler_reset);
  */
 ppe_drv_ret_t ppe_drv_qos_l0_scheduler_set(struct ppe_drv_qos_res *res, uint32_t port_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_qos_scheduler_cfg_t l0cfg = {0};
 
 	if (res->scheduler.drr_weight >= PPE_DRV_QOS_DRR_WEIGHT_MAX) {
@@ -373,7 +373,7 @@ EXPORT_SYMBOL(ppe_drv_qos_l0_scheduler_set);
  */
 ppe_drv_ret_t ppe_drv_qos_port_shaper_reset(struct ppe_drv_qos_res *res, uint32_t port_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_shaper_config_t cfg = {0};
 
 	spin_lock_bh(&p->lock);
@@ -397,7 +397,7 @@ EXPORT_SYMBOL(ppe_drv_qos_port_shaper_reset);
  */
 ppe_drv_ret_t ppe_drv_qos_port_shaper_set(struct ppe_drv_qos_res *res, uint32_t port_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_shaper_token_number_t token = {0};
 	fal_shaper_config_t cfg = {0};
 
@@ -448,7 +448,7 @@ EXPORT_SYMBOL(ppe_drv_qos_port_shaper_set);
  */
 ppe_drv_ret_t ppe_drv_qos_flow_shaper_reset(struct ppe_drv_qos_res *res)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_shaper_config_t cfg = {0};
 
 	/*
@@ -475,7 +475,7 @@ EXPORT_SYMBOL(ppe_drv_qos_flow_shaper_reset);
  */
 ppe_drv_ret_t ppe_drv_qos_flow_shaper_set(struct ppe_drv_qos_res *res)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_shaper_token_number_t token = {0};
 	fal_shaper_config_t cfg = {0};
 
@@ -529,7 +529,7 @@ EXPORT_SYMBOL(ppe_drv_qos_flow_shaper_set);
  */
 ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_reset(struct ppe_drv_qos_res *res)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_shaper_config_t cfg = {0};
 
 	spin_lock_bh(&p->lock);
@@ -553,7 +553,7 @@ EXPORT_SYMBOL(ppe_drv_qos_mcast_queue_shaper_reset);
  */
 ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_set(struct ppe_drv_qos_res *res)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_shaper_token_number_t token = {0};
 	fal_shaper_config_t cfg = {0};
 
@@ -595,7 +595,7 @@ EXPORT_SYMBOL(ppe_drv_qos_mcast_queue_shaper_set);
  */
 ppe_drv_ret_t ppe_drv_qos_queue_shaper_reset(struct ppe_drv_qos_res *res)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_shaper_config_t cfg = {0};
 
 	/*
@@ -623,7 +623,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_shaper_reset);
  */
 ppe_drv_ret_t ppe_drv_qos_queue_shaper_set(struct ppe_drv_qos_res *res)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_shaper_token_number_t token = {0};
 	fal_shaper_config_t cfg = {0};
 
@@ -692,7 +692,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_shaper_set);
  */
 ppe_drv_ret_t ppe_drv_qos_mcast_queue_set(struct ppe_drv_qos_res *res, uint32_t port_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_qos_scheduler_cfg_t l0cfg;
 
 	spin_lock_bh(&p->lock);
@@ -723,7 +723,7 @@ EXPORT_SYMBOL(ppe_drv_qos_mcast_queue_set);
  */
 ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_ac_obj_t obj = {0};
 	fal_ac_dynamic_threshold_t dynamic_cfg;
 	fal_ac_static_threshold_t static_cfg;
@@ -809,7 +809,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_limit_set);
  */
 void ppe_drv_qos_port_bm_control_enable(uint32_t port_id, bool set)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
 	fal_port_bm_ctrl_set(PPE_DRV_SWITCH_ID, port_id, set);
@@ -826,7 +826,7 @@ EXPORT_SYMBOL(ppe_drv_qos_port_bm_control_enable);
  */
 ppe_drv_ret_t ppe_drv_qos_default_conf_set(uint32_t port_id)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
 	/*
 	 * Invoke SSDK API to reset the default configuration for a given port.
@@ -851,7 +851,7 @@ EXPORT_SYMBOL(ppe_drv_qos_default_conf_set);
  */
 ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port *port)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	fal_portscheduler_resource_t cfg = {0};
 
 	/*

@@ -396,7 +396,7 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 	 * Add IP header parameters
 	 */
 	fal_tunnel_decap_entry_t ftde = {0};
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint8_t vp_num = 0;
 	uint8_t vpgroup_id = 0;
 	sw_error_t err;
@@ -623,7 +623,8 @@ struct ppe_drv_tun_decap *ppe_drv_tun_decap_alloc(struct ppe_drv *p)
  */
 void ppe_drv_tun_decap_entries_free(struct ppe_drv_tun_decap *ptun_dc)
 {
-	vfree(ptun_dc);
+	nss_ppe_drv_minidump_free(ptun_dc, "ppe_drv_tun_decap");
+	kfree(ptun_dc);
 }
 
 /*
@@ -637,11 +638,13 @@ struct ppe_drv_tun_decap *ppe_drv_tun_decap_entries_alloc(struct ppe_drv *p)
 
 	ppe_drv_assert(!p->ptun_dc, "%p: tunnel decap entries already allocated", p);
 
-	ptun_dc = vzalloc(sizeof(struct ppe_drv_tun_decap) * PPE_DRV_TUN_DECAP_MAX_ENTRY);
+	ptun_dc = kzalloc(sizeof(struct ppe_drv_tun_decap) * PPE_DRV_TUN_DECAP_MAX_ENTRY, GFP_KERNEL);
 	if (!ptun_dc) {
 		ppe_drv_warn("%p: failed to allocate decap entries", p);
 		return NULL;
 	}
+
+	nss_ppe_drv_minidump_log(ptun_dc, sizeof(struct ppe_drv_tun_decap) * PPE_DRV_TUN_DECAP_MAX_ENTRY, "ppe_drv_tun_decap");
 
 	for (index = 0; index < PPE_DRV_TUN_DECAP_MAX_ENTRY; index++) {
 		ptun_dc[index].index = index;

@@ -25,7 +25,7 @@
 ppe_drv_ret_t ppe_drv_dp_set_mirror_if(struct ppe_drv_iface *iface,
 		ppe_drv_dp_mirror_direction_t direction, bool enable)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 	sw_error_t err;
 
@@ -84,7 +84,7 @@ EXPORT_SYMBOL(ppe_drv_dp_set_mirror_if);
 ppe_drv_ret_t ppe_drv_dp_set_mirr_analysis_port(struct ppe_drv_iface *iface,
 		ppe_drv_dp_mirror_direction_t direction, bool enable, uint8_t priority)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 	sw_error_t err;
 	fal_mirr_analysis_config_t analysis_cfg = {0};
@@ -130,7 +130,7 @@ EXPORT_SYMBOL(ppe_drv_dp_set_mirr_analysis_port);
 ppe_drv_ret_t ppe_drv_dp_get_mirr_analysis_port(
 		ppe_drv_dp_mirror_direction_t direction, uint8_t *port_num)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	sw_error_t err;
 	fal_mirr_analysis_config_t analysis_cfg = {0};
 
@@ -165,7 +165,7 @@ EXPORT_SYMBOL(ppe_drv_dp_get_mirr_analysis_port);
  */
 ppe_drv_ret_t ppe_drv_dp_deinit(struct ppe_drv_iface *iface)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 
@@ -208,7 +208,7 @@ EXPORT_SYMBOL(ppe_drv_dp_deinit);
 ppe_drv_ret_t ppe_drv_dp_init(struct ppe_drv_iface *iface, uint32_t macid,
 				bool mht_dev)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_l3_if *l3_if;
 	struct ppe_drv_port *port;
 
@@ -263,7 +263,7 @@ EXPORT_SYMBOL(ppe_drv_dp_init);
 ppe_drv_ret_t ppe_drv_dp_set_ppe_offload_enable_flag(struct ppe_drv_iface *iface,
 		bool disable)
 {
-	struct ppe_drv *p = &ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 
 	spin_lock_bh(&p->lock);
