@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <fal/fal_ip.h>
@@ -79,6 +68,9 @@ static inline void ppe_drv_pppoe_free(struct kref *kref)
 	 */
 	pppoe->session_id = 0;
 	memset(&pppoe->server_mac[0], 0x00, ETH_ALEN);
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	pppoe->veip_pppoe = NULL;
+#endif
 	ppe_drv_pppoe_dump(pppoe);
 }
 
@@ -365,6 +357,34 @@ struct ppe_drv_l3_if *ppe_drv_pppoe_find_l3_if(uint16_t session_id, uint8_t *sma
 	return NULL;
 }
 
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+/*
+ * ppe_pppoe_find_session()
+ *      Find pppoe session for given session ID and server MAC
+ */
+struct ppe_drv_pppoe *ppe_drv_pppoe_find_session_by_veip(uint16_t session_id, uint8_t *smac, uint32_t gw_vp)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_pppoe *pppoe;
+	uint16_t i = 0;
+	fal_port_t fal_port;
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(gw_vp) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, gw_vp)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, gw_vp);
+
+	for (i = 0; i < p->pppoe_session_max; i++) {
+		pppoe = &p->pppoe[i];
+		if (kref_read(&pppoe->ref) && !memcmp(pppoe->server_mac, smac, sizeof(pppoe->server_mac))
+				&& (pppoe->session_id == session_id) && (pppoe->veip_pppoe != NULL) && (pppoe->veip_pppoe->port_bitmap == fal_port)) {
+			ppe_drv_trace("%p: Found secondary PPPoE idx(%d) for session_id(%d) and server MAC: %pM", pppoe->veip_pppoe, pppoe->veip_pppoe->index, session_id, smac);
+			return pppoe->veip_pppoe;
+		}
+	}
+
+	ppe_drv_warn("%p: secondary pppoe session not found for session_id %d mac: %pM", p, session_id, smac);
+	return NULL;
+}
+#endif
 /*
  * ppe_pppoe_find_session()
  *	Find pppoe session for given session ID and server MAC
@@ -469,6 +489,52 @@ struct ppe_drv_pppoe *ppe_drv_pppoe_alloc(uint16_t session_id, uint8_t *smac)
 }
 
 /*
+ * ppe_drv_pppoe_alloc_secondary()
+ *      Programs a PPPOE_SESSION entry in PPE allowing duplicates of (session_id, smac).
+ */
+struct ppe_drv_pppoe *ppe_drv_pppoe_alloc_secondary(uint16_t session_id, uint8_t *smac)
+{
+	struct ppe_drv_pppoe *pppoe = NULL, *walk;
+	struct ppe_drv *p = ppe_drv_gbl;
+	uint16_t i = 0;
+
+	/*
+	 * Get a free PPPOE (allowing duplicate session_id/server_mac)
+	 */
+	for (i = 0; i < p->pppoe_session_max; i++) {
+		walk = &p->pppoe[i];
+
+		/*
+		 * Save first free pppoe entry to be used later
+		 */
+		if (!pppoe && !(kref_read(&walk->ref))) {
+			pppoe = walk;
+		}
+	}
+
+	if (!pppoe) {
+		ppe_drv_trace("%p: failed to alloc, pppoe table full", p);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_pppoe_full);
+		return NULL;
+	}
+
+	/*
+	 * Take a reference on PPPOE. This will be let go by the user using the deref API
+	 */
+	kref_init(&pppoe->ref);
+
+	/*
+	 * Update the shadow copy.
+	 */
+	pppoe->session_id = session_id;
+	memcpy(&pppoe->server_mac[0], &smac[0], ETH_ALEN);
+
+	ppe_drv_pppoe_dump(pppoe);
+	ppe_drv_trace("%p: pppoe %u created (secondary)", pppoe, pppoe->index);
+	return pppoe;
+}
+
+/*
  * ppe_drv_pppoe_entries_free()
  *	Free pppoe table entries if it was allocated.
  */
@@ -502,3 +568,241 @@ struct ppe_drv_pppoe *ppe_drv_pppoe_entries_alloc()
 
 	return pppoe;
 }
+
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+/**
+ * ppe_drv_pppoe_veip_l3_if_attach()
+ * 	Attach primary and secondary PPPoE entries for VEIP case.
+ */
+void  ppe_drv_pppoe_veip_l3_if_attach(struct ppe_drv_pppoe *pppoe, struct ppe_drv_l3_if *l3_if, struct ppe_drv_iface *base_iface)
+{
+	struct ppe_drv_l3_if *veip_l3_if = NULL;
+	struct ppe_drv_pppoe *pppoe2 = NULL;
+	fal_pppoe_session_t pppoe_cfg = {0};
+	fal_intf_id_t cfg;
+	fal_port_t fal_port;
+	int32_t gw_vp;
+
+	if (!kref_read(&pppoe->ref)) {
+		ppe_drv_warn("%p: attaching l3_if to unused pppoe %u", pppoe, pppoe->index);
+		return;
+	}
+
+	if (pppoe->l3_if) {
+		ppe_drv_warn("%p: pppoe: %u is already attached to l3_if: %p", pppoe, pppoe->index, pppoe->l3_if);
+		return;
+	}
+
+	/*
+	 * Get VEIP L3 IF from base_iface
+	 */
+	veip_l3_if = ppe_drv_iface_l3_if_get(base_iface);
+	if (!veip_l3_if) {
+		ppe_drv_warn("L3_IF not assigned to VEIP iface %p", base_iface);
+		return;
+	}
+
+	/*
+	 * Entry 1: Map PPPoE to VEIP L3_IF (instead of TUN_L3_IF)
+	 */
+	cfg.l3_if_valid = A_TRUE;
+	cfg.l3_if_index = veip_l3_if->l3_if_index;
+
+	if (fal_pppoe_l3_intf_set(PPE_DRV_SWITCH_ID, pppoe->index, FAL_INTF_TYPE_NORMAL, &cfg) != SW_OK) {
+		ppe_drv_warn("%p: error in attaching VEIP l3_if to PPPoE index %u", pppoe, pppoe->index);
+		return;
+	}
+
+	memset(&pppoe_cfg, 0, sizeof(pppoe_cfg));
+	pppoe_cfg.session_id = pppoe->session_id;
+	pppoe_cfg.multi_session = A_TRUE;
+	pppoe_cfg.uni_session = A_TRUE;
+	pppoe_cfg.smac_valid = A_TRUE;
+	pppoe_cfg.l3_if_index = veip_l3_if->l3_if_index;
+	pppoe_cfg.l3_if_valid = A_TRUE;
+	pppoe_cfg.port_bitmap = 0xFF;
+
+	memcpy(&pppoe_cfg.smac_addr, &pppoe->server_mac[0], sizeof(pppoe_cfg.smac_addr));
+
+	if (fal_pppoe_session_table_add(PPE_DRV_SWITCH_ID, &pppoe_cfg) != SW_OK) {
+		ppe_drv_warn("%p: Error in adding SESSION table index for primary PPPoE", pppoe);
+		cfg.l3_if_valid = A_FALSE;
+		fal_pppoe_l3_intf_set(PPE_DRV_SWITCH_ID, pppoe->index, FAL_INTF_TYPE_NORMAL, &cfg);
+		return;
+	}
+
+	pppoe->is_session_added = true;
+	pppoe->port_bitmap = pppoe_cfg.port_bitmap;
+
+	/*
+	 * Keep PPPoE's l3_if reference as the original created L3 IF (passed-in l3_if)
+	 * to preserve existing deinit semantics on the iface's L3_IF.
+	 */
+	pppoe->l3_if = ppe_drv_l3_if_ref(l3_if);
+
+	/*
+	 * Entry 2: Allocate and map a secondary PPPoE entry with
+	 * the original PPPoE L3 IF, and restrict to VEIP GW VP.
+	 */
+	pppoe2 = ppe_drv_pppoe_alloc_secondary(pppoe->session_id, pppoe->server_mac);
+	if (!pppoe2) {
+		ppe_drv_warn("%p: Unable to allocate secondary PPPoE for VEIP (session_id %u)", pppoe, pppoe->session_id);
+		ppe_drv_pppoe_dump(pppoe);
+		goto fail;
+	}
+
+	cfg.l3_if_valid = A_TRUE;
+	cfg.l3_if_index = l3_if->l3_if_index;
+
+	if (fal_pppoe_l3_intf_set(PPE_DRV_SWITCH_ID, pppoe2->index, FAL_INTF_TYPE_NORMAL, &cfg) != SW_OK) {
+		ppe_drv_warn("%p: error in attaching l3_if: %p to secondary PPPoE", pppoe2, l3_if);
+		ppe_drv_pppoe_deref(pppoe2);
+		goto fail;
+	}
+
+	memset(&pppoe_cfg, 0, sizeof(pppoe_cfg));
+	pppoe_cfg.session_id = pppoe2->session_id;
+	pppoe_cfg.multi_session = A_TRUE;
+	pppoe_cfg.uni_session = A_TRUE;
+	pppoe_cfg.smac_valid = A_TRUE;
+	pppoe_cfg.l3_if_index = l3_if->l3_if_index;
+	pppoe_cfg.l3_if_valid = A_TRUE;
+
+	/*
+	 * Getting GW VP from base iface.
+	 */
+	gw_vp = ppe_drv_veip_get_port(base_iface, PPE_DRV_PORT_VIRTUAL_GW);
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(gw_vp) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, gw_vp)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, gw_vp);
+	pppoe_cfg.port_bitmap = fal_port;
+
+	memcpy(&pppoe_cfg.smac_addr, &pppoe->server_mac[0], sizeof(pppoe_cfg.smac_addr));
+
+	if (fal_pppoe_session_table_add(PPE_DRV_SWITCH_ID, &pppoe_cfg) != SW_OK) {
+		ppe_drv_warn("%p: Error in adding SESSION table index for secondary PPPoE", pppoe2);
+		cfg.l3_if_valid = A_FALSE;
+		fal_pppoe_l3_intf_set(PPE_DRV_SWITCH_ID, pppoe2->index, FAL_INTF_TYPE_NORMAL, &cfg);
+		ppe_drv_pppoe_deref(pppoe2);
+		goto fail;
+	}
+
+	pppoe2->is_session_added = true;
+	pppoe2->port_bitmap = pppoe_cfg.port_bitmap;
+	pppoe2->l3_if = ppe_drv_l3_if_ref(l3_if);
+
+	pppoe->veip_pppoe = pppoe2;
+
+	ppe_drv_pppoe_dump(pppoe);
+	ppe_drv_pppoe_dump(pppoe2);
+	return;
+
+fail:
+	if (pppoe->is_session_added) {
+		memset(&pppoe_cfg, 0, sizeof(pppoe_cfg));
+		pppoe_cfg.session_id = pppoe->session_id;
+		pppoe_cfg.multi_session = A_TRUE;
+		pppoe_cfg.uni_session = A_TRUE;
+		pppoe_cfg.smac_valid = A_TRUE;
+		pppoe_cfg.port_bitmap = pppoe->port_bitmap;
+		memcpy(&pppoe_cfg.smac_addr, &pppoe->server_mac[0], sizeof(pppoe_cfg.smac_addr));
+		fal_pppoe_session_table_del(PPE_DRV_SWITCH_ID, &pppoe_cfg);
+		pppoe->is_session_added = false;
+	}
+
+	if (pppoe->l3_if) {
+		ppe_drv_l3_if_deref(pppoe->l3_if);
+		pppoe->l3_if = NULL;
+	}
+
+	cfg.l3_if_valid = A_FALSE;
+	fal_pppoe_l3_intf_set(PPE_DRV_SWITCH_ID, pppoe->index, FAL_INTF_TYPE_NORMAL, &cfg);
+	return;
+}
+
+/*
+ * ppe_drv_pppoe_veip_l3_if_detach()
+ *      Detach primary and secondary PPPoE entries for VEIP case.
+ *      This does NOT deref the iface-held L3_IF; session_deinit will continue to handle that.
+ */
+void ppe_drv_pppoe_veip_l3_if_detach(struct ppe_drv_pppoe *pppoe)
+{
+	fal_pppoe_session_t pppoe_cfg = {0};
+	fal_intf_id_t cfg;
+	sw_error_t error = SW_OK;
+
+	/*
+	 * Detach secondary PPPoE entry first if present
+	 */
+	if (pppoe->veip_pppoe) {
+		struct ppe_drv_pppoe *pppoe2 = pppoe->veip_pppoe;
+
+		cfg.l3_if_valid = A_FALSE;
+		cfg.l3_if_index = 0;
+
+		if (fal_pppoe_l3_intf_set(PPE_DRV_SWITCH_ID, pppoe2->index, FAL_INTF_TYPE_NORMAL, &cfg) != SW_OK) {
+			ppe_drv_warn("%p: error in detaching l3_if: %p", pppoe2, pppoe2->l3_if);
+			return;
+		}
+
+		if (pppoe2->is_session_added) {
+			memset(&pppoe_cfg, 0, sizeof(pppoe_cfg));
+			pppoe_cfg.session_id = pppoe2->session_id;
+			pppoe_cfg.multi_session = A_TRUE;
+			pppoe_cfg.uni_session = A_TRUE;
+			pppoe_cfg.smac_valid = A_TRUE;
+			pppoe_cfg.port_bitmap = pppoe2->port_bitmap | (1U << 25);
+
+			memcpy(&pppoe_cfg.smac_addr, &pppoe2->server_mac[0], sizeof(pppoe_cfg.smac_addr));
+			error = fal_pppoe_session_table_del(PPE_DRV_SWITCH_ID, &pppoe_cfg);
+			if (error != SW_OK) {
+				ppe_drv_warn("%p: Error %d in clearing SESSION table veip pppoe", pppoe2, error);
+				return;
+			}
+
+			pppoe2->is_session_added = false;
+		}
+
+		if (pppoe2->l3_if) {
+			ppe_drv_l3_if_deref(pppoe2->l3_if);
+			pppoe2->l3_if = NULL;
+		}
+
+		ppe_drv_pppoe_deref(pppoe2);
+		pppoe->veip_pppoe = NULL;
+	}
+
+	/*
+	 * Detach primary PPPoE entry
+	 */
+	if (pppoe->l3_if) {
+		cfg.l3_if_valid = A_FALSE;
+		cfg.l3_if_index = 0;
+
+		if (fal_pppoe_l3_intf_set(PPE_DRV_SWITCH_ID, pppoe->index, FAL_INTF_TYPE_NORMAL, &cfg) != SW_OK) {
+			ppe_drv_warn("%p: error in detaching l3_if: %p", pppoe, pppoe->l3_if);
+			return;
+		}
+
+		if (pppoe->is_session_added) {
+			pppoe_cfg.session_id = pppoe->session_id;
+			pppoe_cfg.multi_session = A_TRUE;
+			pppoe_cfg.uni_session = A_TRUE;
+			pppoe_cfg.smac_valid = A_TRUE;
+			pppoe_cfg.port_bitmap = pppoe->port_bitmap;
+			memcpy(&pppoe_cfg.smac_addr, &pppoe->server_mac[0], sizeof(pppoe_cfg.smac_addr));
+			error = fal_pppoe_session_table_del(PPE_DRV_SWITCH_ID, &pppoe_cfg);
+			if (error != SW_OK) {
+				ppe_drv_warn("%p: Error %d in clearing SESSION table index", pppoe, error);
+				return;
+			}
+
+			pppoe->is_session_added = false;
+		}
+
+		ppe_drv_l3_if_deref(pppoe->l3_if);
+		pppoe->l3_if = NULL;
+	}
+
+	ppe_drv_pppoe_dump(pppoe);
+}
+#endif

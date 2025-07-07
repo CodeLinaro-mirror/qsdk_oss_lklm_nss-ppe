@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/netdevice.h>
@@ -72,7 +61,14 @@ ppe_drv_ret_t ppe_drv_pppoe_session_deinit(struct ppe_drv_iface *pppoe_iface)
 	 * Detach the egress L3 interface
 	 */
 	ppe_drv_trace("%p: PPPOE_PPE: Detach L3 interface pppoe: %p", pppoe_iface, pppoe);
-	ppe_drv_pppoe_l3_if_detach(pppoe);
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	if (pppoe->veip_pppoe) {
+		ppe_drv_pppoe_veip_l3_if_detach(pppoe);
+	} else
+#endif
+	{
+		ppe_drv_pppoe_l3_if_detach(pppoe);
+	}
 
 	/*
 	 * Clear the PPPoE on the ingress L3 interface
@@ -195,7 +191,14 @@ ppe_drv_ret_t ppe_drv_pppoe_session_init(struct ppe_drv_iface *pppoe_iface, stru
 	 * PPPoE sessions outbound L3 interface and attach
 	 * to egress l3 interface
 	 */
-	ppe_drv_pppoe_l3_if_attach(pppoe, l3_if);
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	if (base_iface->type == PPE_DRV_IFACE_TYPE_VEIP) {
+		ppe_drv_pppoe_veip_l3_if_attach(pppoe, l3_if, base_iface);
+	} else
+#endif
+	{
+		ppe_drv_pppoe_l3_if_attach(pppoe, l3_if);
+	}
 
 	/*
 	 * Save l3_if in ppe_iface.

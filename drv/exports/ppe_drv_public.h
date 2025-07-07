@@ -41,5 +41,6 @@
 #ifdef NSS_PPE_FEATURE_GEMPORT
 #include "ppe_drv_gemport.h"
 #endif
+#include "ppe_drv_veip.h"
 
 #endif /* _PPE_DRV_PUBLIC_H_ */

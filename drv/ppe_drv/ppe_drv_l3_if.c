@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <fal/fal_ip.h>
@@ -137,7 +126,7 @@ static void ppe_drv_l3_if_free(struct kref *kref)
 	/*
 	 * Clear IN_L3_IF_TBL and EG_L3_IF_TBL entry.
 	 */
-	if (!fal_tunnel_encap_intf_tunnelid_set(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &tun_cfg) != SW_OK) {
+	if (fal_tunnel_encap_intf_tunnelid_set(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &tun_cfg) != SW_OK) {
 		ppe_drv_warn("%p: Clearing EG_L3_IF for tunnel failed\n", l3_if);
 	}
 #endif
@@ -751,4 +740,183 @@ struct ppe_drv_l3_if *ppe_drv_l3_if_entries_alloc()
 	}
 
 	return l3_if;
+}
+
+/*
+ * ppe_drv_l3_if_ig_vsi_mac_update()
+ *	Update the given MAC address and VSI to L3 interface in PPE ingress (L3_MY_MAC) table
+ */
+bool ppe_drv_l3_if_ig_vsi_mac_update(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr, struct ppe_drv_vsi *vsi)
+{
+	sw_error_t err;
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_intf_macaddr_t mac_cfg = {0};
+
+	mac_cfg.direction = FAL_IP_INGRESS;
+	mac_cfg.vsi_valid = A_TRUE;
+	mac_cfg.vsi = vsi->index;
+
+	memcpy(&mac_cfg.mac_addr, l3_if->ig_mac_addr, sizeof(mac_cfg.mac_addr));
+
+	err = fal_ip_intf_macaddr_del(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &mac_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Error in deleting mac addr(%pM) to l3_if %u with err_code %d", l3_if, l3_if->ig_mac_addr, l3_if->l3_if_index, err);
+		return false;
+	}
+
+	/*
+	 * Setting L3_MY_MAC.
+	 */
+	mac_cfg.direction = FAL_IP_INGRESS;
+	mac_cfg.vsi_valid = A_TRUE;
+	mac_cfg.vsi = vsi->index;
+
+	memcpy(&mac_cfg.mac_addr, mac_addr, sizeof(mac_cfg.mac_addr));
+	err = fal_ip_intf_macaddr_add(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &mac_cfg);
+	if (err != SW_OK) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_my_mac_full);
+		ppe_drv_warn("%p: Error in setting mac addr(%pM) to l3_if %u with err_code %d", l3_if, mac_addr, l3_if->l3_if_index, err);
+		return false;
+	}
+
+	l3_if->is_ig_mac_set = true;
+	l3_if->is_vsi_set = true;
+	l3_if->vsi = vsi;
+        ether_addr_copy(l3_if->ig_mac_addr, mac_addr);
+	ppe_drv_trace("%p: setting mac addr(%pM) and vsi(%u) to l3_if %u",
+			l3_if, mac_addr, l3_if->vsi ? l3_if->vsi->index : 0, l3_if->l3_if_index);
+	ppe_drv_l3_if_dump(l3_if);
+	return true;
+}
+
+/*
+ * ppe_drv_l3_if_ig_vsi_mac_set()
+ *	Programs the given MAC address and VSI to L3 interface in PPE ingress (L3_MY_MAC) table
+ */
+bool ppe_drv_l3_if_ig_vsi_mac_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr, struct ppe_drv_vsi *vsi)
+{
+        sw_error_t err;
+        struct ppe_drv *p = ppe_drv_gbl;
+        fal_intf_macaddr_t mac_cfg = {0};
+
+        mac_cfg.direction = FAL_IP_INGRESS;
+	mac_cfg.vsi_valid = A_TRUE;
+	mac_cfg.vsi = vsi->index;
+
+        memcpy(&mac_cfg.mac_addr, mac_addr, sizeof(mac_cfg.mac_addr));
+        err = fal_ip_intf_macaddr_add(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &mac_cfg);
+        if (err != SW_OK) {
+                ppe_drv_stats_inc(&p->stats.gen_stats.fail_my_mac_full);
+                ppe_drv_warn("%p: Error in setting mac addr(%pM) to l3_if %u with err_code %d", l3_if, mac_addr, l3_if->l3_if_index, err);
+                return false;
+        }
+
+        l3_if->is_ig_mac_set = true;
+	l3_if->is_vsi_set = true;
+	l3_if->vsi = vsi;
+        ether_addr_copy(l3_if->ig_mac_addr, mac_addr);
+	ppe_drv_trace("%p: setting mac addr(%pM) and vsi(%u) to l3_if %u",
+			l3_if, mac_addr, l3_if->vsi ? l3_if->vsi->index : 0, l3_if->l3_if_index);
+        ppe_drv_l3_if_dump(l3_if);
+        return true;
+}
+
+/*
+ * ppe_drv_l3_if_ig_vsi_mac_clear()
+ *	Clears MAC address and VSI of a given L3 interface in PPE ingress (L3_MY_MAC) table
+ */
+bool ppe_drv_l3_if_ig_vsi_mac_clear(struct ppe_drv_l3_if *l3_if)
+{
+        sw_error_t err;
+        fal_intf_macaddr_t mac_cfg = {0};
+
+        mac_cfg.direction = FAL_IP_INGRESS;
+	mac_cfg.vsi_valid = A_TRUE;
+	mac_cfg.vsi = l3_if->vsi ? l3_if->vsi->index : 0;
+
+        memcpy(&mac_cfg.mac_addr, l3_if->ig_mac_addr, sizeof(mac_cfg.mac_addr));
+
+	err = fal_ip_intf_macaddr_del(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &mac_cfg);
+        if (err != SW_OK) {
+                ppe_drv_warn("%p: Error in clearing mac addr and vsi for l3_if %u", l3_if, l3_if->l3_if_index);
+                return false;
+        }
+
+        l3_if->is_ig_mac_set = false;
+	l3_if->is_vsi_set = false;
+	if (l3_if->vsi) {
+		ppe_drv_vsi_deref(l3_if->vsi);
+		l3_if->vsi = NULL;
+	}
+        eth_zero_addr(l3_if->ig_mac_addr);
+
+        ppe_drv_trace("%p: clearing mac addr of l3_if %u", l3_if, l3_if->l3_if_index);
+        ppe_drv_l3_if_dump(l3_if);
+        return true;
+}
+
+/*
+ * ppe_drv_l3_if_dest_info_set()
+ *	Set destination info configuration in L3 interface.
+ */
+bool ppe_drv_l3_if_dest_info_set(struct ppe_drv_l3_if *l3_if, struct ppe_drv_port *pp)
+{
+	fal_intf_entry_t in_l3_if_cfg = {0};
+	sw_error_t err;
+
+	if (!pp) {
+		ppe_drv_warn("%p: Dest info set failed - NULL port\n", l3_if);
+		return false;
+	}
+
+	err = fal_ip_intf_get(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &in_l3_if_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Dest info query failed for l3_if index: %u", l3_if, l3_if->l3_if_index);
+		return false;
+	}
+
+	in_l3_if_cfg.l3_dst_port = pp->port;
+	in_l3_if_cfg.l3_dst_valid = A_TRUE;
+	if (fal_ip_intf_set(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &in_l3_if_cfg) != SW_OK) {
+		ppe_drv_warn("%p: Dest info set configuration failed for l3_if index: %d\n",
+				l3_if, l3_if->l3_if_index);
+		return false;
+	}
+
+	l3_if->pp = ppe_drv_port_ref(pp);
+	ppe_drv_trace("%p: Dest info set configuration set to port: %u\n", l3_if, pp->port);
+	ppe_drv_l3_if_dump(l3_if);
+	return true;
+}
+
+/*
+ * ppe_drv_l3_if_dest_info_reset()
+ *	Reset destination info configuration in L3 interface.
+ */
+void ppe_drv_l3_if_dest_info_reset(struct ppe_drv_l3_if *l3_if)
+{
+        fal_intf_entry_t in_l3_if_cfg = {0};
+        sw_error_t err;
+
+        err = fal_ip_intf_get(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &in_l3_if_cfg);
+        if (err != SW_OK) {
+                ppe_drv_warn("%p: Dest info query failed for l3_if index: %u", l3_if, l3_if->l3_if_index);
+                return;
+        }
+
+        in_l3_if_cfg.l3_dst_port = 0;
+	in_l3_if_cfg.l3_dst_valid = A_FALSE;
+        if (fal_ip_intf_set(PPE_DRV_SWITCH_ID, l3_if->l3_if_index, &in_l3_if_cfg) != SW_OK) {
+                ppe_drv_warn("%p: failed to reset the dest info configuration for l3_if index: %d\n", l3_if, l3_if->l3_if_index);
+                return;
+        }
+
+	if (l3_if->pp) {
+		ppe_drv_port_deref(l3_if->pp);
+		l3_if->pp = NULL;
+	}
+
+        ppe_drv_trace("%p: Reset the dest info configuration for l3_if index: %d\n", l3_if, l3_if->l3_if_index);
+        ppe_drv_l3_if_dump(l3_if);
+        return;
 }

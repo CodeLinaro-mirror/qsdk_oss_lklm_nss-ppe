@@ -770,6 +770,7 @@ static bool ppe_vlan_action_fill(struct ppe_vlan *vlan, struct ppe_vlan_rule *ru
 			return false;
 		}
 
+		dev_put(vlan->info.dst_dev);
 		vlan_action->flags |= PPE_DRV_VLAN_ACTION_FLAG_DEST_INFO;
 	}
 
@@ -800,6 +801,7 @@ static bool ppe_vlan_rule_fill(struct ppe_vlan *vlan, struct ppe_vlan_rule *rule
 							r_rule->port_val.dev_name);
 					return false;
 				}
+				dev_put(vlan->info.src_dev);
 				break;
 			case PPE_VLAN_PORT_TYPE_GEM_PORT:
 				if (rule->rule_dir == PPE_VLAN_RULE_DIR_EGRESS) {
@@ -1126,6 +1128,9 @@ ppe_vlan_ret_t ppe_vlan_rule_create(struct ppe_vlan_rule *rule)
 	struct ppe_vlan_base *vlan_g = &ppe_vlan_gbl;
 	struct ppe_vlan *vlan = NULL;
 	struct ppe_drv_vlan_ctx *vlan_ctx = NULL;
+#ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
+	struct ppe_drv_iface *iface = NULL;
+#endif
 	int16_t pm_hw_id = -1;
 	ppe_vlan_ret_t ret;
 
@@ -1221,6 +1226,20 @@ ppe_vlan_ret_t ppe_vlan_rule_create(struct ppe_vlan_rule *rule)
 		goto fail;
 	}
 
+#ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
+	/*
+	 * Check if HGU rule is valid and create HGU rule if needed
+	 */
+	iface = ppe_drv_vlan_ctx_iface_get(vlan_ctx);
+	if (iface && ppe_drv_veip_is_hgu_rule_valid(iface)) {
+		if (ppe_drv_vlan_hgu_rule_create(&vlan->info, vlan_ctx) != PPE_DRV_RET_SUCCESS) {
+			ppe_vlan_warn("%p: Failed to add ingress translation rule for hgu case\n", vlan_g);
+			ret = PPE_VLAN_RET_CREATE_FAIL_RULE;
+			goto fail;
+		}
+	}
+#endif
+
 	/*
 	 * Add new rule node to list
 	 */
@@ -1270,12 +1289,26 @@ static void ppe_vlan_rule_free(struct kref *kref)
 {
 	struct ppe_vlan *vlan = container_of(kref, struct ppe_vlan, ref_cnt);
 	struct ppe_vlan_base *vlan_g = &ppe_vlan_gbl;
+#ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
+	struct ppe_drv_iface *iface;
+#endif
 
 	/*
 	 * Delete the rule node from active list.
 	 */
 	list_del(&vlan->list);
 
+#ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
+	/*
+	 * Check if HGU rule needs to be destroyed first
+	 */
+	iface = ppe_drv_vlan_ctx_iface_get(vlan->ctx);
+	if (iface && ppe_drv_veip_is_hgu_rule_valid(iface)) {
+		if (ppe_drv_vlan_hgu_rule_destroy(vlan->ctx) != PPE_DRV_RET_SUCCESS) {
+			ppe_vlan_warn("%p: Failed to delete ingress translation rule for hgu case\n", vlan_g);
+		}
+	}
+#endif
 	/*
 	 * Destroy the rule in PPE driver.
 	 */

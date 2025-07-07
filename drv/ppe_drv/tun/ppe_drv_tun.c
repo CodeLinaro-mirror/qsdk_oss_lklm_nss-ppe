@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2026 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/ip.h>
@@ -36,6 +25,12 @@
 #include "ppe_drv_tun.h"
 #include "ppe_drv_tun_v4.h"
 #include "ppe_drv_tun_v6.h"
+
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+#include <ppe_drv_veip.h>
+#endif
+
+#include <ppe_drv_sc.h>
 
 static bool ppe_drv_tun_configure_internal(uint16_t port_num, struct ppe_drv_tun_cmn_ctx *pth, void *add_cb, void *del_cb);
 
@@ -545,7 +540,7 @@ static bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_p
 		return false;
 	}
 
-	if (ppe_drv_tun_dp_port_ds(dp)) {
+	if (ppe_drv_tun_dp_port_vp(dp)) {
 		/*
 		 * enqueue vp port is valid if DS metadata is valid.
 		 * Map tunnel destination port with enqueue vp queue
@@ -1266,6 +1261,25 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 		goto skip_tunnel_deactivation;
 	}
 
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	/*
+	 * Clearing EG_VP_TBL for tunnel_vp.
+	 */
+	if (ptun->is_veip_tun) {
+		if (ppe_drv_veip_eg_vpgroup_clear(ptun->vp_num) != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("Failed to clear vp_group config for tun: %x\n", ptun->vp_num);
+			spin_unlock_bh(&p->lock);
+			return false;
+		}
+
+		if (!ppe_drv_port_l2_vp_sc_reset(ptun->pp)) {
+			ppe_drv_warn("Error in reset L2 VP table  %d\n",ptun-> pp->port);
+			spin_unlock_bh(&p->lock);
+			return false;
+		}
+	}
+#endif
+
 	/*
 	 * For MAP-T cases eg edit rule table is used for encapsulation
 	 */
@@ -1557,7 +1571,10 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	bool is_ipv6;
 	bool status;
 	int16_t enq_vp = PPE_DRV_PORT_ID_INVALID;
-
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	struct ppe_drv_iface *if_tx, *if_rx = NULL;
+	struct ppe_drv_iface *veip_if = NULL;
+#endif
 	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
 	spin_lock_bh(&p->lock);
 
@@ -1667,6 +1684,17 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	 * b. the L2 parameter can be configured from user when ECM is not present.
 	 */
 	if (vcreate_rule && is_ipv6) {
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+		struct ppe_drv_v6_rule_create *c6 = (struct ppe_drv_v6_rule_create *)vcreate_rule;
+		if_tx = ppe_drv_iface_get_by_idx(c6->conn_rule.tx_if);
+		if_rx = ppe_drv_iface_get_by_idx(c6->conn_rule.rx_if);
+
+		if (if_tx && if_tx->type == PPE_DRV_IFACE_TYPE_VEIP) {
+			veip_if = if_tx;
+		} else if (if_rx && if_rx->type == PPE_DRV_IFACE_TYPE_VEIP) {
+			veip_if = if_rx;
+		}
+#endif
 		cn_v6 = ppe_drv_v6_conn_alloc();
 		if (!cn_v6) {
 			ppe_drv_stats_inc(&comm_stats->v6_create_fail_mem);
@@ -1695,6 +1723,17 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 			enq_vp = ppe_drv_port_metadata_to_enq_vp_internal(cn_v6->pcr.wifi_rule_ds_metadata);
 		}
 	} else if (vcreate_rule) {
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+		struct ppe_drv_v4_rule_create *c4 = (struct ppe_drv_v4_rule_create *)vcreate_rule;
+		if_tx = ppe_drv_iface_get_by_idx(c4->conn_rule.tx_if);
+		if_rx = ppe_drv_iface_get_by_idx(c4->conn_rule.rx_if);
+
+		if (if_tx && if_tx->type == PPE_DRV_IFACE_TYPE_VEIP) {
+			veip_if = if_tx;
+		} else if (if_rx && if_rx->type == PPE_DRV_IFACE_TYPE_VEIP) {
+			veip_if = if_rx;
+		}
+#endif
 		cn_v4 = ppe_drv_v4_conn_alloc();
 		if (!cn_v4) {
 			ppe_drv_stats_inc(&comm_stats->v4_create_fail_mem);
@@ -1767,7 +1806,15 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	 */
 
 	if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
-		pppoe = ppe_drv_pppoe_find_session(ntohs(l2_hdr->pppoe.ph.sid), l2_hdr->pppoe.server_mac);
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+		if (veip_if) {
+			int32_t gw_vp = ppe_drv_veip_get_port(veip_if, PPE_DRV_PORT_VIRTUAL_GW);
+			pppoe = ppe_drv_pppoe_find_session_by_veip(ntohs(l2_hdr->pppoe.ph.sid), l2_hdr->pppoe.server_mac, gw_vp);
+		} else
+#endif
+		{
+			pppoe = ppe_drv_pppoe_find_session(ntohs(l2_hdr->pppoe.ph.sid), l2_hdr->pppoe.server_mac);
+		}
 		if (!pppoe) {
 			ppe_drv_warn("%p: Could not find pppoe session %x mac %pM", ptun, ntohs(l2_hdr->pppoe.ph.sid), l2_hdr->pppoe.server_mac);
 			goto err_fail;
@@ -1833,6 +1880,30 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 
 	ptun->xmit_port = xmit_port;
 
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	/*
+	 * VEIP mapping: Map tunnel VP to VEIP PON VP group on outer rule push.
+	 */
+	if (veip_if) {
+		int32_t pon_vp = ppe_drv_veip_get_port(veip_if, PPE_DRV_PORT_VIRTUAL_PON);
+		if (pon_vp >= 0) {
+			if (ppe_drv_veip_eg_vpgroup_set(ptun->vp_num, (uint32_t)pon_vp) != PPE_DRV_RET_SUCCESS) {
+				ppe_drv_warn("Failed to det VP group for tun_vp: 0x%x and pon_vp: 0x%x\n",  ptun->vp_num, pon_vp);
+				goto err_fail;
+			}
+			ppe_drv_info("EG_VP group set: tun_vp=0x%x, pon_vp=0x%x\n", ptun->vp_num, pon_vp);
+		}
+
+		/*
+		 * Configuring L2_VP_PORT table.
+		 */
+		if (!ppe_drv_veip_l2_vp_sc_config(ptun->pp, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC, p->loopback_port_info.port_id)) {
+			ppe_drv_warn("Failed to configure L2_VP_PORT_TBL for tun: 0x%x and sc: %u\n", ptun->vp_num, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC);
+			goto err_fail;
+		}
+		ptun->is_veip_tun = true;
+	}
+#endif
 	/*
 	 * For GRETAP tunnel endpoint on DS port push a 3 tuple
 	 * FSE entry. For now only GRETAP is supported and validated

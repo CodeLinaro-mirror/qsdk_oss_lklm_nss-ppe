@@ -901,7 +901,22 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	struct ppe_drv_port *port_rx = pcf->rx_port;
 	ppe_drv_sc_t service_code = *scp;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	ppe_drv_ret_t ret;
 
+	ret = ppe_drv_veip_gw_port_sc(ppe_drv_v6_conn_flow_tx_port_get(pcf), &sc);
+	if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD) {
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+					pcf, service_code, sc);
+			return false;
+		}
+		*scp = service_code;
+	} else if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD_FAIL) {
+		ppe_drv_warn("%p: VEIP US v6 flow add failed ret=%d, sc=%u\n", pcf, ret, sc);
+		return false;
+	}
+#endif
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST)) {
 		/*
 		 * Service code to set priority for PPE assisted flows.
@@ -2113,11 +2128,7 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	struct ppe_drv_port *port_rx = pcf->rx_port;
 	ppe_drv_sc_t service_code = *scp;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
-#ifdef PPE_TUNNEL_ENABLE
-#if defined(PPE_LOOPBACK_RING_SUPPORT)
-	ppe_drv_ret_t ret;
-#endif
-#endif
+	ppe_drv_ret_t ret __maybe_unused;
 
 #ifdef PPE_TUNNEL_ENABLE
 #if defined(PPE_LOOPBACK_RING_SUPPORT)
@@ -2129,6 +2140,22 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		return false;
 	}
 #endif
+#endif
+
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	ret = ppe_drv_veip_gw_port_sc(ppe_drv_v4_conn_flow_tx_port_get(pcf), &sc);
+	if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD) {
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+					pcf, service_code, sc);
+			return false;
+		}
+		*scp = service_code;
+		return true;
+	} else if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD_FAIL) {
+		ppe_drv_warn("%p: VEIP US v4 flow add failed ret=%d, veip_sc=%u\n", pcf, ret, sc);
+		return false;
+	}
 #endif
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST)) {
 		/*

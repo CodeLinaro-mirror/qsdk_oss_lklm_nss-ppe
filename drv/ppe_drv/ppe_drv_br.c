@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include "ppe_drv.h"
@@ -34,7 +23,7 @@ ppe_drv_ret_t ppe_drv_br_fdb_del_bymac(struct ppe_drv_iface *br_iface, uint8_t *
 	vsi = ppe_drv_iface_vsi_get(br_iface);
 	if (!vsi) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: VSI not assinged to bridge\n", br_iface);
+		ppe_drv_warn("%p: VSI not assigned to bridge\n", br_iface);
 		return PPE_DRV_RET_VSI_NOT_FOUND;
 	}
 
@@ -69,7 +58,7 @@ ppe_drv_ret_t ppe_drv_br_fdb_add(struct ppe_drv_iface *br_iface,
 	vsi = ppe_drv_iface_vsi_get(br_iface);
 	if (!vsi) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: VSI not assinged to bridge\n", br_iface);
+		ppe_drv_warn("%p: VSI not assigned to bridge\n", br_iface);
 		return PPE_DRV_RET_VSI_NOT_FOUND;
 	}
 
@@ -238,7 +227,7 @@ ppe_drv_ret_t ppe_drv_br_fdb_lrn_ctrl(struct ppe_drv_iface *br_iface, bool enabl
 	vsi = ppe_drv_iface_vsi_get(br_iface);
 	if (!vsi) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: VSI not assinged to bridge", br_iface);
+		ppe_drv_warn("%p: VSI not assigned to bridge", br_iface);
 		return PPE_DRV_RET_VSI_NOT_FOUND;
 	}
 
@@ -450,7 +439,7 @@ ppe_drv_ret_t ppe_drv_br_leave(struct ppe_drv_iface *br_iface, struct net_device
 	if (!vsi) {
 		ppe_drv_iface_parent_set(member_iface, br_iface);
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: VSI not assinged to bridge %p", br_iface, member);
+		ppe_drv_warn("%p: VSI not assigned to bridge %p", br_iface, member);
 		return PPE_DRV_RET_VSI_NOT_FOUND;
 	}
 
@@ -542,7 +531,7 @@ ppe_drv_ret_t ppe_drv_br_join(struct ppe_drv_iface *br_iface, struct net_device 
 		ppe_drv_iface_parent_clear(member_iface);
 		ppe_drv_iface_deref_internal(member_iface);
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: VSI not assinged to bridge %p", br_iface, member);
+		ppe_drv_warn("%p: VSI not assigned to bridge %p", br_iface, member);
 		return PPE_DRV_RET_VSI_NOT_FOUND;
 	}
 

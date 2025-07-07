@@ -217,8 +217,8 @@ void ppe_drv_vlan_ingress_rule_action_set_vp(fal_vlan_trans_adv_rule_t *xlt_rule
 	xlt_rule->s_vid = (info->svid == 0xFFFF) ? 0 : info->svid;
 	xlt_rule->s_vid_enable = (info->svid == 0xFFFF) ? A_FALSE : A_TRUE;
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
-	xlt_rule->dhcp_type = 0x7;
-	xlt_rule->mc_type = 0x7;
+	xlt_rule->dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule->mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
 #endif
 
 	/*
@@ -247,8 +247,8 @@ void ppe_drv_vlan_egress_rule_action_set_vp(fal_vlan_trans_adv_rule_t *xlt_rule,
 	xlt_rule->s_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED | FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
 	xlt_rule->c_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED | FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
-	xlt_rule->dhcp_type = 0x7;
-	xlt_rule->mc_type = 0x7;
+	xlt_rule->dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule->mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
 #endif
 
 	/*
@@ -618,8 +618,8 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	xlt_rule.s_vid = (info->svid == 0xFFFF) ? 0 : info->svid;
 	xlt_rule.c_vid = (info->cvid == 0xFFFF) ? 0 : info->cvid;
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
-	xlt_rule.dhcp_type = 0x7;
-	xlt_rule.mc_type = 0x7;
+	xlt_rule.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule.mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
 #endif
 
 	/*
@@ -631,7 +631,7 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	xlt_action.vsi_xlt_enable = A_TRUE;
 
 	rc = fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_INGRESS,
-                        &xlt_rule, &xlt_action);
+			&xlt_rule, &xlt_action);
 	if (rc != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("Failed to delete old ingress vlan translation rule of port %d, error: %d\n", fal_port, rc);
@@ -641,9 +641,9 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	vlan->in_vlan_tbl[xlt_rule.index].hw_id_state = PPE_DRV_VLAN_HW_ID_FREE;
 
 	/*
-         * VSI member set
-         */
-        rv = fal_vsi_member_set(PPE_DRV_SWITCH_ID, vsi_idx, &vsi_member);
+	 * VSI member set
+	 */
+	rv = fal_vsi_member_set(PPE_DRV_SWITCH_ID, vsi_idx, &vsi_member);
 	if ( rv != SW_OK ) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("VSI member updated failed for a given VSI index: %d\n", vsi_idx);
@@ -665,8 +665,8 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	xlt_rule.s_tagged = 0x7;				/* Accept tagged/untagged/priority tagged svlan */
 	xlt_rule.c_tagged = 0x7;				/* Accept tagged/untagged/priority tagged cvlan */
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
-	xlt_rule.dhcp_type = 0x7;
-	xlt_rule.mc_type = 0x7;
+	xlt_rule.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule.mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
 #endif
 
 	/*
@@ -738,7 +738,7 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	 * VSI member get
 	 */
 	port_value = FAL_PORT_ID_VALUE (fal_port);
-        vport_value = port_value - SSDK_MIN_VIRTUAL_PORT_ID;
+	vport_value = port_value - SSDK_MIN_VIRTUAL_PORT_ID;
 	ppe_drv_trace("port_id:0x%x, port_value:%d\n", fal_port, port_value);
 
 	rv = fal_vsi_member_get(PPE_DRV_SWITCH_ID, vsi_idx, &vsi_member);
@@ -772,8 +772,8 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	xlt_rule_in.s_vid = (info->svid == 0xFFFF) ? 0 : info->svid;
 	xlt_rule_in.c_vid = (info->cvid == 0xFFFF) ? 0 : info->cvid;
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
-	xlt_rule_in.dhcp_type = 0x7;
-	xlt_rule_in.mc_type = 0x7;
+	xlt_rule_in.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule_in.mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
 #endif
 
 	/*
@@ -831,8 +831,8 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	xlt_rule_eg.s_tagged = 0x7;				/* Accept tagged/untagged/priority tagged svlan */
 	xlt_rule_eg.c_tagged = 0x7;				/* Accept tagged/untagged/priority tagged cvlan */
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
-	xlt_rule_eg.dhcp_type = 0x7;
-	xlt_rule_eg.mc_type = 0x7;
+	xlt_rule_eg.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule_eg.mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
 #endif
 
 	/*
@@ -1521,6 +1521,7 @@ struct ppe_drv_vlan_tbl *ppe_drv_vlan_entries_alloc(void)
 	return vlan;
 }
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 /*
  * ppe_drv_vlan_gen_hw_id_get()
  *	Get an available hw_id from the specified direction's vlan table.
@@ -1580,6 +1581,24 @@ static int16_t ppe_drv_vlan_hw_id_get(ppe_drv_rule_dir_t rule_dir)
 }
 
 /*
+ * ppe_drv_vlan_ctx_iface_get()
+ *	Return the iface associated with VLAN context.
+ */
+struct ppe_drv_iface *ppe_drv_vlan_ctx_iface_get(struct ppe_drv_vlan_ctx *ctx)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_iface *iface = NULL;
+
+	spin_lock_bh(&p->lock);
+	if (ctx) {
+		iface = ctx->iface;
+	}
+	spin_unlock_bh(&p->lock);
+	return iface;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_ctx_iface_get);
+
+/*
  * ppe_drv_vlan_alloc()
  *	Allocate ctx for VLAN rules.
  */
@@ -1621,8 +1640,6 @@ struct ppe_drv_vlan_ctx *ppe_drv_vlan_alloc(ppe_drv_rule_dir_t rule_dir)
 }
 EXPORT_SYMBOL(ppe_drv_vlan_alloc);
 
-
-#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 /*
  * ppe_drv_vlan_hw_id_return()
  *      Return a hw id  to free pool.
@@ -1659,7 +1676,26 @@ static bool ppe_drv_vlan_rule_fill(struct ppe_drv_vlan_ctx *ctx, struct ppe_drv_
 				fal_rule->port_bitmap = fal_port;
 				break;
 			case PPE_DRV_VLAN_PORT_TYPE_PORT:
-				port_info = ppe_drv_port_num_from_dev(info->src_dev);
+				ctx->iface = ppe_drv_iface_get_by_dev(info->src_dev);
+				if (!ctx->iface) {
+					ppe_drv_warn("Failed to get iface for interface: %s\n", info->src_dev->name);
+					return false;
+				}
+
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+				if (ppe_drv_veip_is_enabled(info->src_dev)) {
+					port_info = ppe_drv_veip_get_port(ctx->iface, PPE_DRV_PORT_VIRTUAL_PON);
+				} else
+#endif
+				{
+					port_info = ppe_drv_iface_port_idx_get(ctx->iface);
+				}
+
+				if (port_info == PPE_DRV_INVALID_PORT) {
+					ppe_drv_warn("Invalid port id: %d\n", port_info);
+					return false;
+				}
+
 				fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port_info) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port_info)
 					: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port_info);
 
@@ -2163,13 +2199,13 @@ static bool ppe_drv_vlan_action_fill(struct ppe_drv_vlan_ctx *ctx, struct ppe_dr
 		uint32_t port_info = 0;
 		fal_port_t fal_port;
 
-                port_info = ppe_drv_port_num_from_dev(info->dst_dev);
+		port_info = ppe_drv_port_num_from_dev(info->dst_dev);
 
-                fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port_info) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port_info)
-                                        : FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port_info);
-                fal_action->dst_valid = A_TRUE;
-                fal_action->dst_port.dest_info_type = FAL_DEST_INFO_PORT_ID;
-                fal_action->dst_port.dest_info_value = (1UL << fal_port);
+		fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port_info) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port_info)
+			: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port_info);
+		fal_action->dst_valid = A_TRUE;
+		fal_action->dst_port.dest_info_type = FAL_DEST_INFO_PORT_ID;
+		fal_action->dst_port.dest_info_value = (1UL << fal_port);
 
 		ppe_drv_trace("%p: action DEST_INFO: %d", ctx, fal_action->dst_port.dest_info_value);
 	}
@@ -2241,10 +2277,9 @@ ppe_drv_ret_t ppe_drv_vlan_rule_create(struct ppe_drv_vlan_ctx *ctx, struct ppe_
 	}
 
 	ctx->rule_valid = true;
-	ppe_drv_info("VLAN rule created successfully\n");
-
 	spin_unlock_bh(&p->lock);
 
+	ppe_drv_info("VLAN rule created successfully\n");
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_vlan_rule_create);
@@ -2295,5 +2330,378 @@ void ppe_drv_vlan_destroy(struct ppe_drv_vlan_ctx *ctx)
 
 }
 EXPORT_SYMBOL(ppe_drv_vlan_destroy);
+#endif
 
-#endif /* NSS_PPE_EXT_VLAN_FEATURE_SUPPORT */
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+/*
+ * ppe_drv_vlan_ingress_rule_action_set_veip()
+ *	Set xlt_rule and xlt_action structure for ingress.
+ */
+void ppe_drv_vlan_ingress_rule_action_set_veip(fal_vlan_trans_adv_rule_t *xlt_rule,
+		fal_vlan_trans_adv_action_t *xlt_action, struct ppe_drv_vlan_xlate_info *info)
+{
+	/*
+	 * Field for ingress match.
+	 * Accept tagged/untagged/priority tagged svlan and cvlan.
+	 */
+	xlt_rule->s_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+			| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	xlt_rule->c_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+			| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	xlt_rule->c_vid = (info->cvid == 0xFFFF) ? 0 : info->cvid;
+	xlt_rule->c_vid_enable = (info->cvid == 0xFFFF) ? A_FALSE : A_TRUE;
+	xlt_rule->s_vid = (info->svid == 0xFFFF) ? 0 : info->svid;
+	xlt_rule->s_vid_enable = (info->svid == 0xFFFF) ? A_FALSE : A_TRUE;
+	xlt_rule->dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule->mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
+
+	/*
+	 * field for ingress action.
+	 */
+	xlt_action->cvid_xlt_cmd = (info->cvid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+	xlt_action->svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+	xlt_action->src_info_enable = A_TRUE;
+	xlt_action->src_info = info->port_id;
+	xlt_action->src_info_type = FAL_CHG_SRC_TYPE_VP;
+
+	ppe_drv_trace("Ingress VLAN: s_tagged=0x%x c_tagged=0x%x s_vid=%u c_vid=%u "
+			"svid_cmd=%d svid=%u cvid_cmd=%d c_vid=%u src_info=%u src_type=%u\n",
+			xlt_rule->s_tagged, xlt_rule->c_tagged, xlt_rule->s_vid, xlt_rule->c_vid,
+			xlt_action->svid_xlt_cmd, xlt_action->svid_xlt, xlt_action->cvid_xlt_cmd,
+			xlt_action->cvid_xlt, xlt_action->src_info, xlt_action->src_info_type);
+}
+
+/*
+ * ppe_drv_vlan_egress_rule_action_set_veip()
+ *	Set xlt_rule and xlt_action structure for egress.
+ */
+void ppe_drv_vlan_egress_rule_action_set_veip(fal_vlan_trans_adv_rule_t *xlt_rule,
+		fal_vlan_trans_adv_action_t *xlt_action, struct ppe_drv_vlan_xlate_info *info)
+{
+	/*
+	 * Fields for egress match.
+	 * Accept tagged/untagged/priority tagged svlan and cvlan.
+	 */
+	if (info->svid != FAL_VLAN_INVALID) {
+		xlt_rule->s_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+				| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	} else {
+		xlt_rule->s_tagged = FAL_PORT_VLAN_XLT_MATCH_UNTAGGED;
+	}
+
+	if (info->cvid != FAL_VLAN_INVALID) {
+		xlt_rule->c_tagged = (FAL_PORT_VLAN_XLT_MATCH_UNTAGGED | FAL_PORT_VLAN_XLT_MATCH_TAGGED
+				| FAL_PORT_VLAN_XLT_MATCH_PRIO_TAG);
+	} else {
+		xlt_rule->c_tagged = FAL_PORT_VLAN_XLT_MATCH_UNTAGGED;
+	}
+	xlt_rule->dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule->mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
+
+	/*
+	 * Fields for egress action.
+	 */
+	xlt_action->cvid_xlt_cmd = (info->cvid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
+	xlt_action->cvid_xlt = (info->cvid == 0xFFFF) ? 0 : info->cvid;
+	xlt_action->svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_ADDORREPLACE;
+	xlt_action->svid_xlt = (info->svid == 0xFFFF) ? 0 : info->svid;
+
+	ppe_drv_info("Egress VLAN: Rule[s_tagged=0x%x c_tagged=0x%x] "
+			"Action[svid_cmd=%d svid=%u cvid_cmd=%d cvid=%u]\n", xlt_rule->s_tagged, xlt_rule->c_tagged,
+			xlt_action->svid_xlt_cmd, xlt_action->svid_xlt, xlt_action->cvid_xlt_cmd, xlt_action->cvid_xlt);
+
+}
+
+/*
+ * ppe_drv_vlan_as_veip_add_xlate_rules()
+ *	Add Ingress and Egress VLAN translation rules for VLAN created as VEIP.
+ */
+ppe_drv_ret_t ppe_drv_vlan_as_veip_add_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info)
+{
+	fal_vlan_trans_adv_rule_t xlt_rule = {0};
+	fal_vlan_trans_adv_action_t xlt_action = {0};
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_vlan_tbl *vlan = p->vlan;
+	fal_port_t fal_port;
+	sw_error_t ret;
+
+	spin_lock_bh(&p->lock);
+
+	/*
+	 * Setting VLAN rule and action fields for ingress rules.
+	 */
+	ppe_drv_vlan_ingress_rule_action_set_veip(&xlt_rule, &xlt_action, info);
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(info->port_id) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, info->port_id)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, info->port_id);
+
+	/*
+	 * Add ingress vlan translation rule.
+	 * For adding ingress rule we are using base physical port number
+	 * becasue packet rx happen on gmac, so we need to add a ingress
+	 * rule/action to match tagged packet, which untag the packet and
+	 * give it to src_info port, which is VP.
+	 */
+	ret = fal_port_vlan_trans_adv_add(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_INGRESS, &xlt_rule,
+			&xlt_action);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%px: Failed to update ingress translation rule for port: 0x%x, error: %d\n"
+				, iface, fal_port, ret);
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_ingress_vlan_add);
+		return PPE_DRV_RET_INGRESS_VLAN_FAIL;
+	}
+
+	vlan->in_vlan_tbl[xlt_rule.index].hw_id_state = PPE_DRV_VLAN_HW_ID_USED;
+
+	memset(&xlt_rule, 0, sizeof(xlt_rule));
+	memset(&xlt_action, 0, sizeof(xlt_action));
+
+	ppe_drv_vlan_egress_rule_action_set_veip(&xlt_rule, &xlt_action, info);
+
+	/*
+	 * Add egress vlan translation rule.
+	 */
+	ret = fal_port_vlan_trans_adv_add(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_EGRESS, &xlt_rule,
+			&xlt_action);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%px: Failed to update egress translation rule for port: %d, error: %d\n",
+				iface, fal_port, ret);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_egress_vlan_add);
+
+		/*
+		 * Delete ingress vlan translation rule
+		 */
+		if (ret != SW_ALREADY_EXIST) {
+			memset(&xlt_rule, 0, sizeof(xlt_rule));
+			memset(&xlt_action, 0, sizeof(xlt_action));
+			ppe_drv_vlan_ingress_rule_action_set_veip(&xlt_rule, &xlt_action, info);
+			fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_INGRESS,
+					&xlt_rule, &xlt_action);
+
+			/*
+			 * Resetting HW index state to free.
+			 */
+			vlan->in_vlan_tbl[xlt_rule.index].hw_id_state = PPE_DRV_VLAN_HW_ID_FREE;
+
+		}
+
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_EGRESS_VLAN_FAIL;
+	}
+
+	vlan->eg_vlan_tbl[xlt_rule.index].hw_id_state = PPE_DRV_VLAN_HW_ID_USED;
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_as_veip_add_xlate_rules);
+
+/*
+ * ppe_drv_vlan_as_veip_del_xlate_rules()
+ *	Delete Ingress and Egress VLAN translation rules for VLAN created as VEIP.
+ */
+ppe_drv_ret_t ppe_drv_vlan_as_veip_del_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info)
+{
+	fal_vlan_trans_adv_rule_t xlt_rule = {0};
+	fal_vlan_trans_adv_action_t xlt_action = {0};
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_vlan_tbl *vlan = p->vlan;
+	fal_port_t fal_port;
+	sw_error_t ret;
+
+	spin_lock_bh(&p->lock);
+
+	/*
+	 * Setting VLAN rule and action fields for ingress rules.
+	 */
+	ppe_drv_vlan_ingress_rule_action_set_veip(&xlt_rule, &xlt_action, info);
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(info->port_id) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, info->port_id)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, info->port_id);
+
+	/*
+	 * Delete ingress vlan translation rule..
+	 */
+	ret = fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_INGRESS, &xlt_rule,
+			&xlt_action);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%px: Failed to delete ingress translation rule for port: 0x%x, error: %d\n"
+				, iface, fal_port, ret);
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_INGRESS_VLAN_FAIL;
+	}
+
+	vlan->in_vlan_tbl[xlt_rule.index].hw_id_state = PPE_DRV_VLAN_HW_ID_FREE;
+
+	memset(&xlt_rule, 0, sizeof(xlt_rule));
+	memset(&xlt_action, 0, sizeof(xlt_action));
+
+	ppe_drv_vlan_egress_rule_action_set_veip(&xlt_rule, &xlt_action, info);
+
+	/*
+	 * Delete egress vlan translation rule.
+	 */
+	ret = fal_port_vlan_trans_adv_del(PPE_DRV_SWITCH_ID, fal_port, FAL_PORT_VLAN_EGRESS, &xlt_rule,
+			&xlt_action);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%px: Failed to update egress translation rule for port: %d, error: %d\n",
+				iface, fal_port, ret);
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_EGRESS_VLAN_FAIL;
+	}
+
+	vlan->eg_vlan_tbl[xlt_rule.index].hw_id_state = PPE_DRV_VLAN_HW_ID_FREE;
+	spin_unlock_bh(&p->lock);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_as_veip_del_xlate_rules);
+
+/*
+ * ppe_drv_vlan_hgu_rule_create
+ *      Create the VLAN rule in PPE for HGU use case.
+ */
+ppe_drv_ret_t ppe_drv_vlan_hgu_rule_create(struct ppe_drv_vlan_cfg *info, struct ppe_drv_vlan_ctx *ctx)
+{
+	fal_vlan_trans_adv_rule_t xlt_rule_in = {0};
+	fal_vlan_trans_adv_action_t xlt_action_in = {0};
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_vlan_rule_match *rule = &info->rule_f;
+	struct ppe_drv_vlan_action *action = &info->action_f;
+	struct net_device *base_dev;
+	struct vlan_dev_priv *dev_priv;
+	fal_port_t fal_port;
+	int32_t port_info, vsi_idx = 0;
+	sw_error_t ret;
+	int16_t hw_id = -1;
+
+	/*
+	 * Handle VLAN (eg: eth0.10, eth0.10.20, lan1.10)
+	 * Post these checks, base_dev will point to base net device (eth0/lan1) for VLAN dev,
+	 * or NULL for non-VLAN interface (eg: eth0/lan1).
+	 */
+	dev_priv = (info->src_dev && is_vlan_dev(info->src_dev) ? vlan_dev_priv(info->src_dev): NULL);
+	base_dev = dev_priv ? dev_priv->real_dev: NULL;
+	if (base_dev && is_vlan_dev(base_dev)) {
+		base_dev = vlan_dev_priv(base_dev)->real_dev;
+	}
+
+	port_info = ppe_drv_port_num_from_dev(base_dev);
+	if (port_info == PPE_DRV_INVALID_PORT) {
+		ppe_drv_warn("Invalid Port ID: %d\n", port_info);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port_info) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port_info)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port_info);
+
+	xlt_rule_in.port_bitmap = (1ULL << fal_port);
+
+	spin_lock_bh(&p->lock);
+
+	hw_id = ppe_drv_vlan_hw_id_get(PPE_DRV_RULE_INGRESS);
+	if (hw_id < 0) {
+		ppe_drv_warn("No available hw_id in VLAN table for hgu rule\n");
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_VLAN_RULE_HW_ID_NOT_FOUND;
+	}
+
+	/*
+	 * Getting vsi_idx information.
+	 */
+	vsi_idx = ppe_drv_iface_vsi_idx_get(ctx->iface);
+	if (vsi_idx < 0) {
+		ppe_drv_warn("Invalid VSI index: %d\n", vsi_idx);
+		ppe_drv_vlan_hw_id_return(hw_id, PPE_DRV_RULE_INGRESS);
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_VSI_NOT_FOUND;
+	}
+
+	if (info->rule_dir == PPE_DRV_RULE_EGRESS) {
+		xlt_rule_in.s_vid = rule->svid;
+		xlt_rule_in.c_vid = rule->cvid;
+		xlt_rule_in.s_vid_enable = A_TRUE;
+		xlt_rule_in.c_vid_enable = A_TRUE;
+	} else {
+		xlt_rule_in.s_vid = action->svidxlate;
+		xlt_rule_in.c_vid = action->cvidxlate;
+		xlt_rule_in.s_vid_enable = (action->svidxlate == 0) ? A_FALSE : A_TRUE;
+		xlt_rule_in.c_vid_enable = (action->cvidxlate == 0) ? A_FALSE : A_TRUE;
+	}
+
+	/*
+	 * Fields for match
+	 */
+	xlt_rule_in.s_tagged = (rule->svid == 0xFFFF) ? 0x1 : 0x7;
+	xlt_rule_in.c_tagged = (rule->cvid == 0xFFFF) ? 0x1 : 0x7;
+	xlt_rule_in.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule_in.mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
+
+	/*
+	 * Fields for action
+	 */
+	xlt_action_in.vsi_xlt = vsi_idx;
+	xlt_action_in.vsi_xlt_enable = A_TRUE;
+
+	ret = fal_port_vlan_trans_adv_set(PPE_DRV_SWITCH_ID, FAL_PORT_VLAN_INGRESS, hw_id, &xlt_rule_in, &xlt_action_in);
+	if (ret != SW_OK) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_ingress_vlan_add);
+		ppe_drv_warn("Failed to update ingress vlan translation of port %d, error: %d\n", fal_port, ret);
+		ppe_drv_vlan_hw_id_return(hw_id, PPE_DRV_RULE_INGRESS);
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_INGRESS_VLAN_FAIL;
+	}
+
+	ppe_drv_info("INGRESS_VLAN rule programmed successfully for HGU case.\n");
+
+	ctx->is_veip_rule_valid = A_TRUE;
+	ctx->veip_rule_entry_index = hw_id;
+
+	/*
+	 * Setting VEIP flag to ensure that this rule is
+	 * not pushed with all VLAN rules with src_info as VLAN as VEIP.
+	 */
+	if (ctx->iface) {
+		ppe_drv_veip_flag_set(ctx->iface);
+	}
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_hgu_rule_create);
+
+/*
+ * ppe_drv_vlan_hgu_rule_destroy
+ *      Destroy the VLAN rule in PPE for HGU used case.
+ */
+ppe_drv_ret_t ppe_drv_vlan_hgu_rule_destroy(struct ppe_drv_vlan_ctx *ctx)
+{
+	fal_vlan_trans_adv_rule_t xlt_rule_in = {0};
+	fal_vlan_trans_adv_action_t xlt_action_in = {0};
+	struct ppe_drv *p = ppe_drv_gbl;
+	sw_error_t ret;
+
+	spin_lock_bh(&p->lock);
+
+	ret = fal_port_vlan_trans_adv_set(PPE_DRV_SWITCH_ID, FAL_PORT_VLAN_INGRESS, ctx->veip_rule_entry_index, &xlt_rule_in, &xlt_action_in);
+	if (ret != SW_OK) {
+		ppe_drv_warn("Failed to delete old ingress vlan translation rule with error: %d\n", ret);
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_VLAN_INGRESS_DEL_FAIL;
+	}
+
+	ppe_drv_vlan_hw_id_return(ctx->veip_rule_entry_index, PPE_DRV_RULE_INGRESS);
+
+	/*
+	 * Clearing the flag to ensure that IN_VLAN rule is deleted
+	 * which got pushed with src_info as VEIP iface.
+	 */
+	if (ctx->iface) {
+		ppe_drv_veip_flag_clear(ctx->iface);
+	}
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_hgu_rule_destroy);
+#endif /* PPE_DRV_VEIP_FEATURE_SUPPORT */

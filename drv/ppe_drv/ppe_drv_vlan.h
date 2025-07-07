@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: ISC
  */
 
+#ifndef PPE_DRV_VLAN_H
+#define PPE_DRV_VLAN_H
+
 #include <fal/fal_vlan.h>
 #include <fal/fal_api.h>
 #include <ppe_drv_vlan.h>
@@ -33,9 +36,12 @@
  *	VLAN rule context
  */
 struct ppe_drv_vlan_ctx {
-	int16_t entry_index;				/* Entry Index */
-	bool rule_valid;				/* Rule valid flag */
-	ppe_drv_rule_dir_t rule_dir;			/* Rule direction */
+	int16_t entry_index;				/* Entry Index. */
+	bool is_veip_rule_valid;			/* Rule vaid flags for hgu VLAN rule */
+	int16_t veip_rule_entry_index;			/* Entry Index for VEIP rule. */
+	bool rule_valid;				/* Rule valid flag to handle failure with partial configuration. */
+	ppe_drv_rule_dir_t rule_dir;			/* Rule direction. */
+	struct ppe_drv_iface *iface;			/* Source interface. */
 
 	/*
 	 * Rule shadow.
@@ -67,3 +73,6 @@ struct ppe_drv_vlan_tbl {
  */
 struct ppe_drv_vlan_tbl *ppe_drv_vlan_entries_alloc(void);
 void ppe_drv_vlan_entries_free(struct ppe_drv_vlan_tbl *vlan);
+struct ppe_drv_iface *ppe_drv_vlan_ctx_iface_get(struct ppe_drv_vlan_ctx *ctx);
+
+#endif /* PPE_DRV_VLAN_H */

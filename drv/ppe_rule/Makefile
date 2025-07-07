@@ -34,6 +34,10 @@ ccflags-y += -DPPE_ACL_DEST_BIND_SUPPORT
 ccflags-y += -DNSS_PPE_PORT_ISOL_SUPPORT
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq52xx))
+ccflags-y += -DNSS_PPE_VEIP_FEATURE_SUPPORT
+endif
+
 obj-m += qca-nss-ppe-rule.o
 qca-nss-ppe-rule-objs := ppe_rule.o
 

@@ -401,6 +401,7 @@ bool ppe_drv_iface_port_set(struct ppe_drv_iface *iface, struct ppe_drv_port *po
 	iface->flags |= PPE_DRV_IFACE_FLAG_PORT_VALID;
 	return true;
 }
+EXPORT_SYMBOL(ppe_drv_iface_port_set);
 
 /*
  * ppe_drv_iface_vsi_idx_get()
@@ -768,6 +769,18 @@ ppe_drv_ret_t ppe_drv_iface_mtu_disable(struct ppe_drv_iface *iface)
 		break;
 	}
 
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	case PPE_DRV_IFACE_TYPE_VEIP:
+	{
+		if (!ppe_drv_veip_vp_mtu_mru_disable(iface)) {
+			ppe_drv_warn("%p: PORT MTU MRU config failed\n", iface);
+			status = PPE_DRV_RET_MTU_CFG_FAIL;
+			break;
+		}
+
+		break;
+	}
+#endif
 	default:
 		ppe_drv_warn("%p: invalid inface type(%d)\n", iface, iface->type);
 		status = PPE_DRV_RET_IFACE_INVALID;
@@ -871,6 +884,17 @@ ppe_drv_ret_t ppe_drv_iface_mtu_set(struct ppe_drv_iface *iface, uint16_t mtu)
 		break;
 	}
 
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	case PPE_DRV_IFACE_TYPE_VEIP:
+	{
+		if (!ppe_drv_veip_vp_mtu_mru_set(iface, mtu, mtu)){
+			ppe_drv_warn("%p: PORT MTU MRU failed\n", iface);
+			status = PPE_DRV_RET_MTU_CFG_FAIL;
+			break;
+		}
+		break;
+	}
+#endif
 	default:
 		ppe_drv_warn("%p: invalid inface type(%d)\n", iface, iface->type);
 		status = PPE_DRV_RET_IFACE_INVALID;
@@ -975,6 +999,27 @@ ppe_drv_ret_t ppe_drv_iface_mac_addr_clear(struct ppe_drv_iface *iface)
 		break;
 	}
 
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	case PPE_DRV_IFACE_TYPE_VEIP:
+	{
+		struct ppe_drv_l3_if *l3_if;
+		l3_if = ppe_drv_iface_l3_if_get(iface);
+		if (!l3_if) {
+			status = PPE_DRV_RET_L3_IF_NOT_FOUND;
+			break;
+		}
+
+		if (!ppe_drv_l3_if_eg_mac_addr_clear(l3_if)) {
+			ppe_drv_warn("%p: L3_IF mac_addr failed(%p)\n", iface, l3_if);
+			status =  PPE_DRV_RET_MAC_ADDR_CLEAR_CFG_FAIL;
+			break;
+		}
+
+		ppe_drv_veip_mac_addr_clear(iface);
+
+		break;
+	}
+#endif
 	default:
 		ppe_drv_warn("%p: invalid inface type(%d)\n", iface, iface->type);
 		status = PPE_DRV_RET_IFACE_INVALID;
@@ -1094,6 +1139,28 @@ ppe_drv_ret_t ppe_drv_iface_mac_addr_set(struct ppe_drv_iface *iface, uint8_t *m
 		break;
 	}
 
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	case PPE_DRV_IFACE_TYPE_VEIP:
+	{
+		struct ppe_drv_l3_if *l3_if;
+
+		l3_if = ppe_drv_iface_l3_if_get(iface);
+		if (!l3_if) {
+			status = PPE_DRV_RET_L3_IF_NOT_FOUND;
+			break;
+		}
+
+		if (!ppe_drv_l3_if_eg_mac_addr_set(l3_if, mac_addr)) {
+			ppe_drv_warn("%p: L3_IF mac_addr failed(%p)\n", iface, l3_if);
+			status =  PPE_DRV_RET_MAC_ADDR_SET_CFG_FAIL;
+			break;
+		}
+
+		ppe_drv_veip_mac_addr_set(iface, mac_addr);
+
+		break;
+	}
+#endif
 	default:
 		ppe_drv_warn("%p: invalid inface type(%d)\n", iface, iface->type);
 		status = PPE_DRV_RET_IFACE_INVALID;
@@ -1204,6 +1271,8 @@ struct ppe_drv_iface *ppe_drv_iface_alloc(enum ppe_drv_iface_type type, struct n
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	INIT_LIST_HEAD(&iface->npt6_hp);
 #endif
+
+	INIT_LIST_HEAD(&iface->veip_port);
 
 	spin_unlock_bh(&p->lock);
 

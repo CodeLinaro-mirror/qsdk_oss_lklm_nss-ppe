@@ -1593,6 +1593,7 @@ bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_
 	uint32_t egress_vlan_inner = PPE_DRV_VLAN_NOT_CONFIGURED, egress_vlan_outer = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint8_t vlan_cnt = ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf);
 	bool is_vlan_as_vp;
+	bool is_vlan_as_veip;
 	bool is_dsa_dev = false;
 
 	switch (vlan_cnt) {
@@ -1710,11 +1711,13 @@ bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_
 	 * For create request with egress-VLAN, there must be a corresponding egress-VSI / VLAN as VP IF.
 	 */
 	is_vlan_as_vp = is_vlan_dev(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
+
+	is_vlan_as_veip = is_vlan_dev(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VEIP);
 #ifdef NSS_VLAN_BASED_DSA_SUPPORT
 	is_dsa_dev = dsa_slave_dev_check(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 #endif
 
-	if (vlan_cnt && !is_vlan_as_vp && !eg_vsi_if && !is_dsa_dev) {
+	if (vlan_cnt && !is_vlan_as_veip && !is_vlan_as_vp && !eg_vsi_if && !is_dsa_dev) {
 		ppe_drv_warn("%p: not able to find a matching vlan-if", pcf);
 		return false;
 	}

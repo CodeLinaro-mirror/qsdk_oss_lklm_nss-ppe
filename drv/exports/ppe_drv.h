@@ -19,6 +19,10 @@
 #include <linux/if_ether.h>
 #include "ppe_drv_iface.h"
 #include <linux/netdevice.h>
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+#include "ppe_drv_veip.h"
+#endif
+#include "ppe_drv_sc.h"
 
 /*
  * FSE flags
@@ -603,7 +607,17 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_GEMPORT_RULE_INVALID,		/**< Gemport rule invalid */
 	PPE_DRV_RET_GEMPORT_RULE_ADD_FAIL,		/**< Failed to add Gemport rule */
 	PPE_DRV_RET_GEMPORT_RULE_ENABLE_FAIL,		/**< Failed to enable gemport mapping */
-	PPE_DRV_RET_COS_MAP_CFG_FAIL,			/**< Failed to configure CoS mapping. */
+	PPE_DRV_RET_COS_MAP_CFG_FAIL,			/**< Failed to configure QoS mapping. */
+	PPE_DRV_RET_VLAN_RULE_HW_ID_NOT_FOUND,		/**< Invalid HW index in VLAN tables */
+	PPE_DRV_RET_VEIP_LIST_DEL_FAIL,			/**< VEIP list deletion failed. */
+	PPE_DRV_RET_VEIP_VSI_REMAP_FAIL,		/**< VSI Remapping failed. */
+	PPE_DRV_RET_VEIP_VPGROUP_SET_FAIL,		/**< VP group set failed in EG_VP table. */
+	PPE_DRV_RET_VEIP_VPGROUP_CLEAR_FAIL,		/**< VP group clear failed in EG_VP table. */
+	PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD,		/**< HGU US flow rule addition. */
+	PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD_FAIL,		/**< HGU US flow rule addition failed. */
+	PPE_DRV_RET_VEIP_VSI_ATTACH_FAIL,		/**< VSI attach failed for VEIP VP. */
+	PPE_DRV_RET_VEIP_VSI_DETACH_FAIL,		/**< VSI detach failed for VEIP VP. */
+	PPE_DRV_RET_VEIP_INIT_FAIL,			/**< VEIP init failed. */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 

@@ -611,6 +611,20 @@ struct ppe_drv_tun_encap *ppe_drv_vlan_wlanif_tun_enc_setup(struct net_device *d
 struct ppe_drv_vlan_ctx *ppe_drv_vlan_alloc(ppe_drv_rule_dir_t rule_dir);
 
 /**
+ * ppe_drv_vlan_ctx_iface_get()
+ *      Fetch the PPE interface associated with a VLAN context.
+ *
+ * @datatypes
+ * ppe_drv_vlan_ctx
+ *
+ * @param[in] ctx  Pointer to the VLAN context.
+ *
+ * @return
+ * PPE interface pointer for the VLAN context or NULL.
+ */
+struct ppe_drv_iface *ppe_drv_vlan_ctx_iface_get(struct ppe_drv_vlan_ctx *ctx);
+
+/**
  * ppe_drv_vlan_rule_create()
  *      Create a VLAN rule based on the provided configuration.
  *
@@ -640,4 +654,75 @@ ppe_drv_ret_t  ppe_drv_vlan_rule_create(struct ppe_drv_vlan_ctx *ctx, struct ppe
  */
 void ppe_drv_vlan_destroy(struct ppe_drv_vlan_ctx *ctx);
 
+/**
+ * ppe_drv_vlan_as_veip_add_xlate_rules
+ *      Add vlan translation rules with VP.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * ppe_drv_vlan_xlate_info
+ *
+ * @param[in] iface  PPE interface for vlan device.
+ * @param[in] ppe_drv_vlan_xlate_info Translation info.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_vlan_as_veip_add_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info);
+
+/**
+ * ppe_drv_vlan_as_veip_del_xlate_rules
+ *      Delete vlan translation rules with VP.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ * ppe_drv_vlan_xlate_info
+ *
+ * @param[in] iface  PPE interface for vlan device.
+ * @param[in] ppe_drv_vlan_xlate_info Translation info.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_vlan_as_veip_del_xlate_rules(struct ppe_drv_iface *iface, struct ppe_drv_vlan_xlate_info *info);
+
+/**
+ * ppe_drv_vlan_hgu_rule_create - Create VLAN rules for HGU mode.
+ *
+ * This API programs VLAN rules required for HGU (Home Gateway Unit) operation.
+ * Based on the provided configuration, the function installs necessary PPE rules
+ * for upstream/downstream VLAN handling, classification, and tagging behavior.
+ *
+ * @datatypes
+ *  ppe_drv_vlan_cfg
+ *  ppe_drv_vlan_ctx
+ *
+ * @param[in]  info   VLAN configuration describing rule parameters.
+ * @param[out] ctx    Context to store internal rule identifiers for later deletion.
+ *
+ * @return
+ *  ppe_drv_ret_t     Status of rule creation.
+ *                    PPE_DRV_RET_SUCCESS on success.
+ *                    Appropriate error code on failure.
+ */
+ppe_drv_ret_t ppe_drv_vlan_hgu_rule_create(struct ppe_drv_vlan_cfg *info, struct ppe_drv_vlan_ctx *ctx);
+
+/**
+ * ppe_drv_vlan_hgu_rule_destroy - Remove previously created HGU VLAN rules.
+ *
+ * This API deletes VLAN rules created via ppe_drv_vlan_hgu_rule_create().
+ * It uses the stored rule context to clean up all associated PPE rule entries,
+ * ensuring proper rollback of HGU VLAN configuration.
+ *
+ * @datatypes
+ *  ppe_drv_vlan_ctx
+ *
+ * @param[in] ctx   Context containing rule identifiers to remove.
+ *
+ * @return
+ *  ppe_drv_ret_t   Status of rule deletion.
+ *                  PPE_DRV_RET_SUCCESS on success.
+ *                  Appropriate error code on failure.
+ */
+ppe_drv_ret_t ppe_drv_vlan_hgu_rule_destroy(struct ppe_drv_vlan_ctx *ctx);
 #endif /* _PPE_DRV_VLAN_H_ */

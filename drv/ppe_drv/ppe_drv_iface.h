@@ -13,6 +13,7 @@
 #define PPE_DRV_IFACE_VLAN_OVER_BRIDGE  0x10
 #define PPE_DRV_IFACE_FLAG_WAN_IF_VALID 0x20
 #define PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID 0x40
+#define PPE_DRV_IFACE_FLAG_HGU_RULE_VALID 0x80
 
 /*
  * ppe-iface cleanup function callback
@@ -42,6 +43,7 @@ struct ppe_drv_iface {
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	struct list_head npt6_hp;		/* List of adhoc l3_if for hairpin nat connections */
 #endif
+	struct list_head veip_port;		/* List of vp port for veip interface */
 };
 
 bool ppe_drv_iface_deref_internal(struct ppe_drv_iface *iface);

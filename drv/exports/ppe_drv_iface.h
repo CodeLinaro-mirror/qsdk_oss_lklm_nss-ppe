@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /**
@@ -36,6 +25,7 @@ enum ppe_drv_ret;
 typedef enum ppe_drv_eip_service ppe_drv_eip_service_t;
 enum ppe_vp_user_type;
 typedef enum ppe_drv_ret ppe_drv_ret_t;
+struct ppe_drv_port;
 
 /**
  * PPE Interface Number.
@@ -58,6 +48,7 @@ enum ppe_drv_iface_type {
 	PPE_DRV_IFACE_TYPE_VP_L2_TUN,		/**< Interface type VP for hardware L2 tunnel. */
 	PPE_DRV_IFACE_TYPE_VP_L3_TUN,		/**< Interface type VP for hardware L3 tunnel. */
 	PPE_DRV_IFACE_TYPE_EIP,			/**< Interface type EIP. */
+	PPE_DRV_IFACE_TYPE_VEIP,		/**< Interface type VEIP. */
 	PPE_DRV_IFACE_TYPE_MAX,			/**< Interface type max. */
 };
 typedef enum ppe_drv_iface_type ppe_drv_iface_type_t;
@@ -390,7 +381,6 @@ bool ppe_drv_iface_udp_zero_csum_action_set(struct ppe_drv_iface *iface,
  * ppe_drv_iface_t
  */
 ppe_drv_iface_t ppe_drv_iface_get_index(struct ppe_drv_iface *iface);
-
 
 /**
  * ppe_drv_iface_l3_if_idx_get

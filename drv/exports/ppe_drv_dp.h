@@ -132,7 +132,7 @@ ppe_drv_ret_t ppe_drv_dp_get_mirr_analysis_port(
 ppe_drv_ret_t ppe_drv_dp_set_ppe_offload_enable_flag(struct ppe_drv_iface *iface,
 				bool disable);
 /**
- * ppe_drv_dp_set_ppe_gem_type_enable_flag
+ * ppe_drv_dp_gem_enable
  *      API to set GEM type enable flag in PPE port
  *
  * @datatypes

@@ -1,20 +1,11 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 struct ppe_drv_pppoe;
+struct ppe_drv_vsi;
+struct ppe_drv_port;
 
 #include <linux/if_ether.h>
 
@@ -51,6 +42,11 @@ struct ppe_drv_l3_if {
 
 	uint8_t eg_mac_addr[ETH_ALEN];	/* Egress MAC address of the L3 interface */
 	bool is_eg_mac_set;		/* Egress MAC address set on L3_IF */
+
+	struct ppe_drv_vsi *vsi;	/* VSI associated with l3 */
+	bool is_vsi_set;		/* VSI set on L3_IF */
+
+	struct ppe_drv_port *pp;	/* Port associated with l3 */
 };
 
 uint16_t ppe_drv_l3_if_get_index(struct ppe_drv_l3_if *l3_if);
@@ -83,3 +79,8 @@ bool ppe_drv_l3_if_udp_zero_csum_action_set(struct ppe_drv_l3_if *l3_if, fal_udp
 
 void ppe_drv_l3_if_entries_free(struct ppe_drv_l3_if *l3_if);
 struct ppe_drv_l3_if *ppe_drv_l3_if_entries_alloc(void);
+bool ppe_drv_l3_if_ig_vsi_mac_update(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr, struct ppe_drv_vsi *vsi);
+bool ppe_drv_l3_if_ig_vsi_mac_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr, struct ppe_drv_vsi *vsi);
+bool ppe_drv_l3_if_ig_vsi_mac_clear(struct ppe_drv_l3_if *l3_if);
+bool ppe_drv_l3_if_dest_info_set(struct ppe_drv_l3_if *l3_if, struct ppe_drv_port *pp);
+void  ppe_drv_l3_if_dest_info_reset(struct ppe_drv_l3_if *l3_if);

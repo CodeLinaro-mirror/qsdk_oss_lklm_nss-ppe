@@ -241,6 +241,8 @@ static inline struct ppe_drv_port *ppe_drv_port_get_free_port(enum ppe_drv_port_
 	switch (type) {
 	case PPE_DRV_PORT_VIRTUAL:
 	case PPE_DRV_PORT_VIRTUAL_PO:
+	case PPE_DRV_PORT_VIRTUAL_GW:
+	case PPE_DRV_PORT_VIRTUAL_PON:
 		/*
 		 * Fetch the first available virtual port
 		 */
@@ -487,6 +489,9 @@ bool ppe_drv_port_l3_if_attach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 				return false;
 			}
 
+			ppe_drv_trace("%p port l3_if configuration done: %p port_num: %u l3_if_num: %u",
+                                                pp, pl3, pp->port, pl3->l3_if_index);
+
 			pp->active_l3_if_attached = A_TRUE;
 			pp->active_l3_if = pl3;
 		}
@@ -719,7 +724,7 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		return;
 
 	default:
-		ppe_drv_assert(false, "%p: attaching port: %u of unknown type vsi :%u", pp, fal_port, vsi->type);
+		ppe_drv_assert("%p: attaching port: %u of unknown type vsi :%u", pp, fal_port, vsi->type);
 		ppe_drv_warn("%p: attaching port to unknown vsi type: %u", pp, vsi->type);
 		return;
 	}
@@ -1608,6 +1613,10 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 		profile = FAL_QM_PROFILE_PO_ID;
 	}
 
+	if (pp->type == PPE_DRV_PORT_VIRTUAL_PON || pp->type == PPE_DRV_PORT_VIRTUAL_GW) {
+		profile = PPE_DRV_REDIR_PROFILE_ID;
+	}
+
 	if ((pp->type == PPE_DRV_PORT_VIRTUAL) && is_vlan_dev(pp->dev)) {
 		profile = PPE_DRV_REDIR_PROFILE_ID;
 	}
@@ -2310,7 +2319,7 @@ int ppe_drv_port_src_profile_get_byidx(uint8_t port_idx)
 
 /*
  * ppe_drv_port_l2_vp_sc_config()
- *	L2_VP service code config
+ * 	L2_VP service code config
  */
 bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint32_t phy_port)
 {
@@ -2363,6 +2372,33 @@ bool ppe_drv_port_l2_vp_sc_reset(struct ppe_drv_port *pp)
 }
 
 /*
+ * ppe_drv_port_is_gem()
+ *	Check if a port is a GEM port.
+ */
+bool ppe_drv_port_is_gem(uint16_t port_num)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *pp;
+	bool ret = false;
+
+	if (port_num >= PPE_DRV_PORTS_MAX) {
+		ppe_drv_warn("%p: invalid port number: %u", p, port_num);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+	pp = &p->port[port_num];
+
+	if (kref_read(&pp->ref_cnt)) {
+		ret = !!(pp->flags & PPE_DRV_PORT_FLAG_PORT_GEM);
+	}
+
+	spin_unlock_bh(&p->lock);
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_port_is_gem);
+
+/*
  * ppe_drv_port_alloc()
  *	Create a new virtual port in PPE.
  */
@@ -2384,7 +2420,7 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	if (type == PPE_DRV_PORT_PHYSICAL) {
 		ppe_drv_warn("%p: physical port dynamic allocation not supported dev: %p", p, dev);
 		return NULL;
-	} else if (type == PPE_DRV_PORT_VIRTUAL || type == PPE_DRV_PORT_VIRTUAL_PO) {
+	} else if (type == PPE_DRV_PORT_VIRTUAL || type == PPE_DRV_PORT_VIRTUAL_PO || type == PPE_DRV_PORT_VIRTUAL_GW || type == PPE_DRV_PORT_VIRTUAL_PON) {
 		/*
 		 * Get a free virtual port entry
 		 */

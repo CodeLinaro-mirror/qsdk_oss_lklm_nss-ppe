@@ -206,6 +206,7 @@ int ppe_drv_port_src_profile_get_byidx(uint8_t port_idx);
 bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint32_t phy_port);
 bool ppe_drv_port_loopback_port_get_info(void);
 bool ppe_drv_port_l2_vp_sc_reset(struct ppe_drv_port *pp);
+bool ppe_drv_port_is_gem(uint16_t port_num);
 
 /*
  * ppe_drv_port_flags_check()

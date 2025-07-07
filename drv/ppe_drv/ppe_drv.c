@@ -3054,41 +3054,108 @@ static int ppe_drv_upstream_dev_handler(struct ctl_table *table,
  * ppe_drv_lpbk_port_info_ctx_fill()
  *	Fill Loopback info in global structure.
  */
-bool ppe_drv_lpbk_port_info_ctx_fill()
+bool ppe_drv_lpbk_port_info_ctx_fill(enum ppe_drv_loopback_port_feature_type ft_type)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	int32_t host_queue = -1;
+#endif
 
 	if (!ppe_drv_port_loopback_port_get_info()) {
 		ppe_drv_warn("%p: loopback port get info failed.", p);
 		return false;
 	}
+	switch(ft_type) {
+		case PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON:
+			/*
+			 * configure the pon pass information.
+			 */
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC;
 
-	/*
-	 * configure the pon pass information.
-	 */
-	p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
-	p->loopback_port_info.ucastq_start = p->loopback_port_info.ucastq_start;
-	p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT;
 
-	p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
-	p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT;
+			p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
+			ppe_drv_info("port_id: %d base queue: %d\n", p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
 
-	p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
+			/*
+			 * configure the service code.
+			 */
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc,
+					p->loopback_port_info.port_id);
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 
-	ppe_drv_info("port_id: %d base queue: %d\n", p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
+			/*
+			 * configure the queue to service code mapping.
+			 */
+			ppe_drv_sc_ucast_queue_set(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc, p->loopback_port_info.ucastq_start,
+					PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
 
-	/*
-	 * configure the service code.
-	 */
-	ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc, p->loopback_port_info.port_id);
-	ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+			break;
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+		case PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US:
+			/*
+			 * configure the pon pass information.
+			 */
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC;
 
-	/*
-	 * configure the queue to serivce code mapping.
-	 */
-	ppe_drv_sc_ucast_queue_set(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc, p->loopback_port_info.ucastq_start,
-			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT;
 
+			p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
+			ppe_drv_info("port_id: %d base queue: %d\n", p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
+
+			/*
+			 * configure the service code.
+			 */
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc,
+					p->loopback_port_info.port_id);
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+
+			break;
+
+		case PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS:
+			/*
+			 * Get the queue base for host queues (CPU port 0).
+			 */
+			host_queue = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_CPU);
+			if (host_queue < 0) {
+				ppe_drv_warn("Failed to get host queue for CPU port\n");
+				return false;
+			}
+
+			/*
+			 * configure the pon pass information.
+			 */
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC;
+
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT;
+
+			p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS;
+			ppe_drv_info("port_id: %d base queue: %d\n", p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
+
+			/*
+			 * configure the service code.
+			 */
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc,
+					p->loopback_port_info.port_id);
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+
+			/*
+			 * configure the queue to service code mapping.
+			 */
+			ppe_drv_sc_ucast_queue_set(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc, host_queue, PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_PORT_SRC_PROFILE);
+			break;
+#endif
+
+		default:
+			ppe_drv_warn("invalid feature type %u\n", ft_type);
+			break;
+	}
 	return true;
 }
 
@@ -3104,8 +3171,8 @@ bool ppe_drv_l2vp_sc_add(uint32_t dest_port_id)
 	/*
 	 * Configure lpbk_port.
 	 */
-	if (!ppe_drv_lpbk_port_info_ctx_fill()) {
-		ppe_drv_warn("%p: Error in configuring loopbak port info.\n", p);
+	if (!ppe_drv_lpbk_port_info_ctx_fill(PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON)) {
+		ppe_drv_warn("%p: Error in configuring loopback port info.\n", p);
 		return false;
 	}
 
@@ -3146,7 +3213,7 @@ bool ppe_drv_l2vp_sc_rmv(uint32_t dest_port_id)
 	 * Reset L2_VP port table for UNI port with LOOPBACK service code
 	 */
 	if (!ppe_drv_port_l2_vp_sc_reset(pp)) {
-		ppe_drv_warn("%p: Error in reest L2 VP table  %d\n", p, dest_port_id);
+		ppe_drv_warn("%p: Error in reset L2 VP table  %d\n", p, dest_port_id);
 		return false;
 	}
 

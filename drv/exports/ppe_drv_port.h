@@ -73,6 +73,8 @@ enum ppe_drv_port_type {
 	PPE_DRV_PORT_VIRTUAL_PO,	/* Virtual point offload port */
 	PPE_DRV_PORT_ENQ_VP,		/* Enqueue VPort */
 	PPE_DRV_PORT_CPU_TYPE,		/* CPU Port */
+	PPE_DRV_PORT_VIRTUAL_GW,	/* Gateway Virtual Port */
+	PPE_DRV_PORT_VIRTUAL_PON,	/* PON  Virtual Port */
 };
 
 /*
@@ -289,4 +291,20 @@ void ppe_drv_port_phy_rfs_clear(void);
  * none.
  */
 void ppe_drv_port_phy_rfs_set(void);
+
+/*
+ * ppe_drv_port_is_gem()
+ *      Check whether the given port number corresponds to a GEM port.
+ *
+ * This helper is used to validate whether a port number belongs to
+ * the GEM range supported by the PPE driver.
+ *
+ * @param[in] port_num
+ *      Port number to be evaluated.
+ *
+ * @return
+ *      true  – The port is identified as a GEM port.
+ *      false – The port is not a GEM port.
+ */
+bool ppe_drv_port_is_gem(uint16_t port_num);
 #endif /* _PPE_DRV_PORT_H_ */
