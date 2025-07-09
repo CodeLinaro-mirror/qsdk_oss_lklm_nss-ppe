@@ -2155,7 +2155,7 @@ bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc)
  *	Create a new virtual port in PPE.
  */
 struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_device *dev,
-					uint8_t tunnel_vp_cfg)
+					uint8_t tunnel_vp_cfg, bool fdb_learn_enabled)
 {
 	uint32_t port;
 	sw_error_t err;
@@ -2237,24 +2237,22 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	/*
 	 * Disable FDB learning and station move learning for virtual ports, this
 	 * forces PPE to use flow based bridging by default for all VPs.
-	 *
-	 * TODO: make this configurable through ppe-vp driver.
 	 */
-	err = fal_fdb_port_learning_ctrl_set(PPE_DRV_SWITCH_ID, port, A_FALSE, FAL_MAC_FRWRD);
+	err = fal_fdb_port_learning_ctrl_set(PPE_DRV_SWITCH_ID, port, fdb_learn_enabled, FAL_MAC_FRWRD);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: failed to configure FDB learning for port: %u", p, pp->port);
 		ppe_drv_port_deref(pp);
 		return NULL;
 	}
 
-	err = fal_fdb_port_stamove_ctrl_set(PPE_DRV_SWITCH_ID, port, A_FALSE, FAL_MAC_FRWRD);
+	err = fal_fdb_port_stamove_ctrl_set(PPE_DRV_SWITCH_ID, port, fdb_learn_enabled, FAL_MAC_FRWRD);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: failed to configure station move control for port: %u", p, pp->port);
 		ppe_drv_port_deref(pp);
 		return NULL;
 	}
 
-	pp->is_fdb_learn_enabled = false;
+	pp->is_fdb_learn_enabled = fdb_learn_enabled;
 
 	/*
 	 * Set VP type as normal VP.

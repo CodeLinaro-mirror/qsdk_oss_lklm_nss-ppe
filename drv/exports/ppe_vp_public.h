@@ -210,6 +210,7 @@ struct ppe_vp_ai {
 					/**< VP netdev type */
 	enum ppe_vp_net_dev_pvt_flags net_dev_flags;
 					/**< VP netdev flags */
+	bool fdb_learn_enabled;
 };
 
 /*

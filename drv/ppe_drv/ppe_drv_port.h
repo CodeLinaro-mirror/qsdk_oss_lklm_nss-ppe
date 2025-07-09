@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -171,7 +171,7 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi);
 
 bool ppe_drv_port_deref(struct ppe_drv_port *pp);
 struct ppe_drv_port *ppe_drv_port_ref(struct ppe_drv_port *pp);
-struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_device *dev, uint8_t tunnel_vp_cfg);
+struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_device *dev, uint8_t tunnel_vp_cfg, bool fdb_learn_enabled);
 struct ppe_drv_port *ppe_drv_port_phy_alloc(uint8_t port_num, struct net_device *dev);
 
 void ppe_drv_port_entries_free(struct ppe_drv_port *port);
