@@ -22,6 +22,10 @@
 #ifdef NSS_ATH_HDR_BASED_DSA_SUPPORT
 static struct nss_ppe_dsa_mgr_context g_dsa_ctx;
 
+static bool dsa_fdb_learn_enabled = false;
+module_param(dsa_fdb_learn_enabled, bool, 0644);
+MODULE_PARM_DESC(dsa_fdb_learn_enabled, "DSA fdb learning is enabled");
+
 /*
  * nss_ppe_dsa_mgr_alloc_metadata_dst()
  *	Alloc metadata dst for dsa port
@@ -331,6 +335,7 @@ static int nss_ppe_dsa_mgr_alloc_ppe_vp(struct nss_ppe_dsa_pvt *dsa_pvt,
 	vpai.type = PPE_VP_TYPE_SW_L2;
 	vpai.queue_num = queue_id;
 	vpai.xmit_port = pp_id;
+	vpai.fdb_learn_enabled = dsa_fdb_learn_enabled;
 
 	vpai.dst_cb = NULL;
 	/* when src_cb is NULL, the pkt will go to lanX directly */
