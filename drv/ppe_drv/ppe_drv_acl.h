@@ -119,6 +119,7 @@ struct ppe_drv_acl {
 	ppe_drv_acl_flow_callback_t flow_del_cb;		/* Flow delete callback when flow needs to detached from ACL. */
 	ppe_drv_acl_rule_callback_t acl_rule_cb;		/* ACL rule callback to process the packet tagged with ACL ID. */
 	ppe_drv_acl_mirror_core_select_cb_t mirror_core_cb;	/* DP callback to select core for mirrored packets. */
+	struct ppe_drv_acl_rule_udf_offset_list *udf_offsets;		/* PPE acl rule UDF offsets */
 	void *flow_app_data;					/* Flow callback app data. */
 	void *acl_rule_app_data;				/* ACL rule callback app data. */
 	void *mirror_core_app_data;				/* Mirror core selection callback app data. */
