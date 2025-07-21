@@ -127,6 +127,7 @@ static void ppe_acl_rule_free(struct kref *kref)
 {
 	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
 	struct ppe_acl *acl = container_of(kref, struct ppe_acl, ref_cnt);
+	struct ppe_drv_acl_udf *udf_entry;
 
 	/*
 	 * Delete the rule node from active list.
@@ -150,6 +151,33 @@ static void ppe_acl_rule_free(struct kref *kref)
 		acl->counter_valid = false;
 	}
 #endif
+	/*
+	 * Return ACL UDF offset entry if allocated
+	 */
+	if (acl->slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF]) {
+		udf_entry = &acl->info.chain[PPE_DRV_ACL_SLICE_TYPE_UDF].rule.udf;
+
+		if (udf_entry->udf0.udf_valid) {
+			ppe_drv_acl_offset_entry_put(udf_entry->udf0.udf_offset_entry);
+			udf_entry->udf0.udf_valid = false;
+		}
+
+		if (udf_entry->udf1.udf_valid) {
+			ppe_drv_acl_offset_entry_put(udf_entry->udf1.udf_offset_entry);
+			udf_entry->udf1.udf_valid = false;
+		}
+
+		if (udf_entry->udf2.udf_valid) {
+			ppe_drv_acl_offset_entry_put(udf_entry->udf2.udf_offset_entry);
+			udf_entry->udf2.udf_valid = false;
+		}
+
+		if (udf_entry->udf3.udf_valid) {
+			ppe_drv_acl_offset_entry_put(udf_entry->udf3.udf_offset_entry);
+			udf_entry->udf3.udf_valid = false;
+		}
+	}
+
 	/*
 	 * Destroy the rule in PPE driver.
 	 */
@@ -541,22 +569,88 @@ static void ppe_acl_rule_to_slice_type(struct ppe_acl_rule_match_one *r, ppe_acl
 		break;
 
 	case PPE_ACL_RULE_MATCH_TYPE_UDF:
-		if (r->rule.udf.udf_a_valid || r->rule.udf.udf_b_valid || r->rule.udf.udf_c_valid) {
-			slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF_012] = true;
-		}
-
-		if (r->rule.udf.udf_d_valid) {
-			slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF_123] = true;
-		}
+		slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF] = true;
 
 		break;
 
 	case PPE_ACL_RULE_MATCH_TYPE_DEFAULT:
 		slice_type[PPE_DRV_ACL_SLICE_TYPE_SRC_MAC] = true;
+
 		break;
+
 	default:
 		ppe_acl_warn("%p: invalid rule type: %d", r, type);
 	}
+}
+
+/*
+ * ppe_acl_set_offset()
+ *	Sets offset of the ACL UDF.
+ */
+static bool ppe_acl_set_offset(struct ppe_drv_acl_udf *udf_offset)
+{
+
+	if (udf_offset->udf0.udf_valid) {
+		udf_offset->udf0.udf_offset_entry = ppe_drv_acl_offset_entry_get(udf_offset->udf0.base_info.proto,
+				udf_offset->udf0.base_info.offset_base, udf_offset->udf0.base_info.offset,
+				udf_offset->udf0.udf_op);
+
+		if (!udf_offset->udf0.udf_offset_entry) {
+			ppe_acl_warn("%p: Failed to get UDF offset entry for udf 0\n", udf_offset);
+			return false;
+		}
+	}
+
+	if (udf_offset->udf1.udf_valid) {
+		udf_offset->udf1.udf_offset_entry = ppe_drv_acl_offset_entry_get(udf_offset->udf1.base_info.proto,
+				udf_offset->udf1.base_info.offset_base, udf_offset->udf1.base_info.offset,
+				udf_offset->udf1.udf_op);
+
+		if (!udf_offset->udf1.udf_offset_entry) {
+			ppe_acl_warn("%p: Failed to get UDF offset entry for udf 1\n", udf_offset);
+			goto fail_1;
+		}
+	}
+
+	if (udf_offset->udf2.udf_valid) {
+		udf_offset->udf2.udf_offset_entry = ppe_drv_acl_offset_entry_get(udf_offset->udf2.base_info.proto,
+				udf_offset->udf2.base_info.offset_base, udf_offset->udf2.base_info.offset,
+				udf_offset->udf2.udf_op);
+
+		if (!udf_offset->udf2.udf_offset_entry) {
+			ppe_acl_warn("%p: Failed to get UDF offset entry for udf 2\n", udf_offset);
+			goto fail_2;
+		}
+
+	}
+
+	if (udf_offset->udf3.udf_valid) {
+		udf_offset->udf3.udf_offset_entry = ppe_drv_acl_offset_entry_get(udf_offset->udf3.base_info.proto,
+				udf_offset->udf3.base_info.offset_base, udf_offset->udf3.base_info.offset,
+				udf_offset->udf3.udf_op);
+
+		if (!udf_offset->udf3.udf_offset_entry) {
+			ppe_acl_warn("%p: Failed to get UDF offset entry for udf 3\n", udf_offset);
+			goto fail_3;
+		}
+	}
+
+	return true;
+
+fail_3:
+	if (udf_offset->udf2.udf_offset_entry) {
+		ppe_drv_acl_offset_entry_put(udf_offset->udf2.udf_offset_entry);
+	}
+fail_2:
+	if (udf_offset->udf1.udf_offset_entry) {
+		ppe_drv_acl_offset_entry_put(udf_offset->udf1.udf_offset_entry);
+	}
+fail_1:
+	if (udf_offset->udf0.udf_offset_entry) {
+		ppe_drv_acl_offset_entry_put(udf_offset->udf0.udf_offset_entry);
+	}
+
+	return false;
 }
 
 /*
@@ -579,8 +673,7 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 	struct ppe_drv_acl_ipv6 *sip_v6_1;
 	struct ppe_drv_acl_ipv6 *sip_v6_2;
 	struct ppe_drv_acl_ip_misc *ip;
-	struct ppe_drv_acl_udf *udf_012;
-	struct ppe_drv_acl_udf *udf_123;
+	struct ppe_drv_acl_udf *udf_entry;
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 	struct ppe_drv_acl_ext_vlan *ext_vlan;
 #endif
@@ -1314,96 +1407,71 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		break;
 
 	case PPE_ACL_RULE_MATCH_TYPE_UDF:
-		if (r->rule.udf.udf_a_valid || r->rule.udf.udf_b_valid || r->rule.udf.udf_c_valid) {
-			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_UDF_012];
-			udf_012 = &slice->rule.udf_012;
+		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_UDF];
+		udf_entry = &slice->rule.udf;
 
-			if (r->rule.udf.udf_a_valid) {
-				udf_012->udf_a_min = r->rule.udf.udf_a_min;
-				memset(&udf_012->udf_a_mask_max, 0xff, sizeof(udf_012->udf_a_mask_max));
-				if (r->rule_flags & (PPE_ACL_RULE_FLAG_UDFA_MASK | PPE_ACL_RULE_FLAG_UDFA_RANGE)) {
-					udf_012->udf_a_mask_max = r->rule.udf.udf_a_mask_max;
-					udf_012->range_en = !!(r->rule_flags & PPE_ACL_RULE_FLAG_UDFA_RANGE);
-				}
-
-				udf_012->udf_a_valid = true;
-				slice->valid = true;
-			}
-
-			if (!(r->rule.udf.udf_d_valid || (r->rule_flags & PPE_ACL_RULE_FLAG_UDFB_RANGE))) {
-				if (r->rule.udf.udf_b_valid) {
-					udf_012->udf_b = r->rule.udf.udf_b_min;
-					memset(&udf_012->udf_b_mask, 0xff, sizeof(udf_012->udf_b_mask));
-					if (r->rule_flags & PPE_ACL_RULE_FLAG_UDFB_MASK) {
-						udf_012->udf_b_mask = r->rule.udf.udf_b_mask_max;
-					}
-
-					udf_012->udf_b_valid = true;
-					slice->valid = true;
-				}
-
-				if (r->rule.udf.udf_c_valid) {
-					udf_012->udf_c = r->rule.udf.udf_c;
-					memset(&udf_012->udf_c_mask, 0xff, sizeof(udf_012->udf_c_mask));
-					if (r->rule_flags & PPE_ACL_RULE_FLAG_UDFC_MASK) {
-						udf_012->udf_c_mask = r->rule.udf.udf_c_mask;
-					}
-
-					udf_012->udf_c_valid = true;
-					slice->valid = true;
-				}
-			}
-
-			if (slice->valid) {
-				udf_012->inverse_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
-				slice->type = PPE_DRV_ACL_SLICE_TYPE_UDF_012;
-			}
+		if (r->rule.udf.udf_a.valid_op) {
+			udf_entry->udf0.udf_valid = true;
+			udf_entry->udf0.udf_op = PPE_ACL_TO_DRV_UDF_OP(r->rule.udf.udf_a.valid_op);
+			udf_entry->udf0.udf_min = r->rule.udf.udf_a.min;
+			udf_entry->udf0.udf_mask = r->rule.udf.udf_a.mask_max;
+			udf_entry->udf0.base_info.offset_base = PPE_ACL_TO_DRV_OFST_FROM(r->rule.udf.udf_a.offset_base);
+			udf_entry->udf0.base_info.proto = PPE_ACL_TO_DRV_OFST_PROTO(r->rule.udf.udf_a.proto);
+			udf_entry->udf0.base_info.offset = r->rule.udf.udf_a.offset;
+			udf_entry->udf0.udf_offset_entry = NULL;
 		}
 
-		if (r->rule.udf.udf_d_valid || (r->rule_flags & PPE_ACL_RULE_FLAG_UDFB_RANGE)) {
-			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_UDF_123];
-			udf_123 = &slice->rule.udf_123;
-
-			if (r->rule.udf.udf_d_valid) {
-				udf_123->udf_c = r->rule.udf.udf_d;
-				memset(&udf_123->udf_c_mask, 0xff, sizeof(udf_123->udf_c_mask));
-				if (r->rule_flags & PPE_ACL_RULE_FLAG_UDFD_MASK) {
-					udf_123->udf_c_mask = r->rule.udf.udf_d_mask;
-				}
-
-				udf_123->udf_c_valid = true;
-				slice->valid = true;
-			}
-
-			if (r->rule.udf.udf_b_valid) {
-				udf_123->udf_a_min = r->rule.udf.udf_b_min;
-				memset(&udf_123->udf_a_mask_max, 0xff, sizeof(udf_123->udf_a_mask_max));
-				if (r->rule_flags & (PPE_ACL_RULE_FLAG_UDFB_MASK | PPE_ACL_RULE_FLAG_UDFB_RANGE)) {
-					udf_123->udf_a_mask_max = r->rule.udf.udf_b_mask_max;
-					udf_123->range_en = !!(r->rule_flags & PPE_ACL_RULE_FLAG_UDFB_RANGE);
-				}
-
-				udf_123->udf_a_valid = true;
-				slice->valid = true;
-			}
-
-			if (r->rule.udf.udf_c_valid) {
-				udf_123->udf_b = r->rule.udf.udf_c;
-				memset(&udf_123->udf_b_mask, 0xff, sizeof(udf_123->udf_b_mask));
-				if (r->rule_flags & PPE_ACL_RULE_FLAG_UDFC_MASK) {
-					udf_123->udf_b_mask = r->rule.udf.udf_c_mask;
-				}
-
-				udf_123->udf_b_valid = true;
-				slice->valid = true;
-			}
-
-			if (slice->valid) {
-				udf_123->inverse_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
-				slice->type = PPE_DRV_ACL_SLICE_TYPE_UDF_123;
-			}
+		if (r->rule.udf.udf_b.valid_op) {
+			udf_entry->udf1.udf_valid = true;
+			udf_entry->udf1.udf_op = PPE_ACL_TO_DRV_UDF_OP(r->rule.udf.udf_b.valid_op);
+			udf_entry->udf1.udf_min = r->rule.udf.udf_b.min;
+			udf_entry->udf1.udf_mask = r->rule.udf.udf_b.mask_max;
+			udf_entry->udf1.base_info.offset_base = PPE_ACL_TO_DRV_OFST_FROM(r->rule.udf.udf_b.offset_base);
+			udf_entry->udf1.base_info.proto = PPE_ACL_TO_DRV_OFST_PROTO(r->rule.udf.udf_b.proto);
+			udf_entry->udf1.base_info.offset = r->rule.udf.udf_b.offset;
+			udf_entry->udf1.udf_offset_entry = NULL;
 		}
 
+		if (r->rule.udf.udf_c.valid_op) {
+			udf_entry->udf2.udf_valid = true;
+			udf_entry->udf2.udf_op = PPE_ACL_TO_DRV_UDF_OP(r->rule.udf.udf_c.valid_op);
+			udf_entry->udf2.udf_min = r->rule.udf.udf_c.min;
+			udf_entry->udf2.udf_mask = r->rule.udf.udf_c.mask_max;
+			udf_entry->udf2.base_info.offset_base = PPE_ACL_TO_DRV_OFST_FROM(r->rule.udf.udf_c.offset_base);
+			udf_entry->udf2.base_info.proto = PPE_ACL_TO_DRV_OFST_PROTO(r->rule.udf.udf_c.proto);
+			udf_entry->udf2.base_info.offset = r->rule.udf.udf_c.offset;
+			udf_entry->udf2.udf_offset_entry = NULL;
+		}
+
+		if (r->rule.udf.udf_d.valid_op) {
+			/*
+			 * UDF-D(UDF3) supports only MASK operation.
+			 */
+			udf_entry->udf3.udf_op = PPE_ACL_TO_DRV_UDF_OP(r->rule.udf.udf_d.valid_op);
+			if (udf_entry->udf3.udf_op != PPE_DRV_ACL_UDF_OP_MASK) {
+				ppe_acl_warn("%p: UDF-D(udf3) is supporting only MASK match operation\n", r);
+				return false;
+			}
+
+			udf_entry->udf3.udf_valid = true;
+			udf_entry->udf3.udf_min = r->rule.udf.udf_d.min;
+			udf_entry->udf3.udf_mask = r->rule.udf.udf_d.mask_max;
+			udf_entry->udf3.base_info.offset_base = PPE_ACL_TO_DRV_OFST_FROM(r->rule.udf.udf_d.offset_base);
+			udf_entry->udf3.base_info.proto = PPE_ACL_TO_DRV_OFST_PROTO(r->rule.udf.udf_d.proto);
+			udf_entry->udf3.base_info.offset = r->rule.udf.udf_d.offset;
+			udf_entry->udf3.udf_offset_entry = NULL;
+		}
+
+		/*
+		 * Set UDF ofset
+		 */
+		if (!ppe_acl_set_offset(udf_entry)) {
+			ppe_acl_warn("%p: Failed to set UDF offset \n", r);
+			return false;
+		}
+
+		slice->type = PPE_DRV_ACL_SLICE_TYPE_UDF;
+		slice->valid = true;
 		break;
 
 	case PPE_ACL_RULE_MATCH_TYPE_DEFAULT:
@@ -2082,6 +2150,14 @@ static bool ppe_acl_rule_exist(struct ppe_acl *acl)
 		return false;
 	}
 
+	/*
+	 * Skip duplicate check for UDF slice type - allow multiple UDF rules
+	 * with same device binding.
+	 */
+	if (acl->slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF]) {
+		return false;
+	}
+
 	list_for_each_entry(ae, &acl_g->active_rules, list) {
 
 		/*
@@ -2618,13 +2694,7 @@ static bool ppe_acl_rule_exist(struct ppe_acl *acl)
 
 				break;
 
-			case PPE_DRV_ACL_SLICE_TYPE_UDF_012:
-				/*
-				 * TODO add this.
-				 */
-				break;
-
-			case PPE_DRV_ACL_SLICE_TYPE_UDF_123:
+			case PPE_DRV_ACL_SLICE_TYPE_UDF:
 				/*
 				 * TODO add this.
 				 */
@@ -3325,6 +3395,7 @@ void ppe_acl_deinit(void)
 
 	ppe_acl_hw_ind_map_entries_free(acl_g->acl_hw_map);
 
+	ppe_drv_acl_udf_offset_deinit();
 	ppe_acl_dump_exit();
 	ppe_acl_stats_debugfs_exit();
 }
@@ -3378,4 +3449,9 @@ void ppe_acl_init(struct dentry *d_rule)
 	 * Initialization of ACL dump.
 	 */
 	ppe_acl_dump_init(d_rule);
+
+	/*
+	 * Allocate and initialization of ACL UDF offset.
+	 */
+	ppe_drv_acl_udf_offset_init();
 }

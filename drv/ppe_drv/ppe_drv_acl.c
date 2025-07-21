@@ -244,6 +244,69 @@ EXPORT_SYMBOL(ppe_drv_acl_uni_to_l2vp_sc_unmap);
 #endif
 
 /*
+ * ppe_drv_acl_get_udf_op
+ *	Return FAL UDF operation from ppe-drv UDF operation.
+ */
+static fal_acl_field_op_t ppe_drv_acl_get_udf_op(enum ppe_drv_acl_rule_udf_op udf_op)
+{
+	switch(udf_op) {
+	case PPE_DRV_ACL_UDF_OP_MASK:
+		return FAL_ACL_FIELD_MASK;
+
+	case PPE_DRV_ACL_UDF_OP_RANGE:
+		return FAL_ACL_FIELD_RANGE;
+
+	case PPE_DRV_ACL_RULE_OP_LE:
+		return FAL_ACL_FIELD_LE;
+
+	case PPE_DRV_ACL_RULE_OP_GE:
+		return FAL_ACL_FIELD_GE;
+
+	case PPE_DRV_ACL_UDF_OP_NE:
+		return FAL_ACL_FIELD_NE;
+
+	default:
+		return FAL_ACL_FIELD_OP_BUTT;
+	}
+}
+
+/*
+ * ppe_drv_udf_fill_fal_rule
+ *	Fill ACL UDF fal rule info from udf info.
+ */
+static void ppe_drv_udf_fill_fal_rule(struct ppe_drv_acl_udf_data *udf, fal_acl_rule_t *fal_rule)
+{
+	switch (udf->udf_offset_entry->udf_index) {
+	case PPE_DRV_ACL_UDF_0_OFFSET:
+		fal_rule->udf0_op = ppe_drv_acl_get_udf_op(udf->udf_op);
+		FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_UDF0);
+		fal_rule->udf0_val = udf->udf_min;
+		fal_rule->udf0_mask = udf->udf_mask;
+		break;
+	case PPE_DRV_ACL_UDF_1_OFFSET:
+		fal_rule->udf1_op = ppe_drv_acl_get_udf_op(udf->udf_op);
+		FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_UDF1);
+		fal_rule->udf1_val = udf->udf_min;
+		fal_rule->udf1_mask = udf->udf_mask;
+		break;
+	case PPE_DRV_ACL_UDF_2_OFFSET:
+		fal_rule->udf2_op = ppe_drv_acl_get_udf_op(udf->udf_op);
+		FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_UDF2);
+		fal_rule->udf2_val = udf->udf_min;
+		fal_rule->udf2_mask = udf->udf_mask;
+		break;
+	case PPE_DRV_ACL_UDF_3_OFFSET:
+		FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_UDF3);
+		fal_rule->udf3_val = udf->udf_min;
+		fal_rule->udf3_mask = udf->udf_mask;
+		break;
+	default:
+		ppe_drv_warn("%p: invalid ACL UDF offset index: %d", udf, udf->udf_offset_entry->udf_index);
+		break;
+	}
+}
+
+/*
  * ppe_drv_acl_rule_fill()
  *	Fill rule related information.
  */
@@ -755,54 +818,23 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 
 			break;
 
-		case PPE_DRV_ACL_SLICE_TYPE_UDF_012:
-			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_UDF_012];
+		case PPE_DRV_ACL_SLICE_TYPE_UDF:
+			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_UDF];
 
-			if (slice->rule.udf_012.udf_a_valid) {
-				fal_rule->udf0_val = slice->rule.udf_012.udf_a_min;
-				fal_rule->udf0_mask = slice->rule.udf_012.udf_a_mask_max;
-				fal_rule->udf0_op = slice->rule.udf_012.range_en ?
-						FAL_ACL_FIELD_RANGE : FAL_ACL_FIELD_MASK;
+			if (slice->rule.udf.udf0.udf_valid) {
+				ppe_drv_udf_fill_fal_rule(&slice->rule.udf.udf0, fal_rule);
 			}
 
-			if (slice->rule.udf_012.udf_b_valid) {
-				fal_rule->udf1_val = slice->rule.udf_012.udf_b;
-				fal_rule->udf1_mask = slice->rule.udf_012.udf_b_mask;
+			if (slice->rule.udf.udf1.udf_valid) {
+				ppe_drv_udf_fill_fal_rule(&slice->rule.udf.udf1, fal_rule);
 			}
 
-			if (slice->rule.udf_012.udf_c_valid) {
-				fal_rule->udf2_val = slice->rule.udf_012.udf_c;
-				fal_rule->udf2_mask = slice->rule.udf_012.udf_c_mask;
+			if (slice->rule.udf.udf2.udf_valid) {
+				ppe_drv_udf_fill_fal_rule(&slice->rule.udf.udf2, fal_rule);
 			}
 
-			/*
-			 * If rule type is not set already then set rule_type to UDF.
-			 */
-			if (!ctx->rule_type_valid) {
-				ctx->rule_type_valid = true;
-				fal_rule->rule_type = FAL_ACL_RULE_UDF;
-			}
-
-			break;
-
-		case PPE_DRV_ACL_SLICE_TYPE_UDF_123:
-			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_UDF_123];
-
-			if (slice->rule.udf_123.udf_a_valid) {
-				fal_rule->udf1_val = slice->rule.udf_123.udf_a_min;
-				fal_rule->udf1_mask = slice->rule.udf_123.udf_a_mask_max;
-				fal_rule->udf1_op = slice->rule.udf_123.range_en ?
-						FAL_ACL_FIELD_RANGE : FAL_ACL_FIELD_MASK;
-			}
-
-			if (slice->rule.udf_123.udf_b_valid) {
-				fal_rule->udf2_val = slice->rule.udf_123.udf_b;
-				fal_rule->udf2_mask = slice->rule.udf_123.udf_b_mask;
-			}
-
-			if (slice->rule.udf_123.udf_c_valid) {
-				fal_rule->udf3_val = slice->rule.udf_123.udf_c;
-				fal_rule->udf3_mask = slice->rule.udf_123.udf_c_mask;
+			if (slice->rule.udf.udf3.udf_valid) {
+				ppe_drv_udf_fill_fal_rule(&slice->rule.udf.udf3, fal_rule);
 			}
 
 			/*
@@ -1280,6 +1312,261 @@ void ppe_drv_acl_hw_info_get(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_acl_hw_
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_acl_hw_info_get);
+
+/*
+ * ppe_drv_acl_udf_offset_set()
+ *	set UDF offset profile to PPE.
+ */
+static ppe_drv_ret_t ppe_drv_acl_udf_offset_set(struct ppe_drv_acl_rule_udf_offset *udf_offset)
+{
+	fal_acl_udf_pkt_type_t udf_pkt_type;
+	fal_acl_udf_type_t udf_offset_from;
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	const char *pkt_type_str;
+	const char *offset_from_str;
+
+	a_uint32_t dev_id = 0;
+	sw_error_t ret;
+
+	switch (udf_offset->base_info.proto) {
+	case PPE_DRV_ACL_UDF_NON_IP:
+		udf_pkt_type = FAL_ACL_UDF_NON_IP;
+		pkt_type_str = "PPE_DRV_ACL_UDF_NON_IP";
+		break;
+
+	case PPE_DRV_ACL_UDF_IPV4:
+		udf_pkt_type = FAL_ACL_UDF_IP4;
+		pkt_type_str = "PPE_DRV_ACL_UDF_IPV4";
+		break;
+
+	case PPE_DRV_ACL_UDF_IPV6:
+		udf_pkt_type = FAL_ACL_UDF_IP6;
+		pkt_type_str = "PPE_DRV_ACL_UDF_IPV6";
+		break;
+
+	default:
+		ppe_drv_stats_inc(&p->stats.acl_stats.configure_fail);
+		ppe_drv_warn("%p: Invalid ACL UDF offset type %u\n", udf_offset, udf_offset->base_info.proto);
+		return PPE_DRV_RET_ACL_RULE_INVALID;
+	}
+
+	switch(udf_offset->base_info.offset_base) {
+	case PPE_DRV_ACL_UDF_OFFSET_BASE_L2:
+		udf_offset_from = FAL_ACL_UDF_TYPE_L2;
+		offset_from_str = "PPE_DRV_ACL_UDF_OFFSET_BASE_L2";
+		break;
+
+	case PPE_DRV_ACL_UDF_OFFSET_BASE_L3:
+		udf_offset_from = FAL_ACL_UDF_TYPE_L3;
+		offset_from_str = "PPE_DRV_ACL_UDF_OFFSET_BASE_L3";
+		break;
+
+	case PPE_DRV_ACL_UDF_OFFSET_BASE_L4:
+		udf_offset_from = FAL_ACL_UDF_TYPE_L4;
+		offset_from_str = "PPE_DRV_ACL_UDF_OFFSET_BASE_L4";
+		break;
+
+	default:
+		ppe_drv_stats_inc(&p->stats.acl_stats.configure_fail);
+		ppe_drv_warn("%p: Invalid ACL UDF offset from %u\n", udf_offset, udf_offset->base_info.offset_base);
+		return PPE_DRV_RET_ACL_RULE_INVALID;
+	}
+
+
+	ret = fal_acl_udf_profile_set(dev_id, udf_pkt_type, udf_offset->udf_index, udf_offset_from, udf_offset->base_info.offset);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%p: ACL UDF offset profile set fail with erro %d\n", udf_offset, ret);
+		return PPE_DRV_RET_ACL_RULE_ADD_FAIL;
+	} else {
+		ppe_drv_trace("%p: ACL UDF profile set success for offset type = %s and offset from start of %s\n",
+				udf_offset, pkt_type_str, offset_from_str);
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+}
+
+/*
+ * ppe_drv_acl_udf_offset_del()
+ *	Delete UDF offset profile to PPE.
+ *	NOTE: There is no FAL api to unset udf offset profile.
+ */
+static void ppe_drv_acl_udf_offset_del(struct ppe_drv_acl_rule_udf_offset *udf_offset)
+{
+	ppe_drv_info("%p:UDF offset entry %u is freed", udf_offset, udf_offset->udf_index);
+	return;
+}
+
+/*
+ * ppe_drv_acl_offset_final()
+ *  Get PPE ACL offset entry
+ */
+static void ppe_drv_acl_offset_final(struct kref *ref)
+{
+	struct ppe_drv_acl_rule_udf_offset *offset = container_of(ref, struct ppe_drv_acl_rule_udf_offset, ref_cnt);
+
+	ppe_drv_acl_udf_offset_del(offset);
+	offset->in_use = false;
+}
+
+/*
+ * ppe_drv_acl_offset_entry_put()
+ *  Releases a UDF offset entry back to the global offset list.
+ */
+void ppe_drv_acl_offset_entry_put(struct ppe_drv_acl_rule_udf_offset *offset)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_acl_rule_udf_offset_list *offset_list = p->acl->udf_offsets;
+
+	spin_lock_bh(&offset_list->lock);
+	kref_put(&offset->ref_cnt, ppe_drv_acl_offset_final);
+	spin_unlock_bh(&offset_list->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_offset_entry_put);
+
+/*
+ * ppe_drv_acl_offset_entry_get()
+ *	Retrieves a UDF offset entry from the global offset list.
+ */
+struct ppe_drv_acl_rule_udf_offset *ppe_drv_acl_offset_entry_get(enum ppe_drv_acl_udf_proto proto,
+		enum ppe_drv_acl_udf_rule_base_type offset_base, uint32_t offset,
+		enum ppe_drv_acl_rule_udf_op udf_op)
+{
+	struct ppe_drv_acl_rule_udf_offset *udf_offset = NULL;
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_acl_rule_udf_offset_list *offset_list = p->acl->udf_offsets;
+	int max_udf_ofst_entry;
+	int i;
+
+	/*
+	 * FIXME: Find a better way to implement this,
+	 * since udf3 supports only MASK operations.
+	 */
+	max_udf_ofst_entry =
+		((udf_op == PPE_DRV_ACL_UDF_OP_MASK) ? PPE_DRV_ACL_UDF_OFFSET_MAX : PPE_DRV_ACL_UDF_OFFSET_MAX - 1);
+
+	spin_lock_bh(&offset_list->lock);
+
+	switch (proto) {
+	case PPE_DRV_ACL_UDF_NON_IP:
+		udf_offset = offset_list->non_ip;
+		break;
+
+	case PPE_DRV_ACL_UDF_IPV4:
+		udf_offset = offset_list->ipv4;
+		break;
+
+	case PPE_DRV_ACL_UDF_IPV6:
+		udf_offset = offset_list->ipv6;
+		break;
+
+	default:
+		ppe_drv_warn("Invalid type of ACL UDF offset : %u\n", proto);
+		spin_unlock_bh(&offset_list->lock);
+		return NULL;
+
+	}
+
+	/*
+	 * Search the global UDF offset list for an existing entry
+	 * that matches the given protocol type, base layer, and offset value.
+	 * if found use return same.
+	 */
+	for (i = 0; i < max_udf_ofst_entry; i++) {
+		if (udf_offset[i].in_use) {
+			if (udf_offset[i].base_info.offset_base == offset_base && offset == udf_offset[i].base_info.offset) {
+				kref_get(&udf_offset[i].ref_cnt);
+				spin_unlock_bh(&offset_list->lock);
+				return &udf_offset[i];
+			}
+		}
+	}
+
+	/*
+	 * No matching entry was found, so attempt to allocate a free entry
+	 */
+	for (i = 0; i < max_udf_ofst_entry; i++) {
+		if (!udf_offset[i].in_use) {
+			udf_offset[i].in_use = true;
+			kref_init(&udf_offset[i].ref_cnt);
+			udf_offset[i].base_info.offset = offset;
+			udf_offset[i].base_info.offset_base = offset_base;
+
+			if (ppe_drv_acl_udf_offset_set(&udf_offset[i])) {
+				/*
+				 * Error: fail to configure UDF offset profile in PPE.
+				 */
+				ppe_drv_warn("%p: Failed to set ACL UDF offset profile\n", udf_offset);
+				udf_offset[i].in_use = false;
+				kref_put(&udf_offset[i].ref_cnt, ppe_drv_acl_offset_final);
+				udf_offset[i].base_info.offset = 0;
+				udf_offset[i].base_info.offset_base = 0;
+				goto fail;
+			}
+
+			spin_unlock_bh(&offset_list->lock);
+			return &udf_offset[i];
+		}
+	}
+
+fail:
+	spin_unlock_bh(&offset_list->lock);
+	return NULL;
+}
+EXPORT_SYMBOL(ppe_drv_acl_offset_entry_get);
+
+/*
+ * ppe_drv_acl_udf_offset_deinit()
+ *  Deallocate and deinitialization acl global offset lists
+ */
+void ppe_drv_acl_udf_offset_deinit(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	kfree(p->acl->udf_offsets);
+}
+EXPORT_SYMBOL(ppe_drv_acl_udf_offset_deinit);
+
+/*
+ * ppe_drv_acl_global_udf_offset_init()
+ *  Allocate and initialization acl global offset lists
+ */
+int ppe_drv_acl_udf_offset_init(void)
+{
+	struct ppe_drv_acl_rule_udf_offset_list *acl_offset_list = NULL;
+	struct ppe_drv *p = ppe_drv_gbl;
+	int i;
+
+	acl_offset_list = kzalloc(sizeof(struct ppe_drv_acl_rule_udf_offset_list), GFP_KERNEL);
+	if (!acl_offset_list) {
+		ppe_drv_warn("Fail to allocate ACL UDF offset\n");
+		return -ENOMEM;
+	}
+
+	spin_lock_init(&acl_offset_list->lock);
+	spin_lock_bh(&acl_offset_list->lock);
+
+	for (i = 0; i < PPE_DRV_ACL_UDF_OFFSET_MAX; i++) {
+		acl_offset_list->non_ip[i].base_info.proto = PPE_DRV_ACL_UDF_NON_IP;
+		acl_offset_list->non_ip[i].udf_index = i;
+	}
+
+	for (i = 0; i < PPE_DRV_ACL_UDF_OFFSET_MAX; i++) {
+		acl_offset_list->ipv4[i].base_info.proto = PPE_DRV_ACL_UDF_IPV4;
+		acl_offset_list->ipv4[i].udf_index = i;
+	}
+
+	for (i = 0; i < PPE_DRV_ACL_UDF_OFFSET_MAX; i++) {
+		acl_offset_list->ipv6[i].base_info.proto = PPE_DRV_ACL_UDF_IPV6;
+		acl_offset_list->ipv6[i].udf_index = i;
+	}
+
+	p->acl->udf_offsets = acl_offset_list;
+	spin_unlock_bh(&acl_offset_list->lock);
+
+	return 0;
+}
+EXPORT_SYMBOL(ppe_drv_acl_udf_offset_init);
 
 /*
  * ppe_drv_acl_configure()
