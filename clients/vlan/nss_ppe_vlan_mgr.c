@@ -1,7 +1,7 @@
 /*
  **************************************************************************
  * Copyright (c) 2017-2018, 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -46,6 +46,10 @@ MODULE_PARM_DESC(vlan_as_vp_invert, "When set, it indicates that the vlan_as_vp_
 static char vlan_as_vp_interface[NSS_PPE_VLAN_MGR_VLAN_AS_VP_MAX * IFNAMSIZ];
 module_param_string(vlan_as_vp_interface, vlan_as_vp_interface, sizeof(vlan_as_vp_interface), 0644);
 MODULE_PARM_DESC(vlan_as_vp_interface, "Interface list for the VLAN as VP feature. The meaning of this list is controlled by the vlan_as_vp_invert parameter");
+
+static bool vp_fdb_learn_enabled = false;
+module_param(vp_fdb_learn_enabled, bool, 0644);
+MODULE_PARM_DESC(vp_fdb_learn_enabled, "VLAN-as-VP fdb learning is enabled");
 
 /*
  * vlan_as_vp_dev_name contains the netdevice device names over which
@@ -1008,6 +1012,7 @@ static ppe_vp_num_t nss_ppe_vlan_mgr_alloc_vp(struct net_device *dev, struct net
 		vpai.type = PPE_VP_TYPE_SW_L2;
 		vpai.queue_num = queue_num;
 		vpai.xmit_port = port_num;
+		vpai.fdb_learn_enabled = vp_fdb_learn_enabled;
 #ifdef NSS_VLAN_MGR_WLANIF_DST_XLATE_SUPPORT
 	} else {
 

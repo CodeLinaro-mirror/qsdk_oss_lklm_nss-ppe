@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -482,6 +482,7 @@ static struct ppe_vp *__ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai
 	info.usr_type = vpai->usr_type;
 	info.disable_ttl_dec = !!(vpai->flags & PPE_VP_FLAG_DISABLE_TTL_DEC);
 	info.redir_en = !!(vpai->flags & PPE_VP_FLAG_REDIR_ENABLE);
+	info.fdb_learn_enabled = vpai->fdb_learn_enabled;
 
 	/*
 	 * Initialize the virtual port in PPE.
