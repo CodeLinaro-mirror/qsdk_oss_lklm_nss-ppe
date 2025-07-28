@@ -147,8 +147,6 @@ enum ppe_drv_static_dbg_level {
 #define PPE_DRV_HASH_DIPV6_MIX_2		0x13
 #define PPE_DRV_HASH_DIPV6_MIX_3		0xb
 
-#define PPE_DRV_JUMBO_MAX 9216
-
 /*
  * DSCP macros
  */

@@ -98,6 +98,8 @@
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT	0x4	/* GRETAP to MAPT loopback feature */
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT	0x8	/* Hairpin NAT loopback feature */
 
+#define PPE_DRV_JUMBO_MAX				9216	/* Maximum MRU value */
+
 /*
  * ppe_drv_ip_type
  *	Types of IP addresses handled

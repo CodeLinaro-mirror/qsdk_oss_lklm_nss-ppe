@@ -217,11 +217,6 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 		u64_stats_update_end(&rx_stats->syncp);
 
 		/*
-		 * TODO: update l3 and l4 checksum if needed
-		 */
-		skb->ip_summed = CHECKSUM_COMPLETE;
-
-		/*
 		 * If it can be, try forwarding through fast_xmit.
 		 */
 		if (likely(dvp->flags & PPE_VP_FLAG_VP_FAST_XMIT)) {
