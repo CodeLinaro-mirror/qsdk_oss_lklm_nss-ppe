@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -179,7 +179,7 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_inf
 	}
 
 	spin_lock_bh(&p->lock);
-	port = ppe_drv_port_alloc(port_type, iface->dev, tunnel_vp_cfg);
+	port = ppe_drv_port_alloc(port_type, iface->dev, tunnel_vp_cfg, info->fdb_learn_enabled);
 	if (!port) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: unable to get a valid virtual port of iface type(%d)", iface, iface->type);

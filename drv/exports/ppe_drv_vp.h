@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -42,6 +42,7 @@ struct ppe_drv_vp_info {
 	uint8_t core_mask;		/**< Core to be used for a particular VP flow */
 	uint8_t usr_type;		/**< VP user type */
 	uint8_t mpsk_en;		/**< MPSK Enable flag */
+	bool fdb_learn_enabled;
 };
 
 /**
