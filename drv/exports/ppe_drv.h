@@ -50,8 +50,9 @@
 #define PPE_DRV_ASSIST_FEATURE_RFS_ETH		0x00000001      /* PPE Assist feature to configure RFS */
 #define PPE_DRV_ASSIST_FEATURE_RFS_WLAN		0x00000002      /* PPE Assist feature to configure RFS for WLAN flows */
 #define PPE_DRV_ASSIST_FEATURE_PRIORITY		0x00000004      /* PPE Assist feature to configure Priority */
-#define PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL	0x00000008		/* PPE Assist feature to configure RFS for Tunnel flows */
+#define PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL	0x00000008	/* PPE Assist feature to configure RFS for Tunnel flows */
 #define PPE_DRV_ASSIST_FEATURE_RFS_DEFAULT	0x00000010      /* PPE Assist feature to configure RFS */
+#define PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST	0x00000020      /* PPE Assist feature to configure RFS for udp-st flows */
 
 #define PPE_DRV_SERVICE_CLASS_IS_VALID(sc)	((sc >= PPE_DRV_SAWF_SC_START) && (sc <= PPE_DRV_SAWF_SC_END))
 
@@ -168,6 +169,7 @@ typedef enum ppe_drv_tree_id_type {
 	PPE_DRV_TREE_ID_TYPE_SCS,	/**< SCS usecase */
 	PPE_DRV_TREE_ID_TYPE_MLO_ASSIST,	/**< MLO usecase */
 	PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS,	/**< Wifi8 PPEDS usecase */
+	PPE_DRV_TREE_ID_TYPE_UDP_ST,	/**< UDP-ST usecase */
 	PPE_DRV_TREE_ID_TYPE_MAX = 16,	/**< Maximum number of supported types */
 } ppe_drv_tree_id_type_t;
 

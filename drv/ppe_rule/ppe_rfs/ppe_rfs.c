@@ -181,6 +181,9 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		feature = PPE_DRV_ASSIST_FEATURE_RFS_WLAN;
 	} else if (create_ipv6->rule_flags & PPE_RFS_V6_RULE_FLAG_TUN_FLOW) {
 		feature = PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL;
+	} else if (create_ipv6->rule_flags & PPE_RFS_V6_RULE_UDP_ST) {
+		feature = PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST;
+		pd6rc.qos_rule.flow_qos_tag = create_ipv6->qos_rule.flow_qos_tag;
 	}
 
 	rx_if = ppe_drv_iface_idx_get_by_dev(rx_dev);
@@ -338,6 +341,9 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		feature = PPE_DRV_ASSIST_FEATURE_RFS_WLAN;
 	} else if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_FLAG_TUN_FLOW) {
 		feature = PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL;
+	} else if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_UDP_ST) {
+		feature = PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST;
+		pd4rc.qos_rule.flow_qos_tag = create_ipv4->qos_rule.flow_qos_tag;
 	}
 
 	rx_if = ppe_drv_iface_idx_get_by_dev(rx_dev);
@@ -363,6 +369,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		ppe_rfs_stats_inc(&p->stats.v4_create_return_top_interface_fail);
 		return PPE_RFS_RET_FAILURE;
 	};
+
 	top_tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
 	dev_put(top_rule_tx_dev);
 

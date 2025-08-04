@@ -95,6 +95,8 @@
 					/* Flow requires Qdisc processing in host */
 #define PPE_DRV_V6_CONN_FLAG_FLOW_UDP_ST_DROP	0x200000000ULL
 					/* Flow has UDP ST enabled */
+#define PPE_DRV_V6_CONN_FLAG_UDP_ST_FLOW	0x400000000ULL
+					/* Flow is UDP Speedtest */
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*

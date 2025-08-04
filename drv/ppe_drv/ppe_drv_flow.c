@@ -610,9 +610,9 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint8_
 
 		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
 		case PPE_DRV_TREE_ID_TYPE_SCS:
-			tree_id[2] |= tree_id_data->type << 4;
-			tree_id[1] = 0;
 			tree_id[0] = 0;
+			tree_id[1] = 0;
+			tree_id[2] = tree_id_data->type << 4;
 			break;
 
 		case PPE_DRV_TREE_ID_TYPE_SAWF:
@@ -624,6 +624,13 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint8_
 			tree_id[1] = (tree_id_data->info.value & 0xFF00) >> 8;
 			tree_id[2] = (tree_id_data->info.value & 0x30000) >> 16;
 			tree_id[2] |= tree_id_data->type << 4;
+			break;
+
+		case PPE_DRV_TREE_ID_TYPE_UDP_ST:
+			tree_id[0] = (tree_id_data->info.value & PPE_DRV_UDP_ST_TREE_ID_0_MASK) >> PPE_DRV_UDP_ST_TREE_ID_0_SHIFT;
+			tree_id[1] = (tree_id_data->info.value & PPE_DRV_UDP_ST_TREE_ID_1_MASK) >> PPE_DRV_UDP_ST_TREE_ID_1_SHIFT;
+			tree_id[2] = (tree_id_data->info.value & PPE_DRV_UDP_ST_TREE_ID_2_MASK) >> PPE_DRV_UDP_ST_TREE_ID_2_SHIFT;
+			tree_id[2] |= tree_id_data->type << PPE_DRV_UDP_ST_TREE_ID_DATA_TYPE_SHIFT;
 			break;
 
 		default:
@@ -842,6 +849,15 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8
 		*wifi_qos_en = true;
 	}
 
+	/*
+	 * If the flow metadata tree-id type is UDP-ST, set the WIFI Qos enable
+	 * to indicate the PPE to set the WIFI Qos bit in the EDMA rx descriptor
+	 * to retrieve the rule id of the udp speedtest flow.
+	 */
+	if (pcf->fl_mdata.tree_id_data.type == PPE_DRV_TREE_ID_TYPE_UDP_ST) {
+		*wifi_qos_en = true;
+	}
+
 	return true;
 }
 
@@ -1007,7 +1023,8 @@ bool ppe_drv_flow_v6_pri_profile_get(struct ppe_drv_v6_conn_flow *pcf, struct pp
 		/*
 		 * This is when WiFi VAP has a passive VP allocated.
 		 */
-		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_PASSIVE_WLAN_FLOW) && p->rfs.passive_vp_enable)
+		if ((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_PASSIVE_WLAN_FLOW) ||
+		     ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_UDP_ST_FLOW)) && p->rfs.passive_vp_enable)
 		{
 			if (!pp) {
 				ppe_drv_trace("pcf %p: Port not allocated in PPE for TX dev.\n", pcf);
@@ -2194,9 +2211,9 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint8_
 
 		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
 		case PPE_DRV_TREE_ID_TYPE_SCS:
-			tree_id[2] |= tree_id_data->type << 4;
-			tree_id[1] = 0;
 			tree_id[0] = 0;
+			tree_id[1] = 0;
+			tree_id[2] = tree_id_data->type << 4;
 			break;
 
 		case PPE_DRV_TREE_ID_TYPE_SAWF:
@@ -2208,6 +2225,13 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint8_
 			tree_id[1] = (tree_id_data->info.value & 0xFF00) >> 8;
 			tree_id[2] = (tree_id_data->info.value & 0x30000) >> 16;
 			tree_id[2] |= tree_id_data->type << 4;
+			break;
+
+		case PPE_DRV_TREE_ID_TYPE_UDP_ST:
+			tree_id[0] = (tree_id_data->info.value & PPE_DRV_UDP_ST_TREE_ID_0_MASK) >> PPE_DRV_UDP_ST_TREE_ID_0_SHIFT;
+			tree_id[1] = (tree_id_data->info.value & PPE_DRV_UDP_ST_TREE_ID_1_MASK) >> PPE_DRV_UDP_ST_TREE_ID_1_SHIFT;
+			tree_id[2] = (tree_id_data->info.value & PPE_DRV_UDP_ST_TREE_ID_2_MASK) >> PPE_DRV_UDP_ST_TREE_ID_2_SHIFT;
+			tree_id[2] |= tree_id_data->type << PPE_DRV_UDP_ST_TREE_ID_DATA_TYPE_SHIFT;
 			break;
 
 		default:
@@ -2349,6 +2373,14 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8
 		*wifi_qos_en = true;
 	}
 
+	/*
+	 * If the flow metadata tree-id type is UDP-ST, set the WIFI Qos enable
+	 * to indicate the PPE to set the WIFI Qos bit in the EDMA rx descriptor
+	 * to retrieve the rule id of the udp speedtest flow.
+	 */
+	if (pcf->fl_mdata.tree_id_data.type == PPE_DRV_TREE_ID_TYPE_UDP_ST) {
+		*wifi_qos_en = true;
+	}
 	return true;
 }
 
@@ -2443,7 +2475,8 @@ bool ppe_drv_flow_v4_pri_profile_get(struct ppe_drv_v4_conn_flow *pcf, struct pp
 		/*
 		 * This is when WiFi VAP has a passive VP allocated.
 		 */
-		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_PASSIVE_WLAN_FLOW) && p->rfs.passive_vp_enable)
+		if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_PASSIVE_WLAN_FLOW) ||
+		     ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_UDP_ST_FLOW)) && p->rfs.passive_vp_enable)
 		{
 			if (!pp) {
 				ppe_drv_trace("pcf %p: Port not allocated in PPE for TX dev.\n", pcf);
