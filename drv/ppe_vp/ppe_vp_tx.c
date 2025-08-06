@@ -22,6 +22,7 @@
 #include <ppe_drv_port.h>
 #include <ppe_drv_sc.h>
 #include "ppe_vp_base.h"
+#include "ppe_vp_tx.h"
 
 extern struct ppe_vp_base vp_base;
 
@@ -68,6 +69,14 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 
 	dptxi.svp = vp_num;
 	dptxi.sc = PPE_DRV_SC_SPF_BYPASS;
+
+	/*
+	 * FSE metadata at WLAN side stores macid and relays it from WLAN driver through skb->mark
+	 * If VP is of wifi type, extract macid from skb->mark and assign it to dptxi.egress_macid
+	 */
+	if (likely(svp->flags & PPE_VP_FLAG_EGRESS_MACID_VALID)) {
+		dptxi.egress_macid = ppe_vp_tx_get_macid(skb->mark);
+	}
 
 	/*
 	 * This would enable making list of skb's while freeing in edma tx complete

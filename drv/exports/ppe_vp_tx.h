@@ -14,6 +14,43 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#define PPE_VP_TX_MACID_TAG		0xBB
+#define PPE_VP_TX_MACID_TAG_SHIFT	24
+#define PPE_VP_TX_MACID_MASK		0x00FFFFFF
+#define PPE_VP_TX_INVALID_MACID		0
+
+/*
+ * ppe_vp_tx_set_macid_tag()
+ *      API to set the valid macid tag in skb->mark for active VP WLAN connection.
+ *
+ * @param[IN] mark mark of the skb
+ *
+ * @return
+ * updated mark value with macid tag.
+ */
+static inline uint32_t ppe_vp_tx_set_macid_tag(uint32_t mark) {
+	return ((PPE_VP_TX_MACID_TAG << PPE_VP_TX_MACID_TAG_SHIFT) | mark);
+}
+
+/*
+ * ppe_vp_tx_get_macid()
+ *      API to get macid from skb->mark if it has valid macid tag.
+ *
+ * @param[IN] mark   mark of the skb.
+ *
+ * @return
+ * macid if tag is valid otherwise return PPE_VP_TX_INVALID_MACID.
+ */
+static inline uint8_t ppe_vp_tx_get_macid(uint32_t mark) {
+	uint8_t mark_tag = mark >> PPE_VP_TX_MACID_TAG_SHIFT;
+
+	if (likely(mark_tag == PPE_VP_TX_MACID_TAG)) {
+		return (mark & PPE_VP_TX_MACID_MASK);
+	}
+
+	return PPE_VP_TX_INVALID_MACID;
+}
+
 /*
  * ppe_vp_tx_to_ppe()
  *      API for PPE VP user to enqueue packet for PPE processing

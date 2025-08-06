@@ -53,7 +53,7 @@ MODULE_PARM_DESC(flow_deacclr_dis, "Disable Flow deacceleration & Flush on Excep
 /*
  * Module parameter to enable/disable passive VP creation for SFE flows.
  */
-static bool passive_vp_enable = true;
+static bool passive_vp_enable = false;
 module_param(passive_vp_enable, bool, 0644);
 MODULE_PARM_DESC(passive_vp_enable, "Passive VP creation enable/disable");
 

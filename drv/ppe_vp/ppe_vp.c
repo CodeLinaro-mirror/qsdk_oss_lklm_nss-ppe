@@ -1,18 +1,8 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
+
 #include <net/sch_generic.h>
 #include <fal/fal_qm.h>
 #include "ppe_vp_base.h"
@@ -552,6 +542,14 @@ static struct ppe_vp *__ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai
 	vp->port_num = pp_num;
 	vp->mtu = netdev->mtu;
 	vp->flags = PPE_VP_FLAG_VP_ACTIVE;
+
+	/*
+	 * In case of active VP user mode on Wi-Fi, FSE metadata carries the egress macid.
+	 */
+	if (vpai->net_dev_type == PPE_VP_NET_DEV_TYPE_WIFI) {
+		vp->flags |= PPE_VP_FLAG_EGRESS_MACID_VALID;
+	}
+
 	if (vpai->src_cb) {
 		vp->src_cb = vpai->src_cb;
 		vp->src_cb_data = vpai->src_cb_data;
@@ -705,3 +703,27 @@ ppe_vp_user_type_t ppe_vp_user_type_get(ppe_vp_num_t vp_num)
 	return user_type;
 }
 EXPORT_SYMBOL(ppe_vp_user_type_get);
+
+/*
+ * ppe_vp_update_vp_stats_cb
+ * 	Update VP stats callback
+ */
+ppe_vp_status_t ppe_vp_update_vp_stats_cb(int16_t vp_num, ppe_vp_stats_callback_t stats_cb)
+{
+	struct ppe_vp *vp;
+
+	rcu_read_lock();
+	vp = ppe_vp_base_get_vp_by_port_num(vp_num);
+	if (unlikely(!vp)) {
+		rcu_read_unlock();
+		pr_err("VP is NULL, can't get VP for port num %d", vp_num);
+		return PPE_VP_STATUS_GET_VP_FAIL;
+	}
+
+	vp->stats_cb = stats_cb;
+	rcu_read_unlock();
+
+	return PPE_VP_STATUS_SUCCESS;
+
+}
+EXPORT_SYMBOL(ppe_vp_update_vp_stats_cb);

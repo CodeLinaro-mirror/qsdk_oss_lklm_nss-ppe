@@ -288,6 +288,11 @@ void ppe_drv_iface_base_set(struct ppe_drv_iface *iface, struct ppe_drv_iface *b
 		return;
 	}
 
+#if defined(NSS_VLAN_BASED_DSA_SUPPORT) || defined(NSS_ATH_HDR_BASED_DSA_SUPPORT)
+	if (base_if->flags & PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID)
+		iface->flags |= PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID;
+#endif
+
 	iface->base_if = ppe_drv_iface_ref(base_if);
 }
 

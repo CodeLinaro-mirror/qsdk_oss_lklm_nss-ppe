@@ -154,7 +154,8 @@ struct ppe_drv_fse_rule_info {
 	struct ppe_drv_fse_tuple tuple;		/**< 5 tuple information. */
 	struct net_device *dev;			/**< VAP netdevice. */
 	uint32_t flags;				/**< Info flag */
-	uint8_t vp_num;			/**< Virtual port number. */
+	uint8_t vp_num;				/**< Virtual port number. */
+	uint8_t macid;				/**< Macid of egress port. */
 };
 
 /**

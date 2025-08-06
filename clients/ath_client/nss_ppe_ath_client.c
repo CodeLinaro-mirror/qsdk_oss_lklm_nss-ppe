@@ -11,11 +11,15 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/if_vlan.h>
+#include <linux/nl80211.h>
+#include <net/cfg80211.h>
 #include <ppe_drv_public.h>
 #include <ppe_vp_public.h>
 #include <ppe_vp_tx.h>
 #include "nss_ppe_ath_client.h"
+#include <ath_dp_accel_cfg.h>
 
+#ifdef ATH_WIFI_NSS_PLUGIN_ENABLE
 /*
  * offload ops for netdev
  */
@@ -116,6 +120,7 @@ static int nss_ppe_ath_client_unregister_event(struct net_device *dev)
 	nss_ppe_ath_client_info("Dev: %s Unregistration done\n", dev->name);
 	return NOTIFY_DONE;
 }
+#endif
 
 /*
  * nss_ppe_ath_client_netdevice_event()
@@ -124,12 +129,18 @@ static int nss_ppe_ath_client_unregister_event(struct net_device *dev)
 static int nss_ppe_ath_client_netdevice_event(struct notifier_block *unused,
 				unsigned long event, void *ptr)
 {
+#ifdef ATH_WIFI_NSS_PLUGIN_ENABLE
 	struct netdev_notifier_info *info = (struct netdev_notifier_info *)ptr;
 	struct net_device *dev = netdev_notifier_info_to_dev(info);
 
 	dev = is_vlan_dev(dev) ? vlan_dev_real_dev(dev) : dev;
 	if (!dev->ieee80211_ptr) {
 		nss_ppe_ath_client_info("Dev: %s not a WLAN dev\n", dev->name);
+		return NOTIFY_DONE;
+	}
+
+	if (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_MONITOR) {
+		nss_ppe_ath_client_info("Skipping allocation of VP for monitor interface: %s\n", dev->name);
 		return NOTIFY_DONE;
 	}
 
@@ -143,7 +154,7 @@ static int nss_ppe_ath_client_netdevice_event(struct notifier_block *unused,
 	case NETDEV_UNREGISTER:
 		return nss_ppe_ath_client_unregister_event(dev);
 	}
-
+#endif
 	/*
 	 * Notify done for all the events we don't care
 	 */
