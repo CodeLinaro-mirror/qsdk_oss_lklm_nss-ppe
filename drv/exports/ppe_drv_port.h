@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -49,6 +49,7 @@
 #else
 #define PPE_DRV_PHY_ETH_PORT_MAX	6	/* PPE supports 6 physical ports 1-6 for Others */
 #endif
+#define PPE_DRV_GET_VP_IDX(dvp) ((dvp) - PPE_DRV_VIRTUAL_START)
 
 typedef int32_t ppe_drv_port_t;
 
