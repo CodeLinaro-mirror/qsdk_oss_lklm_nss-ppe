@@ -18,6 +18,7 @@ struct ppe_vp_base;
 
 #define PPE_VP_FLAG_VP_ACTIVE		0x01	/* VP is active */
 #define PPE_VP_FLAG_VP_FAST_XMIT	0x02	/* Enable fast_xmit when delivering to VP interface */
+#define PPE_VP_FLAG_EGRESS_MACID_VALID	0x10	/* Egress macid is valid */
 #define PPE_VP_HW_PORT_STATS_MS		1000
 
 /*

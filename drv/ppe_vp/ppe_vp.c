@@ -552,6 +552,14 @@ static struct ppe_vp *__ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai
 	vp->port_num = pp_num;
 	vp->mtu = netdev->mtu;
 	vp->flags = PPE_VP_FLAG_VP_ACTIVE;
+
+	/*
+	 * In case of active VP user mode on Wi-Fi, FSE metadata carries the egress macid.
+	 */
+	if (vpai->net_dev_type == PPE_VP_NET_DEV_TYPE_WIFI) {
+		vp->flags |= PPE_VP_FLAG_EGRESS_MACID_VALID;
+	}
+
 	if (vpai->src_cb) {
 		vp->src_cb = vpai->src_cb;
 		vp->src_cb_data = vpai->src_cb_data;
