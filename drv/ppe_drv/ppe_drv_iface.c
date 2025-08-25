@@ -1247,9 +1247,9 @@ bool ppe_drv_iface_check_flow_offload_enabled(ppe_drv_iface_t rx_if,
 						ppe_drv_iface_t tx_if)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
-	struct ppe_drv_port *tx_pp = NULL;
-	struct ppe_drv_port *rx_pp = NULL;
-	struct ppe_drv_iface *if_rx, *if_tx;
+	struct ppe_drv_port *tx_pp, *tx_pp_base = NULL;
+	struct ppe_drv_port *rx_pp, *rx_pp_base = NULL;
+	struct ppe_drv_iface *if_rx, *if_tx, *if_tx_base, *if_rx_base;
 
 	spin_lock_bh(&p->lock);
 	if_rx = ppe_drv_iface_get_by_idx(rx_if);
@@ -1301,10 +1301,29 @@ bool ppe_drv_iface_check_flow_offload_enabled(ppe_drv_iface_t rx_if,
 	}
 
 	if (p->eth2eth_offload_if_bitmap) {
+		/*
+		 * For DSA or VP interfaces, the port will not be a physical one.
+		 * Offload validation must be performed on the base physical port.
+		 */
+		if (!PPE_DRV_PHY_PORT_CHK(tx_pp->port)) {
+			if_tx_base = ppe_drv_iface_base_get(if_tx);
+			tx_pp_base = if_tx_base ? ppe_drv_iface_port_get(if_tx_base) : NULL;
+			tx_pp = tx_pp_base ? tx_pp_base : tx_pp;
+		}
+
 		if (!ppe_drv_port_check_flow_offload_enabled(tx_pp)) {
 			ppe_drv_trace("%p: offload not enabled for %d port\n",
 					p, tx_pp->port);
 			goto offload_disabled;
+		}
+
+		/*
+		 * Similarly, resolve rx_pp to base physical port if it's not a physical port..
+		 */
+		if (!PPE_DRV_PHY_PORT_CHK(rx_pp->port)) {
+			if_rx_base = ppe_drv_iface_base_get(if_rx);
+			rx_pp_base = if_rx_base ? ppe_drv_iface_port_get(if_rx_base) : NULL;
+			rx_pp = rx_pp_base ? rx_pp_base : rx_pp;
 		}
 
 		if (!ppe_drv_port_check_flow_offload_enabled(rx_pp)) {
