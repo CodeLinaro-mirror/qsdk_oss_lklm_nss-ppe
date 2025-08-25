@@ -219,7 +219,7 @@ static int nss_ppe_vlan_mgr_update_ppe_tpid(void)
 static bool nss_ppe_vlan_mgr_ppe_update_port_role(struct ppe_drv_iface *iface, int port_id, fal_qinq_port_role_t role)
 {
 	ppe_drv_ret_t ret;
-	fal_port_qinq_role_t mode;
+	fal_port_qinq_role_t mode = {0};
 
 	/*
 	 * Update port role in PPE
