@@ -574,13 +574,22 @@ static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
         sw_error_t err;
 	fal_ucast_queue_dest_t q_dst = {0};
 	struct ppe_drv_port *pp = NULL;
+	int src_profile = -1;
 
-	q_dst.src_profile = PPE_DRV_PORT_SRC_PROFILE;
 	q_dst.dst_port = enq_vport;
-	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, PPE_DRV_REDIR_PROFILE_ID);
-	if (err != SW_OK) {
-		ppe_drv_warn("%p: Unable to map enqueue vp with queue:%d", p, queue_id);
-		return false;
+
+	/*
+	 * Enqueue VP need to be mapped to a queue for all the source profile. This is specifically required
+	 * for PON setups where interfaces can be put to a different source profile. Queue base is dependent
+	 * on source profile and hence queue base need to be updated for all source profile.
+	 */
+	for (src_profile = 0; src_profile < PPE_DRV_PORT_SRC_PROFILE_MAX; src_profile++) {
+		q_dst.src_profile = src_profile;
+		err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		if (err != SW_OK) {
+			ppe_drv_warn("%p: Unable to map enqueue vp with queue:%d for src_profile:%d", p, queue_id, src_profile);
+			return false;
+		}
 	}
 
 	/*
