@@ -3051,6 +3051,9 @@ ppe_drv_ret_t ppe_drv_v4_assist_rule_create(struct ppe_drv_v4_rule_create *creat
 	struct ppe_drv_v4_conn *cn = NULL;
 	ppe_drv_ret_t ret;
 	struct ppe_drv_top_if_rule top_if = {0};
+	struct ppe_drv_iface *if_rx;
+	struct ppe_drv_port *pp_rx;
+	struct ppe_drv_tun *rx_tun;
 
 	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_FLOW];
 
@@ -3058,6 +3061,33 @@ ppe_drv_ret_t ppe_drv_v4_assist_rule_create(struct ppe_drv_v4_rule_create *creat
 	 * Update stats
 	 */
 	ppe_drv_stats_inc(&comm_stats->v4_assist_rule_create_req);
+
+	if_rx = ppe_drv_iface_get_by_idx(create->conn_rule.rx_if);
+	if (!if_rx) {
+		ppe_drv_warn("%p: No PPE interface corresponding to rx_if: %d", create, create->conn_rule.rx_if);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if ((if_rx->type == PPE_DRV_IFACE_TYPE_VP_L2_TUN) || (if_rx->type == PPE_DRV_IFACE_TYPE_VP_L3_TUN)) {
+		pp_rx = ppe_drv_iface_port_get(if_rx);
+		if (!pp_rx) {
+			ppe_drv_warn("%p: Invalid Rx IF: %d", create, create->conn_rule.rx_if);
+			return PPE_DRV_RET_FAILURE_IFACE_PORT_MAP;
+		}
+
+		rx_tun = ppe_drv_port_tun_get(pp_rx);
+
+		/*
+		 * Rejecting the RFS rule when one of the tunnel end point is MAP-T
+		 * To avoid the failure because of v6 rule getting pushed before v4
+		 * this will help in exceptioning the packet to PPE
+		 */
+		if (rx_tun && rx_tun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
+			ppe_drv_warn("%p: Don't push RFS rule as one of the tunnel endpoint is MAP-T\n", p);
+			return PPE_DRV_RET_FAILURE_V4_ASSIST_RULE;
+		}
+
+	}
 
 	/*
 	 * PPE_DRV_ASSIST_FEATURE_PRIORITY flag must be set for flows which only require priority assist.
