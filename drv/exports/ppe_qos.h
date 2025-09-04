@@ -31,6 +31,8 @@ typedef enum ppe_qos_ret {
 	PPE_QOS_FLUSH_INTERFACE_QUEUES_FAIL,	/**< Interface's queue deletion faliure. */
 	PPE_QOS_SET_INTERFACE_SHAPER_FAIL,	/**< Interface's shaper configuration faliure. */
 	PPE_QOS_MAP_PQ_TO_TCONT_FAIL,	/**< Priority queue to Tcont mapping faliure. */
+	PPE_QOS_TCONT_STATS_GET_FAIL,	/**< Tcont stats fetch failure. */
+	PPE_QOS_RESET_TCONT_CREDIT_FAIL,	/**< Tcont credit reset failure. */
 	PPE_QOS_SET_QUEUE_TM_FAIL,	/**< Queue's traffic management configuration faliure. */
 	PPE_QOS_SET_QUEUE_LIMIT_FAIL,	/**< Queue's thresholds configuration faliure. */
 } ppe_qos_ret_t;
@@ -116,6 +118,16 @@ struct ppe_qos_queue_tm_info {
 
 #ifdef NSS_PPE_PON_SUPPORT
 /*
+ * ppe_qos_tcont_stats_info
+ *	PPE QoS Tcont statistics information.
+ */
+struct ppe_qos_tcont_stats_info {
+	uint32_t tcont_id;	/** T-cont ID. */
+	uint32_t credit;	/** T-cont credit. */
+	uint64_t bytes;	/** T-cont pending bytes. */
+};
+
+/*
  * ppe_qos_pq_to_tcont_info
  *	PPE QoS priority queue to tcont mapping information.
  */
@@ -199,6 +211,28 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info);
 ppe_qos_ret_t ppe_qos_set_queue_tm(struct ppe_qos_queue_tm_info *info);
 
 #ifdef NSS_PPE_PON_SUPPORT
+/**
+ * ppe_qos_get_tcont_stats
+ *	Function to get statistics for a given Tcont ID.
+ *
+ *
+ * @param[in] info         PPE QoS T-cont statistics information.
+ * @return
+ * PPE QoS request's return status.
+ */
+ppe_qos_ret_t ppe_qos_get_tcont_stats(struct ppe_qos_tcont_stats_info *info);
+
+/**
+ * ppe_qos_reset_tcont_credit
+ *	Function to reset credit of a given Tcont ID.
+ *
+ *
+ * @param[in] info         PPE QoS T-cont information.
+ * @return
+ * PPE QoS request's return status.
+ */
+ppe_qos_ret_t ppe_qos_reset_tcont_credit(struct ppe_qos_tcont_stats_info *info);
+
 /**
  * ppe_qos_map_pq_to_tcont
  *	Function to map priority queue to a given Tcont ID.

@@ -69,6 +69,16 @@ struct nss_ppenl_qos_map_pq_info {
 	uint32_t tcont_id;	/** T-cont port ID. */
 	int ret;		/* Return value to userspace. */
 };
+
+/*
+ * @brief PPE QoS Tcont statistics information.
+ */
+struct nss_ppenl_qos_tcont_stats_info {
+	uint32_t tcont_id;	/** T-cont ID. */
+	uint32_t credit;	/** T-cont credit. */
+	uint64_t bytes;	/** T-cont pending bytes. */
+	int ret;		/* Return value to userspace. */
+};
 #endif
 
 /*
@@ -126,9 +136,10 @@ struct nss_ppenl_qos_req {
 		struct nss_ppenl_qos_interface_queues_info if_info;	/* PPE QoS interface's queues information */
 		struct nss_ppenl_qos_interface_shaper_info if_shaper_info;	/* PPE QoS interface's shaper information */
 #if defined(CONFIG_NSS_PPENL_PON_PORT)
+		struct nss_ppenl_qos_tcont_stats_info stats_info;	/* PPE QoS Tcont stats information */
 		struct nss_ppenl_qos_map_pq_info pq_info;	/* PPE QoS priority queue mapping information */
 #endif
-	struct nss_ppenl_qos_queue_tm_info tm_info;	/* PPE QoS traffic management information */
+		struct nss_ppenl_qos_queue_tm_info tm_info;	/* PPE QoS traffic management information */
 		struct nss_ppenl_qos_queue_limit_info limit_info;	/* PPE QoS limit and threshold information */
 	} msg;
 };
@@ -143,6 +154,8 @@ enum nss_ppe_qos_message_types {
 	NSS_PPE_QOS_CREATE_INTERFACE_QUEUES,	/* QoS create interface queues. */
 	NSS_PPE_QOS_FLUSH_INTERFACE_QUEUES,	/* QoS delete interface queues. */
 	NSS_PPE_QOS_SET_INTERFACE_SHAPER,	/* QoS configure interface shaper. */
+	NSS_PPE_QOS_GET_TCONT_STATS,	/* QoS get Tcont stats */
+	NSS_PPE_QOS_RESET_TCONT_CREDIT,	/* QoS reset Tcont statistics */
 	NSS_PPE_QOS_MAP_PQ_TO_TCONT,	/* QoS priority queue to Tcont mapping message. */
 	NSS_PPE_QOS_SET_QUEUE_TM,	/* QoS set queue's traffic management message. */
 	NSS_PPE_QOS_SET_QUEUE_LIMIT,	/* QoS set queue's limit and threshold message. */

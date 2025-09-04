@@ -19,8 +19,12 @@ struct ppe_qos_stats {
 	atomic64_t qos_flush_interface_queues_success;		/* Qos flush interface queues success */
 	atomic64_t qos_set_interface_shaper_fail;		/* Qos det interface shaper fail */
 	atomic64_t qos_set_interface_shaper_success;		/* Qos set interface shaper success */
-	atomic64_t qos_pq_to_tcont_mapping_fail;	/* Qos priority queue maooing to Tcont fail */
-	atomic64_t qos_pq_to_tcont_mapping_success;	/* Qos priority queue maooing to Tcont fail */
+	atomic64_t qos_pq_to_tcont_mapping_fail;	/* Qos priority queue mapping to Tcont fail */
+	atomic64_t qos_pq_to_tcont_mapping_success;	/* Qos priority queue mapping to Tcont fail */
+	atomic64_t qos_tcont_stats_get_fail;		/* QoS Tcont statistics fetch failed */
+	atomic64_t qos_tcont_stats_get_success;		/* QoS Tcont statistics fetch success */
+	atomic64_t qos_reset_tcont_credit_fail;		/* QoS Tcont credit reset fail */
+	atomic64_t qos_reset_tcont_credit_success;	/* QoS Tcont credit reset success */
 	atomic64_t qos_set_queue_tm_fail;	/* Qos set queue traffic management fail */
 	atomic64_t qos_set_queue_tm_success;		/* Qos set queue traffic management success */
 	atomic64_t qos_set_queue_limit_fail;			/* QoS set queue limit fail */

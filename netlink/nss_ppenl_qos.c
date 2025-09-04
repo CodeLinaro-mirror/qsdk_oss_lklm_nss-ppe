@@ -48,6 +48,8 @@ static int nss_ppenl_qos_ops_create_interface_queues(struct sk_buff *skb, struct
 static int nss_ppenl_qos_ops_flush_interface_queues(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_qos_ops_set_interface_shaper(struct sk_buff *skb, struct genl_info *info);
 #if defined(CONFIG_NSS_PPENL_PON_PORT)
+static int nss_ppenl_qos_ops_get_tcont_stats(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_qos_ops_reset_tcont_credit(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_qos_ops_map_pq_to_tcont(struct sk_buff *skb, struct genl_info *info);
 #endif
 static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info *info);
@@ -64,6 +66,8 @@ static struct genl_ops nss_ppenl_qos_ops[] = {
 	{.cmd = NSS_PPE_QOS_FLUSH_INTERFACE_QUEUES, .doit = nss_ppenl_qos_ops_flush_interface_queues,},	/* flush port queues */
 	{.cmd = NSS_PPE_QOS_SET_INTERFACE_SHAPER, .doit = nss_ppenl_qos_ops_set_interface_shaper,},	/* set interface shaper */
 #if defined(CONFIG_NSS_PPENL_PON_PORT)
+	{.cmd = NSS_PPE_QOS_GET_TCONT_STATS, .doit = nss_ppenl_qos_ops_get_tcont_stats,},	/* get Tcont stats */
+	{.cmd = NSS_PPE_QOS_RESET_TCONT_CREDIT, .doit = nss_ppenl_qos_ops_reset_tcont_credit,},	/* reset Tcont credit */
 	{.cmd = NSS_PPE_QOS_MAP_PQ_TO_TCONT, .doit = nss_ppenl_qos_ops_map_pq_to_tcont,},	/* priority queue to Tcont mapping */
 #endif
 	{.cmd = NSS_PPE_QOS_SET_QUEUE_TM, .doit = nss_ppenl_qos_ops_set_queue_tm,},	/* set queue traffic management */
@@ -287,6 +291,120 @@ static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info 
 }
 
 #if defined(CONFIG_NSS_PPENL_PON_PORT)
+/*
+ * nss_ppenl_qos_ops_get_tcont_stats()
+ * Get Tcont stats request
+ */
+static int nss_ppenl_qos_ops_get_tcont_stats(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_qos_req *nl_qos_req;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	int error;
+	enum ppe_qos_ret pt;
+	struct ppe_qos_tcont_stats_info stats = {0};
+
+	/*
+	 * Extract the message payload
+	 */
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_qos_family, info, NSS_PPE_QOS_GET_TCONT_STATS);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract stats request data\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate config message before calling req API
+	 */
+	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
+	pid = nl_cm->pid;
+
+	stats.tcont_id = nl_qos_req->msg.stats_info.tcont_id;
+
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
+		return error;
+	}
+
+	pt = ppe_qos_get_tcont_stats(&stats);
+	if (pt == PPE_QOS_SUCCESS) {
+		nss_ppenl_info("PPE qos stats req success");
+	} else {
+		nss_ppenl_info("Input data is invalid, error = %d", pt);
+	}
+
+	nl_qos_req = nss_ppenl_get_data(resp);
+	nl_qos_req->msg.stats_info.ret = pt;
+	nl_qos_req->msg.stats_info.bytes = stats.bytes;
+	nl_qos_req->msg.stats_info.credit = stats.credit;
+
+	nss_ppenl_info("Tcont ID:%d pending bytes:%llu credit:%d:\n",
+			stats.tcont_id, stats.bytes, stats.credit);
+
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
+ * nss_ppenl_qos_ops_reset_tcont_credit()
+ * Reset given Tcont credit to 0.
+ */
+static int nss_ppenl_qos_ops_reset_tcont_credit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_qos_req *nl_qos_req;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	int error;
+	enum ppe_qos_ret pt;
+	struct ppe_qos_tcont_stats_info tcont_info = {0};
+
+	/*
+	 * Extract the message payload
+	 */
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_qos_family, info, NSS_PPE_QOS_RESET_TCONT_CREDIT);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract Tcont data\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate config message before calling rule API
+	 */
+	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
+	pid = nl_cm->pid;
+	tcont_info.tcont_id = nl_qos_req->msg.stats_info.tcont_id;
+
+	/*
+	 * copy the NL message for response
+	 */
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
+		return error;
+	}
+
+	pt = ppe_qos_reset_tcont_credit(&tcont_info);
+	if (pt == PPE_QOS_SUCCESS) {
+		nss_ppenl_info("PPE reset Tcont credit success");
+	} else {
+		nss_ppenl_info("Reset Tcont credit in ppe driver failed, error = %d", pt);
+	}
+
+	nl_qos_req = nss_ppenl_get_data(resp);
+	nl_qos_req->msg.stats_info.ret = pt;
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
 /*
  * nss_ppenl_qos_ops_map_pq_to_tcont()
  * Map priority queue to Tcont handler

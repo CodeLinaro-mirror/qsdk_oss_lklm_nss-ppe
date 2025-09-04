@@ -95,6 +95,15 @@ struct ppe_drv_qos_q_stat {
 };
 
 /**
+ * ppe_drv_qos_tcont_stat
+ *	Information for QoS Tcont statistics.
+ */
+struct ppe_drv_qos_tcont_stat {
+	uint64_t bytes;	/**< Number of bytes pending per Tcont. */
+	uint32_t credit;	/**< Number of credits available for the Tcont. */
+};
+
+/**
  * ppe_drv_qos_queue
  *	Information for QoS queue.
  */
@@ -318,6 +327,29 @@ ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid);
  * Status of the QoS queue enable operation.
  */
 ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid);
+
+/**
+ * ppe_drv_qos_tcont_stats_get
+ *	API to fetch tcont statistics from PPE HW.
+ *
+ * @param[in]  tcont_id         Queue ID.
+ * @param[out] stats       Statistics
+ *
+ * @return
+ * Status of the QoS T-cont statistics get operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_tcont_stats_get(uint32_t tcont_id, struct ppe_drv_qos_tcont_stat *stats);
+
+/**
+ * ppe_drv_qos_tcont_credit_reset
+ *	Resets T-cont credit to 0.
+ *
+ * @param[in] tcont_id  T-cont ID of the port.
+ *
+ * @return
+ * Status of the QoS T-cont configuration operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_tcont_credit_reset(uint32_t tcont_id);
 
 /**
  * ppe_drv_qos_tcont_set

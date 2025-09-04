@@ -973,8 +973,80 @@ EXPORT_SYMBOL(ppe_qos_set_queue_tm);
 
 #ifdef NSS_PPE_PON_SUPPORT
 /*
+ * ppe_qos_reset_tcont_credit()
+ *	Reset the credit of a T-cont.
+ */
+ppe_qos_ret_t ppe_qos_get_tcont_stats(struct ppe_qos_tcont_stats_info *info)
+{
+	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
+	struct ppe_qos_interface_res *tm_if = NULL;
+	struct ppe_drv_qos_tcont_stat stats = {0};
+
+	spin_lock_bh(&g_qos->lock);
+	tm_if = &g_qos->tcont[info->tcont_id];
+
+	/*
+	 * Check T-cont validity
+	 */
+	if (!tm_if->valid) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_tcont_stats_get_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("%px interface is not valid", info);
+		return PPE_QOS_TCONT_STATS_GET_FAIL;
+	}
+
+	if (ppe_drv_qos_tcont_stats_get(info->tcont_id, &stats) != PPE_DRV_RET_SUCCESS) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_tcont_stats_get_fail);
+		spin_unlock_bh(&g_qos->lock);
+		return PPE_QOS_TCONT_STATS_GET_FAIL;
+	}
+
+	info->credit = stats.credit;
+	info->bytes = stats.bytes;
+
+	ppe_qos_stats_inc(&g_qos->stats.qos_tcont_stats_get_success);
+	spin_unlock_bh(&g_qos->lock);
+	return PPE_QOS_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_qos_get_tcont_stats);
+
+/*
+ * ppe_qos_reset_tcont_credit()
+ *	Reset the credit of a T-cont.
+ */
+ppe_qos_ret_t ppe_qos_reset_tcont_credit(struct ppe_qos_tcont_stats_info *info)
+{
+	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
+	struct ppe_qos_interface_res *tm_if = NULL;
+
+	spin_lock_bh(&g_qos->lock);
+	tm_if = &g_qos->tcont[info->tcont_id];
+
+	/*
+	 * Check T-cont validity
+	 */
+	if (!tm_if->valid) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_reset_tcont_credit_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("%px interface is not valid", info);
+		return PPE_QOS_RESET_TCONT_CREDIT_FAIL;
+	}
+
+	if (ppe_drv_qos_tcont_credit_reset(info->tcont_id) != PPE_DRV_RET_SUCCESS) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_reset_tcont_credit_fail);
+		spin_unlock_bh(&g_qos->lock);
+		return PPE_QOS_RESET_TCONT_CREDIT_FAIL;
+	}
+
+	ppe_qos_stats_inc(&g_qos->stats.qos_reset_tcont_credit_success);
+	spin_unlock_bh(&g_qos->lock);
+	return PPE_QOS_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_qos_reset_tcont_credit);
+
+/*
  * ppe_qos_map_pq_to_tcont()
- *	Mapte priority queue to a T-cont.
+ *	Map the priority queue to a T-cont.
  */
 ppe_qos_ret_t ppe_qos_map_pq_to_tcont(struct ppe_qos_pq_to_tcont_info *info)
 {

@@ -247,6 +247,54 @@ ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid)
 EXPORT_SYMBOL(ppe_drv_qos_queue_enable);
 
 /*
+ * ppe_drv_qos_tcont_stats_get()
+ *	API to fetch tcont statistics from PPE HW.
+ */
+ppe_drv_ret_t ppe_drv_qos_tcont_stats_get(uint32_t tcont_id, struct ppe_drv_qos_tcont_stat *stats)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_queue_tcont_stat_t info;
+
+	spin_lock_bh(&p->lock);
+	if (fal_qm_tcont_stat_get(0, tcont_id, &info) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:tcont stats get failed for tcont:%u", p, tcont_id);
+		return PPE_DRV_RET_QOS_TCONT_CFG_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	stats->bytes = info.bytes;
+	stats->credit = info.credit;
+
+	ppe_drv_info("%px:get tcont stats get successful for tcont_id:%u", p, tcont_id);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_tcont_stats_get);
+
+/*
+ * ppe_drv_qos_tcont_credit_reset()
+ *	Resets T-cont credit to 0.
+ */
+ppe_drv_ret_t ppe_drv_qos_tcont_credit_reset(uint32_t tcont_id)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_queue_tcont_stat_t stats = {0};
+
+	spin_lock_bh(&p->lock);
+	if (fal_qm_tcont_stat_set(0, tcont_id, &stats) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:tcont stats setting failed for tcont:%u", p, tcont_id);
+		return PPE_DRV_RET_QOS_TCONT_CFG_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:tcont stats setting successful for tcont:%u", p, tcont_id);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_tcont_credit_reset);
+
+/*
  * ppe_drv_qos_tcont_set()
  *	Sets T-cont configuration for a queue in PPE.
  */
