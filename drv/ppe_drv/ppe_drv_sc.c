@@ -282,11 +282,13 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 		break;
 
 	case PPE_DRV_SC_LOOPBACK_RING_GRETAP_MAPT:
+		sc_cfg.bypass_bitmap[1] = (1 << L2_SOURCE_SEC_BYP);
 		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
 		sc_cfg.direction = PPE_DRV_SC_IN_L2_DIR_SRC;
 		break;
 
 	case PPE_DRV_SC_LOOPBACK_RING_MAPT_GRETAP:
+		sc_cfg.bypass_bitmap[1] = (1 << L2_SOURCE_SEC_BYP);
 		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP) | (1 << TX_COUNTER_BYP);
 		sc_cfg.field_update_bitmap = (1 << FLD_UPDATE_SRC_INFO_BYPASS);
 		break;
