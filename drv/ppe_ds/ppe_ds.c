@@ -153,11 +153,13 @@ static enum hrtimer_restart ppe_ds_timer(struct hrtimer *hrtimer)
  */
 int ppe_ds_ppe2tcl_wlan_handle_intr(void *ctxt)
 {
-	uint32_t cons_idx, prod_idx, move;
+	uint32_t cons_idx, prod_idx, prev_cons_idx;
+	uint32_t cons_move = 0;
 	struct ppe_ds *node = (struct ppe_ds *)ctxt;
 	ppe_ds_wlan_handle_t *wlan_handle = &node->wlan_handle;
 	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
 	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
+	uint32_t ppe2tcl_ring_size = edma_handle->ppe2tcl_num_desc;
 
 	if (!node->en_process_irq) {
 		if (node->umac_reset_inprogress) {
@@ -167,24 +169,33 @@ int ppe_ds_ppe2tcl_wlan_handle_intr(void *ctxt)
 		return 0;
 	}
 
+	/*
+	 * Get prod and cons idx
+	 */
 	prod_idx = dp_ops->get_rx_prod_idx(edma_handle);
 	cons_idx = node->wlan_ops->get_tcl_cons_idx(wlan_handle);
 
 	/*
+	 * Get cached cons idx
+	 */
+	prev_cons_idx = node->last_ppe2tcl_cons_idx;
+
+	/*
 	 * Move Consumer Index
 	 */
-	dp_ops->set_rx_cons_idx(edma_handle, cons_idx);
+	if (prev_cons_idx != cons_idx) {
+		dp_ops->set_rx_cons_idx(edma_handle, cons_idx);
+		cons_move = (cons_idx - prev_cons_idx + ppe2tcl_ring_size) & (ppe2tcl_ring_size - 1);
+		atomic64_add(cons_move, &ppe_ds_node_stats[node->node_cfg_idx].tx_pkts);
+		node->last_ppe2tcl_cons_idx = cons_idx;
+	}
+
 	if (unlikely(prod_idx == cons_idx)) {
 		/* Disable the wlan interrupt */
 		node->wlan_ops->enable_tx_consume_intr(wlan_handle, false);
 		/* Enable the edma interrupt */
 		dp_ops->enable_rx_reap_intr(edma_handle);
 	} else {
-		uint32_t ppe2tcl_ring_size = edma_handle->ppe2tcl_num_desc;
-
-		move = (prod_idx - cons_idx  + ppe2tcl_ring_size) &
-				(ppe2tcl_ring_size - 1);
-		atomic64_add(move, &ppe_ds_node_stats[node->node_cfg_idx].tx_pkts);
 		/*
 		 * Move Producer Idx
 		 */
