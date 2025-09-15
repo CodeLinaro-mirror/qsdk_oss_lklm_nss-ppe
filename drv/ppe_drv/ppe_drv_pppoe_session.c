@@ -62,7 +62,11 @@ ppe_drv_ret_t ppe_drv_pppoe_session_deinit(struct ppe_drv_iface *pppoe_iface)
 	/*
 	 * Clear mac address on L3_IF
 	 */
+#ifndef PPE_DRV_FLOW_IG_MAC_WAR
 	ppe_drv_l3_if_mac_addr_clear(l3_if);
+#else
+	ppe_drv_l3_if_eg_mac_addr_clear(l3_if);
+#endif
 
 	/*
 	 * Detach the egress L3 interface
@@ -172,7 +176,12 @@ ppe_drv_ret_t ppe_drv_pppoe_session_init(struct ppe_drv_iface *pppoe_iface, stru
 	/*
 	 * xmit mac for the interface
 	 */
+#ifndef PPE_DRV_FLOW_IG_MAC_WAR
 	if (!ppe_drv_l3_if_mac_addr_set(l3_if, local_mac)) {
+#else
+	if (!ppe_drv_l3_if_eg_mac_addr_set(l3_if, local_mac)) {
+#endif
+
 		ppe_drv_l3_if_mtu_mru_clear(l3_if);
 		ppe_drv_l3_if_deref(l3_if);
 		ppe_drv_pppoe_deref(pppoe);
