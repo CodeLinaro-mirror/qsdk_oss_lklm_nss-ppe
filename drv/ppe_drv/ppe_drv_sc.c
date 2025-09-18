@@ -346,7 +346,7 @@ static void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t red
 
 	case PPE_DRV_SC_L2_TUNNEL_EXCEPTION:
 		sc_cfg.field_update_bitmap = (1 << FLD_UPDATE_SERVICE_CODE);
-		sc_cfg.bypass_bitmap[1] = (1 << BRIDGING_FWD_BYP);
+		sc_cfg.bypass_bitmap[1] = ((1 << BRIDGING_FWD_BYP) | (1 << L2_SOURCE_SEC_BYP));
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
