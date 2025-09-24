@@ -65,6 +65,13 @@
 #define NSS_PPE_BRIDGE_MGR_SPANNING_TREE_ID 0
 
 /*
+ * Buffer sizes
+ */
+#define NSS_PPE_BRIDGE_MGR_DUMP_PREFIX_SIZE 128
+#define NSS_PPE_BRIDGE_MGR_DUMP_PREFIX_MAX 10
+#define NSS_PPE_BRIDGE_MGR_DUMP_BUFFER_SIZE 3072000
+
+/*
  * struct nss_ppe_bridge_mgr_stats
  *	Bridge manager stats structure
  */
@@ -184,6 +191,22 @@ struct nss_ppe_bridge_mgr_pvt {
 };
 
 /*
+ * struct nss_ppe_bridge_mgr_dump_instance
+ *	Structure used as an instance for bridge manager dump
+ */
+struct nss_ppe_bridge_mgr_dump_instance {
+	uint16_t br_cnt;					/* Number of bridge  */
+	uint16_t slave_cnt;					/* Number of Slave devices  */
+	char prefix[NSS_PPE_BRIDGE_MGR_DUMP_PREFIX_SIZE];	/* This is the prefix added to every message written */
+	int prefix_levels[NSS_PPE_BRIDGE_MGR_DUMP_PREFIX_MAX];	/* How many nested prefixes supported */
+	int prefix_level;					/* Prefix nest level */
+	char msg[NSS_PPE_BRIDGE_MGR_DUMP_BUFFER_SIZE];		/* The message written / being returned to the reader */
+	char *msgp;						/* Points into the msg buffer as we output it to the reader piece by piece */
+	int msg_len;						/* Length of the msg buffer still to be written out */
+	bool dump_en;						/* Enable dump once the file is open */
+};
+
+/*
  * nss_ppe_bridge_mgr_stats_inc()
  * 	Increment stats counter.
  */
@@ -223,5 +246,7 @@ void nss_ppe_bridge_mgr_ovs_init(void);
 void nss_ppe_bridge_mgr_ovs_exit(void);
 void nss_ppe_bridge_mgr_stats_deinit(struct nss_ppe_bridge_mgr_context *ctx);
 bool nss_ppe_bridge_mgr_stats_init(struct nss_ppe_bridge_mgr_context *ctx);
+int nss_ppe_bridge_mgr_dump_init(struct nss_ppe_bridge_mgr_context *ctx);
+void nss_ppe_bridge_mgr_dump_exit(void);
 
 #endif

@@ -1687,6 +1687,8 @@ int nss_ppe_bridge_mgr_register_br(struct net_device *dev)
 static void __exit nss_ppe_bridge_mgr_exit_module(void)
 {
 	nss_ppe_bridge_mgr_stats_deinit(&br_mgr_ctx);
+
+	nss_ppe_bridge_mgr_dump_exit();
 	unregister_netdevice_notifier(&nss_ppe_bridge_mgr_netdevice_nb);
 	ppe_drv_notifier_ops_unregister(&ppe_drv_notifier_ops_bridge_mgr);
 	nss_ppe_bridge_mgr_info("Module unloaded\n");
@@ -1745,6 +1747,7 @@ static int __init nss_ppe_bridge_mgr_init_module(void)
 	nss_ppe_bridge_mgr_ovs_init();
 #endif
 	nss_ppe_vlan_mgr_vlan_over_bridge_register_cb(nss_ppe_bridge_mgr_vlan_over_bridge_notfication);
+	nss_ppe_bridge_mgr_dump_init(&br_mgr_ctx);
 	return 0;
 }
 

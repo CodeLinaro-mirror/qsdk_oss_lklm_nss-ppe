@@ -466,6 +466,19 @@ void ppe_drv_loopback_base_queue(uint8_t queue_id, uint32_t ft_type)
 }
 EXPORT_SYMBOL(ppe_drv_loopback_base_queue);
 
+#ifdef NSS_PPE_L2_VP_SC_ENQ_BYPASS
+/*
+ * ppe_drv_loopback_sc2queue_mapping()
+ *	Loopback to queue mapping
+ */
+static bool ppe_drv_loopback_sc2queue_mapping(struct ppe_drv *p, uint8_t src_profile)
+{
+	int base_queue = p->loopback_ring_info.base_queue;
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING, base_queue, src_profile, PPE_DRV_REDIR_PROFILE_ID);
+	return true;
+}
+
+#else
 /*
  * ppe_drv_loopback_sc2queue_mapping()
  *	Loopback to queue mapping
@@ -493,13 +506,11 @@ static bool ppe_drv_loopback_sc2queue_mapping(struct ppe_drv *p, uint8_t src_pro
 	/*
 	 * Map loopback ring service code to queue mapping
 	 */
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING, base_queue, src_profile,
-					PPE_DRV_REDIR_PROFILE_ID);
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_NEXT, next_sc_queue, src_profile,
-					PPE_DRV_REDIR_PROFILE_ID);
-
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_NEXT, next_sc_queue, src_profile, PPE_DRV_REDIR_PROFILE_ID);
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING, base_queue, src_profile, PPE_DRV_REDIR_PROFILE_ID);
 	return true;
 }
+#endif
 
 /*
  * ppe_drv_queue_from_core()
