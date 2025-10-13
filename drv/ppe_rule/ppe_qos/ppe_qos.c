@@ -824,6 +824,106 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 EXPORT_SYMBOL(ppe_qos_set_queue_limit);
 
 /*
+ * ppe_qos_set_interface_queue_ctrl()
+ *	Set interface queue control (enqueue/dequeue enable/disable/drop).
+ */
+ppe_qos_ret_t ppe_qos_set_interface_queue_ctrl(struct ppe_qos_interface_queue_ctrl_info *info)
+{
+	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
+	struct ppe_qos_interface_res *tm_if = NULL;
+	struct ppe_drv_qos_port *port = NULL;
+	struct ppe_qos_interface_queue *queue = NULL;
+	uint32_t qid;
+	int id;
+	ppe_drv_ret_t (*ctrl_func)(uint32_t, bool);
+	bool enable;
+
+	spin_lock_bh(&g_qos->lock);
+	id = ppe_qos_get_interface_id(&info->if_data);
+	if (id < 0) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("%px invalid interface data", info);
+		return PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL;
+	}
+
+	tm_if = info->if_data.type ? &g_qos->tcont[id] : &g_qos->port_res[id];
+	port = &tm_if->port;
+
+	if (!tm_if->valid) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("%px interface is not valid", info);
+		return PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL;
+	}
+
+	/* Validate drop state is only used with dequeue mode */
+	if ((info->state == PPE_QOS_QUEUE_CTRL_STATE_DROP) && 
+	    (info->mode != PPE_QOS_QUEUE_CTRL_MODE_DEQUEUE)) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("%px drop state only valid with dequeue mode", info);
+		return PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL;
+	}
+
+	/* Select the appropriate control function based on mode and state */
+	if (info->state == PPE_QOS_QUEUE_CTRL_STATE_DROP) {
+		/* Drop state - use dequeue drop control */
+		ctrl_func = ppe_drv_qos_queue_dequeue_drop_ctrl;
+		enable = true;  /* Drop is enabled */
+	} else {
+		/* Enable/Disable state - use enqueue or dequeue control */
+		ctrl_func = (info->mode == PPE_QOS_QUEUE_CTRL_MODE_ENQUEUE) ?
+			    ppe_drv_qos_queue_enqueue_ctrl : ppe_drv_qos_queue_dequeue_ctrl;
+		enable = (info->state == PPE_QOS_QUEUE_CTRL_STATE_ENABLE);
+	}
+
+	qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+
+	/*
+	 * Control enqueue/dequeue/drop for all queues on the interface.
+	 * For physical interfaces, control all queues.
+	 * For TCONT interfaces, control only assigned queues.
+	 */
+	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+		uint32_t offset;
+		for (offset = 0; offset < port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE]; offset++) {
+			if (ctrl_func(qid + offset, enable) != PPE_DRV_RET_SUCCESS) {
+				ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_fail);
+				spin_unlock_bh(&g_qos->lock);
+				ppe_qos_warn("queue control failed for interface type:%d id:%d queue:%d",
+					     info->if_data.type, id, offset);
+				return PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL;
+			}
+		}
+	} else {
+		if (!list_empty(&tm_if->q_list)) {
+			list_for_each_entry(queue, &tm_if->q_list, list) {
+				if (!queue->valid) {
+					continue;
+				}
+
+				if (ctrl_func(qid + queue->offset, enable) != PPE_DRV_RET_SUCCESS) {
+					ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_fail);
+					spin_unlock_bh(&g_qos->lock);
+					ppe_qos_warn("queue control failed for interface type:%d id:%d queue:%d",
+						     info->if_data.type, id, queue->offset);
+					return PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL;
+				}
+			}
+		}
+	}
+
+	ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_success);
+	spin_unlock_bh(&g_qos->lock);
+
+	ppe_qos_info("Interface type:%d id:%d queue control set successfully mode:%d state:%d",
+		     info->if_data.type, id, info->mode, info->state);
+	return PPE_QOS_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_qos_set_interface_queue_ctrl);
+
+/*
  * ppe_qos_set_queue_tm()
  *	Set QoS traffic management for a given port and queue.
  */

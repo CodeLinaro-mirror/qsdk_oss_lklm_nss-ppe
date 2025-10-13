@@ -35,7 +35,17 @@ typedef enum ppe_qos_ret {
 	PPE_QOS_RESET_TCONT_CREDIT_FAIL,	/**< Tcont credit reset failure. */
 	PPE_QOS_SET_QUEUE_TM_FAIL,	/**< Queue's traffic management configuration faliure. */
 	PPE_QOS_SET_QUEUE_LIMIT_FAIL,	/**< Queue's thresholds configuration faliure. */
+	PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL,	/**< Interface queue control configuration failure. */
 } ppe_qos_ret_t;
+
+/*
+ * ppe_qos_queue_ctrl_mode
+ *	PPE QoS queue control mode types.
+ */
+typedef enum ppe_qos_queue_ctrl_mode {
+	PPE_QOS_QUEUE_CTRL_MODE_ENQUEUE = 0,	/**< Enqueue control. */
+	PPE_QOS_QUEUE_CTRL_MODE_DEQUEUE = 1,	/**< Dequeue control. */
+} ppe_qos_queue_ctrl_mode_t;
 
 /*
  * ppe_qos_interface_type
@@ -153,6 +163,26 @@ struct ppe_qos_interface_queues_info {
 struct ppe_qos_interface_shaper_info {
 	struct ppe_qos_interface if_data;		/** interface data */
 	char shaper_name[PPE_QOS_MAX_NAME_LENGTH];	/** Shaper name. */
+};
+
+/*
+ * ppe_qos_queue_ctrl_state
+ *	PPE QoS queue control state types.
+ */
+typedef enum ppe_qos_queue_ctrl_state {
+	PPE_QOS_QUEUE_CTRL_STATE_DISABLE = 0,	/**< Disable state. */
+	PPE_QOS_QUEUE_CTRL_STATE_ENABLE = 1,	/**< Enable state. */
+	PPE_QOS_QUEUE_CTRL_STATE_DROP = 2,	/**< Drop state (dequeue only). */
+} ppe_qos_queue_ctrl_state_t;
+
+/*
+ * ppe_qos_interface_queue_ctrl_info
+ *	PPE QoS interface queue control information.
+ */
+struct ppe_qos_interface_queue_ctrl_info {
+	struct ppe_qos_interface if_data;		/** interface data */
+	ppe_qos_queue_ctrl_mode_t mode;			/** enqueue or dequeue */
+	ppe_qos_queue_ctrl_state_t state;		/** enable, disable, or drop */
 };
 
 /**
@@ -277,5 +307,16 @@ ppe_qos_ret_t ppe_qos_flush_interface_queues(struct ppe_qos_interface_queues_inf
  * PPE QoS request's return status.
  */
 ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_info *info);
+
+/**
+ * ppe_qos_set_interface_queue_ctrl
+ *	Function to enable/disable enqueue or dequeue for all queues on an interface.
+ *
+ *
+ * @param[in] info         PPE QoS interface queue control information.
+ * @return
+ * PPE QoS request's return status.
+ */
+ppe_qos_ret_t ppe_qos_set_interface_queue_ctrl(struct ppe_qos_interface_queue_ctrl_info *info);
 
 #endif /* _PPE_QOS_H_ */

@@ -180,6 +180,70 @@ void ppe_drv_qos_queue_stats_reset(uint32_t qid)
 EXPORT_SYMBOL(ppe_drv_qos_queue_stats_reset);
 
 /*
+ * ppe_drv_qos_queue_enqueue_ctrl()
+ *	Controls enqueue operation for a queue in PPE HW.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_enqueue_ctrl(uint32_t qid, bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	if (fal_qm_enqueue_ctrl_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue enqueue control failed for qid:%u enable:%d", p, qid, enable);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:queue enqueue control successful for qid:%u enable:%d", p, qid, enable);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_enqueue_ctrl);
+
+/*
+ * ppe_drv_qos_queue_dequeue_ctrl()
+ *	Controls dequeue operation for a queue in PPE HW.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_dequeue_ctrl(uint32_t qid, bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	if (fal_scheduler_dequeue_ctrl_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue dequeue control failed for qid:%u enable:%d", p, qid, enable);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:queue dequeue control successful for qid:%u enable:%d", p, qid, enable);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_dequeue_ctrl);
+
+/*
+ * ppe_drv_qos_queue_dequeue_drop_ctrl()
+ *	Controls dequeue drop operation for a queue in PPE HW.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_dequeue_drop_ctrl(uint32_t qid, bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+
+	if (fal_qm_dequeue_drop_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue dequeue drop control failed for qid:%u enable:%d", p, qid, enable);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:queue dequeue drop control successful for qid:%u enable:%d", p, qid, enable);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_dequeue_drop_ctrl);
+
+/*
  * ppe_drv_qos_res_queue_disable()
  *	Disables a queue in PPE HW.
  */

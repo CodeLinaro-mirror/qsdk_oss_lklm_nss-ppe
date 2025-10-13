@@ -33,6 +33,8 @@ static const char *ppe_qos_stats_str[] = {
 	"qos_create_shaper_success",		/* Qos create shaper fail */
 	"qos_delete_shaper_fail",		/* Qos delete shaper fail */
 	"qos_delete_shaper_success",		/* Qos delete shaper success */
+	"qos_set_interface_queue_ctrl_fail",	/* Qos set interface queue control fail */
+	"qos_set_interface_queue_ctrl_success",	/* Qos set interface queue control success */
 };
 
 /*

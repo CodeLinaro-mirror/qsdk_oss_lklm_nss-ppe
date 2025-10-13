@@ -33,6 +33,8 @@ struct ppe_qos_stats {
 	atomic64_t qos_create_shaper_success;		/* Qos create shaper fail */
 	atomic64_t qos_delete_shaper_fail;		/* Qos delete shaper fail */
 	atomic64_t qos_delete_shaper_success;		/* Qos delete shaper success */
+	atomic64_t qos_set_interface_queue_ctrl_fail;	/* Qos set interface queue control fail */
+	atomic64_t qos_set_interface_queue_ctrl_success;	/* Qos set interface queue control success */
 };
 
 /*

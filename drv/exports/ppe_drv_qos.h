@@ -306,6 +306,42 @@ void ppe_drv_qos_queue_stats_get(uint32_t qid, bool is_red, struct ppe_drv_qos_q
 void ppe_drv_qos_queue_stats_reset(uint32_t qid);
 
 /**
+ * ppe_drv_qos_queue_enqueue_ctrl
+ *	API to control enqueue operation for a queue in PPE HW.
+ *
+ * @param[in] qid      Queue ID.
+ * @param[in] enable   Enable or disable enqueue.
+ *
+ * @return
+ * Status of the QoS queue enqueue control operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_enqueue_ctrl(uint32_t qid, bool enable);
+
+/**
+ * ppe_drv_qos_queue_dequeue_ctrl
+ *	API to control dequeue operation for a queue in PPE HW.
+ *
+ * @param[in] qid      Queue ID.
+ * @param[in] enable   Enable or disable dequeue.
+ *
+ * @return
+ * Status of the QoS queue dequeue control operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_dequeue_ctrl(uint32_t qid, bool enable);
+
+/**
+ * ppe_drv_qos_queue_dequeue_drop_ctrl
+ *	API to control dequeue drop operation for a queue in PPE HW.
+ *
+ * @param[in] qid      Queue ID.
+ * @param[in] enable   Enable or disable dequeue drop.
+ *
+ * @return
+ * Status of the QoS queue dequeue drop control operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_dequeue_drop_ctrl(uint32_t qid, bool enable);
+
+/**
  * ppe_drv_qos_queue_disable
  *	API to disable a queue in PPE HW.
  *

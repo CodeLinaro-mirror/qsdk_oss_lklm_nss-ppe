@@ -126,6 +126,16 @@ struct nss_ppenl_qos_shaper_info {
 };
 
 /*
+ * @brief PPE QoS interface queue control info
+ */
+struct nss_ppenl_qos_queue_ctrl_info {
+	struct nss_ppenl_qos_interface if_data;	/** Interface info. */
+	uint32_t mode;		/** 0=enqueue, 1=dequeue */
+	uint32_t state;		/** 0=disable, 1=enable */
+	int ret;		/* Return value to userspace. */
+};
+
+/*
  * @brief QOS req.
  */
 struct nss_ppenl_qos_req {
@@ -141,6 +151,7 @@ struct nss_ppenl_qos_req {
 #endif
 		struct nss_ppenl_qos_queue_tm_info tm_info;	/* PPE QoS traffic management information */
 		struct nss_ppenl_qos_queue_limit_info limit_info;	/* PPE QoS limit and threshold information */
+		struct nss_ppenl_qos_queue_ctrl_info queue_ctrl_info;	/* PPE QoS queue control information */
 	} msg;
 };
 
@@ -159,6 +170,7 @@ enum nss_ppe_qos_message_types {
 	NSS_PPE_QOS_MAP_PQ_TO_TCONT,	/* QoS priority queue to Tcont mapping message. */
 	NSS_PPE_QOS_SET_QUEUE_TM,	/* QoS set queue's traffic management message. */
 	NSS_PPE_QOS_SET_QUEUE_LIMIT,	/* QoS set queue's limit and threshold message. */
+	NSS_PPE_QOS_SET_INTERFACE_QUEUE_CTRL,	/* QoS set interface queue control message. */
 	NSS_PPE_QOS_MAX_MSG_TYPES		/* Maximum message type. */
 };
 
