@@ -42,5 +42,7 @@
 #include "ppe_drv_gemport.h"
 #endif
 #include "ppe_drv_veip.h"
-
+#ifdef NSS_PPE_MCAST_FEATURE_SUPPORT
+#include "ppe_drv_mcast.h"
+#endif
 #endif /* _PPE_DRV_PUBLIC_H_ */

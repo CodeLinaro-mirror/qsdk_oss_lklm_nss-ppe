@@ -618,6 +618,10 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_VEIP_VSI_ATTACH_FAIL,		/**< VSI attach failed for VEIP VP. */
 	PPE_DRV_RET_VEIP_VSI_DETACH_FAIL,		/**< VSI detach failed for VEIP VP. */
 	PPE_DRV_RET_VEIP_INIT_FAIL,			/**< VEIP init failed. */
+	PPE_DRV_RET_MCAST_ENTRY_ADD_FAIL,		/**< Multicast entry add fail */
+	PPE_DRV_RET_MCAST_ENTRY_DELETE_FAIL, 		/**< Multicast entry delete fail */
+	PPE_DRV_RET_MCAST_STATUS_SET_FAIL,		/**< Multicast set status failed */
+	PPE_DRV_RET_MCAST_GLOBAL_CFG_FAIL,		/**< Multicast global configuration failed */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 

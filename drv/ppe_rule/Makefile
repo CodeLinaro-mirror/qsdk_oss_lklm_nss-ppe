@@ -123,6 +123,14 @@ qca-nss-ppe-rule-objs += ppe_cos_map/ppe_cos_map_dump.o
 qca-nss-ppe-rule-objs += ppe_cos_map/ppe_cos_map_stats.o
 ccflags-y += -DPPE_COS_MAP_DEBUG_LEVEL=3
 endif
+
+ifeq ($(PPE_MCAST_ENABLED), y)
+qca-nss-ppe-rule-objs += ppe_mcast/ppe_mcast.o
+qca-nss-ppe-rule-objs += ppe_mcast/ppe_mcast_dump.o
+qca-nss-ppe-rule-objs += ppe_mcast/ppe_mcast_stats.o
+ccflags-y += -DPPE_MCAST_DEBUG_LEVEL=3
+ccflags-y += -DNSS_PPE_MCAST_FEATURE_SUPPORT
+endif
 endif
 
 ifndef PPE_LOWMEM_PROFILE_16M

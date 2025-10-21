@@ -52,7 +52,10 @@
 #include "nss_ppenl_edma_ddrq.h"
 #include "nss_ppenl_edma_ddrq_if.h"
 #endif
-
+#ifdef NSS_PPE_MCAST_FEATURE_SUPPORT
+#include "nss_ppenl_mcast.h"
+#include "nss_ppenl_mcast_if.h"
+#endif
 /*
  * nss_ppenl.c
  *	NSS PPE Netlink manager
@@ -192,6 +195,17 @@ static struct nss_ppenl_family family_handlers[] = {
 		.entry = NSS_PPENL_EDMA_DDRQ_INIT,	/* Init */
 		.exit = NSS_PPENL_EDMA_DDRQ_EXIT,	/* exit */
 		.valid = CONFIG_NSS_PPENL_EDMA_DDRQ	/* 1 or 0 */
+	},
+#endif
+#ifdef NSS_PPE_MCAST_FEATURE_SUPPORT
+	{
+		/*
+		 * NSS_PPENL_MCAST
+		 */
+		.name = NSS_PPENL_MCAST_FAMILY,       	/* Multicast Family */
+		.entry = NSS_PPENL_MCAST_INIT,        	/* Init */
+		.exit = NSS_PPENL_MCAST_EXIT,		/* exit */
+		.valid = CONFIG_NSS_PPENL_MCAST       	/* 1 or 0 */
 	},
 #endif
 };
