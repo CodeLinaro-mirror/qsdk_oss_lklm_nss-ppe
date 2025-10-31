@@ -82,6 +82,7 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC = 49,	/* Service code for loopback port for pon pass */
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT = 50,	/* Service code for loopback port for second pass */
 #endif
+	PPE_DRV_SC_GEM_LOOKUP = 52,	/* Service code for GEM port lookup */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,
