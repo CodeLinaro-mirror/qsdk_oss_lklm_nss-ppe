@@ -177,3 +177,20 @@ ppe_drv_ret_t ppe_drv_eip_init(struct ppe_drv_iface *iface)
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_eip_init);
+
+void ppe_drv_eip_sc_queue_config_set_dtls(void)
+{
+	int32_t queue_id = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_EIP197);
+
+	if (queue_id < 0) {
+		ppe_drv_warn("Invalid queue id for EIP port : %u\n", PPE_DRV_PORT_EIP197);
+		return;
+	}
+
+	/*
+	 * Set qucast queue for decap direction
+	 */
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_DTLS_PPE2EIP, queue_id,
+			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+}
+EXPORT_SYMBOL(ppe_drv_eip_sc_queue_config_set_dtls);

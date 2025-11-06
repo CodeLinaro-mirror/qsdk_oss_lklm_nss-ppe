@@ -1235,6 +1235,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill_hairpin_flows(struct ppe_drv_v6_rule_create *
 			}
 		}
 
+		/*
+		 * Check if destination vp is DTLS inline EIP virtual port.
+		 */
+		if (ppe_drv_port_flags_check(ppe_drv_v6_conn_flow_tx_port_get(pcf_hp), PPE_DRV_PORT_FLAG_IDTLS)) {
+			ppe_drv_v6_conn_flow_flags_set(pcf_hp, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_DTLS);
+		}
+
 #ifdef PPE_DRV_SRC_INTERFACE_CHECK
 		/*
 		 * Check source interface based on rule flags.
@@ -1481,6 +1488,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill_hairpin_flows(struct ppe_drv_v6_rule_create *
 			} else {
 				ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP);
 			}
+		}
+
+		/*
+		 * Check if destination vp is DTLS inline EIP virtual port.
+		 */
+		if (ppe_drv_port_flags_check(ppe_drv_v6_conn_flow_tx_port_get(pcr_hp), PPE_DRV_PORT_FLAG_IDTLS)) {
+			ppe_drv_v6_conn_flow_flags_set(pcr_hp, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_DTLS);
 		}
 
 #ifdef PPE_DRV_SRC_INTERFACE_CHECK
@@ -1977,6 +1991,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			}
 		}
 
+		/*
+		 * Check if destination vp is DTLS inline EIP virtual port.
+		 */
+		if (ppe_drv_port_flags_check(ppe_drv_v6_conn_flow_tx_port_get(pcf), PPE_DRV_PORT_FLAG_IDTLS)) {
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_DTLS);
+		}
+
 #ifdef PPE_DRV_SRC_INTERFACE_CHECK
 		/*
 		 * Check source interface based on rule flags.
@@ -2335,6 +2356,13 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			} else {
 				ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP);
 			}
+		}
+
+		/*
+		 * Check if destination vp is DTLS inline EIP virtual port.
+		 */
+		if (ppe_drv_port_flags_check(ppe_drv_v6_conn_flow_tx_port_get(pcr), PPE_DRV_PORT_FLAG_IDTLS)) {
+			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_DTLS);
 		}
 
 #ifdef PPE_DRV_SRC_INTERFACE_CHECK

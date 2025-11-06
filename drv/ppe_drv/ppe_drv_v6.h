@@ -99,6 +99,8 @@
 					/* Flow is UDP Speedtest */
 #define PPE_DRV_V6_CONN_FLAG_MCAST_RFS_FLOW	0x800000000ULL
 					/* Flow is Multicast RFS */
+#define PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_DTLS 0x1000000000ULL
+					/* Inline DTLS flow */
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*

@@ -108,6 +108,8 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_IPSEC_EDMA_VP_DECAP = 72,				/* Inline IPsec redirection from VP TO EIP for decap direction */
 	PPE_DRV_SC_IPSEC_EIP2PPE_ENCAP = 73,		/* Inline IPsec redirection from EIP to PPE for post encap */
 	PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP = 74,		/* Inline IPsec redirection from VP TO EIP for encap direction using 3-tuple EIP lookup */
+	PPE_DRV_SC_DTLS_PPE2EIP = 75,				/* Inline DTLS redirection from PPE TO EIP */
+	PPE_DRV_SC_DTLS_EIP2PPE = 76,				/* Inline DTLS redirection from EIP to PPE */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,

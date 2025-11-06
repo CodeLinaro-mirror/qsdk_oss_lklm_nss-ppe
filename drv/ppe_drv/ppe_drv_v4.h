@@ -102,6 +102,8 @@
 #define PPE_DRV_V4_CONN_FLAG_MCAST_RFS_FLOW	0x1000000000ULL
 					/* Flow is Multicast RFS */
 
+#define PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_DTLS 0x2000000000ULL
+					/* Inline DTLS flow */
 /*
  * ppe_drv_v4_addr_equal()
  *	compare ipv4 address

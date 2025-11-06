@@ -106,6 +106,17 @@ ppe_drv_ret_t ppe_drv_eip_set_lookup_mode(ppe_drv_eip_flow_lookup_mode_t mode);
  */
 void ppe_drv_eip_sc_queue_config_set(void);
 
+/**
+ * ppe_drv_eip_sc_queue_config_set_dtls
+ *	Configure ucast queue for service code PPE_DRV_SC_DTLS_PPE2EIP_DECAP
+ *
+ * @datatypes
+ *
+ * @params
+ *
+ * @return
+ */
+void ppe_drv_eip_sc_queue_config_set_dtls(void);
 /** @} */ /* end_addtogroup ppe_drv_eip_subsystem */
 
 #endif /* _PPE_DRV_EIP_H_ */

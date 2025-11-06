@@ -30,6 +30,7 @@
 enum ppe_drv_eip_hw_sc {
 	PPE_DRV_EIP_HWSERVICE_IPSEC_IIP = 0x2,	/* EIP HW service LIP, IIP */
 	PPE_DRV_EIP_HWSERVICE_IPSEC_AIIP = 0x3,		/* EIP HW service ALIP, AIIP */
+	PPE_DRV_EIP_HWSERVICE_DTLS = 0x28,	/* EIP HW service IDT */
 };
 
 /*

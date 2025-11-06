@@ -1226,6 +1226,8 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP;
 		} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP)) {
 			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP;
+		} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_DTLS)) {
+			*scp = PPE_DRV_SC_DTLS_PPE2EIP;
 		} else {
 			*scp = PPE_DRV_SC_DDRQ_LP_SC;
 		}
@@ -1335,6 +1337,20 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 		 */
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_NOEDIT_RFS_RULE)) {
 			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u", pcf, service_code, PPE_DRV_SC_NOEDIT_RFS_RULE);
+			return false;
+		}
+
+		*scp = service_code;
+		return true;
+	}
+
+	/*
+	 * SC required to accelerate DTLS inline EIP flows.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_DTLS)) {
+		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_DTLS_PPE2EIP)) {
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, PPE_DRV_SC_DTLS_PPE2EIP);
 			return false;
 		}
 
@@ -2839,6 +2855,8 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP;
 		} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP)) {
 			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP;
+		} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_DTLS)) {
+			*scp = PPE_DRV_SC_DTLS_PPE2EIP;
 		} else {
 			*scp = PPE_DRV_SC_DDRQ_LP_SC;
 		}
@@ -2963,6 +2981,20 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		 */
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_NOEDIT_RFS_RULE)) {
 			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u", pcf, service_code, PPE_DRV_SC_NOEDIT_RFS_RULE);
+			return false;
+		}
+
+		*scp = service_code;
+		return true;
+	}
+
+	/*
+	 * SC required to accelerate DTLS inline EIP flows.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_DTLS)) {
+		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_DTLS_PPE2EIP)) {
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, PPE_DRV_SC_DTLS_PPE2EIP);
 			return false;
 		}
 
