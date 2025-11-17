@@ -183,6 +183,12 @@ void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 	if (ppe_drv_v6_conn_flags_check(cn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
 		pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
 		ppe_drv_v6_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+		if (cn->is_hairpin_nat) {
+			pcr = (pcf == &cn->pcf_hp) ? &cn->pcr_hp : &cn->pcf_hp;
+			ppe_drv_v6_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
+		}
+#endif
 	} else {
 		/*
 		 * Multicast flows have no counter cme. For this type of flows

@@ -153,6 +153,10 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 	struct ppe_drv_v4_conn_flow *pcr_v4;
 	struct ppe_drv_v6_conn_flow *pcf_v6;
 	struct ppe_drv_v6_conn_flow *pcr_v6;
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	struct ppe_drv_v6_conn_flow *pcf_hp;
+	struct ppe_drv_v6_conn_flow *pcr_hp;
+#endif
 	uint16_t id;
 
 	/*
@@ -183,6 +187,17 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 			if (pcr_v6) {
 				ppe_drv_flow_v6_stats_update(pcr_v6);
 			}
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+			if (cn_v6->is_hairpin_nat) {
+				pcf_hp = &cn_v6->pcf_hp;
+				pcr_hp = &cn_v6->pcr_hp;
+
+				ppe_drv_flow_v6_stats_update(pcf_hp);
+				if (pcr_hp) {
+					ppe_drv_flow_v6_stats_update(pcr_hp);
+				}
+			}
+#endif
 		}
 	}
 
