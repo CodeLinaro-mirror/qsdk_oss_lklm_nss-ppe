@@ -184,7 +184,7 @@ void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 		pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
 		ppe_drv_v6_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
-		if (cn->is_hairpin_nat) {
+		if (cn->is_hairpin_nat && ((pcf == &cn->pcf_hp) || (pcf == &cn->pcr_hp))) {
 			pcr = (pcf == &cn->pcf_hp) ? &cn->pcr_hp : &cn->pcf_hp;
 			ppe_drv_v6_conn_flow_tx_stats_add(pcr, delta_pkts, delta_bytes);
 		}
