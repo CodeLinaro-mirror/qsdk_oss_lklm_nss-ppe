@@ -599,12 +599,17 @@ static int nss_ppe_vxlanmgr_fib_update_event(struct notifier_block *nb, unsigned
 	struct vxlan_dev *priv;
 	__be32 vni = 0;
 
+	if (!info) {
+		nss_ppe_vxlanmgr_warn("Skipping - fib_notifier_info is NULL\n");
+		return NOTIFY_DONE;
+	}
+
 	/*
 	 * FIB update event from kernel is same for route add/replace/append which is
 	 * of type 'FIB_EVENT_ENTRY_REPLACE'.
 	 */
 	if (event != FIB_EVENT_ENTRY_REPLACE && event != FIB_EVENT_ENTRY_DEL) {
-		nss_ppe_vxlanmgr_warn("%px: Unsupported event type: [%lu] received \n", info, event);
+		nss_ppe_vxlanmgr_trace("%px: Unsupported event type: [%lu] received \n", info, event);
 		return NOTIFY_DONE;
 	}
 
@@ -615,12 +620,16 @@ static int nss_ppe_vxlanmgr_fib_update_event(struct notifier_block *nb, unsigned
 		struct fib_nh *nh;
 
 		fen_info = container_of(info, struct fib_entry_notifier_info, info);
-		nh = &fen_info->fi->fib_nh[0];
-		if (!nh) {
-			nss_ppe_vxlanmgr_warn("%px: Next hop entry for IPv4 is NULL \n", info);
+
+		/*
+		 * Check if fib_info exists and has next-hops before dereferencing
+		 */
+		if ((!fen_info->fi) || (!fen_info->fi->fib_nhs)) {
+			nss_ppe_vxlanmgr_trace("%px: Skipping - fib_info is NULL or no next-hops\n", info);
 			return NOTIFY_DONE;
 		}
 
+		nh = &fen_info->fi->fib_nh[0];
 		dev = nh->fib_nh_dev;
 		lwtstate = nh->fib_nh_lws;
 		nss_ppe_vxlanmgr_trace("IPv4: event for prefix: %pI4, prefix_len: %d \n", &fen_info->dst, fen_info->dst_len);
@@ -629,12 +638,17 @@ static int nss_ppe_vxlanmgr_fib_update_event(struct notifier_block *nb, unsigned
 		struct fib6_nh *nh6;
 
 		fen_info6 = container_of(info, struct fib6_entry_notifier_info, info);
-		nh6 = &fen_info6->rt->fib6_nh[0];
-		if (!nh6) {
-			nss_ppe_vxlanmgr_trace("%px: Next hop entry for IPv6 is NULL", info);
+		if (!fen_info6->rt) {
+			nss_ppe_vxlanmgr_trace("%px: Skipping - fib6_rt is NULL (event=%lu)\n", info, event);
 			return NOTIFY_DONE;
 		}
 
+		if (fen_info6->rt->nh) {
+			nss_ppe_vxlanmgr_warn("%px: Skipping - rt next hop group is set \n", info);
+			return NOTIFY_DONE;
+		}
+
+		nh6 = &fen_info6->rt->fib6_nh[0];
 		dev = nh6->nh_common.nhc_dev;
 		lwtstate = nh6->nh_common.nhc_lwtstate;
 		nss_ppe_vxlanmgr_trace("IPv6: event for prefix: %pI6, prefix_len: %d", &fen_info6->rt->fib6_dst.addr, fen_info6->rt->fib6_dst.plen);
@@ -659,8 +673,8 @@ static int nss_ppe_vxlanmgr_fib_update_event(struct notifier_block *nb, unsigned
 	/*
 	 * Check if VXLAN-GPE net device
 	 */
-	if (!netif_is_vxlan(dev)) {
-		nss_ppe_vxlanmgr_trace("%px: It is not VXLAN netdevice dev:%s", dev, dev->name);
+	if (!dev || !netif_is_vxlan(dev)) {
+		nss_ppe_vxlanmgr_trace("%px: It is not VXLAN netdevice dev:%s", dev, dev ? dev->name : "NULL");
 		return NOTIFY_DONE;
 	}
 
@@ -671,7 +685,7 @@ static int nss_ppe_vxlanmgr_fib_update_event(struct notifier_block *nb, unsigned
 	}
 
 	if (dstport_gpe != ntohs(priv->cfg.dst_port)) {
-		nss_ppe_vxlanmgr_trace("%px: VXLAN: configured PPE dport: %u is not-equal to user given dport:%dn", dev, dstport_gpe, ntohs(priv->cfg.dst_port));
+		nss_ppe_vxlanmgr_trace("%px: VXLAN: configured PPE dport: %u is not-equal to user given dport:%d\n", dev, dstport_gpe, ntohs(priv->cfg.dst_port));
 		return NOTIFY_DONE;
 	}
 
