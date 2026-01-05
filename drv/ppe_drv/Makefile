@@ -41,6 +41,7 @@ ccflags-y += -DNSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
 ccflags-y += -DNSS_PPE_PM_COUNTER_FEATURE_SUPPORT
 ccflags-y += -DNSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 ccflags-y += -DPPE_DRV_MCAST_ENQ_CTRL
+ccflags-y += -DNSS_PPE_DSA_QINQ_SUPPORT
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx ipq54xx))

@@ -620,6 +620,9 @@ struct ppe_drv {
 	struct ppe_drv_nptv6_prefix *pfx;		/* Memory for PPE prefix table */
 	struct ppe_drv_nptv6_iid *iid;			/* Memory for PPE IID table */
 #endif
+#ifdef NSS_PPE_DSA_QINQ_SUPPORT
+	uint32_t dsa_if_count;                          /* Number of active DSA QinQ interfaces */
+#endif
 	struct dentry *dentry;				/* Debugfs entry */
 	struct dentry *stats_dentry;				/* Debugfs entry */
 	struct ctl_table_header *ppe_drv_header;	/* PPE DRV sysctl */

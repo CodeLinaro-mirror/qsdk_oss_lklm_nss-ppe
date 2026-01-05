@@ -725,4 +725,59 @@ ppe_drv_ret_t ppe_drv_vlan_hgu_rule_create(struct ppe_drv_vlan_cfg *info, struct
  *                  Appropriate error code on failure.
  */
 ppe_drv_ret_t ppe_drv_vlan_hgu_rule_destroy(struct ppe_drv_vlan_ctx *ctx);
+
+/**
+ * ppe_drv_vlan_dsa_cfg_set
+ *      Map VID to VP for ingress and egress; program global private TPID on first DSA interface.
+ *
+ * @param[in] port_id   VP port number of the DSA interface.
+ * @param[in] tpid      Private TPID to program (e.g. PPE_DRV_DSA_QINQ_PRIVATE_TPID).
+ * @param[in] vid       VLAN ID to map to this port.
+ *
+ * @return
+ *  ppe_drv_ret_t   Status of DSA VLAN configuration.
+ *                  PPE_DRV_RET_SUCCESS on success.
+ *                  Appropriate error code on failure.
+ */
+ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t vid);
+
+/**
+ * ppe_drv_vlan_dsa_cfg_reset
+ *      Clear VID-to-VP mapping for this interface; clear global private TPID on last DSA interface removal.
+ *
+ * @param[in] port_id   VP port number of the DSA interface.
+ * @param[in] vid       VLAN ID that was mapped to this port.
+ *
+ * @return
+ *  0 on success, -1 on failure.
+ */
+int ppe_drv_vlan_dsa_cfg_reset(uint32_t port_id, uint32_t vid);
+
+/**
+ * ppe_drv_vlan_dsa_vp_egress_map_set
+ *      Set egress private VLAN mapping (VP -> VID) for a VP created for a VLAN
+ *      over a DSA slave (e.g. lan3.10 or lan3.10.20).
+ *
+ * @param[in] port_id   VP port number allocated for the VLAN-over-DSA interface.
+ * @param[in] vid       VLAN ID (from the base DSA interface) to map to this VP.
+ *
+ * @return
+ *  ppe_drv_ret_t   Status of DSA VP egress map configuration.
+ *                  PPE_DRV_RET_SUCCESS on success.
+ *                  Appropriate error code on failure.
+ */
+ppe_drv_ret_t ppe_drv_vlan_dsa_vp_egress_map_set(uint32_t port_id, uint32_t vid);
+
+/**
+ * ppe_drv_vlan_dsa_vp_egress_map_reset
+ *      Clear egress private VLAN mapping for a VP created for a VLAN over a DSA slave.
+ *
+ * @param[in] port_id   VP port number allocated for the VLAN-over-DSA interface.
+ * @param[in] vid       VLAN ID that was mapped at set time.
+ *
+ * @return
+ *  0 on success, -1 on failure.
+ */
+int ppe_drv_vlan_dsa_vp_egress_map_reset(uint32_t port_id, uint32_t vid);
+
 #endif /* _PPE_DRV_VLAN_H_ */
