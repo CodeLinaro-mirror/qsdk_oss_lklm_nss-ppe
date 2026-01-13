@@ -42,7 +42,7 @@ ccflags-y += -DNSS_PPE_PM_COUNTER_FEATURE_SUPPORT
 ccflags-y += -DNSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 endif
 
-ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx ipq54xx))
 ccflags-y += -DNSS_PPE_SIXTH_TUPLE
 endif
 

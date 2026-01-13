@@ -316,6 +316,7 @@ enum ppe_drv_static_dbg_level {
  */
 #define PPE_DRV_SIXTH_TUPLE_MODE_DISABLE		0
 #define PPE_DRV_SIXTH_TUPLE_MODE_VSI			1
+#define PPE_DRV_SIXTH_TUPLE_MODE_VLAN			2
 #endif
 
 /*
