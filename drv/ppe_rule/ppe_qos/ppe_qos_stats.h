@@ -35,6 +35,14 @@ struct ppe_qos_stats {
 	atomic64_t qos_delete_shaper_success;		/* Qos delete shaper success */
 	atomic64_t qos_set_interface_queue_ctrl_fail;	/* Qos set interface queue control fail */
 	atomic64_t qos_set_interface_queue_ctrl_success;	/* Qos set interface queue control success */
+	atomic64_t qos_mcast_queue_create_fail;		/* Multicast queue creation fail */
+	atomic64_t qos_mcast_queue_create_success;	/* Multicast queue creation success */
+	atomic64_t qos_mcast_queue_delete_fail;		/* Multicast queue deletion fail */
+	atomic64_t qos_mcast_queue_delete_success;	/* Multicast queue deletion success */
+	atomic64_t qos_mcast_queue_tm_set_fail;		/* Multicast queue TM set fail */
+	atomic64_t qos_mcast_queue_tm_set_success;	/* Multicast queue TM set success */
+	atomic64_t qos_mcast_queue_limit_set_fail;	/* Multicast queue limit set fail */
+	atomic64_t qos_mcast_queue_limit_set_success;	/* Multicast queue limit set success */
 };
 
 /*

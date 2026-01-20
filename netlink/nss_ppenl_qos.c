@@ -204,6 +204,7 @@ static int nss_ppenl_qos_ops_set_queue_limit(struct sk_buff *skb, struct genl_in
 	limit_info.green_resume_off = nl_qos_req->msg.limit_info.green_resume_off;
 	limit_info.yellow_resume_off = nl_qos_req->msg.limit_info.yellow_resume_off;
 	limit_info.red_resume_off = nl_qos_req->msg.limit_info.red_resume_off;
+	limit_info.queue_type = (ppe_qos_queue_type_t)nl_qos_req->msg.limit_info.queue_type;
 
 	/*
 	 * copy the NL message for response
@@ -267,6 +268,7 @@ static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info 
 	tm_info.queue_id = nl_qos_req->msg.tm_info.queue_id;
 	tm_info.priority = nl_qos_req->msg.tm_info.priority;
 	tm_info.weight = nl_qos_req->msg.tm_info.weight;
+	tm_info.queue_type = (ppe_qos_queue_type_t)nl_qos_req->msg.tm_info.queue_type;
 
 	/*
 	 * copy the NL message for response
@@ -674,6 +676,7 @@ static int nss_ppenl_qos_ops_flush_interface_queues(struct sk_buff *skb, struct 
 	} else {
 		if_info.if_data.interface.tcont_id = nl_qos_req->msg.if_info.if_data.interface.tcont_id;
 	}
+	if_info.queue_type = (ppe_qos_queue_type_t)nl_qos_req->msg.if_info.queue_type;
 
 	/*
 	 * copy the NL message for response
@@ -736,6 +739,7 @@ static int nss_ppenl_qos_ops_create_interface_queues(struct sk_buff *skb, struct
 		if_info.if_data.interface.tcont_id = nl_qos_req->msg.if_info.if_data.interface.tcont_id;
 	}
 	if_info.num_queues = nl_qos_req->msg.if_info.num_queues;
+	if_info.queue_type = nl_qos_req->msg.if_info.queue_type;
 
 	/*
 	 * copy the NL message for response

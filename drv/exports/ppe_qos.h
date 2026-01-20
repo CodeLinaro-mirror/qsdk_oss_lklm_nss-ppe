@@ -57,6 +57,15 @@ typedef enum ppe_qos_interface_type {
 	PPE_QOS_INTERFACE_TYPE_TCONT,	/**< Tcont interface. */
 } ppe_qos_interface_type_t;
 
+/**
+ * ppe_qos_queue_type_t - Queue type enumeration
+ */
+typedef enum ppe_qos_queue_type {
+	PPE_QOS_QUEUE_TYPE_UCAST = 0,	/**< Unicast queue type. */
+	PPE_QOS_QUEUE_TYPE_MCAST,	/**< Multicast queue type. */
+	PPE_QOS_QUEUE_TYPE_MAX		/**< Maximum queue types. */
+} ppe_qos_queue_type_t;
+
 /*
  * ppe_qos_interface
  *	PPE QoS interface information.
@@ -113,6 +122,7 @@ struct ppe_qos_queue_limit_info {
 	uint32_t green_resume_off;	/** Green resume offset */
 	uint32_t yellow_resume_off;	/** Yellow resume offset */
 	uint32_t red_resume_off;	/** Red resume offset */
+	ppe_qos_queue_type_t queue_type;	/** Queue type (unicast/multicast) */
 };
 
 /*
@@ -124,6 +134,7 @@ struct ppe_qos_queue_tm_info {
 	uint32_t queue_id;	/** Queue number. */
 	uint32_t priority;	/** Priority of the queue. */
 	uint32_t weight;	/** Weight assigned to the queue. */
+	ppe_qos_queue_type_t queue_type;	/** Queue type (unicast/multicast) */
 };
 
 #ifdef NSS_PPE_PON_SUPPORT
@@ -154,6 +165,7 @@ struct ppe_qos_pq_to_tcont_info {
 struct ppe_qos_interface_queues_info {
 	struct ppe_qos_interface if_data;		/** interface data */
 	uint32_t num_queues;	/** Number of queues. */
+	ppe_qos_queue_type_t queue_type;	/** Queue type (unicast/multicast) */
 };
 
 /*

@@ -20,7 +20,6 @@
 #define PPE_DRV_QOS_PORT_MAX	8		/**< Maximum ports for QoS. */
 #define PPE_DRV_QOS_DRR_WEIGHT_MAX	1024	/**< Maximum DRR weight for QoS schedulers. */
 #define PPE_DRV_QOS_PRIORITY_MAX	8	/**< Maximum priority for QoS schedulers. */
-#define PPE_DRV_QOS_MCAST_QUEUE_MAX	1 	/**< Maximum multicast queues per port for QoS. */
 
 #define PPE_DRV_QOS_TCONT_MAX 32	/**<Maximum T-conts supported. */
 #define PPE_DRV_QOS_TCONT_L0_RES_MAX 128	/**<Maximum PQs and L0 DRRs reserved for T-conts. */

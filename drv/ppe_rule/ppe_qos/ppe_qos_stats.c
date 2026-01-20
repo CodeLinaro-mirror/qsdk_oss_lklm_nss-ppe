@@ -35,6 +35,14 @@ static const char *ppe_qos_stats_str[] = {
 	"qos_delete_shaper_success",		/* Qos delete shaper success */
 	"qos_set_interface_queue_ctrl_fail",	/* Qos set interface queue control fail */
 	"qos_set_interface_queue_ctrl_success",	/* Qos set interface queue control success */
+	"qos_create_mcast_queues_fail",		/* Qos create multicast queues fail */
+	"qos_create_mcast_queues_success",	/* Qos create multicast queues success */
+	"qos_flush_mcast_queues_fail",		/* Qos flush multicast queues fail */
+	"qos_flush_mcast_queues_success",	/* Qos flush multicast queues success */
+	"qos_set_mcast_queue_tm_fail",		/* Qos set multicast queue TM fail */
+	"qos_set_mcast_queue_tm_success",	/* Qos set multicast queue TM success */
+	"qos_set_mcast_queue_limit_fail",	/* Qos set multicast queue limit fail */
+	"qos_set_mcast_queue_limit_success",	/* Qos set multicast queue limit success */
 };
 
 /*

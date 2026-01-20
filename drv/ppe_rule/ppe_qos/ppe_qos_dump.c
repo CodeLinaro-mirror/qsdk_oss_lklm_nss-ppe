@@ -141,11 +141,21 @@ int ppe_qos_dump_write(struct ppe_qos_dump_instance *pqdi, char *name, char *fmt
 static bool ppe_qos_dump_one_queue(struct ppe_qos_dump_instance *pqdi,
 				struct ppe_qos_interface_res *tm_if,
 				struct ppe_qos_interface_queue *queue,
-				int queue_num)
+				int queue_num,
+				ppe_qos_queue_type_t queue_type)
 {
 	struct ppe_drv_qos_port *port = &tm_if->port;
-	uint32_t qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+	uint32_t qid;
 	int result;
+
+	/*
+	 * Get the appropriate base queue ID based on queue type
+	 */
+	if (queue_type == PPE_QOS_QUEUE_TYPE_MCAST) {
+		qid = port->base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+	} else {
+		qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+	}
 
 	/*
 	 * Queue information
@@ -155,6 +165,11 @@ static bool ppe_qos_dump_one_queue(struct ppe_qos_dump_instance *pqdi,
 	}
 
 	if ((result = ppe_qos_dump_prefix_index_add(pqdi, queue_num))) {
+		goto error;
+	}
+
+	if ((result = ppe_qos_dump_write(pqdi, "type", "%s", 
+					queue_type == PPE_QOS_QUEUE_TYPE_MCAST ? "mcast" : "ucast"))) {
 		goto error;
 	}
 
@@ -284,7 +299,7 @@ static bool ppe_qos_dump_all_tconts(struct ppe_qos_dump_instance *pqdi)
 		}
 
 		/*
-		 * Dump all queues of the tcont
+		 * Dump all queues of the tcont (unicast only for T-cont)
 		 */
 		queue_num = 0;
 		if (!list_empty(&tm_if->q_list)) {
@@ -294,7 +309,7 @@ static bool ppe_qos_dump_all_tconts(struct ppe_qos_dump_instance *pqdi)
 				}
 
 				queue_num++;
-				result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num);
+				result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num, PPE_QOS_QUEUE_TYPE_UCAST);
 				if (result < 0) {
 					ppe_qos_warn("%p: failed to collect dump for queue: %p", g_qos, queue);
 					return result;
@@ -385,8 +400,12 @@ static bool ppe_qos_dump_all_interfaces(struct ppe_qos_dump_instance *pqdi)
 			goto error;
 		}
 
+		if ((result = ppe_qos_dump_write(pqdi, "num_mcast_queues", "%d", tm_if->num_mcast_queues))) {
+			goto error;
+		}
+
 		/*
-		 * Dump all queues of the interface
+		 * Dump all unicast queues of the interface
 		 */
 		queue_num = 0;
 		if (!list_empty(&tm_if->q_list)) {
@@ -396,9 +415,28 @@ static bool ppe_qos_dump_all_interfaces(struct ppe_qos_dump_instance *pqdi)
 				}
 
 				queue_num++;
-				result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num);
+				result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num, PPE_QOS_QUEUE_TYPE_UCAST);
 				if (result < 0) {
 					ppe_qos_warn("%p: failed to collect dump for queue: %p", g_qos, queue);
+					return result;
+				}
+			}
+		}
+
+		/*
+		 * Dump all multicast queues of the interface
+		 */
+		queue_num = 0;
+		if (!list_empty(&tm_if->mq_list)) {
+			list_for_each_entry(queue, &tm_if->mq_list, list) {
+				if (!queue->valid) {
+					continue;
+				}
+
+				queue_num++;
+				result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num, PPE_QOS_QUEUE_TYPE_MCAST);
+				if (result < 0) {
+					ppe_qos_warn("%p: failed to collect dump for mcast queue: %p", g_qos, queue);
 					return result;
 				}
 			}

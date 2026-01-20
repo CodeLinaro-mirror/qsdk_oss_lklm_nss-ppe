@@ -52,6 +52,8 @@
  */
 #define PPE_DRV_QOS_TCONT_MAX 32
 #define PPE_DRV_QOS_UNI_MAX 4
+#define PPE_QOS_MAX_MCAST_QUEUES_PER_UNI 4
+#define PPE_QOS_MCAST_PRIORITY_MAX 8
 
 struct ppe_drv_queue_info;
 
@@ -113,13 +115,15 @@ struct ppe_qos_interface_queue {
  */
 struct ppe_qos_interface_res {
 	uint32_t id;		/* Interface/T-cont ID. */
-	uint32_t num_queues; 	/* Number of queues. */
+	uint32_t num_queues; 	/* Number of unicast queues. */
+	uint32_t num_mcast_queues;	/* Number of multicast queues. */
 	uint32_t l0sp;	/* L0 SP for this UNI/T-cont. */
 	char shaper_name[PPE_QOS_MAX_NAME_LENGTH];	/* Shaper profile name. */
 	ppe_qos_interface_type_t type;	/* Physical or T-cont interface. */
 	struct ppe_drv_qos_port port;		/* Port structure for QoS resources base and max info. */
 	struct ppe_qos_interface_drr l0drr[PPE_DRV_QOS_PRIORITY_MAX];	/* L0 DRR assigned at each priority */
-	struct list_head q_list;	/* Port's queue list. */
+	struct list_head q_list;	/* Port's unicast queue list. */
+	struct list_head mq_list;	/* Port's multicast queue list. */
 	bool valid;	/* Resource is configured. */
 };
 

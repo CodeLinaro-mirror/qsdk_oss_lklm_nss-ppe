@@ -57,6 +57,7 @@ struct nss_ppenl_qos_interface_shaper_info {
 struct nss_ppenl_qos_interface_queues_info {
 	struct nss_ppenl_qos_interface if_data;		/** Interface info. */
 	uint32_t num_queues;	/** Number of queues. */
+	uint32_t queue_type;	/** Queue type: 0=ucast, 1=mcast. */
 	int ret;		/* Return value to userspace. */
 };
 
@@ -89,6 +90,7 @@ struct nss_ppenl_qos_queue_tm_info {
 	uint32_t queue_id;	/** Queue number. */
 	uint32_t priority;	/** Priority of the queue. */
 	uint32_t weight;	/** Weight assigned to the queue. */
+	uint32_t queue_type;	/** Queue type: 0=ucast, 1=mcast. */
 	int ret;		/* Return value to userspace. */
 };
 
@@ -110,6 +112,7 @@ struct nss_ppenl_qos_queue_limit_info {
 	uint32_t green_resume_off;	/** Green resume offset. */
 	uint32_t yellow_resume_off;	/** Yellow resume offset. */
 	uint32_t red_resume_off;	/** Red resume offset. */
+	uint32_t queue_type;	/** Queue type: 0=ucast, 1=mcast. */
 	int ret;		/* Return value to userspace. */
 };
 

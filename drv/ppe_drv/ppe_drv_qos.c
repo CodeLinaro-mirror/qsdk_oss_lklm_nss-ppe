@@ -1051,10 +1051,7 @@ ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port
 	port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] = cfg.ucastq_num;
 	port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] = cfg.ucastq_start;
 
-	/*
-	 * Even though we reserve more mcast queues in the device tree, we only use 1.
-	 */
-	port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] = PPE_DRV_QOS_MCAST_QUEUE_MAX;
+	port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] = cfg.mcastq_num;
 	port->base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] = cfg.mcastq_start;
 
 	port->max[PPE_DRV_QOS_RES_TYPE_L0_CDRR] = cfg.l0cdrr_num;
