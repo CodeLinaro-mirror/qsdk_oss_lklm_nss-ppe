@@ -77,6 +77,7 @@ static void ppe_vp_stats_hw_port_stats_sync(struct timer_list *tm)
 	struct ppe_drv_port_hw_stats port_stats;
         ppe_vp_hw_stats_t *vp_hw_stats;
 	ppe_vp_hw_stats_t delta_stats;
+	ppe_vp_stats_callback_t stats_cb;
 	int i;
 
 	for (i = 0; i < PPE_DRV_VIRTUAL_MAX; i++) {
@@ -131,14 +132,15 @@ static void ppe_vp_stats_hw_port_stats_sync(struct timer_list *tm)
 		 * timer.
 		 */
 		memcpy(vp_hw_stats, &port_stats, sizeof(ppe_vp_hw_stats_t));
+		stats_cb = vp->stats_cb;
+		netdev = vp->netdev;
 		spin_unlock(&vp->lock);
 
 		/*
 		 * Send the delta stats to VP callback function.
 		 */
-		if (vp->stats_cb) {
-			netdev = vp->netdev;
-			vp->stats_cb(netdev, &delta_stats);
+		if (stats_cb) {
+			stats_cb(netdev, &delta_stats);
 		}
 		ppe_vp_trace("%px: Sync VP port %u statistics", vp, vp->port_num);
 
