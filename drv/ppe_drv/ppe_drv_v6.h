@@ -72,6 +72,12 @@
 #define PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID	0x00800000
 					/* Flow has valid flow idx set*/
 
+#define PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP 0x01000000
+					/* Full inline IPSec ENCAP flow */
+
+#define PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP 0x02000000
+					/* Full Inline IPSec DECAP flow */
+
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*
  * ppe_drv_v6_conn_npt6

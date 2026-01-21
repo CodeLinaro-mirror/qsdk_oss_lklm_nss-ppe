@@ -1002,12 +1002,38 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	}
 
 	/*
-	 * SC required to accelerate inline EIP flows.
+	 * If the flow is flagged for inline IPsec, assign the EIP decap service code.
 	 */
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_INLINE_IPSEC)) {
-		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP)) {
+		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP_DECAP)) {
 			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
-					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP);
+					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP_DECAP);
+			return false;
+		}
+	}
+
+	/*
+	 * If the flow is flagged for inline IPsec ENCAP direction,
+	 * assign the EIP encap service code.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP)) {
+		sc = PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP);
+			return false;
+		}
+	}
+
+	/*
+	 * SC required to accelerate full inline EIP DECAP flow.
+	 * It enables ACL matching based on the SPI field in the packet.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP)) {
+		sc = PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH);
 			return false;
 		}
 	}
@@ -2113,12 +2139,38 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	}
 
 	/*
-	 * SC required to accelerate inline EIP flows.
+	 * If the flow is flagged for inline IPsec, assign the EIP decap service code.
 	 */
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_IPSEC)) {
-		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP)) {
+		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_IPSEC_PPE2EIP_DECAP)) {
 			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
-					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP);
+					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP_DECAP);
+			return false;
+		}
+	}
+
+	/*
+	 * If the flow is flagged for inline IPsec ENCAP direction,
+	 * assign the EIP encap service code.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP)) {
+		sc = PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP);
+			return false;
+		}
+	}
+
+	/*
+	 * SC required to accelerate full inline EIP DECAP flows.
+	 * It enables ACL matching based on the SPI field in the packet
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP)) {
+		sc = PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
+					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH);
 			return false;
 		}
 	}

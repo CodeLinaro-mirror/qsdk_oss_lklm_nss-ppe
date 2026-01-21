@@ -16,6 +16,7 @@
 
 #define PPE_VP_FLAG_DISABLE_TTL_DEC	0x1	/**< Set = TTL Decrement disabled, clear = TTL Decrement enabled */
 #define PPE_VP_FLAG_REDIR_ENABLE	0x2	/**< When set, the packets destined to VP are redirect to VP queue without RPS */
+#define PPE_VP_FLAG_IPSEC_FULL_INLINE	0x4	/**< Set = IPSEC full inline is enabled, clear is IPsec full inline is not enabled */
 
 #define PPE_VP_DS_INVALID_NODE_ID	0xFF	/**< Invalid node id value */
 

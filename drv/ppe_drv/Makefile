@@ -17,6 +17,10 @@ ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx))
 ccflags-y += -DPPE_DRV_FLOW_IG_MAC_WAR
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq96xx))
+	ccflags-y += -DPPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG
+endif
+
 obj-m += qca-nss-ppe.o
 qca-nss-ppe-objs := ppe_drv.o
 qca-nss-ppe-objs += ppe_drv_acl.o

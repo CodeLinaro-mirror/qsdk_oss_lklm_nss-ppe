@@ -15,9 +15,13 @@
  */
 
 /*
- * Inline EIP hardware services.
+ * ppe_drv_eip_hw_sc
+ *	PPE driver EIP HW service.
  */
-#define PPE_DRV_EIP_HWSERVICE_IPSEC 0x3
+enum ppe_drv_eip_hw_sc {
+	PPE_DRV_EIP_HWSERVICE_IPSEC_IIP = 0x2,	/* EIP HW service LIP, IIP */
+	PPE_DRV_EIP_HWSERVICE_IPSEC_AIIP = 0x3,		/* EIP HW service ALIP, AIIP */
+};
 
 /*
  * ppe_drv_sc_in_l2_dir_type

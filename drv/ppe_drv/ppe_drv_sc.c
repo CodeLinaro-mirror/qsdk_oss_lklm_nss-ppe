@@ -135,13 +135,17 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 					| (1 << FLD_UPDATE_HASH_FLOW_INDEX);
 		break;
 
-	case PPE_DRV_SC_IPSEC_PPE2EIP:
+	case PPE_DRV_SC_IPSEC_PPE2EIP_DECAP:
 		sc_cfg.offset_sel = PPE_DRV_SC_IN_L2_OFF_L3;
-		sc_cfg.bypass_bitmap[1] = (1 << L3_PKT_EDIT_BYP);
-		sc_cfg.hw_services = PPE_DRV_EIP_HWSERVICE_IPSEC;
-		sc_cfg.field_update_bitmap[0] = (1 << FLD_UPDATE_DEST_INFO)
+		sc_cfg.bypass_bitmap[1] = ((1 << L3_PKT_EDIT_BYP) | (1 << L2_SOURCE_SEC_BYP));
+		sc_cfg.hw_services = PPE_DRV_EIP_HWSERVICE_IPSEC_AIIP;
+		sc_cfg.field_update_bitmap[0] = ((1 << FLD_UPDATE_DEST_INFO)
 					| (1 << FLD_UPDATE_HASH_FLOW_INDEX)
-					| (1 << FLD_UPDATE_FAKE_L2_PROT_EN);
+					| (1 << FLD_UPDATE_FAKE_L2_PROT_EN)
+#ifdef PPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG
+					| (1ULL << FLD_UP_SRC_WITH_DST) /* Update source with destination for second pass */
+#endif /* PPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG */
+					);
 		break;
 
 	case PPE_DRV_SC_IPSEC_EIP2PPE:
@@ -202,6 +206,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 	case PPE_DRV_SC_NOEDIT_REDIR_CORE1:
 	case PPE_DRV_SC_NOEDIT_REDIR_CORE2:
 	case PPE_DRV_SC_NOEDIT_REDIR_CORE3:
+	case PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH:
 		/*
 		 * For service code PPE_DRV_SC_NOEDIT_RFS_RULE we don't want it to take priority over destination port.
 		 */
@@ -424,6 +429,19 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 #endif
+
+	case PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP:
+		sc_cfg.offset_sel = PPE_DRV_SC_IN_L2_OFF_L3;
+		sc_cfg.bypass_bitmap[1] = ((1 << L3_PKT_EDIT_BYP) | (1 << L2_SOURCE_SEC_BYP));
+		sc_cfg.hw_services = PPE_DRV_EIP_HWSERVICE_IPSEC_IIP;
+		sc_cfg.field_update_bitmap[0] = ((1 << FLD_UPDATE_DEST_INFO)
+			| (1 << FLD_UPDATE_HASH_FLOW_INDEX)
+			| (1 << FLD_UPDATE_FAKE_L2_PROT_EN)
+#ifdef PPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG
+			| (1ULL << FLD_UP_SRC_WITH_DST) /* Update source with destination for second pass */
+#endif /* PPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG */
+			);
+		break;
 
 	case PPE_DRV_SC_FLOW_ACL_FIRST ... PPE_DRV_SC_FLOW_ACL_LAST:
 		/*
@@ -693,7 +711,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_ADV_QOS_BRIDGED, PPE_DRV_SC_ADV_QOS_BRIDGED, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_ADV_QOS_ROUTED, PPE_DRV_SC_ADV_QOS_ROUTED, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_QOS, PPE_DRV_SC_BYPASS_ALL, PPE_DRV_PORT_CPU);
-	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP, PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_PORT_EIP197);
+	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP_DECAP, PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_PORT_EIP197);
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_VLAN_FILTER_BYPASS, PPE_DRV_SC_VLAN_FILTER_BYPASS, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_L3_EXCEPT, PPE_DRV_SC_L3_EXCEPT, PPE_DRV_PORT_CPU);
@@ -714,6 +732,8 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_PRIORITY_SET, PPE_DRV_SC_NOEDIT_PRIORITY_SET, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_RULE, PPE_DRV_SC_NOEDIT_RULE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_FMAC_BYPASS, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP, PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_PORT_EIP197);
+	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH, PPE_DRV_SC_NOEDIT_REDIR_CORE0, PPE_DRV_PORT_CPU);
 
 	/*
 	 * Initialize FLOW ACL service code

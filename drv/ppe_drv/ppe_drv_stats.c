@@ -19,7 +19,7 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_BNC_0",               /* QoS bounce */
 	"PPE_DRV_SC_BNC_CMPL_0",          /* QoS bounce complete */
 	"PPE_DRV_SC_ADV_QOS_ROUTED",      /* Adv QoS redirection for routed flow */
-	"PPE_DRV_SC_IPSEC_PPE2EIP",       /* Inline IPsec redirection from PPE TO EIP */
+	"PPE_DRV_SC_IPSEC_PPE2EIP_DECAP",       /* Inline IPsec redirection from PPE TO EIP */
 	"PPE_DRV_SC_IPSEC_EIP2PPE",       /* Inline IPsec redirection from EIP to PPE */
 	"PPE_DRV_SC_PTP",                 /* Service Code for PTP packets */
 	"PPE_DRV_SC_VLAN_FILTER_BYPASS",  /* VLAN filter bypass for bridge flows between 2 different VSIs */
@@ -43,6 +43,8 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_FMAC_BYPASS",		/* Bypass FAKE mac check in PPE */
 	"PPE_DRV_SC_NPT66_HAIRPIN_NAT",		/* Service code for Hairpin NAT loopback ring */
 	"PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT",	/* Next Service code for Hairpin NAT loopback ring */
+	"PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP",		/* Inline IPsec redirection from PPE TO EIP for encap direction */
+	"PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH",	/* Inline IPsec redirection from PPE TO EIP for decap dorection ACL match */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 

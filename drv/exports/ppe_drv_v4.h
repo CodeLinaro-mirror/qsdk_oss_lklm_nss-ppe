@@ -47,6 +47,7 @@
 #define PPE_DRV_V4_RULE_FLAG_PASSIVE_FLOW		0x00004000	/**< Rule creation for passive flow */
 #define PPE_DRV_V4_RULE_ORIG_FLOW_SW_MDATA_VALID	0x00008000	/**< Rule creation for Socket Offload Original flows */
 #define PPE_DRV_V4_RULE_RET_FLOW_SW_MDATA_VALID		0x00010000	/**< Rule creation for Socket Offload Return flows */
+#define PPE_DRV_V4_RULE_FLAG_IPSEC_DECAP_FLOW		0x00020000	/**< Rule creation for IPsec Decap flow */
 
 /*
  * v4 valid flags

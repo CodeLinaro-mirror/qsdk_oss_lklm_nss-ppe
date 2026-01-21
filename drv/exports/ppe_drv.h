@@ -515,6 +515,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_NPTV6_HAIRPIN_DEL_FAIL,		/**< Failed to destroy nptv6 context for hairpin nat. */
 	PPE_DRV_RET_HAIRPIN_LOOPBACK_FEATURE_FAIL,	/**< NPTv6 Hairpin NAT not enabled in EDMA. */
 	PPE_DRV_RET_NPTV6_HAIRPIN_FEATURE_FAIL,		/**< NPTv6 Hairpin NAT failed. */
+	PPE_DRV_RET_EIP_LOOKUP_MODE_SET_FAIL,		/**< EIP lookup mode failed to set. */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 

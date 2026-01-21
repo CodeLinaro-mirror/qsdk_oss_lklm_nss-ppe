@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014-2017, 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -308,7 +309,8 @@ static struct Qdisc *ppe_tbl_leaf(struct Qdisc *sch, unsigned long arg)
 
 /*
  * ppe_tbl_search()
- * 	Dummy function registered with find operation of Qdisc
+ * 	Dummy function registered with find operation of Qdisc.
+ * 	This is inline with Linux TBF implementation.
  */
 static unsigned long ppe_tbl_search(struct Qdisc *sch, u32 classid)
 {

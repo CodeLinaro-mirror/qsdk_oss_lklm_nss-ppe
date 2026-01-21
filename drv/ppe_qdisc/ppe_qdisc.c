@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -638,6 +639,15 @@ uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
 	}
 
 	/*
+	 * If qdisc is TBL, no need to check for child class
+	 * return int pri of child qdisc if present or
+	 * return default int pri
+	 */
+	if (pq->type == PPE_QDISC_NODE_TYPE_TBL) {
+		ppe_qdisc_info("%px:Fetching int_pri for ppe_tbl qdisc", dev);
+		goto get_int_pri;
+	}
+	/*
 	 * If qdisc is prio, we need to get the child qdisc attached to its band
 	 */
 	if (pq->type == PPE_QDISC_NODE_TYPE_PRIO) {
@@ -662,6 +672,7 @@ uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
 		return ppe_qdisc_def_node_int_pri_get(dev);
 	}
 
+get_int_pri:
 	spin_lock_bh(&pq->lock);
 	if ((pq->child) && (ppe_qdisc_flags_check(pq->child, PPE_QDISC_FLAG_INT_PRI_VALID))) {
 		int_pri = pq->child->int_pri;
@@ -671,7 +682,7 @@ uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid)
 	}
 	spin_unlock_bh(&pq->lock);
 
-	ppe_qdisc_info("%px:no child qdisc atytached to class:%u, returning default int_pri", dev, classid);
+	ppe_qdisc_info("%px:no child qdisc attached to class:%u, returning default int_pri", dev, classid);
 	return ppe_qdisc_def_node_int_pri_get(dev);
 }
 

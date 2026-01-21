@@ -200,7 +200,7 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 	 * Read the statistics from the main structure for
 	 * 1. PPE-VP base, 2. PPE-VP
 	 */
-	pvb_stats = kmalloc(sizeof(struct ppe_vp_base), GFP_KERNEL);
+	pvb_stats = kmalloc(sizeof(struct ppe_vp_base_stats), GFP_KERNEL);
 	if (!pvb_stats) {
 		ppe_vp_warn("Failed to allocate memory for pvb\n");
 		return -ENOMEM;

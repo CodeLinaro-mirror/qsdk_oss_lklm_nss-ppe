@@ -17,6 +17,62 @@
 #include "ppe_drv.h"
 
 /*
+ * ppe_drv_eip_set_sc_queue_config
+ *	Configure ucast queue for service code PPE_DRV_SC_IPSEC_PPE2EIP_DECAP
+ */
+void ppe_drv_eip_sc_queue_config_set(void)
+{
+	int32_t queue_id = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_EIP197);
+
+	if (queue_id < 0) {
+		ppe_drv_warn("Invalid queue id for EIP port : %u\n", PPE_DRV_PORT_EIP197);
+		return;
+	}
+
+	/*
+	 * Set ucast queue for decap direction
+	 */
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_PPE2EIP_DECAP, queue_id,
+			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+
+	/*
+	 * Set ucast for encap direction
+	 */
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP, queue_id,
+			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+}
+EXPORT_SYMBOL(ppe_drv_eip_sc_queue_config_set);
+
+/*
+ * ppe_drv_eip_set_lookup_mode()
+ *	Set lookup mode to flow record lookup mode.
+ */
+ppe_drv_ret_t ppe_drv_eip_set_lookup_mode(ppe_drv_eip_flow_lookup_mode_t mode)
+{
+	fal_flow_eip_lookup_mode_t lookup_mode;
+	uint32_t dev_id = PPE_DRV_SWITCH_ID;
+	sw_error_t ret = SW_OK;
+
+	if (mode == PPE_DRV_EIP_FLOW_LOOKUP_MODE_TR) {
+		lookup_mode = FAL_FLOW_EIP_LOOKUP_MODE_TRANSFORM;
+	} else {
+		lookup_mode = FAL_FLOW_EIP_LOOKUP_MODE_FLOW;
+	}
+
+	/*
+	 * Set lookup mode to flow record lookup
+	 */
+	ret = fal_flow_eip_lookup_mode_set(dev_id, lookup_mode);
+	if (ret != SW_OK) {
+		ppe_drv_warn("Failed to set lookup mode to flow record lookup\n");
+		return PPE_DRV_RET_EIP_LOOKUP_MODE_SET_FAIL;
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_eip_set_lookup_mode);
+
+/*
  * ppe_drv_eip_deinit()
  *	De-initialize EIP port.
  */

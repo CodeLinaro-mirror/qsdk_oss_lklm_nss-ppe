@@ -33,7 +33,7 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_BNC_0 = 4,			/* QoS bounce */
 	PPE_DRV_SC_BNC_CMPL_0 = 5,		/* QoS bounce complete */
 	PPE_DRV_SC_ADV_QOS_ROUTED = 6,		/* Adv QoS redirection for routed flow */
-	PPE_DRV_SC_IPSEC_PPE2EIP = 7,		/* Inline IPsec redirection from PPE TO EIP */
+	PPE_DRV_SC_IPSEC_PPE2EIP_DECAP = 7,		/* Inline IPsec redirection from PPE TO EIP */
 	PPE_DRV_SC_IPSEC_EIP2PPE = 8,		/* Inline IPsec redirection from EIP to PPE */
 	PPE_DRV_SC_PTP = 9,			/* Service Code for PTP packets */
 	PPE_DRV_SC_VLAN_FILTER_BYPASS = 10,	/* VLAN filter bypass for bridge flows between 2 different VSIs */
@@ -70,6 +70,9 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_FLOW_SC_NEXT = 39,		/* Service code for loopback port second pass */
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_RETURN_SC  = 40,		/* Service code for loopback port first pass */
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_RETURN_SC_NEXT = 41,	/* Service code for loopback port second pass */
+
+	PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP = 42,	/* Inline IPsec redirection from PPE TO EIP for encap direction*/
+	PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH = 43,	/* Inline IPsec redirection from PPE TO EIP for decap direction ACL match*/
 
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */

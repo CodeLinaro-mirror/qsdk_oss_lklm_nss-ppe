@@ -658,6 +658,11 @@ ppe_drv_ret_t ppe_drv_iface_eip_set(struct ppe_drv_iface *iface, ppe_drv_eip_ser
 		break;
 	case PPE_DRV_EIP_SERVICE_NONINLINE:
 		break;
+
+	case PPE_DRV_EIP_SERVICE_FULL_INLINE:
+		ppe_drv_port_flags_set(vp, PPE_DRV_PORT_FLAG_IPSEC_FULL_INLINE);
+		break;
+
 	default:
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: unsupported EIP service type: %u", iface, type);
@@ -1240,6 +1245,69 @@ offload_disabled:
 EXPORT_SYMBOL(ppe_drv_iface_check_if_vp_flow);
 
 /*
+ * ppe_drv_iface_check_wifi_flow()
+ *	Check whether the given interfaces port
+ *	correspond to a Wi-Fi device.
+ */
+bool ppe_drv_iface_check_wifi_flow(ppe_drv_iface_t rx_if,
+						ppe_drv_iface_t tx_if)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *tx_pp = NULL;
+	struct ppe_drv_port *rx_pp = NULL;
+	struct ppe_drv_iface *if_rx, *if_tx;
+
+	spin_lock_bh(&p->lock);
+	if_rx = ppe_drv_iface_get_by_idx(rx_if);
+	if (!if_rx) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: No PPE interface corresponding to rx_if: %d", p, rx_if);
+		goto non_wifi_flow;
+	}
+
+	if_tx = ppe_drv_iface_get_by_idx(tx_if);
+	if (!if_tx) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: No PPE interface corresponding to tx_if: %d", p, tx_if);
+		goto non_wifi_flow;
+	}
+
+	tx_pp = ppe_drv_iface_port_get(if_tx);
+	if (!tx_pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: Invalid TX port", p);
+		goto non_wifi_flow ;
+	}
+
+	rx_pp = ppe_drv_iface_port_get(if_rx);
+	if (!rx_pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: Invalid RX port", p);
+		goto non_wifi_flow;
+	}
+
+	if (ppe_drv_port_flags_check(rx_pp, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: wifi device %d port\n", p, rx_pp->port);
+		goto wifi_flow;
+	}
+
+	if (ppe_drv_port_flags_check(tx_pp, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: wifi device %d port\n",
+					p, tx_pp->port);
+		goto wifi_flow;
+	}
+
+	spin_unlock_bh(&p->lock);
+non_wifi_flow:
+	return false;
+wifi_flow:
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_iface_check_wifi_flow);
+
+/*
  * ppe_drv_iface_check_flow_offload_enabled()
  *	Check whether the given interface indexes are enabled for offload or not
  */
@@ -1341,6 +1409,75 @@ offload_disabled:
 	return false;
 }
 EXPORT_SYMBOL(ppe_drv_iface_check_flow_offload_enabled);
+
+/*
+ * ppe_drv_iface_check_wifi_flow_offload_ds_enabled()
+ *	Check whether the given interface indexs are enabled for PPE-DS offload or not
+ */
+bool ppe_drv_iface_check_wifi_flow_offload_ds_enabled(ppe_drv_iface_t rx_if,
+						ppe_drv_iface_t tx_if)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *tx_pp = NULL;
+	struct ppe_drv_port *rx_pp = NULL;
+	struct ppe_drv_iface *if_rx, *if_tx;
+
+	spin_lock_bh(&p->lock);
+	if_rx = ppe_drv_iface_get_by_idx(rx_if);
+	if (!if_rx) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: No PPE interface corresponding to rx_if: %d", p, rx_if);
+		goto offload_disabled;
+	}
+
+	if_tx = ppe_drv_iface_get_by_idx(tx_if);
+	if (!if_tx) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: No PPE interface corresponding to tx_if: %d", p, tx_if);
+		goto offload_disabled;
+	}
+
+	tx_pp = ppe_drv_iface_port_get(if_tx);
+	if (!tx_pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: Invalid TX port", p);
+		goto offload_enabled;
+	}
+
+	rx_pp = ppe_drv_iface_port_get(if_rx);
+	if (!rx_pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_trace("%p: Invalid RX port", p);
+		goto offload_enabled;
+	}
+
+	if ((rx_pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) ||
+			(rx_pp->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		if (!ppe_drv_port_check_flow_offload_enabled(tx_pp)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_trace("%p: offload not enabled for %d port\n",
+					p, tx_pp->port);
+			goto offload_disabled;
+		}
+	}
+
+	if ((tx_pp->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) ||
+			(tx_pp->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		if (!ppe_drv_port_check_flow_offload_enabled(rx_pp)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_trace("%p: offload not enabled for %d port\n",
+					p, rx_pp->port);
+			goto offload_disabled;
+		}
+	}
+
+	spin_unlock_bh(&p->lock);
+offload_enabled:
+	return true;
+offload_disabled:
+	return false;
+}
+EXPORT_SYMBOL(ppe_drv_iface_check_wifi_flow_offload_ds_enabled);
 
 /*
  * ppe_drv_iface_get_index

@@ -329,6 +329,39 @@ bool ppe_drv_iface_check_flow_offload_enabled(ppe_drv_iface_t rx_if,
 				ppe_drv_iface_t tx_if);
 
 /**
+ * ppe_drv_iface_check_wifi_flow
+ *	API to check whether its a wifi flow or not.
+ *
+ * @datatypes
+ * ppe_drv_iface_t
+ *
+ * @param[in] rx_if  Rx interface index.
+ * @param[in] tx_if  Tx interface index.
+ *
+ * @return
+ * true or false
+ */
+bool ppe_drv_iface_check_wifi_flow(ppe_drv_iface_t rx_if,
+				ppe_drv_iface_t tx_if);
+
+/**
+ * ppe_drv_iface_check_wifi_flow_offload_ds_enabled
+ *	API to check whether PPE-DS offload is enabled or not.
+ *
+ * @datatypes
+ * ppe_drv_iface_t
+ *
+ * @param[in] rx_if  Rx interface index.
+ * @param[in] tx_if  Tx interface index.
+ *
+ * @return
+ * true or false
+ */
+
+bool ppe_drv_iface_check_wifi_flow_offload_ds_enabled(ppe_drv_iface_t rx_if,
+				ppe_drv_iface_t tx_if);
+
+/**
  * ppe_drv_iface_udp_zero_csum_action_set
  * 	Update udp zero checksum action of a given PPE interface
  *

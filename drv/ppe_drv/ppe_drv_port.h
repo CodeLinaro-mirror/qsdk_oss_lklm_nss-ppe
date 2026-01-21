@@ -87,6 +87,7 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_TUN_ENDPOINT_DS = 0x200,
 	PPE_DRV_PORT_FLAG_MPSK = 0x400,
 	PPE_DRV_PORT_FLAG_TUN_ACTIVE = 0x800,
+	PPE_DRV_PORT_FLAG_IPSEC_FULL_INLINE = 0x1000,
 } ppe_drv_port_flag_t;
 
 /*
