@@ -15,6 +15,10 @@
 #define PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID 0x40
 #define PPE_DRV_IFACE_FLAG_HGU_RULE_VALID 0x80
 
+#ifdef NSS_PPE_DSA_QUEUE_SUPPORT
+#define PPE_DRV_IFACE_FLAG_HTT_SWITCH_VALID 0x100
+#endif
+
 /*
  * ppe-iface cleanup function callback
  */

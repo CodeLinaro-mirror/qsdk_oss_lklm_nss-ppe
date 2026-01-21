@@ -1145,3 +1145,65 @@ ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_qos_port_res_get);
+
+#ifdef NSS_PPE_DSA_QUEUE_SUPPORT
+/*
+ * ppe_drv_qos_port_htt_res_get()
+ *	Gets boot-time QoS resource allocation information for a given switch slave port.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_htt_res_get(uint32_t port_id, uint8_t index, struct ppe_drv_qos_port *port)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_portscheduler_resource_t cfg = {0};
+	int num_groups;
+
+	/*
+	 * Get boot time QoS resource information for a given port.
+	 */
+	spin_lock_bh(&p->lock);
+	if (fal_port_scheduler_resource_get(PPE_DRV_SWITCH_ID, port_id, &cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:port QoS resources info failed for port:%u", p, port_id);
+		return PPE_DRV_RET_FAILURE_NO_RESOURCE;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	num_groups = cfg.ucastq_num / cfg.max_pri;
+	if (!num_groups) {
+		ppe_drv_warn("%px:invalid HTT queue groups:0 for port:%u ucastq_num:%u max_pri:%u",
+				p, port_id, cfg.ucastq_num, cfg.max_pri);
+		return PPE_DRV_RET_FAILURE_NO_RESOURCE;
+	}
+
+	port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] = cfg.ucastq_num / num_groups;
+	port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] = cfg.ucastq_start + index * cfg.max_pri;
+
+	port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] = cfg.mcastq_num / num_groups;
+	port->base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] = cfg.mcastq_start;
+
+	port->max[PPE_DRV_QOS_RES_TYPE_L0_CDRR] = cfg.l0cdrr_num / num_groups;
+	port->base[PPE_DRV_QOS_RES_TYPE_L0_CDRR] = cfg.l0cdrr_start + index * (cfg.l0cdrr_num / num_groups);
+
+	port->max[PPE_DRV_QOS_RES_TYPE_L0_EDRR] = cfg.l0edrr_num / num_groups;
+	port->base[PPE_DRV_QOS_RES_TYPE_L0_EDRR] = cfg.l0edrr_start + index * (cfg.l0edrr_num / num_groups);
+
+	port->max[PPE_DRV_QOS_RES_TYPE_L0_SP] = cfg.l0sp_num / num_groups;;
+	port->base[PPE_DRV_QOS_RES_TYPE_L0_SP] = cfg.l0sp_start + index * (cfg.l0sp_num / num_groups);;
+
+	port->max[PPE_DRV_QOS_RES_TYPE_L1_CDRR] = cfg.l1cdrr_num;
+	port->base[PPE_DRV_QOS_RES_TYPE_L1_CDRR] = cfg.l1cdrr_start;
+
+	port->max[PPE_DRV_QOS_RES_TYPE_L1_EDRR] = cfg.l1edrr_num;
+	port->base[PPE_DRV_QOS_RES_TYPE_L1_EDRR] = cfg.l1edrr_start;
+
+	port->max[PPE_DRV_QOS_RES_TYPE_L1_SP] = cfg.l1sp_num;
+	port->base[PPE_DRV_QOS_RES_TYPE_L1_SP] = cfg.l1sp_start;
+
+	port->max_pri = cfg.max_pri;
+
+	ppe_drv_info("%px:port QoS resources infosuccessful for port:%u index:%u", p, port_id, index);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_port_htt_res_get);
+#endif

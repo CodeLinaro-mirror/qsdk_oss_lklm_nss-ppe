@@ -184,6 +184,7 @@ struct ppe_drv_qos_res {
 struct ppe_drv_qos_port {
 	uint32_t base[PPE_DRV_QOS_RES_TYPE_MAX];	/**< Base Id for QoS resource. */
 	uint32_t max[PPE_DRV_QOS_RES_TYPE_MAX];		/**< Maximum QoS resouurce. */
+	uint32_t max_pri;		/**< Maximum priority supported. */
 };
 
 /**
@@ -671,6 +672,22 @@ void ppe_drv_qos_pon_port_alloc_callback_register(ppe_drv_qos_pon_port_alloc_cal
  */
 void ppe_drv_qos_pon_port_alloc_callback_unregister(void);
 #endif
+
+/**
+ * ppe_drv_qos_port_htt_res_get
+ *	Gets boot-time QoS resource allocation information for a given switch slave port.
+ *
+ * @datatypes
+ * ppe_drv_qos_port
+ *
+ * @param[in] port_id  Port ID of the port.
+ * @param[in] index    Index ID of the slave port.
+ * @param[in] port     Pointer to the port.
+ *
+ * @return
+ * Status of the resource get operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_htt_res_get(uint32_t port_id, uint8_t index, struct ppe_drv_qos_port *port);
 
 /** @} */ /* end_addtogroup ppe_drv_qos_subsystem */
 
