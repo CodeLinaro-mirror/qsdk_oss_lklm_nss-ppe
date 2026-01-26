@@ -36,6 +36,7 @@ typedef enum ppe_qos_ret {
 	PPE_QOS_SET_QUEUE_TM_FAIL,	/**< Queue's traffic management configuration faliure. */
 	PPE_QOS_SET_QUEUE_LIMIT_FAIL,	/**< Queue's thresholds configuration faliure. */
 	PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL,	/**< Interface queue control configuration failure. */
+	PPE_QOS_SET_UCAST_PRIO_MAP_FAIL,	/**< Unicast priority map configuration failure. */
 } ppe_qos_ret_t;
 
 /*
@@ -197,6 +198,29 @@ struct ppe_qos_interface_queue_ctrl_info {
 	ppe_qos_queue_ctrl_state_t state;		/** enable, disable, or drop */
 };
 
+/*
+ * Maximum number of priorities supported by PPE hardware
+ */
+#define PPE_DRV_MAX_PRIORITY 16
+
+/*
+ * ppe_qos_ucast_prio_map_info
+ *	PPE QoS unicast priority map information.
+ */
+struct ppe_qos_ucast_prio_map_info {
+	struct ppe_qos_interface if_data;    /** Interface data */
+	uint8_t prio_map[PPE_DRV_MAX_PRIORITY]; /** Priority map values */
+};
+
+/*
+ * ppe_qos_mcast_prio_map_info
+ *	PPE QoS multicast priority map information.
+ */
+struct ppe_qos_mcast_prio_map_info {
+	struct ppe_qos_interface if_data;    /** Interface data */
+	uint8_t prio_map[PPE_DRV_MAX_PRIORITY]; /** Priority map values (0-3) */
+};
+
 /**
  * ppe_qos_get_int_pri_func
  *	Function to fetch PPE QoS internal priority for a Qdisc/leaf class.
@@ -330,5 +354,27 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
  * PPE QoS request's return status.
  */
 ppe_qos_ret_t ppe_qos_set_interface_queue_ctrl(struct ppe_qos_interface_queue_ctrl_info *info);
+
+/**
+ * ppe_qos_set_ucast_prio_map
+ *	Function to set unicast priority map for a given profile ID.
+ *
+ *
+ * @param[in] info         PPE QoS unicast priority map information.
+ * @return
+ * PPE QoS request's return status.
+ */
+ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *info);
+
+/**
+ * ppe_qos_set_mcast_prio_map
+ *	Function to set multicast priority map for a given port.
+ *
+ *
+ * @param[in] info         PPE QoS multicast priority map information.
+ * @return
+ * PPE QoS request's return status.
+ */
+ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *info);
 
 #endif /* _PPE_QOS_H_ */

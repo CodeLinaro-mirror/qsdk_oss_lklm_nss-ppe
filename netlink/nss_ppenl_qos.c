@@ -55,6 +55,8 @@ static int nss_ppenl_qos_ops_map_pq_to_tcont(struct sk_buff *skb, struct genl_in
 static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_qos_ops_set_queue_limit(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_qos_ops_set_interface_queue_ctrl(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_qos_ops_set_ucast_prio_map(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_qos_ops_set_mcast_prio_map(struct sk_buff *skb, struct genl_info *info);
 
 /*
  * operation table called by the generic netlink layer based on the command
@@ -74,6 +76,8 @@ static struct genl_ops nss_ppenl_qos_ops[] = {
 	{.cmd = NSS_PPE_QOS_SET_QUEUE_TM, .doit = nss_ppenl_qos_ops_set_queue_tm,},	/* set queue traffic management */
 	{.cmd = NSS_PPE_QOS_SET_QUEUE_LIMIT, .doit = nss_ppenl_qos_ops_set_queue_limit,},	/* set queue limit and thresholds */
 	{.cmd = NSS_PPE_QOS_SET_INTERFACE_QUEUE_CTRL, .doit = nss_ppenl_qos_ops_set_interface_queue_ctrl,},	/* set interface queue control */
+	{.cmd = NSS_PPE_QOS_SET_UCAST_PRIO_MAP, .doit = nss_ppenl_qos_ops_set_ucast_prio_map,},	/* set unicast priority map */
+	{.cmd = NSS_PPE_QOS_SET_MCAST_PRIO_MAP, .doit = nss_ppenl_qos_ops_set_mcast_prio_map,},	/* set multicast priority map */
 };
 
 /*
@@ -794,16 +798,16 @@ static int nss_ppenl_qos_ops_set_interface_queue_ctrl(struct sk_buff *skb, struc
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	
+
 	ctrl_info.if_data.type = nl_qos_req->msg.queue_ctrl_info.if_data.type;
 	if (ctrl_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&ctrl_info.if_data.interface.dev, 
-		       nl_qos_req->msg.queue_ctrl_info.if_data.interface.dev, 
+		memcpy(&ctrl_info.if_data.interface.dev,
+		       nl_qos_req->msg.queue_ctrl_info.if_data.interface.dev,
 		       sizeof(nl_qos_req->msg.queue_ctrl_info.if_data.interface.dev));
 	} else {
 		ctrl_info.if_data.interface.tcont_id = nl_qos_req->msg.queue_ctrl_info.if_data.interface.tcont_id;
 	}
-	
+
 	ctrl_info.mode = nl_qos_req->msg.queue_ctrl_info.mode;
 	ctrl_info.state = nl_qos_req->msg.queue_ctrl_info.state;
 
@@ -851,6 +855,139 @@ bool nss_ppenl_qos_init(void)
 	}
 
 	return true;
+}
+
+/*
+ * nss_ppenl_qos_ops_set_ucast_prio_map()
+ * Set unicast priority map
+ */
+static int nss_ppenl_qos_ops_set_ucast_prio_map(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_qos_req *nl_qos_req;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	int error;
+	enum ppe_qos_ret pt;
+	struct ppe_qos_ucast_prio_map_info prio_map_info = {0};
+
+	/*
+	 * Extract the message payload
+	 */
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_qos_family, info, NSS_PPE_QOS_SET_UCAST_PRIO_MAP);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract unicast priority map data\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate config message before calling API
+	 */
+	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
+	pid = nl_cm->pid;
+
+	prio_map_info.if_data.type = nl_qos_req->msg.ucast_prio_map_info.if_data.type;
+	if (prio_map_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+		memcpy(&prio_map_info.if_data.interface.dev,
+		       nl_qos_req->msg.ucast_prio_map_info.if_data.interface.dev,
+		       sizeof(nl_qos_req->msg.ucast_prio_map_info.if_data.interface.dev));
+	} else {
+		prio_map_info.if_data.interface.tcont_id = nl_qos_req->msg.ucast_prio_map_info.if_data.interface.tcont_id;
+	}
+
+	memcpy(prio_map_info.prio_map, nl_qos_req->msg.ucast_prio_map_info.prio_map,
+	       sizeof(prio_map_info.prio_map));
+
+	/*
+	 * copy the NL message for response
+	 */
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
+		return error;
+	}
+
+	pt = ppe_qos_set_ucast_prio_map(&prio_map_info);
+	if (pt == PPE_QOS_SUCCESS) {
+		nss_ppenl_info("PPE unicast priority map set success");
+	} else {
+		nss_ppenl_info("Setting unicast priority map in PPE driver failed, error = %d", pt);
+	}
+
+	nl_qos_req = nss_ppenl_get_data(resp);
+	nl_qos_req->msg.ucast_prio_map_info.ret = pt;
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+
+/*
+ * nss_ppenl_qos_ops_set_mcast_prio_map()
+ * Set multicast priority map
+ */
+static int nss_ppenl_qos_ops_set_mcast_prio_map(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_qos_req *nl_qos_req;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	int error;
+	enum ppe_qos_ret pt;
+	struct ppe_qos_mcast_prio_map_info prio_map_info = {0};
+
+	/*
+	 * Extract the message payload
+	 */
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_qos_family, info, NSS_PPE_QOS_SET_MCAST_PRIO_MAP);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract multicast priority map data\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate config message before calling API
+	 */
+	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
+	pid = nl_cm->pid;
+
+	prio_map_info.if_data.type = nl_qos_req->msg.mcast_prio_map_info.if_data.type;
+	if (prio_map_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+		memcpy(&prio_map_info.if_data.interface.dev,
+		       nl_qos_req->msg.mcast_prio_map_info.if_data.interface.dev,
+		       sizeof(nl_qos_req->msg.mcast_prio_map_info.if_data.interface.dev));
+	} else {
+		prio_map_info.if_data.interface.tcont_id = nl_qos_req->msg.mcast_prio_map_info.if_data.interface.tcont_id;
+	}
+
+	memcpy(prio_map_info.prio_map, nl_qos_req->msg.mcast_prio_map_info.prio_map,
+	       sizeof(prio_map_info.prio_map));
+
+	/*
+	 * copy the NL message for response
+	 */
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
+		return error;
+	}
+
+	pt = ppe_qos_set_mcast_prio_map(&prio_map_info);
+	if (pt == PPE_QOS_SUCCESS) {
+		nss_ppenl_info("PPE multicast priority map set success");
+	} else {
+		nss_ppenl_info("Setting multicast priority map in PPE driver failed, error = %d", pt);
+	}
+
+	nl_qos_req = nss_ppenl_get_data(resp);
+	nl_qos_req->msg.mcast_prio_map_info.ret = pt;
+	nss_ppenl_ucast_resp(resp);
+	return 0;
 }
 
 /*

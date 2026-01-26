@@ -139,6 +139,24 @@ struct nss_ppenl_qos_queue_ctrl_info {
 };
 
 /*
+ * @brief PPE QoS unicast priority map info
+ */
+struct nss_ppenl_qos_ucast_prio_map_info {
+	struct nss_ppenl_qos_interface if_data;	/** Interface info. */
+	uint8_t prio_map[PPE_DRV_MAX_PRIORITY]; /* Priority map values */
+	int ret;                             /* Return value to userspace */
+};
+
+/*
+ * @brief PPE QoS multicast priority map info
+ */
+struct nss_ppenl_qos_mcast_prio_map_info {
+	struct nss_ppenl_qos_interface if_data;	/** Interface info. */
+	uint8_t prio_map[PPE_DRV_MAX_PRIORITY]; /* Priority map values (0-3) */
+	int ret;                             /* Return value to userspace */
+};
+
+/*
  * @brief QOS req.
  */
 struct nss_ppenl_qos_req {
@@ -155,6 +173,8 @@ struct nss_ppenl_qos_req {
 		struct nss_ppenl_qos_queue_tm_info tm_info;	/* PPE QoS traffic management information */
 		struct nss_ppenl_qos_queue_limit_info limit_info;	/* PPE QoS limit and threshold information */
 		struct nss_ppenl_qos_queue_ctrl_info queue_ctrl_info;	/* PPE QoS queue control information */
+		struct nss_ppenl_qos_ucast_prio_map_info ucast_prio_map_info; /* PPE QoS unicast priority map information */
+		struct nss_ppenl_qos_mcast_prio_map_info mcast_prio_map_info; /* PPE QoS multicast priority map information */
 	} msg;
 };
 
@@ -174,6 +194,8 @@ enum nss_ppe_qos_message_types {
 	NSS_PPE_QOS_SET_QUEUE_TM,	/* QoS set queue's traffic management message. */
 	NSS_PPE_QOS_SET_QUEUE_LIMIT,	/* QoS set queue's limit and threshold message. */
 	NSS_PPE_QOS_SET_INTERFACE_QUEUE_CTRL,	/* QoS set interface queue control message. */
+	NSS_PPE_QOS_SET_UCAST_PRIO_MAP,    /* QoS set unicast priority map */
+	NSS_PPE_QOS_SET_MCAST_PRIO_MAP,    /* QoS set multicast priority map */
 	NSS_PPE_QOS_MAX_MSG_TYPES		/* Maximum message type. */
 };
 

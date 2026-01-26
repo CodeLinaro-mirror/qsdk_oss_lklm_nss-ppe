@@ -158,6 +158,7 @@ endif
 ifndef PPE_256M_PROFILE
 ifndef PPE_16M_PROFILE
 ccflags-y += -DNSS_PPE_COS_MAP_ENABLE
+ccflags-y += -DNSS_PPE_MCAST_QOS_PRI_ENABLE
 endif
 endif
 ccflags-y += -Wall -Werror

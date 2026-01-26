@@ -33,6 +33,11 @@
 #define PPE_DRV_INT_PRI_MIN 0
 #define PPE_DRV_INT_PRI_MAX 15
 
+/*
+ * PPE Multicast Queue Class Max value
+ */
+#define PPE_DRV_MCAST_QUEUE_CLASS_MAX 3			/**< Maximum multicast queue class (0-3) */
+
 #define PPE_DRV_MHT_SWITCH_ID	1			/**< MHT switch ID */
 
 /*
@@ -897,6 +902,31 @@ bool ppe_drv_l2vp_sc_add(uint32_t dest_port_id);
  * Success or error code.
  */
 bool ppe_drv_l2vp_sc_rmv(uint32_t dest_port_id);
+
+/**
+ * ppe_drv_confgiure_ucast_prio_map_tbl
+ *	Configure unicast priority map table for RFS/DS flows
+ *
+ * @param[in] profile_id Profile ID for which priority map is to be configured.
+ * @param[in] prio_map   Array of priority values.
+ *
+ * @return
+ * true if successful, false otherwise.
+ */
+bool ppe_drv_confgiure_ucast_prio_map_tbl(uint8_t profile_id, uint8_t *prio_map);
+
+/**
+ * ppe_drv_port_mcast_priority_class_set
+ *	Set multicast priority to queue class mapping for a port.
+ *
+ * @param[in] port_id    Port ID (must be < PPE_DRV_PHYSICAL_MAX).
+ * @param[in] priority   Priority value (must be < PPE_DRV_MAX_PRIORITY).
+ * @param[in] queue_class Queue class (0-PPE_DRV_MCAST_QUEUE_CLASS_MAX).
+ *
+ * @return
+ * true if successful, false otherwise.
+ */
+bool ppe_drv_port_mcast_priority_class_set(uint32_t port_id, uint8_t priority, uint8_t queue_class);
 
 #ifdef NSS_PPE_PON_SUPPORT
 /**

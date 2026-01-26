@@ -43,6 +43,10 @@ static const char *ppe_qos_stats_str[] = {
 	"qos_set_mcast_queue_tm_success",	/* Qos set multicast queue TM success */
 	"qos_set_mcast_queue_limit_fail",	/* Qos set multicast queue limit fail */
 	"qos_set_mcast_queue_limit_success",	/* Qos set multicast queue limit success */
+	"qos_set_ucast_prio_map_fail",		/* Unicast priority map config fail */
+	"qos_set_ucast_prio_map_success",	/* Unicast priority map config success */
+	"qos_set_mcast_prio_map_fail",		/* Multicast priority map config fail */
+	"qos_set_mcast_prio_map_success",	/* Multicast priority map config success */
 };
 
 /*

@@ -168,7 +168,7 @@ static bool ppe_qos_dump_one_queue(struct ppe_qos_dump_instance *pqdi,
 		goto error;
 	}
 
-	if ((result = ppe_qos_dump_write(pqdi, "type", "%s", 
+	if ((result = ppe_qos_dump_write(pqdi, "type", "%s",
 					queue_type == PPE_QOS_QUEUE_TYPE_MCAST ? "mcast" : "ucast"))) {
 		goto error;
 	}
@@ -349,7 +349,7 @@ static bool ppe_qos_dump_all_interfaces(struct ppe_qos_dump_instance *pqdi)
 	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_qos_interface_queue *queue;
 	struct net_device *dev;
-	int queue_num, i, result;
+	int queue_num, i, j, result;
 
 	/*
 	 * Dump all interfaces
@@ -377,6 +377,49 @@ static bool ppe_qos_dump_all_interfaces(struct ppe_qos_dump_instance *pqdi)
 			if ((result = ppe_qos_dump_write(pqdi, "dev", "%s", dev->name))) {
 				goto error;
 			}
+
+
+		/* Display multicast priority map if configured */
+		if (tm_if->mcast_prio_map_valid) {
+			char mcast_prio_map_str[256];
+			int offset = 0;
+
+			/* Format the map as comma-separated values */
+			for (j = 0; j < PPE_DRV_MAX_PRIORITY; j++) {
+				if (j == 0) {
+					offset += snprintf(mcast_prio_map_str + offset, sizeof(mcast_prio_map_str) - offset,
+							  "%u", tm_if->mcast_prio_map[j]);
+				} else {
+					offset += snprintf(mcast_prio_map_str + offset, sizeof(mcast_prio_map_str) - offset,
+							  ",%u", tm_if->mcast_prio_map[j]);
+				}
+			}
+
+			if ((result = ppe_qos_dump_write(pqdi, "mcast_prio_map", "%s", mcast_prio_map_str))) {
+				goto error;
+			}
+		}
+
+		/* Display unicast priority map if configured */
+		if (tm_if->ucast_prio_map_valid) {
+			char ucast_prio_map_str[256];
+			int offset = 0;
+
+			/* Format the map as comma-separated values */
+			for (j = 0; j < PPE_DRV_MAX_PRIORITY; j++) {
+				if (j == 0) {
+					offset += snprintf(ucast_prio_map_str + offset, sizeof(ucast_prio_map_str) - offset,
+							  "%u", tm_if->ucast_prio_map[j]);
+				} else {
+					offset += snprintf(ucast_prio_map_str + offset, sizeof(ucast_prio_map_str) - offset,
+							  ",%u", tm_if->ucast_prio_map[j]);
+				}
+			}
+
+			if ((result = ppe_qos_dump_write(pqdi, "ucast_prio_map", "%s", ucast_prio_map_str))) {
+				goto error;
+			}
+		}
 		} else {
 #ifdef NSS_PPE_PON_SUPPORT
 			if ((result = ppe_qos_dump_write(pqdi, "type", "%s", "ANI" ))) {
@@ -558,6 +601,7 @@ static bool ppe_qos_dump_all_shapers(struct ppe_qos_dump_instance *pqdi)
 	return 0;
 }
 
+
 /*
  * ppe_qos_dump_all()
  *	Prepare QoS dump information for all the active QoS shapers.
@@ -578,6 +622,7 @@ static bool ppe_qos_dump_all(struct ppe_qos_dump_instance *pqdi)
 		ppe_qos_warn("%p: failed to collect dump for shapers", g_qos);
 		return result;
 	}
+
 
 	result = ppe_qos_dump_all_interfaces(pqdi);
 	if (result < 0) {

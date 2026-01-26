@@ -43,6 +43,10 @@ struct ppe_qos_stats {
 	atomic64_t qos_mcast_queue_tm_set_success;	/* Multicast queue TM set success */
 	atomic64_t qos_mcast_queue_limit_set_fail;	/* Multicast queue limit set fail */
 	atomic64_t qos_mcast_queue_limit_set_success;	/* Multicast queue limit set success */
+	atomic64_t qos_set_ucast_prio_map_fail;		/* Unicast priority map config fail */
+	atomic64_t qos_set_ucast_prio_map_success;	/* Unicast priority map config success */
+	atomic64_t qos_set_mcast_prio_map_fail;		/* Multicast priority map config fail */
+	atomic64_t qos_set_mcast_prio_map_success;	/* Multicast priority map config success */
 };
 
 /*

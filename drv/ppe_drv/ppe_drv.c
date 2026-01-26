@@ -729,38 +729,6 @@ static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
 }
 
 /*
- * ppe_drv_confgiure_ucast_prio_map_tbl
- *	Configure unicast priority map table for RFS/DS flows
- */
-static bool ppe_drv_confgiure_ucast_prio_map_tbl(struct ppe_drv *p, uint8_t profile_id, uint8_t *prio_map)
-{
-	uint8_t pri_class;
-	uint8_t int_pri;
-	sw_error_t ret;
-
-	/*
-	 * Set the priority class value for every possible priority.
-	 */
-	for (int_pri = 0; int_pri < PPE_DRV_MAX_PRIORITY; int_pri++) {
-		pri_class = prio_map[int_pri];
-
-		/*
-		 * Configure priority class for Profile 9 used by RFS and DS.
-		 */
-		ret = fal_ucast_priority_class_set(PPE_DRV_SWITCH_ID, profile_id, int_pri, pri_class);
-		if (ret != SW_OK) {
-			ppe_drv_warn("%p Failed to configure ucast priority class for profile_id %d, int_pri: %d with err: %d\n",
-					p, profile_id, int_pri, ret);
-			return false;
-		}
-
-		ppe_drv_info("profile_id: %d, int_priority: %d, pri_class: %d\n", profile_id, int_pri, pri_class);
-	}
-
-	return true;
-}
-
-/*
  * ppe_drv_enq_vp_map_to_queue()
  *	Enqueue VP to queue mapping.
  */
@@ -974,7 +942,7 @@ ppe_drv_ret_t ppe_drv_pon_map_enqueue_vp_to_pq(struct ppe_drv_port *port)
 
 	pon_port_profile_id = ppe_drv_port_ucast_queue_profile_get(port->port);
 
-	if (!ppe_drv_confgiure_ucast_prio_map_tbl(p, pon_port_profile_id, ppe_drv_16_prio_map)) {
+	if (!ppe_drv_confgiure_ucast_prio_map_tbl(pon_port_profile_id, ppe_drv_16_prio_map)) {
 		ppe_drv_warn("%p: failed to configure ucast priority class setting\n", p);
 		return PPE_DRV_RET_UCAST_PRIO_TBL_MAP_FAIL;
 	}
@@ -1504,6 +1472,85 @@ static const struct of_device_id ppe_drv_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, ppe_drv_dt_ids);
 
 /*
+ * ppe_drv_confgiure_ucast_prio_map_tbl
+ *	Configure unicast priority map table for RFS/DS flows
+ */
+bool ppe_drv_confgiure_ucast_prio_map_tbl(uint8_t profile_id, uint8_t *prio_map)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	uint8_t pri_class;
+	uint8_t int_pri;
+	sw_error_t ret;
+
+	/*
+	 * Set the priority class value for every possible priority.
+	 */
+	for (int_pri = 0; int_pri < PPE_DRV_MAX_PRIORITY; int_pri++) {
+		pri_class = prio_map[int_pri];
+
+		/*
+		 * Configure priority class for Profile 9 used by RFS and DS.
+		 */
+		ret = fal_ucast_priority_class_set(PPE_DRV_SWITCH_ID, profile_id, int_pri, pri_class);
+		if (ret != SW_OK) {
+			ppe_drv_warn("%p Failed to configure ucast priority class for profile_id %d, int_pri: %d with err: %d\n",
+					p, profile_id, int_pri, ret);
+			return false;
+		}
+
+		ppe_drv_info("profile_id: %d, int_priority: %d, pri_class: %d\n", profile_id, int_pri, pri_class);
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_confgiure_ucast_prio_map_tbl);
+
+/*
+ * ppe_drv_port_mcast_priority_class_set()
+ *	Set multicast priority to queue class mapping for a port.
+ */
+bool ppe_drv_port_mcast_priority_class_set(uint32_t port_id, uint8_t priority, uint8_t queue_class)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+#ifdef NSS_PPE_MCAST_QOS_PRI_ENABLE
+	sw_error_t ret;
+#endif
+
+	if (port_id >= PPE_DRV_PHYSICAL_MAX) {
+		ppe_drv_warn("%p: Invalid port ID: %u\n", p, port_id);
+		return false;
+	}
+
+	if (priority >= PPE_DRV_MAX_PRIORITY) {
+		ppe_drv_warn("%p: Invalid priority: %u\n", p, priority);
+		return false;
+	}
+
+	if (queue_class > PPE_DRV_MCAST_QUEUE_CLASS_MAX) {
+		ppe_drv_warn("%p: Invalid queue class: %u (must be 0-%u)\n",
+			     p, queue_class, PPE_DRV_MCAST_QUEUE_CLASS_MAX);
+		return false;
+	}
+
+	/*
+	 * TODO: Enable this for LM256 profiles once SSDK API is enabled.
+	 */
+#ifdef NSS_PPE_MCAST_QOS_PRI_ENABLE
+	ret = fal_port_mcast_priority_class_set(PPE_DRV_SWITCH_ID, port_id, priority, queue_class);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%p: Failed to set mcast priority class for port %u, priority %u, error: %d\n",
+			     p, port_id, priority, ret);
+		return false;
+	}
+#endif
+
+	ppe_drv_trace("%p: Successfully set mcast priority class for port %u, priority %u to class %u\n",
+		      p, port_id, priority, queue_class);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_port_mcast_priority_class_set);
+
+/*
  * ppe_drv_wlan_rfs_enable_set()
  *	Sets the value of the global variable to enable.
  */
@@ -1741,7 +1788,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
-	if (!ppe_drv_confgiure_ucast_prio_map_tbl(p, PPE_DRV_REDIR_PROFILE_ID, ppe_drv_redir_prio_map)) {
+	if (!ppe_drv_confgiure_ucast_prio_map_tbl(PPE_DRV_REDIR_PROFILE_ID, ppe_drv_redir_prio_map)) {
 		ppe_drv_warn("%p: failed to configure ucast priority class setting\n", p);
 		goto fail;
 	}

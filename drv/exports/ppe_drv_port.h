@@ -236,6 +236,17 @@ bool ppe_drv_port_check_rfs_support(struct net_device *dev);
 bool ppe_drv_port_clear_hw_vp_stats(int16_t port);
 
 /**
+ * ppe_drv_port_ucast_queue_profile_get
+ * 	Get pri profile for the unicast queue
+ *
+ * @param[in] port
+ *
+ * @return
+ * pri profile.
+ */
+int32_t ppe_drv_port_ucast_queue_profile_get(int port);
+
+/**
  * ppe_drv_port_metadata_to_pri_prof
  * 	Get enqueue vport pri profile
  *

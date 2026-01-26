@@ -1014,6 +1014,7 @@ int32_t ppe_drv_port_ucast_queue_profile_get(int port)
 
 	return profile;
 }
+EXPORT_SYMBOL(ppe_drv_port_ucast_queue_profile_get);
 
 /*
  * ppe_drv_port_ucast_queue_get_by_port()

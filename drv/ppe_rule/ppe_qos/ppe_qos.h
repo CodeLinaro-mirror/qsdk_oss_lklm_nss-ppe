@@ -124,6 +124,10 @@ struct ppe_qos_interface_res {
 	struct ppe_qos_interface_drr l0drr[PPE_DRV_QOS_PRIORITY_MAX];	/* L0 DRR assigned at each priority */
 	struct list_head q_list;	/* Port's unicast queue list. */
 	struct list_head mq_list;	/* Port's multicast queue list. */
+	uint8_t mcast_prio_map[PPE_DRV_MAX_PRIORITY]; /* Multicast priority map (0-3) */
+	bool mcast_prio_map_valid;                   /* Whether multicast priority map is configured */
+	uint8_t ucast_prio_map[PPE_DRV_MAX_PRIORITY]; /* Unicast priority map (0-7) */
+	bool ucast_prio_map_valid;                   /* Whether unicast priority map is configured */
 	bool valid;	/* Resource is configured. */
 };
 
@@ -136,6 +140,7 @@ struct ppe_qos_shaper_profile {
 	struct ppe_drv_qos_shaper shaper;	/* Shaper parameters. */
 	struct list_head list;	/* List of shaper profile. */
 };
+
 
 /*
  * ppe_qos_base
