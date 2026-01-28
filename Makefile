@@ -21,4 +21,5 @@ obj-y += drv/
 obj-y += clients/
 obj-$(netlink) += netlink/
 obj-$(ppe-mirror-test) += test/
+obj-y += nss_debug/
 obj ?= .

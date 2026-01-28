@@ -1516,6 +1516,14 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	}
 
 	flow_cfg.pmtu_check_l3 = (a_bool_t)PPE_DRV_FLOW_PMTU_TYPE_L3;
+
+	/*
+	 * For RFS assist flows, force PMTU to jumbo to avoid L3 PMTU for fragmentation cases
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST)) {
+		xmit_mtu = PPE_DRV_PORT_JUMBO_MAX;
+	}
+
 	flow_cfg.pmtu = xmit_mtu;
 
 	ppe_drv_trace("%p: flow_tbl[PMTU]: %u", pcf, xmit_mtu);
@@ -2701,6 +2709,14 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	}
 
 	flow_cfg.pmtu_check_l3 = (a_bool_t)PPE_DRV_FLOW_PMTU_TYPE_L3;
+
+	/*
+	 * For RFS assist flows, force PMTU to jumbo to avoid L3 PMTU check as SFE offload can fragment
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST)) {
+		xmit_mtu = PPE_DRV_PORT_JUMBO_MAX;
+	}
+
 	flow_cfg.pmtu = xmit_mtu;
 
 	ppe_drv_trace("%p: flow_tbl[PMTU]: %u", pcf, xmit_mtu);

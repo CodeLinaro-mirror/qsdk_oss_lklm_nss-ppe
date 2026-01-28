@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -115,6 +115,7 @@ static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 				struct ppe_drv_tun_cmn_ctx *pth, fal_tunnel_rule_t *decap_entry)
 {
 	struct ppe_drv_tun_prgm_prsr *pgm = NULL;
+	struct ppe_drv_tun_prgm_prsr_decap_cfg *parser_decap_cfg = NULL;
 
 	decap_entry->l4_proto = IPPROTO_GRE;
 
@@ -135,7 +136,7 @@ static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 		 * Configure PPE in Programable parser mode for GRETAP without key acceleration.
 		 * Lock is accquired for every succesful program parser entry allocated.
 		 */
-		pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_GRE);
+		pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_GRE, parser_decap_cfg);
 		if (!pgm) {
 			ppe_drv_warn("%p: Error getting programable parser for L2 GRETAP\n", pth);
 			return false;
@@ -151,13 +152,20 @@ static bool ppe_drv_tun_decap_gre_check_n_set(struct ppe_drv_tun_decap *ptdc,
 		 * program parser instance.
 		 */
 		if (!ppe_drv_tun_prgm_prsr_gre_configure(pgm)) {
+			ppe_drv_warn("%p: GRE tunnel configuration failed\n", pth);
 			ppe_drv_tun_prgm_prsr_deref(pgm);
 			ptdc->pgm_prsr = NULL;
-			ppe_drv_warn("%p: GRE tunnel configuration failed\n", pth);
 			return false;
 		}
 
-		decap_entry->tunnel_type = PPE_DRV_TUN_GET_TUNNEL_TYPE_FROM_PGM_TYPE(pgm->parser_idx);
+		decap_entry->tunnel_type = ppe_drv_tun_get_tunnel_type_from_pgm_type(pgm->parser_idx);
+		if (decap_entry->tunnel_type == FAL_TUNNEL_TYPE_INVALID_TUNNEL) {
+			ppe_drv_warn("%p: Invalid L3-GRE tunnel type for parser_idx %d", pth, pgm->parser_idx);
+			ppe_drv_tun_prgm_prsr_deref(pgm);
+			ptdc->pgm_prsr = NULL;
+			return false;
+		}
+
 		ppe_drv_trace("%p: Configure GRE with Tunnel Parser : %d\n", pth, decap_entry->tunnel_type);
 	}
 
@@ -172,11 +180,12 @@ static bool ppe_drv_tun_decap_l2tp_check_n_set(struct ppe_drv_tun_decap *ptdc,
 				struct ppe_drv_tun_cmn_ctx *pth, fal_tunnel_rule_t *decap_entry)
 {
 	struct ppe_drv_tun_prgm_prsr *pgm;
+	struct ppe_drv_tun_prgm_prsr_decap_cfg *parser_decap_cfg = NULL;
 
 	/*
 	 * Configure PPE in Programable parser mode for L2TP acceleration
 	 */
-	pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2);
+	pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2, parser_decap_cfg);
 	if (!pgm) {
 		ppe_drv_warn("%p: Error getting programable parser for L2TP tunnel\n", pth);
 		return false;
@@ -191,7 +200,14 @@ static bool ppe_drv_tun_decap_l2tp_check_n_set(struct ppe_drv_tun_decap *ptdc,
 		return false;
 	}
 
-	decap_entry->tunnel_type = PPE_DRV_TUN_GET_TUNNEL_TYPE_FROM_PGM_TYPE(pgm->parser_idx);
+	decap_entry->tunnel_type = ppe_drv_tun_get_tunnel_type_from_pgm_type(pgm->parser_idx);
+	if (decap_entry->tunnel_type == FAL_TUNNEL_TYPE_INVALID_TUNNEL) {
+		ppe_drv_warn("%p: Invalid L2TP tunnel type for parser_idx %d", pth, pgm->parser_idx);
+		ppe_drv_tun_prgm_prsr_deref(pgm);
+		ptdc->pgm_prsr = NULL;
+		return false;
+	}
+
 	ppe_drv_trace("%p: Configure L2TP with Tunnel Parser : %d\n", pth, decap_entry->tunnel_type);
 
 	decap_entry->l4_proto = IPPROTO_UDP;
@@ -418,6 +434,7 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 	/*
 	 * Add IP header parameters
 	 */
+	struct ppe_drv_tun_prgm_prsr_decap_cfg *parser_decap_cfg = NULL;
 	fal_tunnel_decap_entry_t ftde = {0};
 	struct ppe_drv *p = ppe_drv_gbl;
 	uint8_t vp_num = 0;
@@ -499,10 +516,10 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 		 * Configure PPE in Programable parser mode for GRETUN without key acceleration.
 		 * Lock is accquired for every succesful program parser entry allocated.
 		 */
-		pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_GRE);
+		pgm = ppe_drv_tun_prgm_prsr_entry_alloc(PPE_DRV_TUN_PROGRAM_MODE_GRE, parser_decap_cfg);
 		if (!pgm) {
 			ppe_drv_warn("%p: Error getting programable parser for L3 GRETUN\n", pth);
-			return false;
+			return  PPE_DRV_TUN_DECAP_INVALID_IDX;
 		}
 
 		ptdc->pgm_prsr = pgm;
@@ -515,14 +532,21 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 		 * program parser instance.
 		 */
 		if (!ppe_drv_tun_prgm_prsr_gre_configure(pgm)) {
+			ppe_drv_warn("%p: GRETUN tunnel configuration failed\n", pth);
 			ppe_drv_tun_prgm_prsr_deref(pgm);
 			ptdc->pgm_prsr = NULL;
-			ppe_drv_warn("%p: GRETUN tunnel configuration failed\n", pth);
-			return false;
+			return  PPE_DRV_TUN_DECAP_INVALID_IDX;
 		}
 
 		ftde.decap_rule.l4_proto = IPPROTO_GRE;
-		ftde.decap_rule.tunnel_type = PPE_DRV_TUN_GET_TUNNEL_TYPE_FROM_PGM_TYPE(pgm->parser_idx);
+		ftde.decap_rule.tunnel_type = ppe_drv_tun_get_tunnel_type_from_pgm_type(pgm->parser_idx);
+		if (ftde.decap_rule.tunnel_type == FAL_TUNNEL_TYPE_INVALID_TUNNEL) {
+			ppe_drv_warn("%p: Invalid L3-GRE tunnel type for parser_idx %d", p, pgm->parser_idx);
+			ppe_drv_tun_prgm_prsr_deref(pgm);
+			ptdc->pgm_prsr = NULL;
+			return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		}
+
 		ppe_drv_trace("%p: Configure GRETUN with Tunnel Parser : %d\n", pth, ftde.decap_rule.tunnel_type);
 	} else if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN) {
 		/*
@@ -537,7 +561,7 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 		ftde.decap_rule.l4_proto = IPPROTO_IPIP;
 	} else if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
 		if (!ppe_drv_tun_decap_l2tp_check_n_set(ptdc, pth, &ftde.decap_rule)) {
-			ppe_drv_trace("%p: GRE header validation failed", pp);
+			ppe_drv_trace("%p: L2TP header validation failed", pp);
 			return PPE_DRV_TUN_DECAP_INVALID_IDX;
 		}
 		ftde.decap_action.udp_csum_zero = A_TRUE;
@@ -562,7 +586,6 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 			return PPE_DRV_TUN_DECAP_INVALID_IDX;
 		}
 	}
-
 
 	ftde.decap_action.src_info_enable = A_TRUE;
 	ftde.decap_action.src_info_type = PPE_DRV_TUN_TL_TBL_SRC_INFO_TYPE_VP;
@@ -608,6 +631,11 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 	err = fal_tunnel_decap_entry_add(PPE_DRV_SWITCH_ID, FAL_TUNNEL_OP_MODE_HASH, &ftde);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: unable to allocate decap entry", pp);
+		if (ptdc->pgm_prsr) {
+			ppe_drv_tun_prgm_prsr_deref(ptdc->pgm_prsr);
+			ptdc->pgm_prsr = NULL;
+		}
+
 		return PPE_DRV_TUN_DECAP_INVALID_IDX;
 	}
 

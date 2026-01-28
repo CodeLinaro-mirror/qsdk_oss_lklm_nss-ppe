@@ -30,6 +30,10 @@
 #include "ppe_drv_v6.h"
 #include "ppe_drv_flow_dump.h"
 #include "ppe_drv_if_map.h"
+#ifdef NSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
+#include "ppe_drv_dscp.h"
+#endif
+#include <fal/fal_portvlan.h>
 
 #ifdef CONFIG_QCA_MINIDUMP
 #include <soc/qcom/ctx-save.h>
@@ -146,6 +150,11 @@ enum ppe_drv_static_dbg_level {
 #define PPE_DRV_HASH_DIPV6_MIX_1		0xb
 #define PPE_DRV_HASH_DIPV6_MIX_2		0x13
 #define PPE_DRV_HASH_DIPV6_MIX_3		0xb
+
+/*
+ * MACID macros
+ */
+#define PPE_DRV_INVALID_MACID		0
 
 /*
  * DSCP macros
@@ -481,6 +490,9 @@ struct ppe_drv {
 	bool eth2eth_offload_if_bitmap;		/* Flag to enable if bitmap check for eth to eth flows */
 	struct ppe_drv_tun_gbl tun_gbl;		/* ppe tunnel global context */
 	struct ppe_drv_rfs_ctx rfs;		/* PPE RFS global context */
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+	struct ppe_drv_tun_tpr *tun_tpr;	/* Tunnel TPR entries list */
+#endif
 };
 
 /*

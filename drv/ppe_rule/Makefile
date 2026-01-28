@@ -43,6 +43,7 @@ endif
 
 ifeq ($(PPE_POLICER_ENABLED), y)
 qca-nss-ppe-rule-objs += ppe_policer/ppe_policer.o
+qca-nss-ppe-rule-objs += ppe_policer/ppe_policer_dump.o
 qca-nss-ppe-rule-objs += ppe_policer/ppe_policer_stats.o
 ccflags-y += -DPPE_POLICER_DEBUG_LEVEL=3
 endif
@@ -50,6 +51,12 @@ endif
 ifeq ($(PPE_QOS_ENABLED), y)
 qca-nss-ppe-rule-objs += ppe_qos/ppe_qos.o
 ccflags-y += -DPPE_QOS_DEBUG_LEVEL=3
+endif
+
+ifeq ($(PPE_DSCP_ENABLED), y)
+qca-nss-ppe-rule-objs += ppe_dscp/ppe_dscp.o
+ccflags-y += -DPPE_DSCP_DEBUG_LEVEL=3
+ccflags-y += -DNSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
 endif
 endif
 

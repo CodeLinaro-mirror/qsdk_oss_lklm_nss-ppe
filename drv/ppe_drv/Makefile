@@ -21,6 +21,11 @@ ifeq ($(SoC),$(filter $(SoC),ipq96xx))
 	ccflags-y += -DPPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DNSS_PPE_FEATURE_EXCEPTION_EDIT
+ccflags-y += -DNSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
+endif
+
 obj-m += qca-nss-ppe.o
 qca-nss-ppe-objs := ppe_drv.o
 qca-nss-ppe-objs += ppe_drv_acl.o
@@ -52,6 +57,9 @@ qca-nss-ppe-objs += ppe_drv_v4.o
 qca-nss-ppe-objs += ppe_drv_v6.o
 qca-nss-ppe-objs += ppe_drv_flow_dump.o
 qca-nss-ppe-objs += ppe_drv_if_map.o
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+qca-nss-ppe-objs += ppe_drv_dscp.o
+endif
 ifdef PPE_TUN_ENABLE
 ccflags-y += -DPPE_TUNNEL_ENABLE
 qca-nss-ppe-objs += tun/ppe_drv_tun.o
@@ -68,6 +76,11 @@ qca-nss-ppe-objs += tun/ppe_drv_tun_udf.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_v4.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_v6.o
 qca-nss-ppe-objs += tun/ppe_drv_tun_gre.o
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DNSS_PPE_TUNNEL_ENHANCED_PARSER
+ccflags-y += -DNSS_PPE_TUNNEL_TPR_ENABLE
+qca-nss-ppe-objs += tun/ppe_drv_tun_tpr.o
+endif
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))

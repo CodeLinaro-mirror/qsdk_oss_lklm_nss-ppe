@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,14 +18,22 @@
 
 #include <fal/fal_tunnel_program.h>
 #include "ppe_drv_tun_udf.h"
-#include "ppe_drv_tun_l2tp.h"
-#include "ppe_drv_tun_prgm_prsr_gre.h"
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+#include "ppe_drv_tun_tpr.h"
+#endif
+
+#ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
+#define PPE_DRV_TUN_PRGM_PRSR_MAX	16 /* Program Parser MAX value for chipsets supporting Enhanced Parsers like 96xx */
+#else
+#define PPE_DRV_TUN_PRGM_PRSR_MAX	6 /* Program Parser MAX value */
+#endif
 
 /*
- *  Get Tunnel Type from Program Parser entry type
+ * Array size for program type to tunnel type mapping
+ * Includes space for all valid entries plus sentinel invalid entry
  */
-#define PPE_DRV_TUN_GET_TUNNEL_TYPE_FROM_PGM_TYPE(a) (FAL_TUNNEL_TYPE_PROGRAM0 + (a))
-#define PPE_DRV_TUN_PRGM_PRSR_MAX	6 /* Program Parser MAX value */
+#define PPE_DRV_TUN_PRGM_TYPE_MAP_SIZE	(PPE_DRV_TUN_PRGM_PRSR_MAX + 1)
+
 #define PPE_DRV_TUN_PRGM_UDF_MAX	3 /* Program UDF MAC value */
 
 /*
@@ -39,6 +47,14 @@
 #define PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_TLINFO		5
 #define PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_UDF0		6
 #define PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_UDF1		7
+
+#ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
+#define PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_TLINFO_UDF0_EN		8
+#define PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_TLINFO_UDF1_EN		9
+#define PPE_DRV_TUN_PRGM_PRSR_DECAP_KEY_SIP_LPM_PREFIX_EN	10
+#endif
+
+extern const fal_tunnel_type_t program_to_tunnel_type_map[PPE_DRV_TUN_PRGM_TYPE_MAP_SIZE];
 
 /*
  * Program UDF Bitmap
@@ -68,6 +84,9 @@ enum ppe_drv_tun_prgm_prsr_mode {
 	PPE_DRV_TUN_PROGRAM_MODE_NONE,	/* Program parser not configured*/
 	PPE_DRV_TUN_PROGRAM_MODE_GRE,	/* Program parser mode GRETAP/GRETUN */
 	PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2,	/* Program parser mode L2TP */
+	PPE_DRV_TUN_PROGRAM_MODE_TPR_RPS,	/* Program parser mode for RPS */
+	PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L2,	/* Program parser mode User defined tunnel L2 */
+	PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L3,	/* Program parser mode User defined tunnel L3 */
 };
 
 /*
@@ -131,12 +150,19 @@ enum ppe_drv_tun_prgm_prsr_inner_hdr_t {
  *	Tunnel program parser key structure
  */
 struct ppe_drv_tun_prgm_prsr_decap_key {
-	uint8_t udf1_id;	/* UDF1 index */
-	uint8_t udf0_id;	/* UDF0 index */
-	uint16_t key_bitmap;	/* Decap key Bitmap configuration */
-	uint16_t udf0_mask;	/* UDF0 mask */
-	uint16_t udf1_mask;	/* UDF1 mask */
+	uint8_t udf1_id;		/* UDF1 index used with decap entry*/
+	uint8_t udf0_id;		/* UDF0 index used with decap entry*/
+	uint16_t key_bitmap;		/* Decap key Bitmap configuration */
+	uint16_t udf0_mask;		/* UDF0 mask */
+	uint16_t udf1_mask;		/* UDF1 mask */
 	uint32_t tunnel_info_mask;	/* Tunnel info mask */
+#ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
+	uint16_t tunnel_info_udf0_id;	/* UDF0 index used for tunnel info lower 16 bits */
+	uint16_t tunnel_info_udf1_id;	/* UDF1 index used for tunnel info higher 16 bits*/
+	bool decap_en_action;		/* decapsulation action if decap_entry miss */
+	bool service_code_en;		/* Service code enable if decap_entry miss */
+	uint8_t service_code;		/* Service code to be added if decap_entry miss */
+#endif
 };
 
 /*
@@ -184,6 +210,28 @@ struct ppe_drv_tun_prgm_prsr_gre {
 	struct ppe_drv_tun_prgm_prsr_prgm_udf eth_csum_udf;	/* program UDF entry used for matching Ethernet GRETAP inner payload with csum enabled */
 };
 
+#ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
+/*
+ * ppe_drv_tun_prgm_prsr_proto_pos_mode
+ *	Parser protocol position mode type for enhanced parsers
+ *	Used to specify how protocol position offset is calculated
+ */
+enum ppe_drv_tun_prgm_prsr_proto_pos_mode {
+	PPE_DRV_TUN_PRGM_PRSR_PROTO_POS_MODE_END = 0,		/* Position from end of outer header */
+	PPE_DRV_TUN_PRGM_PRSR_PROTO_POS_MODE_START,		/* Position from start of outer header */
+};
+#endif
+
+/*
+ * ppe_drv_tun_prgm_prsr_fixed_cfg
+ *	Tunnel fixed inner header configurations for fixed mode parsing
+ *	Used when inner_mode is set to PPE_DRV_TUN_PRGM_PRSR_INNER_MODE_FIX
+ */
+struct ppe_drv_tun_prgm_prsr_fixed_cfg {
+	enum ppe_drv_tun_prgm_prsr_inner_hdr_t inner_hdr;	/* Inner header type used in case of fix mode */
+	uint16_t hdr_len;					/* Header length in bytes */
+	uint8_t len_unit;					/* Header length unit: 0=1byte, 1=2bytes, 2=4bytes, 3=8bytes */
+};
 
 /*
  * ppe_drv_tun_prgm_prsr_cfg
@@ -196,8 +244,15 @@ struct ppe_drv_tun_prgm_prsr_cfg {
 	enum ppe_drv_tun_prgm_prsr_pos_mode pos_mode;			/* program position mode */
 	uint32_t protocol;						/* protocol value based on outer header (32 bits) */
 	uint32_t protocol_mask;						/* protocol mask */
+#ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
+	enum ppe_drv_tun_prgm_prsr_proto_pos_mode proto_pos_mode;	/* Protocol position mode */
+	uint32_t protocol_pos_offset;					/* protocol position offset */
+	uint32_t tuple_id;						/* Tuple ID value to link TPR block to Parser */
+	bool protocol_pos_valid;					/* protocol position field is valid/invalid */
+	bool tuple_id_valid;						/* Tuple ID valid bit */
+#endif
 	union {
-		enum ppe_drv_tun_prgm_prsr_inner_hdr_t inner_hdr;	/* Inner header type used in case of fix mode */
+		struct ppe_drv_tun_prgm_prsr_fixed_cfg fix;             /* Data used in fixed mode */
 		struct ppe_drv_tun_prgm_prsr_prgm_udf_cfg udf;		/* Udf data used in case of udf mode */
 	} conf;
 };
@@ -213,6 +268,9 @@ struct ppe_drv_tun_prgm_prsr_decap_cfg {
 	union {
 		struct ppe_drv_tun_prgm_prsr_l2tp l2tp;	/* L2TP specific data */
 		struct ppe_drv_tun_prgm_prsr_gre gre; /* GRE specific data */
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+		struct ppe_drv_tun_tpr *tpr;	/* TPR configurations used for RPS */
+#endif
 	} data;
 };
 
@@ -281,11 +339,28 @@ static inline void ppe_drv_tun_prgm_udf_action_bitmap_clear(struct ppe_drv_tun_p
 }
 
 /*
+ *  Get Tunnel Type from Program Parser entry type
+ */
+static inline fal_tunnel_type_t ppe_drv_tun_get_tunnel_type_from_pgm_type(uint8_t pgm_type)
+{
+	/*
+	 * Compile-time check to ensure array is properly sized
+	 */
+	_Static_assert(PPE_DRV_TUN_PRGM_TYPE_MAP_SIZE == (PPE_DRV_TUN_PRGM_PRSR_MAX + 1), "Tunnel type map size mismatch");
+
+	if (pgm_type >= PPE_DRV_TUN_PRGM_PRSR_MAX) {
+		return FAL_TUNNEL_TYPE_INVALID_TUNNEL;
+	}
+
+	return program_to_tunnel_type_map[pgm_type];
+}
+
+/*
  * PPE Decap Program Tunnel Parser API's
  */
 void ppe_drv_tun_prgm_prsr_free(struct ppe_drv_tun_prgm_prsr *program_parser);
 struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_alloc(struct ppe_drv *p);
-struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun_prgm_prsr_mode mode);
+struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun_prgm_prsr_mode mode, struct ppe_drv_tun_prgm_prsr_decap_cfg *dcap_cfg);
 bool ppe_drv_tun_prgm_prsr_configured(struct ppe_drv_tun_prgm_prsr *program_parser);
 bool ppe_drv_tun_prgm_prsr_deref(struct ppe_drv_tun_prgm_prsr *pgm);
 void ppe_drv_tun_prgm_prsr_ref(struct ppe_drv_tun_prgm_prsr *pgm);

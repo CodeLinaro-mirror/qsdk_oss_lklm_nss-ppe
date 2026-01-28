@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /*
@@ -53,6 +42,7 @@ enum ppe_drv_policer_colour_mode {
 
 struct ppe_drv_policer_acl;
 struct ppe_drv_policer_port;
+struct ppe_drv_policer_hw_stats;
 
 /*
  * ppe_drv_policer_flow
@@ -210,6 +200,32 @@ struct ppe_drv_policer_rule_create {
 	uint16_t hw_id;		/**< Port index for port policer; acl index for acl policer */
 };
 
+/*
+ * ppe_drv_policer_hw_cntr
+ * 	PPE Policer hardware counters.
+ */
+struct ppe_drv_policer_hw_cntr {
+	uint64_t gpc;		/* Green packet counters */
+	uint64_t gbc;		/* green byte counters */
+	uint64_t ypc;		/* yellow packet counters */
+	uint64_t ybc;		/* yellow byte counters */
+	uint64_t rpc;		/* red packet counters */
+	uint64_t rbc;		/* red byte counters */
+};
+
+/*
+ * ppe_drv_policer_hw_stats
+ *  Policer h/w stats
+ */
+struct ppe_drv_policer_hw_stats {
+	union {
+		struct ppe_drv_policer_port *port_ctx;      /* Port policer ctx */
+		struct ppe_drv_policer_acl *acl_ctx;        /* ACL policer ctx */
+	} drv_ctx;
+
+	struct ppe_drv_policer_hw_cntr hw_cntrs;		/* Policer hardware counters */
+};
+
 /**
  * ppe_drv_policer_flow_callback_t
  *	Flow policer callback type
@@ -321,3 +337,26 @@ struct ppe_drv_policer_acl *ppe_drv_policer_acl_create(struct ppe_drv_policer_ru
  * status.
  */
 struct ppe_drv_policer_port *ppe_drv_policer_port_create(struct ppe_drv_policer_rule_create *create);
+
+/*
+ * ppe_drv_policer_acl_get_hw_stats
+ * 	Get hw stats for port policer
+ *
+ * @param[IN] policer context
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_policer_acl_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_acl *ctx);
+
+
+/*
+ * ppe_drv_policer_port_get_hw_stats
+ * 	Get hw stats for port policer
+ *
+ * @param[IN] policer context
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_policer_port_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_port *ctx);

@@ -245,6 +245,7 @@ bool nss_ppe_bridge_mgr_vlan_over_bridge_notfication(struct net_device *bridge_d
 static int nss_ppe_bridge_mgr_ppe_leave_br(struct nss_ppe_bridge_mgr_pvt *b_pvt, struct net_device *dev, bool is_wan)
 {
 	ppe_drv_ret_t ret;
+
 	struct ppe_drv_iface *iface = ppe_drv_iface_get_by_dev(dev);
 	if (!iface) {
 		nss_ppe_bridge_mgr_warn("%px: failed to find PPE interface\n", dev);
@@ -1719,6 +1720,7 @@ static int __init nss_ppe_bridge_mgr_init_module(void)
 			&& !of_machine_is_compatible("qcom,ipq9574")
 			&& !of_machine_is_compatible("qcom,ipq9679")
 			&& !of_machine_is_compatible("qcom,ipq5200")
+			&& !of_machine_is_compatible("qcom,ipq5210")
 			&& !of_machine_is_compatible("qcom,ipq5332")
 			&& !of_machine_is_compatible("qcom,ipq5424")
 			&& !of_machine_is_compatible("qcom,devsoc")) {

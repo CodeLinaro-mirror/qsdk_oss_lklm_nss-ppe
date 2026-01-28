@@ -19,9 +19,9 @@
 #include <ppe_vp_public.h>
 #include "nss_ppe_dsa_mgr.h"
 
-#ifdef NSS_ATH_HDR_BASED_DSA_SUPPORT
 static struct nss_ppe_dsa_mgr_context g_dsa_ctx;
 
+#ifdef NSS_ATH_HDR_BASED_DSA_SUPPORT
 static bool dsa_fdb_learn_enabled = false;
 module_param(dsa_fdb_learn_enabled, bool, 0644);
 MODULE_PARM_DESC(dsa_fdb_learn_enabled, "DSA fdb learning is enabled");
@@ -444,6 +444,87 @@ static int nss_ppe_dsa_mgr_dsa_vp_destroy(struct net_device *dev)
 #endif
 
 /*
+ * nss_ppe_dsa_mgr_proto_state_find()
+ *	Find protocol state for a device
+ */
+static struct nss_ppe_dsa_proto_state *nss_ppe_dsa_mgr_proto_state_find(struct net_device *dev)
+{
+	struct nss_ppe_dsa_proto_state *state = NULL;
+
+	spin_lock(&g_dsa_ctx.proto_lock);
+	list_for_each_entry(state, &g_dsa_ctx.proto_list, item) {
+		if (state->dev == dev) {
+			spin_unlock(&g_dsa_ctx.proto_lock);
+			return state;
+		}
+	}
+	spin_unlock(&g_dsa_ctx.proto_lock);
+
+	return NULL;
+}
+
+/*
+ * nss_ppe_dsa_mgr_proto_state_get()
+ *	Get protocol for a device, return NONE if not found
+ */
+static enum dsa_tag_protocol nss_ppe_dsa_mgr_proto_state_get(struct net_device *dev)
+{
+	struct nss_ppe_dsa_proto_state *state = nss_ppe_dsa_mgr_proto_state_find(dev);
+	return state ? state->proto : DSA_TAG_PROTO_NONE;
+}
+
+/*
+ * nss_ppe_dsa_mgr_proto_state_set()
+ *	Set protocol for a device, create state if not exists
+ */
+static int nss_ppe_dsa_mgr_proto_state_set(struct net_device *dev, enum dsa_tag_protocol proto)
+{
+	struct nss_ppe_dsa_proto_state *state = nss_ppe_dsa_mgr_proto_state_find(dev);
+
+	if (state) {
+		/* Update existing state */
+		spin_lock(&g_dsa_ctx.proto_lock);
+		state->proto = proto;
+		spin_unlock(&g_dsa_ctx.proto_lock);
+		return 0;
+	}
+
+	/* Create new state */
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	if (!state) {
+		nss_ppe_dsa_mgr_warn("%s: Failed to allocate protocol state\n", dev->name);
+		return -ENOMEM;
+	}
+
+	state->dev = dev;
+	state->proto = proto;
+
+	spin_lock(&g_dsa_ctx.proto_lock);
+	list_add(&state->item, &g_dsa_ctx.proto_list);
+	spin_unlock(&g_dsa_ctx.proto_lock);
+
+	nss_ppe_dsa_mgr_trace("%s: Created protocol state, proto=%d\n", dev->name, proto);
+	return 0;
+}
+
+/*
+ * nss_ppe_dsa_mgr_proto_state_remove()
+ *	Remove protocol state for a device
+ */
+static void nss_ppe_dsa_mgr_proto_state_remove(struct net_device *dev)
+{
+	struct nss_ppe_dsa_proto_state *state = nss_ppe_dsa_mgr_proto_state_find(dev);
+
+	if (state) {
+		spin_lock(&g_dsa_ctx.proto_lock);
+		list_del(&state->item);
+		spin_unlock(&g_dsa_ctx.proto_lock);
+		kfree(state);
+		nss_ppe_dsa_mgr_trace("%s: Removed protocol state\n", dev->name);
+	}
+}
+
+/*
  * nss_ppe_dsa_mgr_changeaddr_event()
  *	Change dsa netdev MAC address.
  */
@@ -507,6 +588,10 @@ static int nss_ppe_dsa_mgr_register_event(struct dsa_port *dp)
 		nss_ppe_dsa_mgr_dsa_vp_create(slave, master, dp);
 	}
 #endif
+
+	/* Init protocol node for this device */
+	nss_ppe_dsa_mgr_proto_state_set(slave, dp->cpu_dp->tag_ops->proto);
+
 	return NOTIFY_DONE;
 }
 
@@ -527,6 +612,10 @@ static int nss_ppe_dsa_mgr_unregister_event(struct dsa_port *dp)
 		nss_ppe_dsa_mgr_dsa_vp_destroy(slave);
 	}
 #endif
+
+	/* Uninit protocol node for this device */
+	nss_ppe_dsa_mgr_proto_state_remove(slave);
+
 	return NOTIFY_DONE;
 }
 
@@ -542,10 +631,6 @@ static int nss_ppe_dsa_mgr_netdevice_event(struct notifier_block *unused,
 
 	struct dsa_port *dp = dsa_port_from_netdev(dev);
 	if (IS_ERR(dp))
-		return NOTIFY_DONE;
-
-	if ((DSA_TAG_PROTO_4B_QCA != dp->cpu_dp->tag_ops->proto) &&
-		(DSA_TAG_PROTO_QCA_8021Q != dp->cpu_dp->tag_ops->proto))
 		return NOTIFY_DONE;
 
 	switch (event) {
@@ -573,7 +658,6 @@ static struct notifier_block nss_ppe_dsa_mgr_netdevice_nb __read_mostly = {
 	.notifier_call = nss_ppe_dsa_mgr_netdevice_event,
 };
 
-#ifdef NSS_ATH_HDR_BASED_DSA_SUPPORT
 /*
  * nss_ppe_dsa_mgr_tag_proto_change()
  *	Change PPE config per proto
@@ -582,34 +666,45 @@ static int nss_ppe_dsa_mgr_tag_proto_change(struct net_device *dev, enum dsa_tag
 {
 	struct dsa_port *dp = dsa_port_from_netdev(dev);
 	struct net_device *master = dsa_port_to_master(dp);
-	struct nss_ppe_dsa_pvt *dsa_pvt = NULL;
+	enum dsa_tag_protocol old_proto;
 
 	if (!dsa_slave_dev_check(dev))
 		return NOTIFY_DONE;
 
-	/* dsa_pvt exists only for ath based dsa */
-	dsa_pvt = nss_ppe_dsa_mgr_instance_find_and_ref(dev);
+	/* Get current protocol from per-device state */
+	old_proto = nss_ppe_dsa_mgr_proto_state_get(dev);
 
-	/* vlan based change to atheros header based,
-	 *  destroy the vlan based DSA configuration and implement
-	 *  the atheros header based DSA configuration */
-	if ((!dsa_pvt) && (proto == DSA_TAG_PROTO_4B_QCA)) {
+	/* If already using this protocol, nothing to do */
+	if (old_proto == proto) {
+		nss_ppe_dsa_mgr_trace("%s: Already using tag protocol %d\n", dev->name, proto);
+		return NOTIFY_DONE;
+	}
+
+	nss_ppe_dsa_mgr_info("%s: Changing tag protocol from %d to %d\n", dev->name, old_proto, proto);
+
+	/* Teardown old protocol configuration */
+	if (old_proto == DSA_TAG_PROTO_QCA_8021Q)
 		nss_ppe_vlan_mgr_dsa_vp_destroy(dev);
-
-		nss_ppe_dsa_mgr_dsa_vp_create(dev, master, dp);
-	}
-
-	/* atheros header based change to vlan based,
-	 *  destroy atheros header based DSA configuration and implement
-	 *  the the vlan based DSA configuration */
-	if ((dsa_pvt) && (proto == DSA_TAG_PROTO_QCA_8021Q)) {
+#ifdef NSS_ATH_HDR_BASED_DSA_SUPPORT
+	else if (old_proto == DSA_TAG_PROTO_4B_QCA)
 		nss_ppe_dsa_mgr_dsa_vp_destroy(dev);
+#endif
 
-		/* defer for nss_ppe_dsa_mgr_instance_find_and_ref*/
-		nss_ppe_dsa_mgr_instance_deref(dsa_pvt);
-
+	/* Setup new protocol configuration */
+	/* For DSA_TAG_PROTO_NONE, all chip supported, no configuration for PPE besides teardown old proto */
+	if (proto == DSA_TAG_PROTO_NONE)
+		nss_ppe_dsa_mgr_info("%s: Switching to DSA_TAG_PROTO_NONE, no new configuration needed\n", dev->name);
+	else if (proto == DSA_TAG_PROTO_QCA_8021Q)
 		nss_ppe_vlan_mgr_dsa_vp_create(dev, master);
-	}
+#ifdef NSS_ATH_HDR_BASED_DSA_SUPPORT
+	else if (proto == DSA_TAG_PROTO_4B_QCA)
+		nss_ppe_dsa_mgr_dsa_vp_create(dev, master, dp);
+#endif
+
+	/* Update protocol state for this device */
+	nss_ppe_dsa_mgr_proto_state_set(dev, proto);
+
+	nss_ppe_dsa_mgr_info("%s: Tag protocol changed to %d successfully\n", dev->name, proto);
 
 	return NOTIFY_DONE;
 }
@@ -642,7 +737,6 @@ static int nss_ppe_dsa_mgr_dsa_event_nb(struct notifier_block *unused,
 static struct notifier_block nss_ppe_dsa_mgr_dsa_notifier_nb = {
 	.notifier_call = nss_ppe_dsa_mgr_dsa_event_nb,
 };
-#endif
 
 /*
  * nss_ppe_dsa_mgr_exit_module()
@@ -650,9 +744,7 @@ static struct notifier_block nss_ppe_dsa_mgr_dsa_notifier_nb = {
  */
 static void __exit nss_ppe_dsa_mgr_exit_module(void)
 {
-#ifdef NSS_ATH_HDR_BASED_DSA_SUPPORT
 	unregister_dsa_blocking_notifier(&nss_ppe_dsa_mgr_dsa_notifier_nb);
-#endif
 	unregister_netdevice_notifier(&nss_ppe_dsa_mgr_netdevice_nb);
 
 	nss_ppe_dsa_mgr_info("PPE DSA MGR Module unloaded\n");
@@ -667,9 +759,11 @@ static int __init nss_ppe_dsa_mgr_init_module(void)
 #ifdef NSS_ATH_HDR_BASED_DSA_SUPPORT
 	INIT_LIST_HEAD(&g_dsa_ctx.list);
 	spin_lock_init(&g_dsa_ctx.lock);
+#endif
+	INIT_LIST_HEAD(&g_dsa_ctx.proto_list);
+	spin_lock_init(&g_dsa_ctx.proto_lock);
 
 	register_dsa_blocking_notifier(&nss_ppe_dsa_mgr_dsa_notifier_nb);
-#endif
 	register_netdevice_notifier(&nss_ppe_dsa_mgr_netdevice_nb);
 
 	nss_ppe_dsa_mgr_info("PPE DSA MGR Module (Build %s) loaded\n", NSS_PPE_BUILD_ID);

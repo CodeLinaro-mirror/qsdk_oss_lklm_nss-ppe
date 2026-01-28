@@ -137,6 +137,15 @@ typedef enum ppe_drv_tree_id_type {
 } ppe_drv_tree_id_type_t;
 
 /*
+ * ppe_drv_rule_dir
+ *	Rule direction
+ */
+typedef enum ppe_drv_rule_dir {
+	PPE_DRV_RULE_INGRESS = 1,	/**< Ingress: Rule Direction. */
+	PPE_DRV_RULE_EGRESS = 2,	/**< Egress: Rule Direction. */
+} ppe_drv_rule_dir_t;
+
+/*
  * ppe_drv_fse_tuple
  *	fse tuple
  */
@@ -516,6 +525,10 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_HAIRPIN_LOOPBACK_FEATURE_FAIL,	/**< NPTv6 Hairpin NAT not enabled in EDMA. */
 	PPE_DRV_RET_NPTV6_HAIRPIN_FEATURE_FAIL,		/**< NPTv6 Hairpin NAT failed. */
 	PPE_DRV_RET_EIP_LOOKUP_MODE_SET_FAIL,		/**< EIP lookup mode failed to set. */
+	PPE_DRV_RET_IN_VLAN_DSCP_PBIT_TBL_CONFIG_FAIL,	/**< Failed to configure IN_VLAN_DSCP_PBIT table. */
+	PPE_DRV_RET_DSCP_PBIT_TBL_CONFIG_FAIL,		/**< Failed to configure DSCP_PBIT_MAP table. */
+	PPE_DRV_RET_DSCP_PBIT_TBL_RST_FAIL,		/**< Failed to reset DSCP_PBIT_MAP table. */
+	PPE_DRV_RET_L2_DSCP_PBIT_TBL_CONFIG_FAIL,	/**< Failed to configure L2_DSCP_PBIT_MAP table. */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 
@@ -743,4 +756,5 @@ int8_t ppe_drv_get_qdisc_rule_flag(int32_t flow_index);
  * none.
  */
 void ppe_drv_wlan_rfs_enable_set(bool enable);
+
 #endif /* _PPE_DRV_H_ */

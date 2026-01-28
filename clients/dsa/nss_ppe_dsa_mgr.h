@@ -43,11 +43,22 @@
 #endif /* CONFIG_DYNAMIC_DEBUG */
 
 /*
+ * Per-device protocol state tracking
+ */
+struct nss_ppe_dsa_proto_state {
+	struct list_head item;			/* List iterator */
+	struct net_device *dev;			/* Associated net device */
+	enum dsa_tag_protocol proto;		/* Current protocol */
+};
+
+/*
  * dsa mgr context
  */
 struct nss_ppe_dsa_mgr_context {
 	struct list_head list;			/* List of dsa private instance */
 	spinlock_t lock;				/* Lock to protect dsa private instance */
+	struct list_head proto_list;		/* List of per-device protocol states */
+	spinlock_t proto_lock;			/* Lock to protect protocol state list */
 };
 
 /*

@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <fal/fal_fdb.h>
@@ -638,3 +627,139 @@ struct ppe_drv_policer_ctx *ppe_drv_policer_entries_alloc(void)
 
 	return pol;
 }
+
+/*
+ * ppe_drv_port_policer_stats_update()
+ *	Update hardware match counters.
+ */
+void ppe_drv_port_policer_stats_update(struct ppe_drv_policer_port *ctx)
+{
+	sw_error_t err;
+	struct ppe_drv_policer_stat delta = {0};
+	fal_policer_counter_t policer_cntrs = {0};
+
+	ppe_drv_trace("%p: updating port poliecr stats", ctx);
+
+	err = fal_port_policer_counter_get(PPE_DRV_SWITCH_ID, ctx->index, &policer_cntrs);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to get stats for port policer index: %u",
+				ctx, ctx->index);
+		return;
+	}
+
+	/*
+	 * PPE stats are not clear on read, so we need to calculate the delta
+	 * between the latest counters and previously read counters.
+	 */
+	delta.green_pkts = PPE_DRV_POLICER_PKT_CNTR_ROLLOVER(policer_cntrs.green_packet_counter - ctx->pre_cntrs.green_packet_counter);
+	delta.green_bytes = PPE_DRV_POLICER_BYTE_CNTR_ROLLOVER(policer_cntrs.green_byte_counter - ctx->pre_cntrs.green_byte_counter);
+	delta.yellow_pkts = PPE_DRV_POLICER_PKT_CNTR_ROLLOVER(policer_cntrs.yellow_packet_counter - ctx->pre_cntrs.yellow_packet_counter);
+	delta.yellow_bytes = PPE_DRV_POLICER_BYTE_CNTR_ROLLOVER(policer_cntrs.yellow_byte_counter - ctx->pre_cntrs.yellow_byte_counter);
+
+	delta.red_pkts = PPE_DRV_POLICER_PKT_CNTR_ROLLOVER(policer_cntrs.red_packet_counter - ctx->pre_cntrs.red_packet_counter);
+	delta.red_bytes = PPE_DRV_POLICER_BYTE_CNTR_ROLLOVER(policer_cntrs.red_byte_counter - ctx->pre_cntrs.red_byte_counter);
+
+	/*
+	 * Update hardware stats packet and byte counters
+	 */
+	ppe_drv_port_policer_stats_add(ctx, &delta);
+
+	/*
+	 * Store current stats for next iteration.
+	 */
+	ctx->pre_cntrs.green_packet_counter = policer_cntrs.green_packet_counter;
+	ctx->pre_cntrs.green_byte_counter = policer_cntrs.green_byte_counter;
+	ctx->pre_cntrs.yellow_packet_counter = policer_cntrs.yellow_packet_counter;
+	ctx->pre_cntrs.yellow_byte_counter = policer_cntrs.yellow_byte_counter;
+	ctx->pre_cntrs.red_packet_counter = policer_cntrs.red_packet_counter;
+	ctx->pre_cntrs.red_byte_counter = policer_cntrs.red_byte_counter;
+}
+
+/*
+ * ppe_drv_acl_policer_stats_update()
+ *	Update hardware match counters.
+ */
+void ppe_drv_acl_policer_stats_update(struct ppe_drv_policer_acl *ctx)
+{
+	sw_error_t err;
+	struct ppe_drv_policer_stat delta = {0};
+	fal_policer_counter_t policer_cntrs = {0};
+
+	ppe_drv_trace("%p: updating acl poliecr stats", ctx);
+
+	err = fal_acl_policer_counter_get(PPE_DRV_SWITCH_ID, ctx->acl_index, &policer_cntrs);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to get stats for acl policer index: %u",
+				ctx, ctx->acl_index);
+		return;
+	}
+
+	/*
+	 * PPE stats are not clear on read, so we need to calculate the delta
+	 * between the latest counters and previously read counters.
+	 */
+	delta.green_pkts = PPE_DRV_POLICER_PKT_CNTR_ROLLOVER(policer_cntrs.green_packet_counter - ctx->pre_cntrs.green_packet_counter);
+	delta.green_bytes = PPE_DRV_POLICER_BYTE_CNTR_ROLLOVER(policer_cntrs.green_byte_counter - ctx->pre_cntrs.green_byte_counter);
+	delta.yellow_pkts = PPE_DRV_POLICER_PKT_CNTR_ROLLOVER(policer_cntrs.yellow_packet_counter - ctx->pre_cntrs.yellow_packet_counter);
+	delta.yellow_bytes = PPE_DRV_POLICER_BYTE_CNTR_ROLLOVER(policer_cntrs.yellow_byte_counter - ctx->pre_cntrs.yellow_byte_counter);
+
+	delta.red_pkts = PPE_DRV_POLICER_PKT_CNTR_ROLLOVER(policer_cntrs.red_packet_counter - ctx->pre_cntrs.red_packet_counter);
+	delta.red_bytes = PPE_DRV_POLICER_BYTE_CNTR_ROLLOVER(policer_cntrs.red_byte_counter - ctx->pre_cntrs.red_byte_counter);
+
+	/*
+	 * Update hardware stats packet and byte counters
+	 */
+	ppe_drv_acl_policer_stats_add(ctx, &delta);
+
+	/*
+	 * Store current stats for next iteration.
+	 */
+	ctx->pre_cntrs.green_packet_counter = policer_cntrs.green_packet_counter;
+	ctx->pre_cntrs.green_byte_counter = policer_cntrs.green_byte_counter;
+	ctx->pre_cntrs.yellow_packet_counter = policer_cntrs.yellow_packet_counter;
+	ctx->pre_cntrs.yellow_byte_counter = policer_cntrs.yellow_byte_counter;
+	ctx->pre_cntrs.red_packet_counter = policer_cntrs.red_packet_counter;
+	ctx->pre_cntrs.red_byte_counter = policer_cntrs.red_byte_counter;
+}
+
+/*
+ * ppe_drv_policer_port_get_hw_stats
+ * 	Get hw stats for port policer.
+ */
+void ppe_drv_policer_port_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_port *port_ctx)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+
+	pol_ctx->hw_cntrs.gpc = atomic64_read(&port_ctx->green_packet_counter);
+	pol_ctx->hw_cntrs.gbc = atomic64_read(&port_ctx->green_byte_counter);
+	pol_ctx->hw_cntrs.ypc = atomic64_read(&port_ctx->yellow_packet_counter);
+	pol_ctx->hw_cntrs.ybc = atomic64_read(&port_ctx->yellow_byte_counter);
+	pol_ctx->hw_cntrs.rpc = atomic64_read(&port_ctx->red_packet_counter);
+	pol_ctx->hw_cntrs.rbc = atomic64_read(&port_ctx->red_byte_counter);
+
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_policer_port_get_hw_stats);
+
+/*
+ * ppe_drv_policer_acl_get_hw_stats
+ * 	Get hw stats for acl policer.
+ */
+void ppe_drv_policer_acl_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_acl *acl_ctx)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+
+	pol_ctx->hw_cntrs.gpc = atomic64_read(&acl_ctx->green_packet_counter);
+	pol_ctx->hw_cntrs.gbc = atomic64_read(&acl_ctx->green_byte_counter);
+	pol_ctx->hw_cntrs.ypc = atomic64_read(&acl_ctx->yellow_packet_counter);
+	pol_ctx->hw_cntrs.ybc = atomic64_read(&acl_ctx->yellow_byte_counter);
+	pol_ctx->hw_cntrs.rpc = atomic64_read(&acl_ctx->red_packet_counter);
+	pol_ctx->hw_cntrs.rbc = atomic64_read(&acl_ctx->red_byte_counter);
+
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_policer_acl_get_hw_stats);

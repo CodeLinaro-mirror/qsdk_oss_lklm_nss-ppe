@@ -239,6 +239,24 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 		}
 	}
 
+	/*
+	 * Update h/w stats counter if policer is in use.
+	 */
+	for (id = 0; id < PPE_DRV_PORT_POLICER_MAX; id++) {
+		if (p->pol_ctx->port_pol[id].in_use) {
+			ppe_drv_port_policer_stats_update(&p->pol_ctx->port_pol[id]);
+		}
+	}
+
+	/*
+	 * Update h/w stats counter if acl-policer is in use.
+	 */
+	for (id = 0; id < PPE_DRV_ACL_POLICER_MAX; id++) {
+		if (p->pol_ctx->acl_pol[id].in_use) {
+			ppe_drv_acl_policer_stats_update(&p->pol_ctx->acl_pol[id]);
+		}
+	}
+
 	spin_unlock_bh(&p->lock);
 
 	/*
@@ -1371,6 +1389,14 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		ppe_drv_warn("%p: failed to allocate tunnel udf entries", p);
 		goto fail;
 	}
+
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+	p->tun_tpr = ppe_drv_tun_tpr_alloc(p);
+	if (!p->tun_tpr) {
+		ppe_drv_warn("%p: failed to allocate tunnel tpr entries", p);
+		goto fail;
+	}
+#endif
 #endif
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	p->pfx = ppe_drv_nptv6_prefix_entries_alloc();
@@ -1536,6 +1562,13 @@ fail:
 		ppe_drv_tun_encap_hdr_ctrl_free(p->ecap_hdr_ctrl);
 		p->ecap_hdr_ctrl = NULL;
 	}
+
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+	if (p->tun_tpr) {
+		ppe_drv_tun_tpr_free(p->tun_tpr);
+		p->tun_tpr = NULL;
+	}
+#endif
 #endif
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	if (p->pfx) {
@@ -1690,6 +1723,13 @@ static int ppe_drv_remove(struct platform_device *pdev)
 		ppe_drv_tun_encap_hdr_ctrl_free(p->ecap_hdr_ctrl);
 		p->ecap_hdr_ctrl = NULL;
 	}
+
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+	if (p->tun_tpr) {
+		ppe_drv_tun_tpr_free(p->tun_tpr);
+		p->tun_tpr = NULL;
+	}
+#endif
 #endif
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	if (p->pfx) {

@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/if.h>
@@ -33,6 +22,10 @@
 #include "nss_ppenl_qos_if.h"
 #include "nss_ppenl_exception.h"
 #include "nss_ppenl_exception_if.h"
+#ifdef NSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
+#include "nss_ppenl_dscp.h"
+#include "nss_ppenl_dscp_if.h"
+#endif
 
 /*
  * nss_ppenl.c
@@ -89,6 +82,17 @@ static struct nss_ppenl_family family_handlers[] = {
 		.exit = NSS_PPENL_EXCEPTION_EXIT,		/* exit */
 		.valid = CONFIG_NSS_PPENL_EXCEPTION		/* 1 or 0 */
 	},
+#ifdef NSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
+	{
+		/*
+		 * NSS_PPENL_DSCP
+		 */
+		.name = NSS_PPENL_DSCP_FAMILY,		/* DSCP Family */
+		.entry = NSS_PPENL_DSCP_INIT,		/* Init */
+		.exit = NSS_PPENL_DSCP_EXIT,		/* exit */
+		.valid = CONFIG_NSS_PPENL_DSCP		/* 1 or 0 */
+	},
+#endif
 
 };
 

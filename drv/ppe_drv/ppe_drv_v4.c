@@ -226,7 +226,12 @@ void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct pp
 
 	pp = ppe_drv_v4_conn_flow_rx_port_get(conn);
 	tx_port = ppe_drv_v4_conn_flow_tx_port_get(conn);
-	fse_info->macid = tx_port->port;
+
+	if (tx_port->type == PPE_DRV_PORT_PHYSICAL) {
+		fse_info->macid = tx_port->port;
+	} else {
+		fse_info->macid = PPE_DRV_INVALID_MACID;
+	}
 
 	dev = ppe_drv_port_to_dev(pp);
 

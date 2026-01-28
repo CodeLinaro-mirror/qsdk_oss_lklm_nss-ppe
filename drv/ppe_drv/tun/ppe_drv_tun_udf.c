@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -101,6 +101,42 @@ void ppe_drv_tun_udf_entry_ref(struct ppe_drv_tun_udf  *pgm_udf)
 
 	ppe_drv_assert(kref_read(&pgm_udf->ref), "%p: ref count rollover for udf index:%d", pgm_udf, pgm_udf->udf_index);
 	ppe_drv_trace("%p: idx: %u ref inc:%u", pgm_udf, pgm_udf->udf_index, kref_read(&pgm_udf->ref));
+}
+
+/*
+ * ppe_drv_tun_udf_compare_udf_profiles
+ *	compare udf profile configurations
+ *	a -> represents exisiting configuration
+ *	b -> proposed new configurations
+ */
+bool ppe_drv_tun_udf_compare_udf_profiles(struct ppe_drv_tun_udf_profile *a, struct ppe_drv_tun_udf_profile *b)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int i;
+
+	/*
+	 * Input validation
+	 */
+	if (!a || !b) {
+		return false;
+	}
+
+	if (a->l3_match != b->l3_match || a->l3_type != b->l3_type ||
+	    a->l4_match != b->l4_match || a->l4_type != b->l4_type ||
+	    a->program_match != b->program_match || a->program_type != b->program_type ||
+	    a->udf_bitmap != b->udf_bitmap) {
+		ppe_drv_trace("%p: UDF profile configurations doesnt match", p);
+		return false;
+	}
+
+	for (i = 0; i < PPE_DRV_TUN_UDF_MAX; i++) {
+		if (a->udf[i].offset_type != b->udf[i].offset_type ||
+		    a->udf[i].offset != b->udf[i].offset) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 /*

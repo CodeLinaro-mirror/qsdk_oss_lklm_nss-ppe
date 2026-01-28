@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, 2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -127,5 +127,7 @@ struct ppe_drv_tun_udf *ppe_drv_tun_udf_alloc(struct ppe_drv *p);
 void ppe_drv_tun_udf_free(struct ppe_drv_tun_udf *pgm_udf);
 bool ppe_drv_tun_udf_entry_dref(struct ppe_drv_tun_udf  *pgm_udf);
 struct ppe_drv_tun_udf *ppe_drv_tun_udf_entry_configure(struct ppe_drv_tun_udf_profile *udf_pf);
+bool ppe_drv_tun_udf_compare_udf_profiles(struct ppe_drv_tun_udf_profile *a, struct ppe_drv_tun_udf_profile *b);
 struct ppe_drv_tun_udf *ppe_drv_tun_udf_entry_alloc(struct ppe_drv *p);
+void ppe_drv_tun_udf_entry_ref(struct ppe_drv_tun_udf  *pgm_udf);
 #endif /* _PPE_DRV_TUN_UDF_H_ */
