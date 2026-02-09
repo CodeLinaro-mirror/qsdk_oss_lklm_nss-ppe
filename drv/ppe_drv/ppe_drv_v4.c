@@ -9,6 +9,7 @@
 #include <linux/dsa/8021q.h>
 #include <net/dsa.h>
 #endif
+#include <fal/fal_qos.h>
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
 #include "tun/ppe_drv_tun_v4.h"
@@ -868,6 +869,89 @@ static bool ppe_drv_v4_conn_flow_igmac_del(struct ppe_drv_v4_conn_flow *pcf)
 }
 #endif
 
+#ifdef PPE_DRV_DDRQ_ENABLE
+/*
+ * ppe_drv_v4_is_egress_ddrq_disabled()
+ *	API for checking if the ESQ has any of the mapped DDRQs disabled or not
+ */
+static bool ppe_drv_v4_is_egress_ddrq_disabled(struct ppe_drv_iface *if_rx, struct ppe_drv_iface *if_tx)
+{
+	uint8_t q_base, q_cnt;
+	uint16_t port_num;
+	uint32_t word_idx = 0, bit_idx = 0, i;
+	sw_error_t err;
+	struct ppe_drv_port *pp_tx;
+
+	if (!if_rx || !if_tx) {
+		ppe_drv_warn("Incomplete Rx iface: %px or Tx iface: %px information available\n", if_rx, if_tx);
+		return false;
+	}
+
+	if (if_rx->type != PPE_DRV_IFACE_TYPE_VIRTUAL) {
+		ppe_drv_warn("Rx type condition (%d) not suitable for DDRQ PT disable check\n", if_rx->type);
+		return false;
+	}
+
+	if ((if_tx->type != PPE_DRV_IFACE_TYPE_PHYSICAL) &&
+			(if_tx->type != PPE_DRV_IFACE_TYPE_VIRTUAL) &&
+			(if_tx->type != PPE_DRV_IFACE_TYPE_VP_L2_TUN) &&
+			(if_tx->type != PPE_DRV_IFACE_TYPE_VP_L3_TUN)) {
+		ppe_drv_warn("Tx type condition (%d) not suitable for DDRQ PT disable check\n", if_tx->type);
+		return false;
+	}
+
+	pp_tx = ppe_drv_iface_port_get(if_tx);
+	if (!pp_tx) {
+		ppe_drv_warn("Invalid Tx port for Tx IFACE (%px)\n", if_tx);
+		return false;
+	}
+
+	ppe_drv_warn("Rx type is %d, Tx type is %d\n", if_rx->type, if_tx->type);
+	port_num = ppe_drv_port_num_get(pp_tx);
+	if (port_num <= PPE_DRV_PHYSICAL_MAX) {
+		fal_portscheduler_resource_t cfg = {0};
+		err = fal_port_scheduler_resource_get(PPE_DRV_SWITCH_ID, port_num, &cfg);
+		if (err != SW_OK) {
+			ppe_drv_warn("Error in getting port(id: %d) interface's queue information\n", port_num);
+			return false;
+		}
+
+		q_base = cfg.ucastq_start;
+		q_cnt = cfg.ucastq_num;
+	} else {
+		q_base = ppe_drv_port_ucast_queue_get(pp_tx);
+		q_cnt = 8;
+	}
+
+	ppe_drv_warn("qbase: %d, q_cnt: %d, port: %d\n", q_base, q_cnt, port_num);
+	if ((q_base + q_cnt) > PPE_DRV_DDRQ_MAX_CNT) {
+		ppe_drv_warn("queues mapped to the %d port seems to be outside the DDRQ range\n", port_num);
+		return false;
+	}
+
+	for (i = 0 ; i < q_cnt ; i++, bit_idx++) {
+		word_idx = (q_base + i) / PPE_DRV_BITS_IN_WORD;
+		bit_idx = (q_base + i) % PPE_DRV_BITS_IN_WORD;
+
+		if (!(ppe_drv_ddrq_en_bitmask[word_idx] & (1 << bit_idx))) {
+			ppe_drv_warn("bit %d for %d word is not set\n", bit_idx, word_idx);
+			break;
+		}
+	}
+
+	/*
+	 * All queues has its DDRQs enabled
+	 */
+	if (i == q_cnt) {
+		 ppe_drv_warn("All queues of %d port has its DDRQ enabled\n", port_num);
+		 return false;
+	 }
+
+	 ppe_drv_warn("Mapped DDRQ for %d port seems to be disabled\n", port_num);
+	 return true;
+}
+#endif
+
 /*
  * ppe_drv_v4_conn_fill()
  *	Populate each direction flow object.
@@ -1071,6 +1155,13 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_egress_dscp_set(pcf, dscp_rule->flow_dscp);
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_DSCP_MARKING);
 		}
+#ifdef PPE_DRV_DDRQ_ENABLE
+		if (ddrq_lp_sc_set_en) {
+			if (ppe_drv_v4_is_egress_ddrq_disabled(if_rx, if_tx)) {
+				ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS);
+			}
+		}
+#endif
 
 		/*
 		 * VLAN over bridge flow
@@ -1370,6 +1461,13 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_egress_dscp_set(pcr, dscp_rule->return_dscp);
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_DSCP_MARKING);
 		}
+#ifdef PPE_DRV_DDRQ_ENABLE
+		if (ddrq_lp_sc_set_en) {
+			if (ppe_drv_v4_is_egress_ddrq_disabled(if_tx, if_rx)) {
+				ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS);
+			}
+		}
+#endif
 
 		/*
 		 * VLAN over bridge flow

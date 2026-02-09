@@ -148,6 +148,27 @@ static void ppe_drv_sc_config_lpbk_port_pon(ppe_drv_sc_t sc, fal_servcode_config
 }
 #endif
 
+/*
+ * ppe_drv_sc_ucast_qbase_profile_set()
+ *	API to configure qbase profile for input service code
+ */
+bool ppe_drv_sc_ucast_qbase_profile_set(uint8_t sc, uint16_t qbase)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	if (sc >= PPE_DRV_SC_MAX) {
+		ppe_drv_warn("Incorrect SC:%d passed for SC qbase profile configuration\n", sc);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+	ppe_drv_sc_ucast_queue_set(sc, qbase, PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+	spin_unlock_bh(&p->lock);
+	ppe_drv_info("port ucast queue base id: %d for sc: %d\n", qbase, sc);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_sc_ucast_qbase_profile_set);
+
 #ifdef PPE_DRV_DDRQ_ENABLE
 /*
  * ppe_drv_sc_spl_ddrq_config()
@@ -291,6 +312,16 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		break;
 
 	case PPE_DRV_SC_SPF_BYPASS:
+#ifdef PPE_DRV_DDRQ_ENABLE
+		/*
+		 * DDRQ WAR: Bypass packet format checks in the first pass for avoiding
+		 * the PPE DATA incomplete exception.
+		 */
+		sc_cfg.bypass_bitmap[0] = ((1 << WRONG_PKT_FMT_L2_BYP)
+						| (1 << WRONG_PKT_FMT_L3_IPV4_BYP)
+						| (1 << WRONG_PKT_FMT_L3_IPV6_BYP)
+						| (1 << WRONG_PKT_FMT_L4_BYP));
+#endif
 		/*
 		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
 		 * packets sent to PPE, with SPF bypass service code.
@@ -693,6 +724,30 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1ULL << DROP_CPUCODE_CNT_BYP));
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
+
+	case PPE_DRV_SC_DDRQ_LP_SC:
+		sc_cfg.field_update_bitmap[0] = ((1ULL << EPE_LOOPBACK_VLAN_START)
+				| (1ULL << FLD_UP_DST_INFO_WITH_GEM)
+				| (1ULL << FLD_UP_DST_INFO_FORCE)
+				| (1ULL << FLD_UP_SERVICE_CODE_DDRQ)
+				| (1ULL << FLD_UP_DDRQ_DIRECT_ENQ));
+		sc_cfg.bypass_bitmap[1] = ((1 << EG_VLAN_MEMBER_CHECK_BYP)
+						| (1 << L2_SOURCE_SEC_BYP)
+						| (1 << BRIDGING_FWD_BYP)
+						| (1 << SOURCE_FLTR_BYP));
+		sc_cfg.dest_port_valid = A_TRUE;
+		break;
+
+	case PPE_DRV_SC_DDRQ_LP_SC_NEXT:
+		sc_cfg.bypass_bitmap[0] = (1 << FLOW_SERVICE_CODE_BYP);
+		sc_cfg.bypass_bitmap[1] = ((1 << EG_VLAN_MEMBER_CHECK_BYP)
+						| (1 << L2_SOURCE_SEC_BYP)
+						| (1 << BRIDGING_FWD_BYP)
+						| (1 << SOURCE_FLTR_BYP)
+						| (1 << L2_VP_SERVICE_CODE_ENQ_BYP)
+						| (1 << DOT1P_VLAN_FROM_LOOPBACK));
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
 #endif
 
 	default:
@@ -1025,6 +1080,8 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_ETH_PT_MODE, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_PON_PT_MODE, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_spl_ddrq_config();
+	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC, PPE_DRV_SC_DDRQ_LP_SC_NEXT, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 #endif
 	return sc;
 }

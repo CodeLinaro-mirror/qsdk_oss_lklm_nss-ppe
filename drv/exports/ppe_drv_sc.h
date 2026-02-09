@@ -89,6 +89,8 @@ typedef enum ppe_drv_sc_type {
 #endif
 	PPE_DRV_SC_DDRQ_ETH_PT_MODE = 54,			/* Service code for DDRQ ETH passthrough mode  */
 	PPE_DRV_SC_DDRQ_PON_PT_MODE = 55,			/* Service code for DDRQ PON passthrough mode */
+	PPE_DRV_SC_DDRQ_LP_SC = 56,				/* Service code for DDRQ loopback ring */
+	PPE_DRV_SC_DDRQ_LP_SC_NEXT = 57,			/* Next service code for DDRQ loopback ring */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,
@@ -174,6 +176,18 @@ extern void ppe_drv_sc_unregister_vp_cb(ppe_drv_sc_t sc, uint16_t vp_num);
  * void
  */
 extern bool ppe_drv_sc_register_vp_cb(ppe_drv_sc_t sc, ppe_drv_sc_callback_t cb, void *app_data, uint16_t vp_num);
+
+/*
+ * ppe_drv_sc_ucast_qbase_profile_set()
+ *	Configure UCAST qbase profile configuration for the given service code
+ *
+ * @param[IN] sc   Service code number.
+ * @param[IN] qbase UCAST queue base.
+ *
+ * @return
+ * API return status
+ */
+extern bool ppe_drv_sc_ucast_qbase_profile_set(uint8_t sc, uint16_t qbase);
 
 /** @} */ /* end_addtogroup ppe_drv_sc_subsystem */
 

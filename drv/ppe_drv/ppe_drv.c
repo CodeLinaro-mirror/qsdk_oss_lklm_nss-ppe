@@ -106,6 +106,15 @@ module_param(pon_max_pq, int, 0644);
 MODULE_PARM_DESC(pon_max_pq, "Max number of PON PQs needed by OMCI");
 #endif
 
+#ifdef PPE_DRV_DDRQ_ENABLE
+/*
+ * Module parameter to control setting of DDRQ LP SC for mapped DDRQ disabled scenarios
+ */
+bool ddrq_lp_sc_set_en = true;
+module_param(ddrq_lp_sc_set_en, bool, 0644);
+MODULE_PARM_DESC(ddrq_lp_sc_set_en, "Knob to configure DDRQ LP SC for DDRQ disabled scenarios");
+#endif
+
 int disable_port_mtu_check = true;
 uint32_t static_dbg_level = 0;
 static char static_dbg_level_str[PPE_DRV_STATIC_DBG_LEVEL_STR_LEN];
@@ -132,6 +141,10 @@ int ppe_drv_ipsec_passth_en = 0;
 static uint32_t loopback_port_ft_type;
 #endif
 
+#ifdef PPE_DRV_DDRQ_ENABLE
+uint32_t ppe_drv_ddrq_en_bitmask[PPE_DRV_DDRQ_MAX_CNT_WORD];
+#endif
+
 /*
  * Define the filename to be used for assertions.
  */
@@ -154,6 +167,59 @@ int ppe_drv_get_vxlan_gpe_dport(void)
 {
 	return ppe_drv_gbl->vxlan_gpe_dport;
 }
+
+#ifdef PPE_DRV_DDRQ_ENABLE
+/*
+ * ppe_drv_set_ddrq_en_bitmask()
+ *	API to set the PPE global DDRQ enable bitmask
+ */
+int ppe_drv_set_ddrq_en_bitmask(uint32_t q_base, uint32_t q_cnt, bool state)
+{
+	uint32_t word_idx, bit_off, bit_pending, bit_cnt, i, mask;
+
+	if ((q_base + q_cnt) > PPE_DRV_DDRQ_MAX_CNT) {
+		ppe_drv_warn("qbase: %d, q_cnt: %d outside the DDRQ range\n", q_base, q_cnt);
+		return -1;
+	}
+
+	i = q_base;
+	bit_pending = q_cnt;
+
+	while (bit_pending) {
+		word_idx = i / PPE_DRV_BITS_IN_WORD;
+		bit_off = i % PPE_DRV_BITS_IN_WORD;
+
+		bit_cnt = PPE_DRV_BITS_IN_WORD - bit_off;
+		if (bit_cnt > bit_pending) {
+			bit_cnt = bit_pending;
+		}
+		mask = (((1u << bit_cnt) - 1u) << bit_off);
+
+		if (state) {
+			ppe_drv_ddrq_en_bitmask[word_idx] |= mask;
+		} else {
+			ppe_drv_ddrq_en_bitmask[word_idx] &= ~mask;
+		}
+
+		i += bit_cnt;
+		bit_pending -= bit_cnt;
+	}
+
+	for (i = 0 ; i < PPE_DRV_DDRQ_MAX_CNT_WORD; i++) {
+		ppe_drv_info("updated DDRQN enable bitmask word:%d value is 0x%0x\n",
+					i, ppe_drv_ddrq_en_bitmask[i]);
+	}
+
+	return 0;
+}
+#else
+int ppe_drv_set_ddrq_en_bitmask(uint32_t q_base, uint32_t q_cnt, bool state)
+{
+	ppe_drv_warn("DDRQ feature not enabled in the PPE module\n");
+	return 0;
+}
+#endif
+EXPORT_SYMBOL(ppe_drv_set_ddrq_en_bitmask);
 
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 /*
@@ -224,7 +290,6 @@ bool ppe_drv_is_mht_dev(struct net_device *dev)
 }
 EXPORT_SYMBOL(ppe_drv_is_mht_dev);
 
-#ifdef PPE_DRV_DDRQ_ENABLE
 /*
  * ppe_drv_isram_queue_profile_init()
  *	API to enable ISRAM queue for all the PPE ports
@@ -260,7 +325,6 @@ bool ppe_drv_isram_queue_profile_init(uint8_t isram_qbase)
 	return true;
 }
 EXPORT_SYMBOL(ppe_drv_isram_queue_profile_init);
-#endif
 
 /*
  * ppe_drv_hw_stats_sync()
