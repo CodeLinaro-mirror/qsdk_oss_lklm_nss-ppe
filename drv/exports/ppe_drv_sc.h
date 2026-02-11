@@ -91,6 +91,7 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_DDRQ_PON_PT_MODE = 55,			/* Service code for DDRQ PON passthrough mode */
 	PPE_DRV_SC_DDRQ_LP_SC = 56,				/* Service code for DDRQ loopback ring */
 	PPE_DRV_SC_DDRQ_LP_SC_NEXT = 57,			/* Next service code for DDRQ loopback ring */
+	PPE_DRV_SC_HOST_QOS = 58,				/* Service code for redirecting packet to host for qdisc processing */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,

@@ -1350,6 +1350,29 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 					pcf->qdisc_info.qdisc_xmit_dev->name);
 		}
 
+		if (valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_E2E_HOST_ASSIST_QDISC) {
+			if ((!qdisc_rule->flow_netdev) ||
+					(qdisc_rule->flow_flags == PPE_DRV_HOST_QDISC_INVALID)) {
+				return PPE_DRV_RET_HOST_QDISC_CFG_FAIL;
+			}
+
+			/*
+			 * Set the flag to indicate host assisted qdisc processing.
+			 * Set the Qdisc info and flag / core mask for RFS as well.
+			 */
+			ppe_drv_v4_conn_flow_host_qdisc_info_set(pcf, qdisc_rule->flow_flags,
+					qdisc_rule->flow_class_id, qdisc_rule->flow_netdev);
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC);
+
+			pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL];
+			pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL];
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_PASSIVE_FLOW);
+			ppe_drv_trace("%p: valid_flags: 0x%0x, qdisc_flags: 0x%0x"
+					" class_id: %u, netdev name: %s\n", create, valid_flags,
+					pcf->qdisc_info.flags, pcf->qdisc_info.class_id,
+					pcf->qdisc_info.qdisc_xmit_dev->name);
+		}
+
 		/*
 		 * Bridge + VLAN? Make sure both top interfaces are attached to same parent.
 		 * If Interface is set as wanif using "echo eth# > /proc/sys/ppe/bridge_mgr/add_wanif",
@@ -1675,6 +1698,29 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_host_qdisc_info_set(pcr, qdisc_rule->return_flags,
 					qdisc_rule->return_class_id, qdisc_rule->return_netdev);
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID);
+			ppe_drv_trace("%p: valid_flags: 0x%0x, qdisc_flags: 0x%0x"
+					" class_id: %u, netdev name: %s\n", create, valid_flags,
+					pcr->qdisc_info.flags, pcr->qdisc_info.class_id,
+					pcr->qdisc_info.qdisc_xmit_dev->name);
+		}
+
+		if (valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_E2E_HOST_ASSIST_QDISC) {
+			if ((!qdisc_rule->return_netdev) ||
+					(qdisc_rule->return_flags == PPE_DRV_HOST_QDISC_INVALID)) {
+				return PPE_DRV_RET_HOST_QDISC_CFG_FAIL;
+			}
+
+			/*
+			 * Set the flag to indicate host assisted qdisc processing.
+			 * Set the Qdisc info and flag / core mask for RFS as well.
+			 */
+			ppe_drv_v4_conn_flow_host_qdisc_info_set(pcr, qdisc_rule->return_flags,
+					qdisc_rule->return_class_id, qdisc_rule->return_netdev);
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC);
+
+			pcr->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL];
+			pcr->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL];
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_PASSIVE_FLOW);
 			ppe_drv_trace("%p: valid_flags: 0x%0x, qdisc_flags: 0x%0x"
 					" class_id: %u, netdev name: %s\n", create, valid_flags,
 					pcr->qdisc_info.flags, pcr->qdisc_info.class_id,

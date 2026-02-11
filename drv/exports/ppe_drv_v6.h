@@ -80,7 +80,11 @@
 #define PPE_DRV_V6_VALID_FLAG_FLOW_HOST_QDISC_VALID	0x00004000  /**< Qdisc info is valid in flow direction. */
 #define PPE_DRV_V6_VALID_FLAG_RETURN_HOST_QDISC_VALID	0x00008000  /**< Qdisc info is valid in return direction. */
 #define PPE_DRV_V6_VALID_FLAG_FLOW_LABEL		0x00010000	/** < IPv6 header flow label valid. */
-#define PPE_DRV_V6_VALID_FLAG_UNIDIR_RULE	0x00020000	/**< Unidirectional rule is valid. */
+#define PPE_DRV_V6_VALID_FLAG_UNIDIR_RULE		0x00020000	/**< Unidirectional rule is valid. */
+#define PPE_DRV_V6_VALID_FLAG_FLOW_E2E_HOST_ASSIST_QDISC	0x00040000
+					/**< Qdisc info is valid for eth to eth host assisted qdisc in flow direction. */
+#define PPE_DRV_V6_VALID_FLAG_RETURN_E2E_HOST_ASSIST_QDISC	0x00080000
+					/**< Qdisc info is valid for eth to eth host assisted qdisc in return direction. */
 
 #define PPE_DRV_V6_MAX_CONN_COUNT               1024
 
@@ -418,4 +422,3 @@ extern bool ppe_drv_v6_nsm_stats_update(struct ppe_drv_nsm_stats *nsm_stats, str
 /** @} */ /* end_addtogroup ppe_drv_v6_subsystem */
 
 #endif /* _PPE_DRV_V6_H_ */
-
