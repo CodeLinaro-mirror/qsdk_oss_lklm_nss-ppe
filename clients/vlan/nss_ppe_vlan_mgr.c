@@ -469,7 +469,23 @@ static int nss_ppe_vlan_mgr_bond_configure_ppe(struct nss_vlan_pvt *v, struct ne
 	 * In case the bond interface has no slaves, we do not want to proceed further
 	 */
 	if (vlan_mgr_bond_port_role == -1) {
-		goto leave_lag_slaves;
+		if (NSS_PPE_VLAN_MGR_TAG_CNT(v) == NSS_PPE_VLAN_MGR_TYPE_DOUBLE) {
+			v->ppe_cvid = v->vid;
+			v->ppe_svid = v->parent->vid;
+		} else {
+			if (v->tpid == vlan_mgr_ctx.ctpid) {
+				v->ppe_cvid = v->vid;
+				v->ppe_svid = FAL_VLAN_INVALID;
+			} else {
+				v->ppe_cvid = FAL_VLAN_INVALID;
+				v->ppe_svid = v->vid;
+			}
+		}
+
+		v->xlate_info.br = NULL;
+		v->xlate_info.svid = v->ppe_svid;
+		v->xlate_info.cvid = v->ppe_cvid;
+		return PPE_DRV_RET_SUCCESS;
 	}
 
 	/*
