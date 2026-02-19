@@ -1159,7 +1159,8 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			 * interface is a Wi-Fi VP.
 			 */
 			if ((valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_DS) &&
-						(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
+					!(rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW) &&
+					(ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
 				pcf->wifi_rule_ds_metadata = create->wifi_rule.flow_ds_node_mdata;
 				ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS);
 			}
@@ -1457,6 +1458,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			 * interface is a Wi-Fi VP.
 			 */
 			if ((valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS) &&
+					!(rule_flags & PPE_DRV_V4_RULE_FLAG_VP_FLOW) &&
 						(ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV))) {
 				pcr->wifi_rule_ds_metadata = create->wifi_rule.return_ds_node_mdata;
 				ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_WIFI_DS);
