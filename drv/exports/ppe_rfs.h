@@ -63,6 +63,7 @@ struct ppe_rfs_ipv4_5tuple {
 	__be32 return_ip;       /**< Return IP address. */
 	__be16 flow_ident;      /**< Flow identifier, e.g., TCP/UDP port. */
 	__be16 return_ident;    /**< Return identifier, e.g., TCP/UDP port. */
+	uint32_t flow_rule_id;	/**< Connection manager unique number. */
 	u8 protocol;            /**< Protocol number. */
 	u8 reserved[3];         /**< Reserved; padding for alignment. */
 };
@@ -115,6 +116,7 @@ struct ppe_rfs_ipv6_5tuple {
 	__be32 return_ip[4];    /**< Return IP address. */
 	__be16 flow_ident;      /**< Flow identifier, e.g.,TCP/UDP port. */
 	__be16 return_ident;    /**< Return identifier, e.g., TCP/UDP port. */
+	u32 flow_rule_id;	/**< Connection manager unique number. */
 	u8 protocol;           /**< Protocol number. */
 };
 

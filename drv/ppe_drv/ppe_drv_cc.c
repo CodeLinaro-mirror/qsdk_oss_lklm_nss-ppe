@@ -28,7 +28,7 @@
  * ppe_drv_cc_process_v4()
  *	Try flush for a given flow key.
  */
-static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys)
+static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys, struct net_device *dev)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_flow *flow;
@@ -57,7 +57,7 @@ static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys)
 	 * Get the flow table entry and try to destroy.
 	 */
 	spin_lock_bh(&p->lock);
-	flow = ppe_drv_flow_v4_get(&v4_5tuple);
+	flow = ppe_drv_flow_v4_get_by_dev(&v4_5tuple, dev);
 	if (!flow) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_stats_inc(&p->stats.gen_stats.v4_flush_conn_not_found);
@@ -115,7 +115,7 @@ static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys)
  * ppe_drv_cc_process_v6()
  *	Try flush for a given flow key.
  */
-static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys)
+static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys, struct net_device *dev)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_flow *flow;
@@ -144,7 +144,7 @@ static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys)
 	 * Get the flow table entry and try to destroy.
 	 */
 	spin_lock_bh(&p->lock);
-	flow = ppe_drv_flow_v6_get(&v6_5tuple);
+	flow = ppe_drv_flow_v6_get_by_dev(&v6_5tuple, dev);
 	if (!flow) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_conn_not_found);
@@ -296,11 +296,11 @@ bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_bu
 	 */
 	switch (keys.control.addr_type) {
 		case FLOW_DISSECTOR_KEY_IPV4_ADDRS:
-			ppe_drv_cc_process_v4((ppe_drv_cc_t)cc, &keys);
+			ppe_drv_cc_process_v4((ppe_drv_cc_t)cc, &keys, skb->dev);
 			break;
 
 		case FLOW_DISSECTOR_KEY_IPV6_ADDRS:
-			ppe_drv_cc_process_v6((ppe_drv_cc_t)cc, &keys);
+			ppe_drv_cc_process_v6((ppe_drv_cc_t)cc, &keys, skb->dev);
 			break;
 
 		default:

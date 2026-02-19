@@ -93,6 +93,7 @@ struct ppe_drv_v6_5tuple {
 	uint32_t flow_ident;		/**< Flow identifier (e.g., TCP or UDP port). */
 	uint32_t return_ip[4];		/**< Return IP address. */
 	uint32_t return_ident;		/**< Return identier (e.g., TCP or UDP port). */
+	uint32_t flow_rule_id;		/**< Unique number defined in connection manager. */
 	uint8_t protocol;		/**< Protocol number. */
 };
 
@@ -203,6 +204,7 @@ struct ppe_drv_v6_conn_sync {
 	uint32_t return_tx_packet_count;		/**< Return interface's TX packet count. */
 	uint32_t return_tx_byte_count;			/**< Return interface's TX byte count. */
 	enum ppe_drv_stats_sync_reason reason;		/**< Reason for the sync. */
+	uint32_t flow_rule_id;				/**< Unique number defined in connection manager. */
 };
 
 /*

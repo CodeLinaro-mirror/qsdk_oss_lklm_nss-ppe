@@ -870,6 +870,7 @@ bool ppe_drv_flow_v6_pri_profile_get(struct ppe_drv_v6_conn_flow *pcf, struct pp
 	reverse_tuple.flow_ident = pcf->match_dest_ident;
 	reverse_tuple.return_ident = pcf->match_src_ident;
 	reverse_tuple.protocol = pcf->match_protocol;
+	reverse_tuple.flow_rule_id = pcf->conn ? pcf->conn->flow_rule_id : 0;
 
 	/*
 	 * This is when its a RFS flow, pcf flag is set as PPE_DRV_V4_CONN_FLAG_PASSIVE_FLOW.
@@ -1180,89 +1181,42 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 struct ppe_drv_flow *ppe_drv_flow_v6_get(struct ppe_drv_v6_5tuple *tuple)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
-	fal_flow_host_entry_t flow_host = {0};
-	fal_flow_entry_t *flow_cfg = &flow_host.flow_entry;
-	fal_host_entry_t *host_cfg = &flow_host.host_entry;
-	uint8_t protocol = tuple->protocol;
 	struct ppe_drv_flow *flow;
-	bool tuple_3 = false;
-	sw_error_t err;
 
-	/*
-	 * Fill host entry.
-	 */
-	memcpy(host_cfg->ip6_addr.ul, tuple->flow_ip, sizeof(tuple->flow_ip));
-	host_cfg->flags = FAL_IP_IP6_ADDR;
-
-	/*
-	 * Fill relevant details for 3-tuple and 5-tuple flows.
-	 */
-	if (protocol == IPPROTO_TCP) {
-		flow_cfg->protocol = FAL_FLOW_PROTOCOL_TCP;
-		ppe_drv_trace("%p: flow_tbl[protocol]: TCP-%u", tuple, FAL_FLOW_PROTOCOL_TCP);
-	} else if (protocol == IPPROTO_UDP) {
-		flow_cfg->protocol = FAL_FLOW_PROTOCOL_UDP;
-		ppe_drv_trace("%p: flow_tbl[protocol]: UDP-%u", tuple, FAL_FLOW_PROTOCOL_UDP);
-	} else if (protocol == IPPROTO_UDPLITE) {
-		flow_cfg->protocol = FAL_FLOW_PROTOCOL_UDPLITE;
-		ppe_drv_trace("%p: flow_tbl[protocol]: UDP-Lite-%u", tuple, FAL_FLOW_PROTOCOL_UDPLITE);
-	} else if (protocol == IPPROTO_ESP) {
-		tuple_3 = true;
-		ppe_drv_trace("%p: flow_tbl[protocol]: Other-%u", tuple, FAL_FLOW_PROTOCOL_OTHER);
-	} else if (protocol == IPPROTO_IPIP) {
-		tuple_3 = true;
-		ppe_drv_trace("%p: flow_tbl[protocol]: Other-%u", tuple, FAL_FLOW_PROTOCOL_OTHER);
-	} else if (protocol == IPPROTO_GRE) {
-		tuple_3 = true;
-		ppe_drv_trace("%p: flow_tbl[protocol]: Other-%u", tuple, FAL_FLOW_PROTOCOL_OTHER);
-	} else {
-		ppe_drv_stats_inc(&p->stats.gen_stats.fail_query_unknown_proto);
-		ppe_drv_warn("%p: protocol: %u incorrect for PPE", tuple, protocol);
-		return NULL;
-	}
-
-	memcpy(flow_cfg->flow_ip.ipv6.ul, tuple->return_ip, sizeof(tuple->return_ip));
-
-	ppe_drv_trace("%p: flow_tbl[dest_ip]: %pI6", tuple, &tuple->return_ip);
-	if (tuple_3) {
-		flow_cfg->entry_type = FAL_FLOW_IP6_3TUPLE_ADDR;
-		flow_cfg->protocol = FAL_FLOW_PROTOCOL_OTHER;
-		flow_cfg->ip_type = protocol;
-		ppe_drv_trace("%p: flow_tbl[ip_proto]: 0x%x", tuple, protocol);
-	} else {
-		flow_cfg->entry_type = FAL_FLOW_IP6_5TUPLE_ADDR;
-
-		flow_cfg->src_port = tuple->flow_ident;
-		flow_cfg->dst_port = tuple->return_ident;
-
-		ppe_drv_trace("%p: flow_tbl[sport]: %u", tuple, flow_cfg->src_port);
-		ppe_drv_trace("%p: flow_tbl[dport]: %u", tuple, flow_cfg->dst_port);
-
-	}
-
-	/*
-	 * query hardware
-	 */
-	err = fal_flow_host_get(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_KEY, &flow_host);
-	if (err != SW_OK) {
+	flow = ppe_drv_v6_flow_hash_tuple_find(tuple, p->hash_conn_v6);
+	if (!flow) {
 		ppe_drv_trace("%p: flow get failed", tuple);
 		return NULL;
 	}
 
-	/*
-	 * Get the sw instance of flow entry.
-	 */
-	flow = &p->flow[flow_cfg->entry_id];
 	ppe_drv_assert((flow->flags & PPE_DRV_FLOW_VALID), "%p: flow entry is already decelerated from PPE at index: %d",
-			tuple, flow_cfg->entry_id);
+			tuple, flow->index);
+	ppe_drv_trace("%p: flow_tbl entry found at index: %u", tuple, flow->index);
 
-	ppe_drv_assert((host_cfg->entry_id == flow->host->index),
-			"%p flow entry and host entry mismatch flow-index: %d hw-host_index: %d sw-host_index: %d",
-			tuple, flow->index, host_cfg->entry_id, flow->host->index);
-
-	ppe_drv_trace("%p: flow_tbl entry found at index: %u", tuple, flow_cfg->entry_id);
 	return flow;
 }
+
+/*
+ * ppe_drv_flow_v6_get_by_dev()
+ *	Find flow with 5tuple and incoming device.
+ */
+struct ppe_drv_flow *ppe_drv_flow_v6_get_by_dev(struct ppe_drv_v6_5tuple *tuple, struct net_device *dev)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_flow *flow;
+
+	flow = ppe_drv_v6_flow_hash_tuple_find_by_dev(tuple, p->hash_conn_v6, dev);
+	if (!flow) {
+		ppe_drv_trace("%p: flow get failed", tuple);
+		return NULL;
+	}
+
+	ppe_drv_assert((flow->flags & PPE_DRV_FLOW_VALID), "%p: flow entry is already decelerated from PPE at index: %d",
+			tuple, flow->index);
+	ppe_drv_trace("%p: flow_tbl entry found at index: %u", tuple, flow->index);
+	return flow;
+}
+
 
 /*
  * ppe_drv_flow_v6_wlan_metadata_set()
@@ -2528,89 +2482,63 @@ bool ppe_drv_flow_del(struct ppe_drv_flow *pf)
 struct ppe_drv_flow *ppe_drv_flow_v4_get(struct ppe_drv_v4_5tuple *tuple)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
-	fal_flow_host_entry_t flow_host = {0};
-	fal_flow_entry_t *flow_cfg = &flow_host.flow_entry;
-	fal_host_entry_t *host_cfg = &flow_host.host_entry;
-	uint8_t protocol = tuple->protocol;
 	struct ppe_drv_flow *flow;
-	bool tuple_3 = false;
-	sw_error_t err;
 
-	/*
-	 * Fill host entry.
-	 */
-	host_cfg->ip4_addr = tuple->flow_ip;
-	host_cfg->flags = FAL_IP_IP4_ADDR;
-
-	/*
-	 * Fill relevant details for 3-tuple and 5-tuple flows.
-	 */
-	if (protocol == IPPROTO_TCP) {
-		flow_cfg->protocol = FAL_FLOW_PROTOCOL_TCP;
-		ppe_drv_trace("%p: flow_tbl[protocol]: TCP-%u", tuple, FAL_FLOW_PROTOCOL_TCP);
-	} else if (protocol == IPPROTO_UDP) {
-		flow_cfg->protocol = FAL_FLOW_PROTOCOL_UDP;
-		ppe_drv_trace("%p: flow_tbl[protocol]: UDP-%u", tuple, FAL_FLOW_PROTOCOL_UDP);
-	} else if (protocol == IPPROTO_UDPLITE) {
-		flow_cfg->protocol = FAL_FLOW_PROTOCOL_UDPLITE;
-		ppe_drv_trace("%p: flow_tbl[protocol]: UDP-Lite-%u", tuple, FAL_FLOW_PROTOCOL_UDPLITE);
-	} else if (protocol == IPPROTO_ESP) {
-		tuple_3 = true;
-		ppe_drv_trace("%p: flow_tbl[protocol]: Other-%u", tuple, FAL_FLOW_PROTOCOL_OTHER);
-	} else if (protocol == IPPROTO_IPV6) {
-		tuple_3 = true;
-		ppe_drv_trace("%p: flow_tbl[protocol]: Other-%u", tuple, FAL_FLOW_PROTOCOL_OTHER);
-	} else if (protocol == IPPROTO_GRE) {
-		tuple_3 = true;
-		ppe_drv_trace("%p: flow_tbl[protocol]: Other-%u", tuple, FAL_FLOW_PROTOCOL_OTHER);
-	} else {
-		ppe_drv_stats_inc(&p->stats.gen_stats.fail_query_unknown_proto);
-		ppe_drv_warn("%p: protocol: %u incorrect for PPE", tuple, protocol);
-		return NULL;
-	}
-
-	flow_cfg->flow_ip.ipv4 = tuple->return_ip;
-	ppe_drv_trace("%p: flow_tbl[dest_ip]: %pI4", tuple, &tuple->return_ip);
-	if (tuple_3) {
-		flow_cfg->entry_type = FAL_FLOW_IP4_3TUPLE_ADDR;
-		flow_cfg->protocol = FAL_FLOW_PROTOCOL_OTHER;
-		flow_cfg->ip_type = protocol;
-		ppe_drv_trace("%p: flow_tbl[ip_proto]: 0x%x", tuple, protocol);
-	} else {
-		flow_cfg->entry_type = FAL_FLOW_IP4_5TUPLE_ADDR;
-
-		flow_cfg->src_port = tuple->flow_ident;
-		flow_cfg->dst_port = tuple->return_ident;
-
-		ppe_drv_trace("%p: flow_tbl[sport]: %u", tuple, flow_cfg->src_port);
-		ppe_drv_trace("%p: flow_tbl[dport]: %u", tuple, flow_cfg->dst_port);
-
-	}
-
-	/*
-	 * query hardware
-	 */
-	err = fal_flow_host_get(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_KEY, &flow_host);
-	if (err != SW_OK) {
+	flow = ppe_drv_v4_flow_hash_tuple_find(tuple, p->hash_conn_v4, false);
+	if (!flow) {
 		ppe_drv_trace("%p: flow get failed", tuple);
 		return NULL;
 	}
 
-	/*
-	 * Get the sw instance of flow entry.
-	 */
-	flow = &p->flow[flow_cfg->entry_id];
 	ppe_drv_assert((flow->flags & PPE_DRV_FLOW_VALID), "%p: flow entry is already decelerated from PPE at index: %d",
-			tuple, flow_cfg->entry_id);
-
-	ppe_drv_assert((host_cfg->entry_id == flow->host->index),
-			"%p flow entry and host entry mismatch flow-index: %d hw-host_index: %d sw-host_index: %d",
-			tuple, flow->index, host_cfg->entry_id, flow->host->index);
-
-	ppe_drv_trace("%p: flow_tbl entry found at index: %u", tuple, flow_cfg->entry_id);
+			tuple, flow->index);
+	ppe_drv_trace("%p: flow_tbl entry found at index: %u", tuple, flow->index);
 	return flow;
 }
 
+/*
+ * ppe_drv_flow_v4_get_by_dev()
+ *	Find flow table entry with 5tuple and incoming device.
+ */
+struct ppe_drv_flow *ppe_drv_flow_v4_get_by_dev(struct ppe_drv_v4_5tuple *tuple, struct net_device *dev)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_flow *flow;
+
+	flow = ppe_drv_v4_flow_hash_tuple_find_by_dev(tuple, p->hash_conn_v4, dev);
+	if (!flow) {
+		ppe_drv_trace("%p: flow get failed", tuple);
+		return NULL;
+	}
+
+	ppe_drv_assert((flow->flags & PPE_DRV_FLOW_VALID), "%p: flow entry is already decelerated from PPE at index: %d",
+			tuple, flow->index);
+	ppe_drv_trace("%p: flow_tbl entry found at index: %u", tuple, flow->index);
+	return flow;
+}
+/*
+ * ppe_drv_v4_flow_get_ignore_rule_id()
+ *	Find flow table entry ignoring rule id matched or not.
+ */
+struct ppe_drv_flow *ppe_drv_v4_flow_get_ignore_rule_id(struct ppe_drv_v4_5tuple *tuple)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_flow *flow;
+
+	flow = ppe_drv_v4_flow_hash_tuple_find(tuple, p->hash_conn_v4, true);
+	if (!flow) {
+		ppe_drv_trace("%p:get flow failed(%pI4:%u->%pI4:%u [%d])", tuple,
+				&tuple->flow_ip, tuple->flow_ident,
+				&tuple->return_ip, tuple->return_ident,
+				tuple->protocol);
+		return NULL;
+	}
+
+	ppe_drv_assert((flow->flags & PPE_DRV_FLOW_VALID), "%p: flow entry is already decelerated from PPE at index: %d",
+			tuple, flow->index);
+	ppe_drv_trace("%p: flow_tbl entry found at index: %u", tuple, flow->index);
+	return flow;
+}
 
 /*
  * ppe_drv_flow_v4_wlan_metadata_set()

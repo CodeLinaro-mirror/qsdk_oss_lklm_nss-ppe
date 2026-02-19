@@ -107,6 +107,7 @@
 struct ppe_drv_v4_conn_flow {
 	struct ppe_drv_v4_conn *conn;		/* Pointer to parent structure */
 	struct ppe_drv_flow *pf;		/* Flow pointer */
+	struct hlist_node hnode;		/* Flow hash list node */
 	uint16_t xmit_interface_mtu;		/* Interface MTU */
 	uint8_t match_protocol;			/* Protocol */
 	uint32_t match_src_ip;			/* Source IP address */
@@ -210,9 +211,10 @@ struct ppe_drv_v4_conn_flow {
  *	Structure to define a complete connection.
  */
 struct ppe_drv_v4_conn {
-	struct list_head list;
+	struct list_head list;			/* all connection list node */
 	struct ppe_drv_v4_conn_flow pcf;	/* flow object for flow direction */
 	struct ppe_drv_v4_conn_flow pcr;	/* flow object for return direction */
+	uint32_t flow_rule_id;			/* unique number defined in connection manager */
 	uint32_t flags;				/* connection flags */
 	bool toggle;				/* Used during stats sync */
 };
@@ -976,3 +978,8 @@ bool ppe_drv_v4_if_walk(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_top_if_
 bool ppe_drv_v4_fse_flow_configure(struct ppe_drv_v4_rule_create *create, struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_v4_conn_flow *pcr);
 void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct ppe_drv_fse_rule_info *fse_info, bool is_ds);
 bool ppe_drv_v4_fse_interface_check(struct ppe_drv_v4_conn_flow *pcf);
+struct ppe_drv_flow *ppe_drv_v4_flow_hash_tuple_find(struct ppe_drv_v4_5tuple *tuple,
+		struct hlist_head *head_tbl, bool ignore_rule_id);
+struct ppe_drv_flow *ppe_drv_v4_flow_hash_tuple_find_by_dev(struct ppe_drv_v4_5tuple *tuple,
+		struct hlist_head *head_tbl, struct net_device *dev);
+

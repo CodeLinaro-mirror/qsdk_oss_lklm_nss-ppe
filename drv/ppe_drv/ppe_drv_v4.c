@@ -536,6 +536,8 @@ ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, st
 	 */
 	ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST);
 
+	cn->flow_rule_id = create->tuple.flow_rule_id;
+
 	return PPE_DRV_RET_SUCCESS;
 }
 
@@ -695,6 +697,7 @@ ppe_drv_ret_t ppe_drv_v4_policer_conn_fill(struct ppe_drv_v4_rule_create *create
 		pcr->eg_port_if = ppe_drv_iface_ref(if_rx);
 	}
 
+	cn->flow_rule_id = create->tuple.flow_rule_id;
 	return PPE_DRV_RET_SUCCESS;
 }
 
@@ -745,6 +748,7 @@ ppe_drv_ret_t ppe_drv_v4_priority_conn_fill(struct ppe_drv_v4_rule_create *creat
 	ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_QOS_VALID);
 	ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST);
 
+	cn->flow_rule_id = create->tuple.flow_rule_id;
 	return PPE_DRV_RET_SUCCESS;
 }
 
@@ -1749,6 +1753,8 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 		ppe_drv_v4_conn_flags_set(cn, PPE_DRV_V4_CONN_FLAG_RETURN_VALID);
 	}
 
+	cn->flow_rule_id = tuple->flow_rule_id;
+
 	return PPE_DRV_RET_SUCCESS;
 }
 
@@ -1969,7 +1975,15 @@ static bool ppe_drv_v4_flow_check(struct ppe_drv_v4_conn_flow *pcf)
 {
 	struct ppe_drv_v4_5tuple tuple;
 	struct ppe_drv_flow *flow = NULL;
+	struct ppe_drv_v4_conn *cn = NULL;
 
+	cn = ppe_drv_v4_conn_flow_conn_get(pcf);
+	if (!cn) {
+		ppe_drv_info("%p: flow entry not found", pcf);
+		return false;
+	}
+
+	tuple.flow_rule_id = cn->flow_rule_id;
 	tuple.flow_ip = ppe_drv_v4_conn_flow_match_src_ip_get(pcf);
 	tuple.flow_ident = ppe_drv_v4_conn_flow_match_src_ident_get(pcf);
 	tuple.return_ip = ppe_drv_v4_conn_flow_match_dest_ip_get(pcf);
@@ -2396,6 +2410,7 @@ void ppe_drv_v4_conn_sync_one(struct ppe_drv_v4_conn *cn, struct ppe_drv_v4_conn
 	 * Fill reason for sync
 	 */
 	cns->reason = reason;
+	cns->flow_rule_id = cn->flow_rule_id;
 
 	/*
 	 * Update stats for each direction
@@ -2714,6 +2729,12 @@ ppe_drv_ret_t ppe_drv_v4_flush(struct ppe_drv_v4_conn *cn)
 	 */
 	if (pcf) {
 		ppe_drv_v4_if_walk_release(pcf);
+
+		/*
+		 * Delete flow entry from flow hash table.
+		 */
+		hlist_del_init(&pcf->hnode);
+
 	}
 
 #if defined(NSS_PPE_DRV_HW_GRO)
@@ -2737,6 +2758,10 @@ ppe_drv_ret_t ppe_drv_v4_flush(struct ppe_drv_v4_conn *cn)
 	 */
 	if (pcr) {
 		ppe_drv_v4_if_walk_release(pcr);
+		/*
+		 * Delete flow entry from flow hash table.
+		 */
+		hlist_del_init(&pcr->hnode);
 	}
 
 	/*
@@ -2799,6 +2824,11 @@ ppe_drv_ret_t ppe_drv_v4_rfs_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 		ppe_drv_iface_deref_internal(pcf->in_l3_if);
 		pcf->in_l3_if = NULL;
 	}
+
+	/*
+	 * Delete connection entry from connection hash table.
+	 */
+	hlist_del_init(&pcf->hnode);
 
 	spin_unlock_bh(&p->lock);
 
@@ -2869,6 +2899,11 @@ ppe_drv_ret_t ppe_drv_v4_assist_rule_destroy(struct ppe_drv_v4_rule_destroy *des
 		pcf->in_l3_if = NULL;
 	}
 
+	/*
+	 * Delete flow entry from flow hash table.
+	 */
+	hlist_del_init(&pcf->hnode);
+
 	spin_unlock_bh(&p->lock);
 
 	/*
@@ -2932,6 +2967,12 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 			ppe_drv_iface_deref_internal(pcf->in_l3_if);
 			pcf->in_l3_if = NULL;
 		}
+
+		/*
+		 * Delete flow entry from flow hash table.
+		 */
+		hlist_del_init(&pcf->hnode);
+
 	}
 
 	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
@@ -2956,6 +2997,12 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 			ppe_drv_iface_deref_internal(pcr->in_l3_if);
 			pcr->in_l3_if = NULL;
 		}
+
+		/*
+		 * Delete flow entry from flow hash table.
+		 */
+		hlist_del_init(&pcr->hnode);
+
 	}
 
 	spin_unlock_bh(&p->lock);
@@ -2977,6 +3024,139 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 EXPORT_SYMBOL(ppe_drv_v4_policer_flow_destroy);
 
 /*
+ * ppe_drv_v4_5tuple_hash
+ *	Return the hash value for given tuple.
+ */
+static inline uint32_t ppe_drv_v4_5tuple_hash(struct ppe_drv_v4_5tuple *tuple)
+{
+	uint32_t hash =  tuple->flow_ip ^ tuple->return_ip ^ tuple->protocol
+		^ tuple->flow_ident ^ tuple->return_ident;
+	return ((hash >> PPE_DRV_CONN_HASH_SHIFT) ^ hash) & (PPE_DRV_CONN_HASH_SIZE - 1);
+}
+
+/*
+ * ppe_drv_v4_conn_flow_hash
+ *	Return the hash value for given flow.
+ * The information of 5tuple is equivalent to the flow match information.
+ */
+static inline uint32_t ppe_drv_v4_conn_flow_hash(struct ppe_drv_v4_conn_flow *pcf)
+{
+	uint32_t hash =  pcf->match_src_ip ^ pcf->match_dest_ip ^ pcf->match_protocol
+		^ pcf->match_src_ident ^ pcf->match_dest_ident;
+	return ((hash >> PPE_DRV_CONN_HASH_SHIFT) ^ hash) & (PPE_DRV_CONN_HASH_SIZE - 1);
+}
+
+/*
+ * ppe_drv_v4_flow_hash_tuple_find()
+ *	find a flow entry in the hashtable by 5tuple and flow_rule_id number.
+ * The flow_rule_id number of connection from ecm is unique,
+ * the flow_rule_id number comes from netfn or clients, the flow_rule_id number is
+ * always zero
+ */
+struct ppe_drv_flow *ppe_drv_v4_flow_hash_tuple_find(struct ppe_drv_v4_5tuple *tuple,
+		struct hlist_head *head_tbl, bool ignore_rule_id)
+{
+	struct ppe_drv_v4_conn_flow *pcf;
+	uint32_t hash_index = ppe_drv_v4_5tuple_hash(tuple);
+	hlist_for_each_entry(pcf, &head_tbl[hash_index], hnode) {
+
+		ppe_drv_trace("%p:flow_rule_id:%u", pcf, pcf->conn->flow_rule_id);
+
+		/*
+		 * Go next if flow_rule_id is not matched when flow_rule_id match
+		 * is required.
+		 */
+		if ((!ignore_rule_id) && pcf->conn && pcf->conn->flow_rule_id != tuple->flow_rule_id) {
+			continue;
+		}
+
+		if (pcf->pf) {
+			ppe_drv_trace("%p:current (%pI4:%u->%pI4:%u [%d])", pcf,
+				&pcf->match_src_ip, pcf->match_src_ident,
+				&pcf->match_dest_ip, pcf->match_dest_ident,
+				pcf->match_protocol);
+		}
+
+		/*
+		 * return the cn when flow_rule_id and 5tuple matched with flow
+		 * direction.
+		 */
+		if (pcf->pf && pcf->match_src_ip == tuple->flow_ip
+				&& pcf->match_dest_ip == tuple->return_ip
+				&& pcf->match_src_ident == tuple->flow_ident
+				&& pcf->match_dest_ident == tuple->return_ident
+				&& pcf->match_protocol == tuple->protocol) {
+			return pcf->pf;
+		}
+
+	}
+
+	return NULL;
+}
+
+/*
+ * ppe_drv_v4_flow_hash_tuple_find_by_dev()
+ *	find a flow entry in the hashtable by 5tuple and device.
+ *	the device is receiving device in driver.
+ */
+struct ppe_drv_flow *ppe_drv_v4_flow_hash_tuple_find_by_dev(struct ppe_drv_v4_5tuple *tuple,
+		struct hlist_head *head_tbl, struct net_device *dev)
+{
+	struct ppe_drv_v4_conn_flow *pcf;
+	uint32_t hash_index = ppe_drv_v4_5tuple_hash(tuple);
+	hlist_for_each_entry(pcf, &head_tbl[hash_index], hnode) {
+
+		/*
+		 * return the flow when incoming device and 5tuple matched with flow
+		 * direction.
+		 */
+		if (pcf->pf && pcf->match_src_ip == tuple->flow_ip
+				&& pcf->match_dest_ip == tuple->return_ip
+				&& pcf->match_src_ident == tuple->flow_ident
+				&& pcf->match_dest_ident == tuple->return_ident
+				&& pcf->match_protocol == tuple->protocol
+				&& pcf->rx_port && pcf->rx_port->dev == dev) {
+			return pcf->pf;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * ppe_drv_v4_flow_hash_add()
+ *	Add the conn flow to the hash table, original flow and
+ * return flow may be in different slot for different hash value.
+ */
+static void ppe_drv_v4_flow_hash_add(struct hlist_head *head_tbl, struct ppe_drv_v4_conn_flow *pcf)
+{
+	uint32_t hash_index = ppe_drv_v4_conn_flow_hash(pcf);
+	if (hlist_unhashed(&pcf->hnode)) {
+		hlist_add_head(&pcf->hnode, &head_tbl[hash_index]);
+	}
+}
+
+/*
+ * ppe_drv_v4_conn_hash_tuple_find()
+ *	find a connection entry in the hashtable by 5tuple and flow_rule_id number.
+ *	the flow_rule_id number of connection from ecm is unique,
+ *	the flow_rule_id number comes from netfn or clients, the flow_rule_id number is
+ *	always zero
+ */
+static struct ppe_drv_v4_conn *ppe_drv_v4_conn_hash_tuple_find(struct ppe_drv_v4_5tuple *tuple,
+		struct hlist_head *head_tbl)
+{
+	struct ppe_drv_flow *pf = ppe_drv_v4_flow_hash_tuple_find(tuple, head_tbl, false);
+	if (pf && pf->pcf.v4) {
+		return pf->pcf.v4->conn;
+	}
+
+	ppe_drv_trace("%p: no connection match with given tuple", tuple);
+	return NULL;
+}
+
+
+/*
  * ppe_drv_v4_destroy()
  *	Destroy a connection entry in PPE.
  */
@@ -2984,7 +3164,6 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 {
 	struct ppe_drv_comm_stats *comm_stats;
 	struct ppe_drv *p = ppe_drv_gbl;
-	struct ppe_drv_flow *flow = NULL;
 	struct ppe_drv_v4_conn_flow *pcf;
 	struct ppe_drv_v4_conn_flow *pcr;
 	struct ppe_drv_v4_conn_sync *cns;
@@ -3014,15 +3193,15 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	 * Get flow table entry.
 	 */
 	spin_lock_bh(&p->lock);
-	flow = ppe_drv_flow_v4_get(&destroy->tuple);
-	if (!flow) {
+	cn = ppe_drv_v4_conn_hash_tuple_find(&destroy->tuple, ppe_drv_gbl->hash_conn_v4);
+	if (!cn) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_stats_inc(&comm_stats->v4_destroy_conn_not_found);
 		ppe_drv_warn("%p: flow entry not found", p);
 		return PPE_DRV_RET_FAILURE_DESTROY_NO_CONN;
 	}
 
-	pcf = flow->pcf.v4;
+	pcf = &cn->pcf;
 
 #if defined(NSS_PPE_DRV_HW_GRO)
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
@@ -3044,8 +3223,12 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	 */
 	ppe_drv_v4_if_walk_release(pcf);
 
-	cn = ppe_drv_v4_conn_flow_conn_get(pcf);
-	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
+	/*
+	 * Delete flow entry from flow hash table.
+	 */
+	hlist_del_init(&pcf->hnode);
+
+	pcr = &cn->pcr;
 
 #if defined(NSS_PPE_DRV_HW_GRO)
 	if (ppe_drv_v4_conn_flow_flags_check(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
@@ -3081,6 +3264,11 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	 * Delete connection entry from the active connection list.
 	 */
 	list_del(&cn->list);
+
+	/*
+	 * Delete flow entry from flow hash table.
+	 */
+	hlist_del_init(&pcr->hnode);
 
 	cns = ppe_drv_v4_conn_stats_alloc();
 	if (cns) {
@@ -3214,6 +3402,7 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_create(struct ppe_drv_v4_rule_create *crea
 		}
 
 		pcf->conn = cn;
+		ppe_drv_v4_flow_hash_add(p->hash_conn_v4, pcf);
 	}
 
 	if (create->ap_rule.rule_id.policer.flags & PPE_DRV_VALID_FLAG_RETURN_POLICER) {
@@ -3226,6 +3415,11 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_create(struct ppe_drv_v4_rule_create *crea
 			 */
 			if (pcf) {
 				ppe_drv_v4_flow_del(pcf);
+
+				/*
+				 * Remove it from hash table.
+				 */
+				hlist_del_init(&pcf->hnode);
 				pcf->pf = NULL;
 
 				ppe_drv_stats_inc(&comm_stats->v4_create_policer_fail);
@@ -3241,6 +3435,7 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_create(struct ppe_drv_v4_rule_create *crea
 		 * Add connection entry to the active connection list.
 		 */
 		pcr->conn = cn;
+		ppe_drv_v4_flow_hash_add(p->hash_conn_v4, pcr);
 		ppe_drv_trace("setting pcr ppe assist patch\n");
 	}
 
@@ -3345,7 +3540,9 @@ ppe_drv_ret_t ppe_drv_v4_rfs_create(struct ppe_drv_v4_rule_create *create)
 
 	pcf->conn = cn;
 
+	ppe_drv_v4_flow_hash_add(p->hash_conn_v4, pcf);
 	cn->pcr.pf = NULL;
+
 	spin_unlock_bh(&p->lock);
 
 	return PPE_DRV_RET_SUCCESS;
@@ -3490,7 +3687,9 @@ ppe_drv_ret_t ppe_drv_v4_assist_rule_create(struct ppe_drv_v4_rule_create *creat
 
 	pcf->conn = cn;
 
+	ppe_drv_v4_flow_hash_add(p->hash_conn_v4, pcf);
 	cn->pcr.pf = NULL;
+
 	spin_unlock_bh(&p->lock);
 
 	return PPE_DRV_RET_SUCCESS;
@@ -3865,7 +4064,14 @@ ppe_drv_ret_t ppe_drv_v4_create(struct ppe_drv_v4_rule_create *create)
 		ppe_drv_stats_inc(&comm_stats->v4_create_fse_success);
 	}
 
+	/*
+	 * Add to the all connection list
+	 */
 	list_add(&cn->list, &p->conn_v4);
+
+	ppe_drv_v4_flow_hash_add(p->hash_conn_v4, pcf);
+	ppe_drv_v4_flow_hash_add(p->hash_conn_v4, pcr);
+
 	spin_unlock_bh(&p->lock);
 
 	return PPE_DRV_RET_SUCCESS;
@@ -4025,22 +4231,19 @@ ppe_drv_ret_t ppe_drv_v4_rule_update(struct ppe_drv_v4_rule_update_msg *update_m
 {
 	struct ppe_drv_v4_conn *conn;
 	struct ppe_drv *p = ppe_drv_gbl;
-	struct ppe_drv_flow *flow;
 	struct ppe_drv_v4_5tuple *tuple;
 	ppe_drv_ret_t status;
 
-	spin_lock_bh(&p->lock);
 	tuple = &update_msg->tuple;
 
-	flow = ppe_drv_flow_v4_get(tuple);
-	if (!flow) {
+	spin_lock_bh(&p->lock);
+	conn = ppe_drv_v4_conn_hash_tuple_find(tuple, p->hash_conn_v4);
+	if (!conn) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_trace("%px : Flow not found for given tuple information - src ip: %pI4, dest ip: %pI4", &update_msg->tuple, &update_msg->tuple.flow_ip, &update_msg->tuple.return_ip);
+		ppe_drv_warn("%px : Connection not found for given tuple information", &update_msg->tuple);
 		ppe_drv_stats_inc(&p->stats.gen_stats.fail_unidir_rule_match);
 		return PPE_DRV_RET_UNIDIR_CONN_MATCH_FAIL;
 	}
-
-	conn = ppe_drv_v4_conn_flow_conn_get(flow->pcf.v4);
 
 	/*
 	 * QoS and DSCP will be updated by unidirection rule

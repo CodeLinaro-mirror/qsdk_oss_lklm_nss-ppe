@@ -120,6 +120,7 @@ struct ppe_drv_v6_conn_npt6 {
 struct ppe_drv_v6_conn_flow {
 	struct ppe_drv_v6_conn *conn;		/* Pointer to parent structure */
 	struct ppe_drv_flow *pf;		/* Flow pointer */
+	struct hlist_node hnode;		/* flow hash list node */
 	uint16_t xmit_interface_mtu;		/* Interface MTU */
 	uint8_t match_protocol;			/* Protocol */
 	uint32_t match_src_ip[4];			/* Source IP address */
@@ -228,6 +229,7 @@ struct ppe_drv_v6_conn {
 	struct ppe_drv_v6_conn_npt6 npt6;	/* Object to store NPTv6 rule info */
 #endif
 	uint32_t flags;				/* connection flags */
+	uint32_t flow_rule_id;			/* unique number defined in connection manager */
 	bool toggle;				/* Used during stats sync */
 	bool is_hairpin_nat;			/* If the connection is Hairpin NAT */
 };
@@ -1046,3 +1048,8 @@ bool ppe_drv_v6_fse_interface_check(struct ppe_drv_v6_conn_flow *pcf);
 ppe_drv_ret_t ppe_drv_v6_flush_hairpin_flow(struct ppe_drv_v6_conn *cn);
 ppe_drv_ret_t ppe_drv_v6_delete_hairpin_flow(struct ppe_drv_v6_conn *cn, struct ppe_drv_v6_conn_flow *pcf);
 #endif
+
+struct ppe_drv_flow *ppe_drv_v6_flow_hash_tuple_find(struct ppe_drv_v6_5tuple *tuple, struct hlist_head *head_tbl);
+struct ppe_drv_flow *ppe_drv_v6_flow_hash_tuple_find_by_dev(struct ppe_drv_v6_5tuple *tuple,
+		struct hlist_head *head_tbl, struct net_device *dev);
+
