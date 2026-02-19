@@ -592,6 +592,10 @@ struct ppe_drv_l3_if *ppe_drv_l3_if_alloc(enum ppe_drv_l3_if_type type)
 	in_l3_if_cfg.udp_zero_csum_action = FAL_UDP_ZERO_CSUM_FRWRD;
 	in_l3_if_cfg.vpn_id = 0;
 
+#ifdef NSS_PPE_SIXTH_TUPLE
+	in_l3_if_cfg.vpn_id = FAL_VPN_ID_FROM_INTF(l3_if->l3_if_index);
+#endif
+
 	if (type != PPE_DRV_L3_IF_TYPE_CPU_PORT) {
 		/*
 		 * For CPU port ipv4/ipv6 uc_route_en is not set as this would cause failure with egress l3_if checks

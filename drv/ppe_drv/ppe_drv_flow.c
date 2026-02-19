@@ -547,14 +547,31 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint8_
 
 /*
  * ppe_drv_flow_v6_vpn_id_get()
- *	Find the tree ID associated with a flow
+ *	Find the VPN ID associated with a flow
  */
 static bool ppe_drv_flow_v6_vpn_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_t *vpn_id)
 {
-	/*
-	 * TODO: to be added later.
-	 */
-	*vpn_id = 0;
+#ifdef NSS_PPE_SIXTH_TUPLE
+	int sixth_tuple_mode = ppe_drv_get_sixth_tuple_mode();
+
+	if (sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VSI) {
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+			struct ppe_drv_vsi *vsi = ppe_drv_v6_conn_flow_eg_top_vsi_get(pcf);
+			if (!vsi) {
+				ppe_drv_warn("No bridge vsi");
+				return false;
+			}
+			*vpn_id = FAL_VPN_ID_FROM_VSI(vsi->index);
+		} else {
+			struct ppe_drv_iface *l3_if = ppe_drv_v6_conn_flow_in_l3_if_get(pcf);
+			if (!l3_if || !l3_if->l3) {
+				ppe_drv_warn("No valid l3 iface");
+				return false;
+			}
+			*vpn_id = FAL_VPN_ID_FROM_INTF(l3_if->l3->l3_if_index);
+		}
+	}
+#endif
 	return true;
 }
 
@@ -1960,10 +1977,27 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint8_
  */
 static bool ppe_drv_flow_v4_vpn_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_t *vpn_id)
 {
-	/*
-	 * TODO: to be added later.
-	 */
-	*vpn_id = 0;
+#ifdef NSS_PPE_SIXTH_TUPLE
+	int sixth_tuple_mode = ppe_drv_get_sixth_tuple_mode();
+
+	if (sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VSI) {
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
+			struct ppe_drv_vsi *vsi = ppe_drv_v4_conn_flow_eg_top_vsi_get(pcf);
+			if (!vsi) {
+				ppe_drv_warn("No bridge vsi");
+				return false;
+			}
+			*vpn_id = FAL_VPN_ID_FROM_VSI(vsi->index);
+		} else {
+			struct ppe_drv_iface *l3_if = ppe_drv_v4_conn_flow_in_l3_if_get(pcf);
+			if (!l3_if || !l3_if->l3) {
+				ppe_drv_warn("No valid l3 iface");
+				return false;
+			}
+			*vpn_id = FAL_VPN_ID_FROM_INTF(l3_if->l3->l3_if_index);
+		}
+	}
+#endif
 	return true;
 }
 
