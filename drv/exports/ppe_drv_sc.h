@@ -101,6 +101,9 @@ struct ppe_drv_sc_metadata {
 	uint32_t int_pri;		/* Priority from EDMA descriptor*/
 	uint8_t vp_num;			/* Destination VP number */
 	uint8_t service_code;		/* Service code from EDMA descriptor*/
+	uint16_t ts_sec;			/* Timestamp second from EDMA descriptor. */
+	uint32_t ts_nsec;		/* Timestamp nanosecond from EDMA descriptor. */
+
 };
 
 typedef bool (*ppe_drv_sc_callback_t)(void *app_data, struct sk_buff *skb, void *sc_data);
