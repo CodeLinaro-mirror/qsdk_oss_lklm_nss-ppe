@@ -76,39 +76,13 @@ struct ppe_ds_wlan_reg_info {
 
 struct ppe_vp_ui;
 
+#define ppe_ds_wlan_ops_v2 ppe_ds_wlan_ops
+
 /**
  * ppe_ds_wlan_ops
  *	PPE-DS WLAN operations
  */
 struct ppe_ds_wlan_ops {
-	uint32_t (*get_tx_desc_many)(ppe_ds_wlan_handle_t *, struct ppe_ds_wlan_txdesc_elem *,
-			uint32_t num_buff_req, uint32_t buff_size, uint32_t headroom);
-	/**< Callback to get WLAN Tx descriptors and buffers */
-	void (*release_tx_desc_single)(ppe_ds_wlan_handle_t *, uint32_t cookie);
-	/**< Callback to release WLAN Tx descriptor and buffer */
-	void (*set_tcl_prod_idx)(ppe_ds_wlan_handle_t *, uint16_t tcl_prod_idx);
-	/**< Callback to set PPE2TCL ring's producer index */
-	void (*set_reo_cons_idx)(ppe_ds_wlan_handle_t *, uint16_t reo_cons_idx);
-	/**< Callback to set REO2PPE ring's consumer index */
-	uint16_t (*get_tcl_cons_idx)(ppe_ds_wlan_handle_t *);
-	/**< Callback to get PPE2TCL ring's consumer index */
-	uint16_t (*get_reo_prod_idx)(ppe_ds_wlan_handle_t *);
-	/**< Callback to get REO2PPE ring's producer index */
-	void (*release_rx_desc)(ppe_ds_wlan_handle_t *ppeds_handle,
-			struct ppe_ds_wlan_rxdesc_elem *arr, uint16_t count);
-	/**< Callback to release WLAN Rx descriptors and buffers */
-	void (*enable_tx_consume_intr)(ppe_ds_wlan_handle_t *ppeds_handle,
-			bool enable);
-	/**< Callback to toggle wlan interrupt */
-	void (*notify_napi_done)(ppe_ds_wlan_handle_t *ppeds_handle);
-	/**< Callback to trigger after ppeds ring process completes */
-};
-
-/**
- * ppe_ds_wlan_ops_v2
- *	PPE-DS WLAN operations
- */
-struct ppe_ds_wlan_ops_v2 {
 	uint32_t (*get_tx_desc_many)(int ppeds_node_id, struct ppe_ds_wlan_txdesc_elem *,
 			uint32_t num_buff_req, uint32_t buff_size, uint32_t headroom);
 	/**< Callback to get WLAN Tx descriptors and buffers */
@@ -143,7 +117,7 @@ struct ppe_ds_wlan_ops_v2 {
  * PPE-DS node id
  *
  */
-typedef int (*ds_inst_alloc_func_t)(struct ppe_ds_wlan_ops_v2 *ops, size_t priv_size);
+typedef int (*ds_inst_alloc_func_t)(struct ppe_ds_wlan_ops *ops, size_t priv_size);
 
 /*
  * ds_inst_start_func_t
