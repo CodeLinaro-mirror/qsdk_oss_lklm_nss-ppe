@@ -98,7 +98,7 @@ static int nss_ppenl_edma_ddrq_ops_cfg_rule(struct sk_buff *skb, struct genl_inf
 	ddrq_cfg = &nl_edma_rule->msg.ddrq_cfg;
 	pid = nl_cm->pid;
 
-	if (ddrq_cfg->ddrq_obj.ip_type == NSS_DP_DDRQ_IP_TYPE_NONE) {
+	if (ddrq_cfg->ddrq_obj.cfg_type == NSS_DP_DDRQ_CFG_TYPE_NONE) {
 		nss_ppenl_warn("Neither port id or the queue id is provided to extract EDMA DDRQ configuration\n");
 		nss_ppenl_ucast_resp(skb);
 		return -EINVAL;
@@ -128,7 +128,7 @@ static int nss_ppenl_edma_ddrq_ops_cfg_rule(struct sk_buff *skb, struct genl_inf
 			/*
 			 * DDRQ_TODO : Extend this for the port based DDRQ configuration
 			 */
-			nss_ppenl_trace("Configuration dump for DDRQ[%d]:\n", ddrq_cfg->ddrq_obj.obj_id);
+			nss_ppenl_trace("Configuration dump for DDRQ[%d]:\n", ddrq_cfg->ddrq_obj.cfg_id);
 			nss_ppenl_trace("ac_cfg_gap_grn_grn_min: %d\n", ddrq_ac_queue_cfg.ac_cfg_gap_grn_grn_min);
 			nss_ppenl_trace("ac_cfg_gap_grn_red_max: %d\n", ddrq_ac_queue_cfg.ac_cfg_gap_grn_red_max);
 			nss_ppenl_trace("ac_cfg_gap_grn_red_min: %d\n", ddrq_ac_queue_cfg.ac_cfg_gap_grn_red_min);

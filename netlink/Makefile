@@ -18,6 +18,8 @@ ccflags-y += -DNSS_PPE_PM_COUNTER_FEATURE_SUPPORT
 ccflags-y += -DNSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 ccflags-y += -DCONFIG_NSS_PPENL_PORT_MGMT=1
 ccflags-y += -DNSS_PPE_PPENL_PORT_MGMT_SUPPORT
+ccflags-y += -DCONFIG_NSS_PPENL_EDMA_DDRQ=1
+ccflags-y += -DNSS_PPE_EDMA_DDRQ_FEATURE_SUPPORT
 endif
 
 qca-nss-ppe-netlink-objs := nss_ppenl.o
@@ -32,6 +34,7 @@ qca-nss-ppe-netlink-objs += nss_ppenl_dscp.o
 qca-nss-ppe-netlink-objs += nss_ppenl_pm.o
 qca-nss-ppe-netlink-objs += nss_ppenl_port_mgmt.o
 qca-nss-ppe-netlink-objs += nss_ppenl_vlan.o
+qca-nss-ppe-netlink-objs += nss_ppenl_edma_ddrq.o
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq52xx))
