@@ -41,10 +41,28 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_NOEDIT_PRIORITY_SET",	/* PPE Priority service code */
 	"PPE_DRV_SC_NOEDIT_RULE",		/* PPE noedit rule service code */
 	"PPE_DRV_SC_FMAC_BYPASS",		/* Bypass FAKE mac check in PPE */
+	"PPE_DRV_SC_VP_MPSK",			/* Service code to bypass the egress VLAN table in case of MPSK */
+	"PPE_DRV_SC_LOOPBACK_RING",			/* Service code for EDMA LOOPBACK ring */
+	"PPE_DRV_SC_LOOPBACK_RING_NEXT",		/* Next Service code for EDMA LOOPBACK ring */
+	"PPE_DRV_SC_LOOPBACK_RING_GRETAP_MAPT",		/* Next Service code for EDMA LOOPBACK ring GRETAP to MAPT */
+	"PPE_DRV_SC_LOOPBACK_RING_MAPT_GRETAP",	/* Service code for EDMA LOOPBACK ring MAPT to GRETAP*/
+	"PPE_DRV_SC_LOOPBACK_RING_NEXT_GRETAP_N_MAPT",
+			/* Next Service code to dequeue packets from loopback ring and queue to GRETAP or MAPT ring */
 	"PPE_DRV_SC_NPT66_HAIRPIN_NAT",		/* Service code for Hairpin NAT loopback ring */
 	"PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT",	/* Next Service code for Hairpin NAT loopback ring */
+	"PPE_DRV_SC_PKT_EXCEPTION_EDIT_EN",
+			/* Service code to edit/commit packet when exceptioned */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_FLOW_SC",		/* Service code for loopback port first pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_FLOW_SC_NEXT",		/* Service code for loopback port second pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_RETURN_SC",		/* Service code for loopback port first pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_RETURN_SC_NEXT",	/* Service code for loopback port second pass */
+
 	"PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP",		/* Inline IPsec redirection from PPE TO EIP for encap direction */
 	"PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH",	/* Inline IPsec redirection from PPE TO EIP for decap dorection ACL match */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC",		/* Service code for loopback port for pon pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT",		/* Service code for loopback port for second pass */
+	"PPE_DRV_SC_FDB_BYPASS",		/* Service code for gem port table to bypass destination selection from FDB table */
+
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 
@@ -614,7 +632,7 @@ static int ppe_drv_conn_stats_sc_show(struct seq_file *m, void __attribute__((un
 
 	seq_puts(m, "\nPPE_sc_stats:\n\n");
 	stats_shadow = (uint64_t *)sc_stats;
-	for (i = 0; i <= PPE_DRV_SC_FMAC_BYPASS; i++) {
+	for (i = 0; i <= PPE_DRV_SC_FDB_BYPASS; i++) {
 		uint64_t stats1 = *stats_shadow++;
 		uint64_t stats2 = *stats_shadow++;
 		uint64_t stats3 = *stats_shadow++;
