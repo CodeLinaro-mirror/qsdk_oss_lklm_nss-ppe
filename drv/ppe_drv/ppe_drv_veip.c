@@ -149,7 +149,7 @@ ppe_drv_ret_t ppe_drv_veip_eg_vpgroup_set(uint32_t vport_index, uint32_t vpgroup
 	struct ppe_drv *p = ppe_drv_gbl;
 	sw_error_t err = SW_OK;
 
-//	err = fal_port_vlan_vpgroup_set(PPE_DRV_SWITCH_ID, vport_index, FAL_PORT_VLAN_EGRESS, vpgroup_id);
+	err = fal_port_vlan_vpgroup_set(PPE_DRV_SWITCH_ID, vport_index, FAL_PORT_VLAN_EGRESS, vpgroup_id);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: Failed to set VP group id in EG_VP_TBL for index : %d, error: %d\n",
 				p, vport_index, err);
@@ -213,22 +213,36 @@ bool ppe_drv_veip_is_hgu_rule_valid(struct ppe_drv_iface *iface)
 EXPORT_SYMBOL(ppe_drv_veip_is_hgu_rule_valid);
 
 /*
- * ppe_drv_veip_get_port()
+ * ppe_drv_veip_get_port_internal()
  *      Get VEIP VP ports of a specific type (PON or GW) from the interface.
+ *      Caller must hold ppe_drv_gbl->lock.
  */
-int32_t ppe_drv_veip_get_port(struct ppe_drv_iface *iface, enum ppe_drv_port_type type)
+int32_t ppe_drv_veip_get_port_internal(struct ppe_drv_iface *iface, enum ppe_drv_port_type type)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_veip_ctx *veip_ctx;
 	int32_t port_num = PPE_DRV_INVALID_PORT;
 
-	spin_lock_bh(&p->lock);
 	list_for_each_entry(veip_ctx, &iface->veip_port, list) {
 		if ((veip_ctx->port) && (veip_ctx->port->type == type)) {
 			port_num = veip_ctx->port->port;
 			break;
 		}
 	}
+
+	return port_num;
+}
+
+/*
+ * ppe_drv_veip_get_port()
+ *      Get VEIP VP ports of a specific type (PON or GW) from the interface.
+ */
+int32_t ppe_drv_veip_get_port(struct ppe_drv_iface *iface, enum ppe_drv_port_type type)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int32_t port_num;
+
+	spin_lock_bh(&p->lock);
+	port_num = ppe_drv_veip_get_port_internal(iface, type);
 	spin_unlock_bh(&p->lock);
 
 	return port_num;
@@ -280,10 +294,10 @@ void ppe_drv_veip_flag_clear(struct ppe_drv_iface *iface)
 ppe_drv_ret_t ppe_drv_veip_eg_vpgroup_clear(uint32_t vport_index)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
-	//uint32_t vpgroup_id = 0;
+	uint32_t vpgroup_id = 0;
 	sw_error_t err = SW_OK;
 
-	//err = fal_port_vlan_vpgroup_set(PPE_DRV_SWITCH_ID, vport_index, FAL_PORT_VLAN_EGRESS, vpgroup_id);
+	err = fal_port_vlan_vpgroup_set(PPE_DRV_SWITCH_ID, vport_index, FAL_PORT_VLAN_EGRESS, vpgroup_id);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: Failed to clear VP group id in EG_VP_TBL for index : %d, error: %d\n",
 				p, vport_index, err);

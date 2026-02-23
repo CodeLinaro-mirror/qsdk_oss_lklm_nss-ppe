@@ -39,6 +39,7 @@ ppe_drv_ret_t ppe_drv_veip_eg_vpgroup_clear(uint32_t vport_index);
 bool ppe_drv_veip_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint32_t phy_port);
 ppe_drv_ret_t ppe_drv_veip_gw_port_sc(struct ppe_drv_port *tx_port, ppe_drv_sc_t *service_code);
 bool ppe_drv_veip_is_enabled(struct net_device *dev);
+int32_t ppe_drv_veip_get_port_internal(struct ppe_drv_iface *iface, enum ppe_drv_port_type type);
 int32_t ppe_drv_veip_get_port(struct ppe_drv_iface *iface, enum ppe_drv_port_type type);
 bool ppe_drv_veip_is_hgu_rule_valid(struct ppe_drv_iface *iface);
 void ppe_drv_veip_flag_set(struct ppe_drv_iface *iface);

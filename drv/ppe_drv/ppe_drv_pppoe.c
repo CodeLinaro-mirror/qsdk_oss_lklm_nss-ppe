@@ -671,7 +671,7 @@ void  ppe_drv_pppoe_veip_l3_if_attach(struct ppe_drv_pppoe *pppoe, struct ppe_dr
 	/*
 	 * Getting GW VP from base iface.
 	 */
-	gw_vp = ppe_drv_veip_get_port(base_iface, PPE_DRV_PORT_VIRTUAL_GW);
+	gw_vp = ppe_drv_veip_get_port_internal(base_iface, PPE_DRV_PORT_VIRTUAL_GW);
 	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(gw_vp) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, gw_vp)
 		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, gw_vp);
 	pppoe_cfg.port_bitmap = fal_port;

@@ -1808,7 +1808,7 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	if (l2_hdr->flags & PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID) {
 #ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 		if (veip_if) {
-			int32_t gw_vp = ppe_drv_veip_get_port(veip_if, PPE_DRV_PORT_VIRTUAL_GW);
+			int32_t gw_vp = ppe_drv_veip_get_port_internal(veip_if, PPE_DRV_PORT_VIRTUAL_GW);
 			pppoe = ppe_drv_pppoe_find_session_by_veip(ntohs(l2_hdr->pppoe.ph.sid), l2_hdr->pppoe.server_mac, gw_vp);
 		} else
 #endif
@@ -1885,7 +1885,7 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 	 * VEIP mapping: Map tunnel VP to VEIP PON VP group on outer rule push.
 	 */
 	if (veip_if) {
-		int32_t pon_vp = ppe_drv_veip_get_port(veip_if, PPE_DRV_PORT_VIRTUAL_PON);
+		int32_t pon_vp = ppe_drv_veip_get_port_internal(veip_if, PPE_DRV_PORT_VIRTUAL_PON);
 		if (pon_vp >= 0) {
 			if (ppe_drv_veip_eg_vpgroup_set(ptun->vp_num, (uint32_t)pon_vp) != PPE_DRV_RET_SUCCESS) {
 				ppe_drv_warn("Failed to det VP group for tun_vp: 0x%x and pon_vp: 0x%x\n",  ptun->vp_num, pon_vp);

@@ -813,7 +813,7 @@ bool ppe_drv_l3_if_ig_vsi_mac_set(struct ppe_drv_l3_if *l3_if, uint8_t *mac_addr
 
         l3_if->is_ig_mac_set = true;
 	l3_if->is_vsi_set = true;
-	l3_if->vsi = vsi;
+	l3_if->vsi = ppe_drv_vsi_ref(vsi);
         ether_addr_copy(l3_if->ig_mac_addr, mac_addr);
 	ppe_drv_trace("%p: setting mac addr(%pM) and vsi(%u) to l3_if %u",
 			l3_if, mac_addr, l3_if->vsi ? l3_if->vsi->index : 0, l3_if->l3_if_index);
