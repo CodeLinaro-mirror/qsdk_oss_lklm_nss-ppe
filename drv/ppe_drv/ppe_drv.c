@@ -1512,9 +1512,7 @@ EXPORT_SYMBOL(ppe_drv_confgiure_ucast_prio_map_tbl);
 bool ppe_drv_port_mcast_priority_class_set(uint32_t port_id, uint8_t priority, uint8_t queue_class)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
-#ifdef NSS_PPE_MCAST_QOS_PRI_ENABLE
 	sw_error_t ret;
-#endif
 
 	if (port_id >= PPE_DRV_PHYSICAL_MAX) {
 		ppe_drv_warn("%p: Invalid port ID: %u\n", p, port_id);
@@ -1532,17 +1530,12 @@ bool ppe_drv_port_mcast_priority_class_set(uint32_t port_id, uint8_t priority, u
 		return false;
 	}
 
-	/*
-	 * TODO: Enable this for LM256 profiles once SSDK API is enabled.
-	 */
-#ifdef NSS_PPE_MCAST_QOS_PRI_ENABLE
 	ret = fal_port_mcast_priority_class_set(PPE_DRV_SWITCH_ID, port_id, priority, queue_class);
 	if (ret != SW_OK) {
 		ppe_drv_warn("%p: Failed to set mcast priority class for port %u, priority %u, error: %d\n",
 			     p, port_id, priority, ret);
 		return false;
 	}
-#endif
 
 	ppe_drv_trace("%p: Successfully set mcast priority class for port %u, priority %u to class %u\n",
 		      p, port_id, priority, queue_class);

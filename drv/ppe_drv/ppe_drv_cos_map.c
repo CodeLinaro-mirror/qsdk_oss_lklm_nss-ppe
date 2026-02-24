@@ -93,11 +93,6 @@ ppe_drv_ret_t ppe_drv_cos_map_cosmap_set(struct ppe_drv_cos_map_cfg *cfg)
 
 			break;
 
-		/*
-		 * TODO: Curretly fal API is not enabled for low memory profile.
-		 * Remove this flag once fal API is enabled.
-		 */
-#ifdef NSS_PPE_COS_MAP_ENABLE
 		case PPE_DRV_COS_MAP_TYPE_TCI:
 			err = fal_qos_cosmap_pcp_set(PPE_DRV_SWITCH_ID, cfg->group_id, cfg->val, &cos_cfg);
 			if (err != SW_OK) {
@@ -107,7 +102,6 @@ ppe_drv_ret_t ppe_drv_cos_map_cosmap_set(struct ppe_drv_cos_map_cfg *cfg)
 			}
 
 			break;
-#endif
 
 		default:
 			spin_unlock_bh(&p->lock);
