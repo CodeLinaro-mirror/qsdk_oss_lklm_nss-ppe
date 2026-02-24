@@ -43,7 +43,10 @@ struct ppe_drv_iface {
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	struct list_head npt6_hp;		/* List of adhoc l3_if for hairpin nat connections */
 #endif
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	uint16_t veip_cnt;			/* VEIP interface count */
 	struct list_head veip_port;		/* List of vp port for veip interface */
+#endif
 };
 
 bool ppe_drv_iface_deref_internal(struct ppe_drv_iface *iface);

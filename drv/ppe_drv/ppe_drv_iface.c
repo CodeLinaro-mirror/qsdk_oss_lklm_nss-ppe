@@ -1271,8 +1271,9 @@ struct ppe_drv_iface *ppe_drv_iface_alloc(enum ppe_drv_iface_type type, struct n
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	INIT_LIST_HEAD(&iface->npt6_hp);
 #endif
-
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 	INIT_LIST_HEAD(&iface->veip_port);
+#endif
 
 	spin_unlock_bh(&p->lock);
 

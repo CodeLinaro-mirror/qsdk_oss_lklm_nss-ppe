@@ -398,6 +398,11 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 			sc_cfg.dest_port_valid = A_TRUE;
 		}
 		break;
+	case PPE_DRV_SC_FEATURE_PON_HGU_PPTP:
+		sc_cfg.bypass_bitmap[1] = (1 << EG_VLAN_MEMBER_CHECK_BYP);
+		sc_cfg.direction = PPE_DRV_SC_IN_L2_DIR_DST;
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
 #endif
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
@@ -879,6 +884,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT, p->loopback_port_info.port_id);
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_FEATURE_PON_HGU_PPTP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 #endif
 	return sc;
 }

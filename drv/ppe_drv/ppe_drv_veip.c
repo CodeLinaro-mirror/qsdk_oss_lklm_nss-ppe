@@ -11,6 +11,7 @@
 #include <fal/fal_portvlan.h>
 #include <fal/fal_port_ctrl.h>
 #include <fal/fal_vport.h>
+#include <fal/fal_servcode.h>
 #include "ppe_drv.h"
 
 #define MAX_VEIP_PORTS 2
@@ -870,6 +871,57 @@ ppe_drv_ret_t ppe_drv_veip_gw_port_sc(struct ppe_drv_port *tx_port, ppe_drv_sc_t
 }
 
 /*
+ * ppe_drv_veip_tl_tbl_set()
+ *	Configure Service code in TL_SERVICE_TBL.
+ */
+static void ppe_drv_veip_tl_tbl_set(struct ppe_drv_port *port, ppe_drv_sc_t sc)
+{
+	fal_port_t fal_port;
+	sw_error_t err;
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port->port) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port->port)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port->port);
+
+	/*
+	 * Setting TL_SERVICE_TBL.
+	 */
+	err = fal_port_servcode_set(PPE_DRV_SWITCH_ID, fal_port, sc);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to configure TL_SERVICE_TBL for SC: %u\n", sc);
+		return;
+	}
+
+	ppe_drv_trace("TL_SERVICE_TBL configured for SC: %u  and port: %u\n", sc, port->port);
+	return;
+}
+
+/*
+ * ppe_drv_veip_tl_tbl_clear()
+ *	Clear Service code in TL_SERVICE_TBL.
+ */
+static void ppe_drv_veip_tl_tbl_clear(struct ppe_drv_port *port)
+{
+	fal_port_t fal_port;
+	uint32_t sc_idx = FAL_SERVCODE_INVALID;
+	sw_error_t err;
+
+	fal_port = PPE_DRV_VIRTUAL_PORT_CHK(port->port) ? FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port->port)
+		: FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port->port);
+
+	/*
+	 * Setting TL_SERVICE_TBL.
+	 */
+	err = fal_port_servcode_set(PPE_DRV_SWITCH_ID, fal_port, sc_idx);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to clear TL_SERVICE_TBL for port: %u\n", port->port);
+		return;
+	}
+
+	ppe_drv_trace("TL_SERVICE_TBL cleared for port: %u\n", port->port);
+	return;
+}
+
+/*
  * ppe_drv_veip_port_init()
  *	Helper function to initialize a single VEIP port
  */
@@ -1075,6 +1127,13 @@ ppe_drv_ret_t ppe_drv_veip_init(struct ppe_drv_iface *iface, struct net_device *
 	}
 
 	/*
+	 * Configure TL_SERVICE table.
+	 */
+	if ((base_if->port) && (!base_if->veip_cnt++)) {
+		ppe_drv_veip_tl_tbl_set(base_if->port, PPE_DRV_SC_FEATURE_PON_HGU_PPTP);
+	}
+
+	/*
 	 * Return VP port numbers
 	 */
 	vp_info->gw_vp_num = port_nums[0];
@@ -1216,6 +1275,13 @@ void ppe_drv_veip_deinit(struct ppe_drv_iface *iface)
 		if (parent_if && (parent_if->type == PPE_DRV_IFACE_TYPE_BRIDGE) && parent_if->vsi) {
 			ppe_drv_vsi_clear_remap_entries(vsi, parent_if->vsi);
 		}
+	}
+
+	/*
+	 * Clear TL_SERVICE table.
+	 */
+	if ((base_if->port) && (!--base_if->veip_cnt)){
+		ppe_drv_veip_tl_tbl_clear(base_if->port);
 	}
 
 	/*
