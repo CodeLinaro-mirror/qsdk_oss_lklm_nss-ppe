@@ -360,6 +360,23 @@ bool ppe_drv_flow_v6_qos_clear(struct ppe_drv_flow *pf)
 	return true;
 }
 
+#ifdef NSS_PPE_DRV_HW_GRO
+static bool ppe_drv_hw_gro_is_enabled(struct ppe_drv *p, struct ppe_drv_port *tx_port, struct ppe_drv_port *rx_port)
+{
+	if ((ppe_drv_port_flags_check(tx_port, PPE_DRV_PORT_FLAG_NETFN_OL)) && rx_port->hw_gro_en) {
+		if (atomic_read(&p->gro_ctx.num_hw_gro_flows) < NSS_PPE_DRV_MAX_GRO_FLOWS)
+			return true;
+	}
+
+	if ((ppe_drv_port_flags_check(rx_port, PPE_DRV_PORT_FLAG_NETFN_OL)) && tx_port->hw_gro_en) {
+		if (atomic_read(&p->gro_ctx.num_hw_gro_flows) < NSS_PPE_DRV_MAX_GRO_FLOWS)
+			return true;
+	}
+
+	return false;
+}
+#endif
+
 #ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
 /*
  * ppe_drv_flow_v6_flow_cookie40b_get()
@@ -1238,6 +1255,10 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	uint8_t service_class;
 	struct ppe_drv_iface *port_if = ppe_drv_v6_conn_flow_eg_port_if_get(pcf);
 	struct ppe_drv_port *pp = NULL;
+#ifdef NSS_PPE_DRV_HW_GRO
+	struct ppe_drv_port *tx_port = NULL;
+	struct ppe_drv_port *rx_port = NULL;
+#endif
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
 	bool wifi_qos_en = false;
@@ -1284,7 +1305,10 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	 * 2. We haven't exceeded the maximum number of concurrent GRO flows
 	 */
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID)) {
-		if ((atomic_read(&p->gro_ctx.num_hw_gro_flows) < NSS_PPE_DRV_MAX_GRO_FLOWS)) {
+		tx_port = ppe_drv_v6_conn_flow_tx_port_get(pcf);
+		rx_port = ppe_drv_v6_conn_flow_rx_port_get(pcf);
+
+		if (ppe_drv_hw_gro_is_enabled(p, tx_port, rx_port)) {
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO);
 			atomic_inc(&p->gro_ctx.num_hw_gro_flows);
 		}
@@ -2487,6 +2511,10 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	uint8_t service_class;
 	struct ppe_drv_iface *port_if = ppe_drv_v4_conn_flow_eg_port_if_get(pcf);
 	struct ppe_drv_port *pp = NULL;
+#ifdef NSS_PPE_DRV_HW_GRO
+	struct ppe_drv_port *tx_port = NULL;
+	struct ppe_drv_port *rx_port = NULL;
+#endif
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
 	bool wifi_qos_en = false;
@@ -2534,7 +2562,10 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	 * 2. We haven't exceeded the maximum number of concurrent GRO flows
 	 */
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_SW_MDATA_VALID)) {
-		if (atomic_read(&p->gro_ctx.num_hw_gro_flows) < NSS_PPE_DRV_MAX_GRO_FLOWS) {
+		tx_port = ppe_drv_v4_conn_flow_tx_port_get(pcf);
+		rx_port = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+
+		if (ppe_drv_hw_gro_is_enabled(p, tx_port, rx_port)) {
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO);
 			atomic_inc(&p->gro_ctx.num_hw_gro_flows);
 		}

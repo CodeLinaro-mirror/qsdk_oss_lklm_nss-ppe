@@ -1361,6 +1361,12 @@ disable_encap:
 	ptun->tun_state = PPE_DRV_TUN_STATE_INACTIVE;
 
 skip_tunnel_deactivation:
+
+	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6 && ptun->th.tun.mape.is_mape_br && ptun->th.tun.mape.is_mape_activate) {
+		ptun->th.tun.mape.is_mape_activate = A_FALSE;
+		ptun->mape_br_active_tun_count--;
+	}
+
 	/*
 	 * Delete all the instances of tunnel stored in cn list
 	 * and release acquired references
@@ -1393,22 +1399,17 @@ skip_tunnel_deactivation:
 	ppe_drv_v6_conn_free(cn_v6);
 	ppe_drv_v4_conn_free(cn_v4);
 
-	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6 && ptun->th.tun.mape.is_mape_br && ptun->th.tun.mape.is_mape_activate) {
-		ptun->th.tun.mape.is_mape_activate = A_FALSE;
-		ptun->mape_br_active_tun_count--;
-	}
-
 	return true;
 
 error:
-	spin_unlock_bh(&p->lock);
-	ppe_drv_v4_conn_stats_free(cns_v4);
-	ppe_drv_v6_conn_stats_free(cns_v6);
-
 	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6 && ptun->th.tun.mape.is_mape_br) {
 		ptun->th.tun.mape.is_mape_activate = A_FALSE;
 		ptun->mape_br_active_tun_count--;
 	}
+
+	spin_unlock_bh(&p->lock);
+	ppe_drv_v4_conn_stats_free(cns_v4);
+	ppe_drv_v6_conn_stats_free(cns_v6);
 
 	return false;
 }

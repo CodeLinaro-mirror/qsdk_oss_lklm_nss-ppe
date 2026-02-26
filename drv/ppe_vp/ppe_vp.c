@@ -473,6 +473,7 @@ static struct ppe_vp *__ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai
 	info.disable_ttl_dec = !!(vpai->flags & PPE_VP_FLAG_DISABLE_TTL_DEC);
 	info.redir_en = !!(vpai->flags & PPE_VP_FLAG_REDIR_ENABLE);
 	info.fdb_learn_enabled = vpai->fdb_learn_enabled;
+	info.netfn_ol_enabled = (info.net_dev_type == PPE_VP_NET_DEV_TYPE_NETFN_OL);
 
 	/*
 	 * Initialize the virtual port in PPE.

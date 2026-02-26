@@ -92,6 +92,30 @@ qca-nss-ppe-rule-objs += ppe_vlan/ppe_vlan_dump.o
 qca-nss-ppe-rule-objs += ppe_vlan/ppe_vlan_stats.o
 ccflags-y += -DPPE_VLAN_DEBUG_LEVEL=3
 endif
+
+ifeq ($(PPE_DOT1P_ENABLED), y)
+qca-nss-ppe-rule-objs += ppe_dot1p/ppe_dot1p.o
+qca-nss-ppe-rule-objs += ppe_dot1p/ppe_dot1p_dump.o
+qca-nss-ppe-rule-objs += ppe_dot1p/ppe_dot1p_stats.o
+ccflags-y += -DPPE_DOT1P_DEBUG_LEVEL=3
+ccflags-y += -DNSS_PPE_FEATURE_DOT1P
+ccflags-y += -DNSS_PPE_PON_SUPPORT
+endif
+
+ifeq ($(PPE_GEMPORT_ENABLED), y)
+qca-nss-ppe-rule-objs += ppe_gemport/ppe_gemport.o
+qca-nss-ppe-rule-objs += ppe_gemport/ppe_gemport_dump.o
+qca-nss-ppe-rule-objs += ppe_gemport/ppe_gemport_stats.o
+ccflags-y += -DPPE_GEM_PORT_DEBUG_LEVEL=3
+ccflags-y += -DNSS_PPE_FEATURE_GEMPORT
+endif
+
+ifeq ($(PPE_COS_MAP_ENABLED), y)
+qca-nss-ppe-rule-objs += ppe_cos_map/ppe_cos_map.o
+qca-nss-ppe-rule-objs += ppe_cos_map/ppe_cos_map_dump.o
+qca-nss-ppe-rule-objs += ppe_cos_map/ppe_cos_map_stats.o
+ccflags-y += -DPPE_COS_MAP_DEBUG_LEVEL=3
+endif
 endif
 
 ifndef PPE_LOWMEM_PROFILE_16M

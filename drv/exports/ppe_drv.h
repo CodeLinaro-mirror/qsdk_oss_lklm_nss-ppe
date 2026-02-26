@@ -587,6 +587,17 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_PORT_MGMT_MAC_FILTER_CLR_FAIL,	/**< Failed to clear the mac filter table. */
 	PPE_DRV_RET_PORT_MGMT_MAC_FILTER_SET_FAIL,	/**< Failed to config the mac filter. */
 	PPE_DRV_RET_UCAST_PRIO_TBL_MAP_FAIL,		/**< Failed to set profile id for a port. */
+	PPE_DRV_RET_DOT1P_RULE_INVALID,			/**< DOT1P rule invalid */
+	PPE_DRV_RET_DOT1P_RULE_ADD_FAIL,		/**< Failed to add DOT1P rule */
+	PPE_DRV_RET_DOT1P_RULE_BIND_GEMPORT_FAIL,	/**< Failed to bind DOT1P rule to gemport cfg */
+	PPE_DRV_RET_DOT1P_RULE_ENABLE_FAIL,		/**< Failed to enable gemport gen */
+	PPE_DRV_RET_DOT1P_RULE_BIND_POLICER_ID_FAIL,	/**< Failed to bind DOT1P rule to policer id */
+	PPE_DRV_RET_DOT1P_GLOBAL_CFG_FAIL,		/**< DOT1P global config failed */
+	PPE_DRV_RET_DOT1P_DEFAULT_CFG_FAIL,		/**< DOT1P default config failed */
+	PPE_DRV_RET_GEMPORT_RULE_INVALID,		/**< Gemport rule invalid */
+	PPE_DRV_RET_GEMPORT_RULE_ADD_FAIL,		/**< Failed to add Gemport rule */
+	PPE_DRV_RET_GEMPORT_RULE_ENABLE_FAIL,		/**< Failed to enable gemport mapping */
+	PPE_DRV_RET_COS_MAP_CFG_FAIL,			/**< Failed to configure CoS mapping. */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 
@@ -899,5 +910,30 @@ bool ppe_drv_l2vp_sc_rmv(uint32_t dest_port_id);
  * true or false
  */
 bool ppe_drv_pon_get_pq_config(uint8_t pq, uint8_t *enq_vp, uint8_t *int_pri);
+
+/**
+ * ppe_drv_pon_map_enq_vp_to_base_pq
+ *	Provides enq_vp mapped to the given base pq.
+ *
+ * @param[in] base_pq	base priority queue.
+ * @param[in] enq_vp	enqueue vp.
+ *
+ * @return
+ * success or error code
+ */
+ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp);
+
 #endif
+
+/**
+ * ppe_drv_hw_gro_feature_set
+ *	Set HW GRO feature state
+ *
+ * @param[in] dev	Netdevice on which HW GRO is enabled or disabled
+ * @param[in] enable	Enable or disable for HW GRO
+ *
+ * @return
+ * none.
+ */
+bool ppe_drv_hw_gro_feature_set(struct net_device *dev, bool enable);
 #endif /* _PPE_DRV_H_ */

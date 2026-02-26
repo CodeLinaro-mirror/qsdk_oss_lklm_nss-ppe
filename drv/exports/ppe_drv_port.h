@@ -101,6 +101,7 @@ enum ppe_drv_enq_vp_type {
 	PPE_DRV_ENQ_VP_DEFAULT,		/* Used for DS and other purpose */
 #ifdef NSS_PPE_PON_SUPPORT
 	PPE_DRV_ENQ_VP_PON,		/* Used for PON cases */
+	PPE_DRV_BASEQ_ENQ_VP_PON,	/* Used for mapoing base queue for PON cases */
 #endif
 };
 

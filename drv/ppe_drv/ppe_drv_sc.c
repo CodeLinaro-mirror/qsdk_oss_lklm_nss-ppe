@@ -451,6 +451,14 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
+	case PPE_DRV_SC_FDB_BYPASS:
+		/*
+		 * bypass the dest mac lookup forward
+		 */
+		sc_cfg.bypass_bitmap[1] =(1 << BRIDGING_FWD_BYP);
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+
 #ifdef NSS_PPE_FEATURE_EXCEPTION_EDIT
 	case PPE_DRV_SC_PKT_EXCEPTION_EDIT_EN:
 		/*
@@ -765,6 +773,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_FMAC_BYPASS, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP, PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_PORT_EIP197);
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH, PPE_DRV_SC_NOEDIT_REDIR_CORE0, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_FDB_BYPASS, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 
 	/*
 	 * Initialize FLOW ACL service code

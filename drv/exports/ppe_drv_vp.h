@@ -43,6 +43,7 @@ struct ppe_drv_vp_info {
 	uint8_t usr_type;		/**< VP user type */
 	uint8_t mpsk_en;		/**< MPSK Enable flag */
 	bool fdb_learn_enabled;
+	bool netfn_ol_enabled;		/**< NETFN enabled */
 };
 
 /**

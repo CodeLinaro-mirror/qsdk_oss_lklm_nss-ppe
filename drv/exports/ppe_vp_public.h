@@ -184,6 +184,7 @@ typedef enum ppe_vp_user_type {
  */
 enum ppe_vp_net_dev_type {
 	PPE_VP_NET_DEV_TYPE_WIFI = 1,	/**< VP netdev is of type Wi-Fi */
+	PPE_VP_NET_DEV_TYPE_NETFN_OL,	/**< NETFN netdev */
 	PPE_VP_NET_DEV_TYPE_MAX,		/**< Maximum VP netdev types */
 };
 

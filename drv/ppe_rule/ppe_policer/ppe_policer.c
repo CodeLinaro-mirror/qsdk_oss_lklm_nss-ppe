@@ -439,7 +439,10 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 	struct ppe_drv_policer_rule_create create = {0};
 	struct ppe_drv_policer_rule_create_acl_info *acl_info = &create.msg.acl_info;
 	struct ppe_policer_base *g_policer = &gbl_ppe_policer;
+	struct ppe_drv_policer_acl *acl_ctx = NULL;
 	struct ppe_policer *pol;
+	uint32_t acl_index = 0;
+	bool acl_index_valid = false;
 
 	if ((cinfo->committed_burst_size > cinfo->peak_burst_size) || (cinfo->committed_rate > cinfo->peak_rate)) {
 		ppe_policer_warn("%p: Committed shaper parameters may not exceed peak shaper parameters", g_policer);
@@ -452,22 +455,44 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 		return false;
 	}
 
+#ifndef NSS_PPE_PON_SUPPORT
+	if (info->dir != PPE_POLICER_DIRECTION_INVALID) {
+		ppe_policer_warn("%p: Policer direction not supported: %d", g_policer, info->rule_id);
+		return false;
+	}
+#endif
+
 	pol = ppe_policer_rule_acl_find_by_id(info->rule_id);
 	if (pol) {
-		ppe_policer_stats_inc(&g_policer->stats.policer_acl_already_exists);
-		ppe_policer_warn("%p: Policer index already configured: %d", g_policer, info->rule_id);
-		return false;
-	}
+		/*
+		 * Check if any policer with same rule ID configured for US or DS.
+		 * If yes, get the acl_index.
+		 */
+		if (info->dir != PPE_POLICER_DIRECTION_INVALID) {
+			acl_index = ppe_drv_policer_get_policer_id(pol->drv_ctx.acl_ctx);
+			acl_index_valid = true;
+			pol->num_dir++;
+		} else {
+			ppe_policer_stats_inc(&g_policer->stats.policer_acl_already_exists);
+			ppe_policer_warn("%p: Policer index already configured: %d", g_policer, info->rule_id);
+			return false;
+		}
+	} else {
+		pol = ppe_policer_alloc();
+		if (!pol) {
+			ppe_policer_stats_inc(&g_policer->stats.port_create_fail_oom);
+			ppe_policer_warn("%p: failed to allocate acl memory for policer: %p", g_policer, info);
+			return false;
+		}
 
-	pol = ppe_policer_alloc();
-	if (!pol) {
-		ppe_policer_stats_inc(&g_policer->stats.port_create_fail_oom);
-		ppe_policer_warn("%p: failed to allocate acl memory for policer: %p", g_policer, info);
-		return false;
+		/*
+		 * Each rule ID can be configured for max 2 directions in PON mode.
+		 * num_dir would keep the track of number of direction for which
+		 * this policer rule ID is configured.
+		 */
+		pol->rule_id = info->rule_id;
+		pol->num_dir = info->dir == PPE_POLICER_DIRECTION_INVALID ? 0 : pol->num_dir + 1;
 	}
-
-	/* ACL policer */
-	pol->rule_id = info->rule_id;
 
 	acl_info->meter_en = cinfo->meter_enable;
 	acl_info->colour_mode = cinfo->colour_aware;
@@ -476,6 +501,10 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 	acl_info->meter_unit = cinfo->meter_unit;
 	acl_info->cbs = cinfo->committed_burst_size;
 	acl_info->cir = cinfo->committed_rate;
+
+	acl_info->dir_info.dir = (uint32_t)info->dir;
+	acl_info->dir_info.acl_index = acl_index;
+	acl_info->dir_info.acl_index_valid = acl_index_valid;
 
 	if (cinfo->mode == PPE_POLICER_MODE_RFC2698) {
 		/* RFC2698 */
@@ -517,24 +546,44 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 	acl_info->action.red_drop = true;
 
 	pol->userspace_rule = info->userspace_rule;
-	pol->drv_ctx.acl_ctx = ppe_drv_policer_acl_create(&create);
-	if (!pol->drv_ctx.acl_ctx) {
+	acl_ctx = ppe_drv_policer_acl_create(&create);
+	if (!acl_ctx) {
+		pol->num_dir = info->dir == PPE_POLICER_DIRECTION_INVALID ? 0 : pol->num_dir - 1;
 		ppe_policer_stats_inc(&g_policer->stats.create_acl_policer_failed);
 		ppe_policer_warn("Unable to create acl policer in HW for dev\n");
+
+		if (!acl_index_valid) {
+			ppe_policer_free(pol);
+		}
 		return false;
 	}
 
+	pol->drv_ctx.acl_ctx = acl_ctx;
 	ppe_drv_policer_user2hw_id_map(pol->drv_ctx.acl_ctx, info->rule_id);
 
-	memcpy(&pol->policer_info, info, sizeof(struct ppe_policer_create_info));
+	/*
+	 * In case of both direction rules are present, we copy the 2nd direction rule to other_dir_policer
+	 * else we copy the rule to policer_info
+	 */
+	if (pol->num_dir == PPE_DRV_POLICER_DIRECTION_MAX - 1) {
+		memcpy(&pol->other_dir_policer_info, info, sizeof(struct ppe_policer_create_info));
+	} else {
+		memcpy(&pol->policer_info, info, sizeof(struct ppe_policer_create_info));
+	}
 
-	list_add(&pol->list, &g_policer->acl_active_rules);
+	/*
+	 * In case of invalid direction, each policer rule ID refers to one HW index.
+	 * In case of US/DS direction, the policer rule points to 2 HW indexes internally.
+	 * so, we add the policer rule to the list only once.
+	 */
+	if (!acl_index_valid) {
+		list_add(&pol->list, &g_policer->acl_active_rules);
+		kref_init(&pol->kref_cnt);
+	}
 
 	info->ret = PPE_POLICER_SUCCESS;
 	ppe_policer_stats_inc(&g_policer->stats.policer_acl_create_req);
 	ppe_policer_warn("%p: ACL policer rule created with rule ID: %d", g_policer, pol->rule_id);
-
-	kref_init(&pol->kref_cnt);
 
 	ppe_policer_stats_inc(&g_policer->stats.create_acl_policer_success);
 	return true;

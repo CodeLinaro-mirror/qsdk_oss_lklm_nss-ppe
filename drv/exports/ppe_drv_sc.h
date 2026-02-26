@@ -75,6 +75,7 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH = 43,	/* Inline IPsec redirection from PPE TO EIP for decap direction ACL match*/
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC = 44,		/* Service code for loopback port for pon pass */
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT = 45,		/* Service code for loopback port for second pass */
+	PPE_DRV_SC_FDB_BYPASS = 46,		/* Service code for gem port table to bypass destination selection from FDB table */
 
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */

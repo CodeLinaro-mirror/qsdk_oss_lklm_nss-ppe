@@ -11,6 +11,7 @@
 #include "ppe_acl/ppe_acl.h"
 #include "ppe_policer/ppe_policer.h"
 #include "ppe_qos/ppe_qos.h"
+#include "ppe_cos_map/ppe_cos_map.h"
 #endif
 #ifdef NSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
 #include "ppe_dscp/ppe_dscp.h"
@@ -27,6 +28,12 @@
 #if !defined(NSS_PPE_LOWMEM_PROFILE_16M) && !defined(NSS_PPE_LOWMEM_PROFILE_256M)
 #include "ppe_mirror/ppe_mirror.h"
 #include "ppe_priority/ppe_priority.h"
+#endif
+#ifdef NSS_PPE_FEATURE_DOT1P
+#include "ppe_dot1p/ppe_dot1p.h"
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+#include "ppe_gemport/ppe_gemport.h"
 #endif
 
 struct dentry *d_rule;
@@ -53,6 +60,7 @@ static int __init ppe_rule_module_init(void)
 	ppe_acl_init(d_rule);
 	ppe_policer_init(d_rule);
 	ppe_qos_init(d_rule);
+	ppe_cos_map_init(d_rule);
 #endif
 #ifdef NSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
 	ppe_dscp_init(d_rule);
@@ -69,6 +77,12 @@ static int __init ppe_rule_module_init(void)
 #if !defined(NSS_PPE_LOWMEM_PROFILE_16M) && !defined(NSS_PPE_LOWMEM_PROFILE_256M)
 	ppe_mirror_init(d_rule);
 	ppe_priority_init(d_rule);
+#endif
+#ifdef NSS_PPE_FEATURE_DOT1P
+	ppe_dot1p_init(d_rule);
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+	ppe_gem_port_init(d_rule);
 #endif
 
 	printk("PPE-RULE module loaded successfully\n");
@@ -92,6 +106,7 @@ static void __exit ppe_rule_module_exit(void)
 	ppe_policer_deinit();
 	ppe_acl_deinit();
 	ppe_qos_deinit();
+	ppe_cos_map_deinit();
 #endif
 #ifdef NSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
 	ppe_dscp_deinit();
@@ -104,6 +119,12 @@ static void __exit ppe_rule_module_exit(void)
 #endif
 #ifdef NSS_PPE_PORT_MGMT_SUPPORT
 	ppe_port_mgmt_deinit();
+#endif
+#ifdef NSS_PPE_FEATURE_DOT1P
+	ppe_dot1p_deinit();
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+	ppe_gem_port_deinit();
 #endif
 	debugfs_remove_recursive(d_rule);
 	printk("PPE-RULE module unloaded");

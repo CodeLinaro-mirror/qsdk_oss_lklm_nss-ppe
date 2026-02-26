@@ -143,7 +143,9 @@ int ppe_policer_dump_one(struct ppe_policer_dump_instance *pdi, struct ppe_polic
 	int result;
 	bool policer_type;
 	struct ppe_drv_policer_hw_stats pol_ctx = {0};
-	policer_type = policer->policer_info.policer_type;
+	struct ppe_policer_create_info *policer_info = &policer->policer_info;
+	policer_type = policer_info->policer_type;
+	bool is_complete = false;
 
 	/*
 	 * Rule information
@@ -171,55 +173,74 @@ int ppe_policer_dump_one(struct ppe_policer_dump_instance *pdi, struct ppe_polic
 	}
 
 	if (policer_type == PPE_POLICER_TYPE_PORT) {
-		if ((result = ppe_policer_dump_write(pdi, "dev", "%s", policer->policer_info.name))) {
+		if ((result = ppe_policer_dump_write(pdi, "dev", "%s", policer_info->name))) {
 			goto error;
 		}
 
 		if (policer->policer_info.rule_id) {
-			if ((result = ppe_policer_dump_write(pdi, "user_id", "%u", policer->policer_info.rule_id))) {
+			if ((result = ppe_policer_dump_write(pdi, "user_id", "%u", policer_info->rule_id))) {
 				goto error;
 			}
 		}
 
 	} else {
-		if ((result = ppe_policer_dump_write(pdi, "user_id", "%u", policer->policer_info.rule_id))) {
+		if ((result = ppe_policer_dump_write(pdi, "user_id", "%u", policer_info->rule_id))) {
 			goto error;
+		}
+
+		if (!policer->num_dir) {
+			goto dump_info;
+		} else {
+			if ((result = ppe_policer_dump_write(pdi, "Direction", "%u", policer_info->dir))) {
+				goto error;
+			}
+
+			if (policer_info->dir == PPE_POLICER_DIRECTION_US) {
+				if ((result = ppe_policer_dump_prefix_add(pdi, "US"))) {
+					goto error;
+				}
+			} else if (policer_info->dir == PPE_POLICER_DIRECTION_DS) {
+				if ((result = ppe_policer_dump_prefix_add(pdi, "DS"))) {
+					goto error;
+				}
+			}
 		}
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "CIR", "%u", policer->policer_info.config.committed_rate))) {
+dump_info:
+	if ((result = ppe_policer_dump_write(pdi, "CIR", "%u", policer_info->config.committed_rate))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "CBS", "%u", policer->policer_info.config.committed_burst_size))) {
+	if ((result = ppe_policer_dump_write(pdi, "CBS", "%u", policer_info->config.committed_burst_size))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "EIR", "%u", policer->policer_info.config.peak_rate))) {
+	if ((result = ppe_policer_dump_write(pdi, "EIR", "%u", policer_info->config.peak_rate))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "EBS", "%u", policer->policer_info.config.peak_burst_size))) {
+	if ((result = ppe_policer_dump_write(pdi, "EBS", "%u", policer_info->config.peak_burst_size))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "METER_MODE", "%d", policer->policer_info.config.mode))) {
+	if ((result = ppe_policer_dump_write(pdi, "METER_MODE", "%d", policer_info->config.mode))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "METER_UNIT", "%d", policer->policer_info.config.meter_unit))) {
+	if ((result = ppe_policer_dump_write(pdi, "METER_UNIT", "%d", policer_info->config.meter_unit))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "METER_EN", "%d", policer->policer_info.config.meter_enable))) {
+	if ((result = ppe_policer_dump_write(pdi, "METER_EN", "%d", policer_info->config.meter_enable))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "COUPLE_EN", "%d", policer->policer_info.config.couple_enable))) {
+	if ((result = ppe_policer_dump_write(pdi, "COUPLE_EN", "%d", policer_info->config.couple_enable))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "COLOUR_AWARE", "%d", policer->policer_info.config.colour_aware))) {
+	if ((result = ppe_policer_dump_write(pdi, "COLOUR_AWARE", "%d", policer_info->config.colour_aware))) {
 		goto error;
 	}
 
@@ -227,33 +248,38 @@ int ppe_policer_dump_one(struct ppe_policer_dump_instance *pdi, struct ppe_polic
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "yellow_pri", "%d", policer->policer_info.config.action_info.yellow_pri))) {
+	if ((result = ppe_policer_dump_write(pdi, "yellow_pri", "%d", policer_info->config.action_info.yellow_pri))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "yellow_dp", "%d", policer->policer_info.config.action_info.yellow_dp))) {
+	if ((result = ppe_policer_dump_write(pdi, "yellow_dp", "%d", policer_info->config.action_info.yellow_dp))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "yellow_pcp", "%d", policer->policer_info.config.action_info.yellow_pcp))) {
+	if ((result = ppe_policer_dump_write(pdi, "yellow_pcp", "%d", policer_info->config.action_info.yellow_pcp))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "yellow_dei", "%d", policer->policer_info.config.action_info.yellow_dei))) {
+	if ((result = ppe_policer_dump_write(pdi, "yellow_dei", "%d", policer_info->config.action_info.yellow_dei))) {
 		goto error;
 	}
 
-	if ((result = ppe_policer_dump_write(pdi, "yellow_dscp", "%d", policer->policer_info.config.action_info.yellow_dscp))) {
+	if ((result = ppe_policer_dump_write(pdi, "yellow_dscp", "%d", policer_info->config.action_info.yellow_dscp))) {
+		goto error;
+	}
+
+	/*
+	 * Remove the 'yellow_action_info' prefix
+	 */
+	if ((result = ppe_policer_dump_prefix_remove(pdi))) {
 		goto error;
 	}
 
 	if (policer_type == PPE_POLICER_TYPE_ACL) {
-		/* pol_ctx.drv_ctx.port_ctx = policer->drv_ctx.port_ctx; */
 		ppe_drv_policer_port_get_hw_stats(&pol_ctx, policer->drv_ctx.port_ctx);
 
 	} else {
-		/* pol_ctx.drv_ctx.acl_ctx = policer->drv_ctx.acl_ctx; */
-		ppe_drv_policer_acl_get_hw_stats(&pol_ctx, policer->drv_ctx.acl_ctx);
+		ppe_drv_policer_acl_get_hw_stats(&pol_ctx, policer->drv_ctx.acl_ctx, (ppe_drv_policer_direction_t)policer_info->dir);
 	}
 
 	if ((result = ppe_policer_dump_prefix_add(pdi, "stats"))) {
@@ -285,10 +311,41 @@ int ppe_policer_dump_one(struct ppe_policer_dump_instance *pdi, struct ppe_polic
 	}
 
 	/*
-	 * Remove the 'stats' prefix for next interation
+	 * Remove the 'stats' prefix
 	 */
 	if ((result = ppe_policer_dump_prefix_remove(pdi))) {
 		goto error;
+	}
+
+	/*
+	 * Remove the 'direction' prefix
+	 */
+	if (policer->num_dir) {
+		if ((result = ppe_policer_dump_prefix_remove(pdi))) {
+			goto error;
+		}
+
+		/*
+		 * Initialize to get the policer info for other direction policer
+		 */
+		if ((!is_complete) && (policer->num_dir == 2)) {
+			policer_info = &policer->other_dir_policer_info;
+			if ((result = ppe_policer_dump_write(pdi, "Direction", "%u", policer_info->dir))) {
+				goto error;
+			}
+
+			if (policer_info->dir == PPE_POLICER_DIRECTION_US) {
+				if ((result = ppe_policer_dump_prefix_add(pdi, "US"))) {
+					goto error;
+				}
+			} else if (policer_info->dir == PPE_POLICER_DIRECTION_DS) {
+				if ((result = ppe_policer_dump_prefix_add(pdi, "DS"))) {
+					goto error;
+				}
+			}
+			is_complete = true;
+			goto dump_info;
+		}
 	}
 
 	/*
@@ -307,13 +364,6 @@ int ppe_policer_dump_one(struct ppe_policer_dump_instance *pdi, struct ppe_polic
 
 	/*
 	 * Remove prefix for rule
-	 */
-	if ((result = ppe_policer_dump_prefix_remove(pdi))) {
-		goto error;
-	}
-
-	/*
-	 * Remove the index prefix for next interation
 	 */
 	if ((result = ppe_policer_dump_prefix_remove(pdi))) {
 		goto error;

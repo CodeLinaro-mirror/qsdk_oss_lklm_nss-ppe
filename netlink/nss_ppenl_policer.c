@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /*
@@ -117,6 +106,7 @@ static int nss_ppenl_policer_ops_create_rule(struct sk_buff *skb, struct genl_in
 
 	create.policer_type = nl_policer_rule->config.is_port_policer;
 	create.rule_id = nl_policer_rule->config.policer_id;
+	create.dir = nl_policer_rule->config.dir;
 	create.config.committed_rate = nl_policer_rule->config.committed_rate;
 	create.config.committed_burst_size = nl_policer_rule->config.committed_burst_size;
 	create.config.peak_rate = nl_policer_rule->config.peak_rate;

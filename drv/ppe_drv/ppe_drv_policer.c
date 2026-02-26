@@ -27,55 +27,67 @@ static void ppe_drv_policer_acl_dump(struct ppe_drv_policer_acl *pol)
 	fal_policer_config_t pol_cfg = {0};
 	fal_policer_action_t action = {0};
 	sw_error_t err = SW_OK;
+	uint32_t hw_index = pol->acl_index;
 
 	spin_lock_bh(&p->lock);
 
-	err = fal_acl_policer_entry_get(PPE_DRV_SWITCH_ID, pol->acl_index, &pol_cfg, &action);
-	if (err != SW_OK) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: Error in retreiving stats\n", p);
-		return;
+	for (uint32_t index = 0; index < pol->num_acl_reserved && hw_index < PPE_DRV_ACL_POLICER_MAX; index++) {
+		if (!p->pol_ctx->acl_pol[hw_index].is_configured) {
+			hw_index++;
+			continue;
+		}
+
+		err = fal_acl_policer_entry_get(PPE_DRV_SWITCH_ID, hw_index, &pol_cfg, &action);
+		if (err != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: Error in retreiving stats\n", p);
+			return;
+		}
+
+		ppe_drv_trace("%p: policer config: hw_index: %d\n", p, hw_index);
+		ppe_drv_trace("%p: policer config: meter_en: %d\n", p, pol_cfg.meter_en);
+		ppe_drv_trace("%p: policer config: couple_en: %d\n", p, pol_cfg.couple_en);
+		ppe_drv_trace("%p: policer config: color_mode: %d\n", p, pol_cfg.color_mode);
+		ppe_drv_trace("%p: policer config: meter_mode: %d\n", p, pol_cfg.meter_mode);
+		ppe_drv_trace("%p: policer config: meter_unit: %d\n", p, pol_cfg.meter_unit);
+		ppe_drv_trace("%p: policer config: cir: %d\n", p, pol_cfg.cir);
+		ppe_drv_trace("%p: policer config: cbs: %d\n", p, pol_cfg.cbs);
+		ppe_drv_trace("%p: policer config: eir: %d\n", p, pol_cfg.eir);
+		ppe_drv_trace("%p: policer config: ebs: %d\n", p, pol_cfg.ebs);
+		ppe_drv_trace("%p: policer config: meter_type: %d\n", p, pol_cfg.meter_type);
+
+
+		/*
+		 * Action configuration
+		 */
+		ppe_drv_trace("%p: policer action: yellow_pri_en: %d\n", p, action.yellow_priority_en);
+		ppe_drv_trace("%p: policer action: yellow_dp_en: %d\n", p, action.yellow_drop_priority_en);
+		ppe_drv_trace("%p: policer action: yellow_pcp_en: %d\n", p, action.yellow_pcp_en);
+		ppe_drv_trace("%p: policer action: yellow_dei_en: %d\n", p, action.yellow_dei_en);
+		ppe_drv_trace("%p: policer action: yellow_pri: %d\n", p, action.yellow_priority);
+		ppe_drv_trace("%p: policer action: yellow_dp: %d\n", p, action.yellow_drop_priority);
+		ppe_drv_trace("%p: policer action: yellow_pcp: %d\n", p, action.yellow_pcp);
+		ppe_drv_trace("%p: policer action: yellow_dei: %d\n", p, action.yellow_dei);
+		ppe_drv_trace("%p: policer action: red_action: %d\n", p, action.red_action);
+		ppe_drv_trace("%p: policer action: red_priority_en: %d\n", p, action.red_priority_en);
+		ppe_drv_trace("%p: policer action: red_drop_priority_en: %d\n", p, action.red_drop_priority_en);
+		ppe_drv_trace("%p: policer action: red_pcp_en: %d\n", p, action.red_pcp_en);
+		ppe_drv_trace("%p: policer action: red_dei_en: %d\n", p, action.red_dei_en);
+		ppe_drv_trace("%p: policer action: red_priority: %d\n", p, action.red_priority);
+		ppe_drv_trace("%p: policer action: red_drop_priority: %d\n", p, action.red_drop_priority);
+		ppe_drv_trace("%p: policer action: red_pcp: %d\n", p, action.red_pcp);
+		ppe_drv_trace("%p: policer action: red_dei: %d\n", p, action.red_dei);
+
+		ppe_drv_trace("%p: policer action: yellow_dscp_en: %d\n", p, action.yellow_dscp_en);
+		ppe_drv_trace("%p: policer action: yellow_dscp: %d\n", p, action.yellow_dscp);
+		ppe_drv_trace("%p: policer action: red_dscp_en: %d\n", p, action.red_dscp_en);
+		ppe_drv_trace("%p: policer action: red dscp: %d\n", p, action.red_dscp);
+		ppe_drv_trace("%p: policer action: yellow_remark_en: %d\n", p, action.yellow_remap_en);
+		ppe_drv_trace("%p: policer action: red_remap_en: %d\n", p, action.red_remap_en);
+
+		hw_index++;
 	}
 
-	ppe_drv_trace("%p: policer config: meter_en: %d\n", p, pol_cfg.meter_en);
-	ppe_drv_trace("%p: policer config: couple_en: %d\n", p, pol_cfg.couple_en);
-	ppe_drv_trace("%p: policer config: color_mode: %d\n", p, pol_cfg.color_mode);
-	ppe_drv_trace("%p: policer config: meter_mode: %d\n", p, pol_cfg.meter_mode);
-	ppe_drv_trace("%p: policer config: meter_unit: %d\n", p, pol_cfg.meter_unit);
-	ppe_drv_trace("%p: policer config: cir: %d\n", p, pol_cfg.cir);
-	ppe_drv_trace("%p: policer config: cbs: %d\n", p, pol_cfg.cbs);
-	ppe_drv_trace("%p: policer config: eir: %d\n", p, pol_cfg.eir);
-	ppe_drv_trace("%p: policer config: ebs: %d\n", p, pol_cfg.ebs);
-	ppe_drv_trace("%p: policer config: meter_type: %d\n", p, pol_cfg.meter_type);
-
-
-	/*
-	 * Action configuration
-	 */
-	ppe_drv_trace("%p: policer action: yellow_pri_en: %d\n", p, action.yellow_priority_en);
-	ppe_drv_trace("%p: policer action: yellow_dp_en: %d\n", p, action.yellow_drop_priority_en);
-	ppe_drv_trace("%p: policer action: yellow_pcp_en: %d\n", p, action.yellow_pcp_en);
-	ppe_drv_trace("%p: policer action: yellow_dei_en: %d\n", p, action.yellow_dei_en);
-	ppe_drv_trace("%p: policer action: yellow_pri: %d\n", p, action.yellow_priority);
-	ppe_drv_trace("%p: policer action: yellow_dp: %d\n", p, action.yellow_drop_priority);
-	ppe_drv_trace("%p: policer action: yellow_pcp: %d\n", p, action.yellow_pcp);
-	ppe_drv_trace("%p: policer action: yellow_dei: %d\n", p, action.yellow_dei);
-	ppe_drv_trace("%p: policer action: red_action: %d\n", p, action.red_action);
-	ppe_drv_trace("%p: policer action: red_priority_en: %d\n", p, action.red_priority_en);
-	ppe_drv_trace("%p: policer action: red_drop_priority_en: %d\n", p, action.red_drop_priority_en);
-	ppe_drv_trace("%p: policer action: red_pcp_en: %d\n", p, action.red_pcp_en);
-	ppe_drv_trace("%p: policer action: red_dei_en: %d\n", p, action.red_dei_en);
-	ppe_drv_trace("%p: policer action: red_priority: %d\n", p, action.red_priority);
-	ppe_drv_trace("%p: policer action: red_drop_priority: %d\n", p, action.red_drop_priority);
-	ppe_drv_trace("%p: policer action: red_pcp: %d\n", p, action.red_pcp);
-	ppe_drv_trace("%p: policer action: red_dei: %d\n", p, action.red_dei);
-
-	ppe_drv_trace("%p: policer action: yellow_dscp_en: %d\n", p, action.yellow_dscp_en);
-	ppe_drv_trace("%p: policer action: yellow_dscp: %d\n", p, action.yellow_dscp);
-	ppe_drv_trace("%p: policer action: red_dscp_en: %d\n", p, action.red_dscp_en);
-	ppe_drv_trace("%p: policer action: red dscp: %d\n", p, action.red_dscp);
-	ppe_drv_trace("%p: policer action: yellow_remark_en: %d\n", p, action.yellow_remap_en);
-	ppe_drv_trace("%p: policer action: red_remap_en: %d\n", p, action.red_remap_en);
 	spin_unlock_bh(&p->lock);
 }
 
@@ -191,6 +203,21 @@ static void ppe_drv_policer_acl_free(struct ppe_drv_policer_acl *pol)
 		return;
 	}
 
+	/*
+	 * If Policer is configured for both US and DS, remove both rules
+	 */
+	if (pol->num_acl_reserved == PPE_DRV_POLICER_DIRECTION_MAX - 1) {
+		struct ppe_drv_policer_acl *next_pol = &p->pol_ctx->acl_pol[pol->acl_index + 1];
+
+		err = fal_acl_policer_entry_set(PPE_DRV_SWITCH_ID, pol->acl_index + 1, &pol_cfg, &action);
+		if (err != SW_OK) {
+			ppe_drv_warn("%p: cannot configure hw for port policer\n", p);
+			ppe_drv_stats_inc(&p->stats.policer_stats.fail_hw_acl_policer_destroy_cfg);
+			return;
+		}
+		memset(next_pol, 0, sizeof(struct ppe_drv_policer_acl));
+	}
+
 	memset(pol, 0, sizeof(struct ppe_drv_policer_acl));
 
 	ppe_drv_stats_inc(&p->stats.policer_stats.success_hw_acl_policer_destroy_cfg);
@@ -261,6 +288,7 @@ int ppe_drv_policer_user2hw_id(int index)
 
 	return hw_index;
 }
+EXPORT_SYMBOL(ppe_drv_policer_user2hw_id);
 
 /*
  * ppe_drv_policer_port_destroy()
@@ -445,20 +473,49 @@ struct ppe_drv_policer_acl *ppe_drv_policer_acl_create(struct ppe_drv_policer_ru
 	fal_policer_config_t pol_cfg = {0};
 	fal_policer_action_t action = {0};
 	sw_error_t err = SW_OK;
-	uint16_t index;
+	uint16_t index, hw_index;
 
 	spin_lock_bh(&p->lock);
 
 	/*
+	 * Check if any policer configured at that rule ID for US or DS,
+	 * use that index. Else get a free index based on US/DS direction.
+	 */
+	if (ainfo->dir_info.acl_index_valid) {
+		index = ainfo->dir_info.acl_index;
+
+		if (((ainfo->dir_info.dir == PPE_DRV_POLICER_DIRECTION_US)
+		&& (!p->pol_ctx->acl_pol[index].is_configured))
+		||((ainfo->dir_info.dir == PPE_DRV_POLICER_DIRECTION_DS)
+		&& (!p->pol_ctx->acl_pol[index + 1].is_configured))) {
+			pol = &p->pol_ctx->acl_pol[index];
+			goto process;
+		} else {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: Policer index already configured:", p);
+			return NULL;
+		}
+	}
+
+	/*
 	 * Get a free policer entry from pool
+	 * In case direction is present, search for a subsequent
+	 * pair of indexes. Both index and index + 1 would be
+	 * reserved to keep the US and DS rules together.
 	 */
 	for (index = 0; index < PPE_DRV_ACL_POLICER_MAX; index++) {
 		if (!p->pol_ctx->acl_pol[index].in_use) {
+			if (ainfo->dir_info.dir != PPE_DRV_POLICER_DIRECTION_INVALID) {
+				if ((index + 1) >= PPE_DRV_ACL_POLICER_MAX || p->pol_ctx->acl_pol[index + 1].in_use) {
+					continue;
+				}
+			}
 			pol = &p->pol_ctx->acl_pol[index];
 			break;
 		}
 	}
 
+process:
 	if (!pol) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: cannot alloc policer, table full for type", p);
@@ -517,7 +574,12 @@ struct ppe_drv_policer_acl *ppe_drv_policer_acl_create(struct ppe_drv_policer_ru
 	action.yellow_remap_en = rule_action->exceed_remap;
 	action.red_remap_en = rule_action->violate_remap;
 
-	err = fal_acl_policer_entry_set(PPE_DRV_SWITCH_ID, index, &pol_cfg, &action);
+	hw_index = index;
+	if (ainfo->dir_info.dir == PPE_DRV_POLICER_DIRECTION_DS) {
+		hw_index = index + 1;
+	}
+
+	err = fal_acl_policer_entry_set(PPE_DRV_SWITCH_ID, hw_index, &pol_cfg, &action);
 	if (err != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%p: cannot configure hw for acl policer\n", p);
@@ -536,6 +598,29 @@ struct ppe_drv_policer_acl *ppe_drv_policer_acl_create(struct ppe_drv_policer_ru
 	 * Fill acl index in response
 	 */
 	create->hw_id = index;
+
+	/*
+	 * Fill US index in case direction is provided.
+	 * In case we reserve a pair for both US/DS policer,
+	 * mark both indexes in use.
+	 */
+	if (ainfo->dir_info.dir == PPE_DRV_POLICER_DIRECTION_INVALID) {
+		p->pol_ctx->acl_pol[index].is_configured = true;
+		p->pol_ctx->acl_pol[index].num_acl_reserved++;
+	} else {
+		p->pol_ctx->acl_pol[index].num_acl_reserved = PPE_DRV_POLICER_DIRECTION_MAX - 1;
+
+		if (!ainfo->dir_info.acl_index_valid) {
+			p->pol_ctx->acl_pol[index + 1].acl_index = index + 1;
+			p->pol_ctx->acl_pol[index + 1].in_use = true;
+		}
+
+		if (ainfo->dir_info.dir == PPE_DRV_POLICER_DIRECTION_US) {
+			p->pol_ctx->acl_pol[index].is_configured = true;
+		} else {
+			p->pol_ctx->acl_pol[index + 1].is_configured = true;
+		}
+	}
 
 	spin_unlock_bh(&p->lock);
 
@@ -747,11 +832,17 @@ EXPORT_SYMBOL(ppe_drv_policer_port_get_hw_stats);
  * ppe_drv_policer_acl_get_hw_stats
  * 	Get hw stats for acl policer.
  */
-void ppe_drv_policer_acl_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_acl *acl_ctx)
+void ppe_drv_policer_acl_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_acl *acl_ctx, ppe_drv_policer_direction_t dir)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
+	/*
+	 * Get the ACL context in case of DS direction
+	 */
+	if (dir == PPE_DRV_POLICER_DIRECTION_DS) {
+		acl_ctx = &p->pol_ctx->acl_pol[acl_ctx->acl_index + 1];
+	}
 
 	pol_ctx->hw_cntrs.gpc = atomic64_read(&acl_ctx->green_packet_counter);
 	pol_ctx->hw_cntrs.gbc = atomic64_read(&acl_ctx->green_byte_counter);
