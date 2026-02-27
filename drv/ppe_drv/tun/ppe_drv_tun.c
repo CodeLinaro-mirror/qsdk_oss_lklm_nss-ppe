@@ -567,14 +567,14 @@ static bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_p
 		 * correct profile and queues initially.
 		 */
 		dp_queue_id = ppe_drv_port_ucast_queue_get(dp);
-		if (!ppe_drv_port_ucast_queue_set(ptun->pp, dp_queue_id)) {
+		if (!ppe_drv_port_ucast_queue_set(ptun->pp, 0, dp_queue_id)) {
 			ppe_drv_warn("%p: Failed to set queue %d for port", ptun, dp_queue_id);
 			return false;
 		}
 	}
 
 	for (i = 1; i < PPE_DRV_PORT_SRC_PROFILE_MAX; i++) {
-		if (p->prof2portmap[i] == -1)
+		if (PPE_DRV_PROF2PORT_IS_EMPTY(p->prof2portmap[i]))
 			continue;
 
 		int port_num = ppe_drv_port_num_get(ptun->pp);

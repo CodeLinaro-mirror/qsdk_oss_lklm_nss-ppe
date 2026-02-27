@@ -651,7 +651,7 @@ ppe_drv_ret_t ppe_drv_iface_eip_set(struct ppe_drv_iface *iface, ppe_drv_eip_ser
 		/*
 		 * Map VP queues to EIP port.
 		 */
-		if ((queue_id < 0) || !ppe_drv_port_ucast_queue_set(vp, queue_id)) {
+		if ((queue_id < 0) || !ppe_drv_port_ucast_queue_set(vp, 0, queue_id)) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("%p: failed to set queue for the port: %u", iface, vp->port);
 			return PPE_DRV_RET_QUEUE_CFG_FAIL;
@@ -668,7 +668,7 @@ ppe_drv_ret_t ppe_drv_iface_eip_set(struct ppe_drv_iface *iface, ppe_drv_eip_ser
 		/*
 		 * Map VP queues to EIP port.
 		 */
-		if ((queue_id < 0) || !ppe_drv_port_ucast_queue_set(vp, queue_id)) {
+		if ((queue_id < 0) || !ppe_drv_port_ucast_queue_set(vp, 0, queue_id)) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("%p: failed to set queue for the port: %u", iface, vp->port);
 			return PPE_DRV_RET_QUEUE_CFG_FAIL;
@@ -1227,6 +1227,7 @@ ppe_drv_ret_t ppe_drv_iface_ucast_queue_set(struct ppe_drv_iface *iface, uint8_t
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
+	int src_profile = -1;
 
 	spin_lock_bh(&p->lock);
 	port = ppe_drv_iface_port_get(iface);
@@ -1236,10 +1237,12 @@ ppe_drv_ret_t ppe_drv_iface_ucast_queue_set(struct ppe_drv_iface *iface, uint8_t
 		return PPE_DRV_RET_PORT_NOT_FOUND;
 	}
 
-	if (!ppe_drv_port_ucast_queue_set(port, queue_id)) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%p: queue configuration failed for queue_id(%d)", iface, queue_id);
-		return PPE_DRV_RET_QUEUE_CFG_FAIL;
+	for (src_profile = 0; src_profile < PPE_DRV_PORT_SRC_PROFILE_MAX; src_profile++) {
+		if (!ppe_drv_port_ucast_queue_set(port, src_profile, queue_id)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: queue configuration failed for queue_id(%d)", iface, queue_id);
+			return PPE_DRV_RET_QUEUE_CFG_FAIL;
+		}
 	}
 
 	spin_unlock_bh(&p->lock);

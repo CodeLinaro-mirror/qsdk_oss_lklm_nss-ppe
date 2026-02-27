@@ -1620,7 +1620,7 @@ bool ppe_drv_port_ucast_queue_profile_set(struct ppe_drv_port *pp, uint8_t src_p
  * ppe_drv_port_ucast_queue_set()
  *	Set queue ID of a given port in PPE.
  */
-bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
+bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, int src_profile, uint8_t queue_id)
 {
 	sw_error_t err;
 	fal_ucast_queue_dest_t q_dst = {0};
@@ -1676,7 +1676,7 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 	/*
 	 * TODO confirm with SSDK team if using profile-ID 0 for CPU port
 	 */
-	q_dst.src_profile = 0;
+	q_dst.src_profile = src_profile;
 	q_dst.dst_port = pp->port;
 	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, profile);
 	if (err != SW_OK) {

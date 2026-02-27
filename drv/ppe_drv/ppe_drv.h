@@ -518,7 +518,7 @@ struct ppe_drv {
 	 * Pointer to memory pool for different PPE tables
 	 */
 	uint8_t core2queue[NR_CPUS];			/* Core to queue mapping */
-	uint8_t prof2portmap[PPE_DRV_PORT_SRC_PROFILE_MAX];  /* Source profile to bitmap */
+	uint32_t prof2portmap[PPE_DRV_PORT_SRC_PROFILE_MAX][8];  /* Source profile to port bitmap (256 ports) */
 	struct ppe_drv_iface *iface;			/* Memory for PPE interface shadow table */
 	struct ppe_drv_flow *flow;			/* Memory for PPE Flow table */
 	struct ppe_drv_host *host;			/* Memory for PPE Host table */
