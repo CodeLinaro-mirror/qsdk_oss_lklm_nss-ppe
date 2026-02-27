@@ -1354,7 +1354,9 @@ static struct nss_vlan_pvt *nss_ppe_vlan_mgr_create_instance(struct net_device *
 			}
 		} else {
 #if defined(BONDING_SUPPORT)
-			bond_id = bond_get_id(real_dev);
+			if (vlan_mgr_ctx.bond_id_get_cb) {
+				bond_id = vlan_mgr_ctx.bond_id_get_cb(real_dev);
+			}
 #endif
 			if (bond_id < 0) {
 				nss_ppe_vlan_mgr_warn("%px: Invalid LAG group id 0x%x\n", v, bond_id);
@@ -1875,6 +1877,21 @@ void nss_ppe_vlan_mgr_vlan_over_bridge_unregister_cb(void)
 EXPORT_SYMBOL(nss_ppe_vlan_mgr_vlan_over_bridge_unregister_cb);
 
 /*
+ * nss_ppe_vlan_mgr_register_bond_dev_get_id_cb()
+ *	Register callback to get the bond_id of netdevice.
+ */
+void nss_ppe_vlan_mgr_register_bond_dev_get_id_cb(nss_ppe_bond_dev_get_id_cb_t cb)
+{
+	spin_lock(&vlan_mgr_ctx.lock);
+	vlan_mgr_ctx.bond_id_get_cb = cb;
+	spin_unlock(&vlan_mgr_ctx.lock);
+
+	nss_ppe_vlan_mgr_trace("%px: Callback registered in VLAN mgr to get bond_id of bonded netdev\n",
+			       vlan_mgr_ctx.bond_id_get_cb);
+}
+EXPORT_SYMBOL(nss_ppe_vlan_mgr_register_bond_dev_get_id_cb);
+
+/*
  * nss_ppe_vlan_mgr_vlan_over_bridge_register_cb()
  *	Register callback for VLAN over bridge to increment and decrement no. of bridge VLAN netdev in bridge mgr
  */
@@ -2190,7 +2207,9 @@ int nss_ppe_vlan_mgr_add_bond_slave(struct net_device *bond_dev,
 	BUG_ON(!netif_is_bond_master(bond_dev));
 
 #if defined(BONDING_SUPPORT)
-	bond_id = bond_get_id(bond_dev);
+	if (vlan_mgr_ctx.bond_id_get_cb) {
+		bond_id = vlan_mgr_ctx.bond_id_get_cb(bond_dev);
+	}
 #endif
 	if (bond_id < 0) {
 		nss_ppe_vlan_mgr_warn("%s: Invalid LAG group id 0x%x\n", bond_dev->name, bond_id);
