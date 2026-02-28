@@ -130,7 +130,7 @@ bool ppe_drv_tun_udf_compare_udf_profiles(struct ppe_drv_tun_udf_profile *a, str
 
 /*
  * ppe_drv_tun_udf_entry_configure
- *	Configure tunnel udf entry
+ *	Configure tunnel udf entry - searches for existing matching entry first
  */
 struct ppe_drv_tun_udf *ppe_drv_tun_udf_entry_configure(struct ppe_drv_tun_udf_profile *udf_pf)
 {
@@ -141,6 +141,39 @@ struct ppe_drv_tun_udf *ppe_drv_tun_udf_entry_configure(struct ppe_drv_tun_udf_p
 	sw_error_t err;
 	int i;
 
+	/*
+	 * First, search for an existing tun_udf entry with matching configuration.
+	 * If found, take a reference and return it to enable sharing across tunnels.
+	 */
+	for (i = 0; i < PPE_DRV_TUN_UDF_PROFILE_ID_MAX; i++) {
+		udf_entry = &p->pgm_udf[i];
+
+		/*
+		 * Skip free entries
+		 */
+		if (!kref_read(&udf_entry->ref)) {
+			continue;
+		}
+
+		/*
+		 * Compare configurations - if they match, reuse this entry
+		 */
+		if (ppe_drv_tun_udf_compare_udf_profiles(udf_pf, &udf_entry->udf)) {
+			/*
+			 * Found matching configuration - take reference and return.
+			 * This enables multiple tunnels with identical UDF offsets
+			 * to share the same hardware UDF profile entry.
+			 */
+			ppe_drv_tun_udf_entry_ref(udf_entry);
+			ppe_drv_trace("%p: Reusing existing tun_udf entry at index %d, ref count: %u",
+				     udf_entry, i, kref_read(&udf_entry->ref));
+			return udf_entry;
+		}
+	}
+
+	/*
+	 * No matching entry found - allocate and configure a new one
+	 */
 	udf_entry = ppe_drv_tun_udf_entry_alloc(p);
 	if (!udf_entry) {
 		ppe_drv_warn("%p: tunnel udf profile entry allocation failed\n", p);
@@ -172,6 +205,7 @@ struct ppe_drv_tun_udf *ppe_drv_tun_udf_entry_configure(struct ppe_drv_tun_udf_p
 	}
 
 	memcpy(&udf_entry->udf, udf_pf, sizeof(struct ppe_drv_tun_udf_profile));
+	ppe_drv_trace("%p: Allocated new tun_udf entry at index %d", udf_entry, udf_entry->udf_index);
 
 	return udf_entry;
 fail:

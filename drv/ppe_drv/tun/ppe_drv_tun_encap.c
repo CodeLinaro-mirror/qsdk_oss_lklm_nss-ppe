@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/ip.h>
@@ -23,6 +12,7 @@
 #include <fal_tunnel.h>
 #include <ppe_drv/ppe_drv.h>
 #include "ppe_drv_tun.h"
+#include "ppe_drv_tun_cmn_ctx.h"
 
 /*
  * ppe_drv_tun_encap_hdr_ctrl_entry_free
@@ -477,6 +467,33 @@ bool ppe_drv_tun_encap_hdr_ctrl_gretun_configure(struct ppe_drv *p, struct ppe_d
 }
 
 /*
+ * ppe_drv_tun_encap_hdr_ctrl_custom_configure
+ *     Custom tunnel encap header control configuration
+ */
+bool ppe_drv_tun_encap_hdr_ctrl_custom_configure(struct ppe_drv *p, struct ppe_drv_tun *tun)
+{
+	struct ppe_drv_tun_encap_header_ctrl hdr_ctrl = {0};
+
+	hdr_ctrl.ipv4_proto_map_data = tun->th.tun.user.encap_data.ipv4_proto;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP);
+	hdr_ctrl.ipv6_proto_map_data = tun->th.tun.user.encap_data.ipv6_proto;
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&hdr_ctrl.flags, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP);
+
+	if (!ppe_drv_tun_encap_hdr_ctrl_set(hdr_ctrl)) {
+		ppe_drv_warn("%p encap header control set failed for custom tunnel", p);
+		return false;
+	}
+
+	/*
+	 * Set encap header control bitmap in tunnel structure.
+	 */
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV4_PROTO_MAP);
+	ppe_drv_tun_encap_hdr_ctrl_flag_set(&tun->encap_hdr_bitmap, PPE_DRV_TUN_ENCAP_HDR_CTRL_IPV6_PROTO_MAP);
+
+	return true;
+}
+
+/*
  * ppe_drv_tun_encap_dump
  *	Dump contents of EG_TUN_CTRL table instance
  */
@@ -777,6 +794,42 @@ static bool ppe_drv_tun_encap_header_rule_configure(enum ppe_drv_tun_cmn_ctx_typ
 			ppe_drv_warn("%p GRETUN: failed to configure encap header control", p);
 			return false;;
 		}
+		break;
+
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3:
+		if (ptun->th.tun.user.encap_data.proto_update_en) {
+			/*
+			 * src1_sel: Copy 16B from packet header data (src1_start)
+			 * src2_sel: Mapped to Zero data as its not used.
+			 * src3_sel: Set to update Protomap data 1.
+			 * src3_src_start: start of header data
+			 * src3_src_width: Size of the field to be updated (8-bit/ 16-bit)
+			 * src3_dest_pos: offset from LSB to the field which needs to be updated.
+			 * des_pos = 16 bytes (128 Bits) - width to be updated.
+			 */
+			if (ptun->th.tun.user.encap_data.proto_size > PPE_DRV_TUN_ENCAP_CUSTOM_MAX_LEN) {
+				ppe_drv_warn("%p CUSTOM TUN: proto_size %u exceeds maximum %u",
+					     p, ptun->th.tun.user.encap_data.proto_size,
+					     PPE_DRV_TUN_ENCAP_CUSTOM_MAX_LEN);
+				return false;
+			}
+
+			rule_data.src1_sel = PPE_DRV_TUN_ENCAP_XLATE_SRC1_HDR_DATA;
+			rule_data.src1_start = ptun->th.tun.user.encap_data.proto_offset;
+			rule_data.src2_sel = PPE_DRV_TUN_ENCAP_XLATE_SRC2_ZERO_DATA;
+			rule_data.src3_sel = PPE_DRV_TUN_ENCAP_XLATE_SRC3_PROTO_MAP1;
+			rule_data.src3_entry[0].enable = true;
+			rule_data.src3_entry[0].src_start = PPE_DRV_TUN_ENCAP_CUSTOM_SRC_START;
+			rule_data.src3_entry[0].src_width = ptun->th.tun.user.encap_data.proto_size;
+			rule_data.src3_entry[0].dest_pos = PPE_DRV_TUN_ENCAP_CUSTOM_DEST_POS(ptun->th.tun.user.encap_data.proto_size);
+			ptun->ptecxr = ppe_drv_tun_encap_rule_entry_get(ptun, &rule_data);
+			if (!ptun->ptecxr || !ppe_drv_tun_encap_hdr_ctrl_custom_configure(p, ptun)) {
+				ppe_drv_warn("%p CUSTOM TUN: failed to configure encap header control", p);
+				return false;
+			}
+		}
+
 		break;
 
 	default:
@@ -1082,6 +1135,21 @@ static void ppe_drv_tun_encap_hdr_set(struct ppe_drv_tun_encap *ptec,
 		tun_len += sizeof(greh);
 
 		l4_offset_valid = true;
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2 ||
+			th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3) {
+		if (th->tun.user.udp_hdr_valid) {
+			memcpy((void*)tun_hdr, (void*)&th->tun.user.udph,
+							sizeof(th->tun.user.udph));
+			tun_hdr += sizeof(th->tun.user.udph);
+			tun_len += sizeof(th->tun.user.udph);
+			l4_offset_valid = true;
+		}
+
+		if (th->tun.user.encap_data.encap_hdr_data_len) {
+			memcpy((void*)tun_hdr, (void*)th->tun.user.encap_data.encap_hdr_data, th->tun.user.encap_data.encap_hdr_data_len);
+			tun_len += th->tun.user.encap_data.encap_hdr_data_len;
+		}
+
 	}
 
 	ptec->tun_len = tun_len;
@@ -1315,6 +1383,19 @@ bool ppe_drv_tun_encap_configure(struct ppe_drv_tun_encap *ptec,
 			encap_cfg.l4_checksum_en = A_TRUE;
 		}
 
+	} else if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2 ||
+			th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3) {
+
+		if (th->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3) {
+			encap_cfg.payload_inner_type = FAL_TUNNEL_INNER_IP;
+		} else {
+			encap_cfg.payload_inner_type =  FAL_TUNNEL_INNER_ETHERNET;
+		}
+
+		if (th->tun.user.encap_data.proto_update_en) {
+			encap_cfg.encap_target = FAL_TUNNEL_ENCAP_TARGET_TUNNEL_INFO;
+			encap_cfg.tunnel_offset = th->tun.user.encap_data.proto_offset;
+		}
 	}
 
 	/*

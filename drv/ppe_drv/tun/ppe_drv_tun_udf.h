@@ -14,6 +14,9 @@
 #define PPE_DRV_TUN_UDF_IDX_GRE_CSUM	0	/* UDF index for GRE CSUM option. */
 #define PPE_DRV_TUN_UDF_OFFSET_GRE_CSUM 0	/* UDF offset to match GRE CSUM. */
 
+#define PPE_DRV_TUN_CUSTOM_UDF3	0	/*UDF index for Custom tunnel UDF3  */
+#define PPE_DRV_TUN_CUSTOM_UDF4	1	/* UDF index for Custom tunnel UDF4 */
+
 /*
  * ppe_drv_tun_udf_l3_type
  *	tun udf l3 type

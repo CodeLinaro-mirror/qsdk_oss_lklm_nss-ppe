@@ -307,4 +307,15 @@ void ppe_drv_port_phy_rfs_set(void);
  *      false – The port is not a GEM port.
  */
 bool ppe_drv_port_is_gem(uint16_t port_num);
+
+/**
+ * ppe_drv_port_num_from_ifname
+ *	Get PPE port number from ifname
+ *
+ * @param[in]	ifname.
+ *
+ * @return
+ * PPE port number.
+ */
+int32_t ppe_drv_port_num_from_ifname(const char *ifname);
 #endif /* _PPE_DRV_PORT_H_ */

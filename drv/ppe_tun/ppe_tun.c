@@ -118,6 +118,10 @@ static bool ppe_tun_allow_accel(enum ppe_drv_tun_cmn_ctx_type type)
 		ppe_tun_warn("%p: PPE gretun acceleration is not enabled", ptp);
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3:
+		return true;
+
 	default:
 		break;
 	}
@@ -165,6 +169,14 @@ bool ppe_tun_set_tun_data(struct ppe_tun *tun, ppe_tun_data *tun_data)
 	if (tun->type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
 		tunnel_data->l2tp_info.session_id = tun_data->l2tp_info.session_id;
 		tunnel_data->l2tp_info.tunnel_id = tun_data->l2tp_info.tunnel_id;
+		return true;
+	}
+
+	if (tun->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2 ||
+			tun->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3) {
+		tunnel_data->cust_info.custom_tunnel_data = tun_data->cust_info.custom_tunnel_data;
+		tunnel_data->cust_info.exp_cb = tun_data->cust_info.exp_cb;
+		tunnel_data->cust_info.stats_cb = tun_data->cust_info.stats_cb;
 		return true;
 	}
 
@@ -277,6 +289,12 @@ bool ppe_tun_stats(struct net_device *dev, ppe_vp_hw_stats_t *stats)
 	if (!tun) {
 		ppe_tun_trace("%p: ppe tun stats update failed: tunnel not found", tun);
 		return false;
+	}
+
+	if (!(tun->state & PPE_TUN_STATE_CONFIGURED)) {
+		ppe_tun_trace("%p: tunnel is not configured yet", tun);
+		ret = false;
+		goto done;
 	}
 
 	if (!tun->stats_excp) {
@@ -620,6 +638,21 @@ bool ppe_tun_deactivate(struct net_device *dev)
 		return false;
 	}
 
+	/*
+	 * Guard against deactivating a tunnel that was never activated.
+	 * This can happen when ppe_tun_destroy is called after a failed
+	 * ppe_tun_activate, or when ppe_tun_destroy_custom_tunnel is called
+	 * on a partially-created tunnel. Without this guard the extra
+	 * ppe_tun_deref below (which balances the ref taken in ppe_tun_activate)
+	 * would underrun the reference count.
+	 */
+	if (!(tun->state & PPE_TUN_STATE_ACTIVATED)) {
+		ppe_tun_trace("%p: tunnel not activated, skipping deactivation for dev %s",
+			      tun, dev->name);
+		ppe_tun_deref(tun);
+		return true;
+	}
+
 	if (!ppe_drv_tun_deactivate(tun->vp_num, NULL)) {
 		ppe_tun_deref(tun);
 		ppe_tun_warn("%p: failed to deactivate tunnel for dev %s", tun, dev->name);
@@ -674,7 +707,7 @@ bool ppe_tun_activate(struct net_device *dev)
 	if (ppe_drv_tun_xmit_port_mtu_get(tun->vp_num, &tun->tun_xmit_port_mtu)) {
 		ppe_tun_warn("%p: Could not get tunnel xmit port MTU", tun);
 	}
-	ppe_tun_warn("%p: tunnel %p activated for dev %s", ptp, tun, dev->name);
+	ppe_tun_info("%p: tunnel %p activated for dev %s", ptp, tun, dev->name);
 
 	/*
 	 * We should not deref tun here. we should hold ref on tun till deactivate.
@@ -687,11 +720,11 @@ EXPORT_SYMBOL(ppe_tun_activate);
  * ppe_tun_xcpn_mode_get()
  *	Get the exception mode based on tunnel type.
  */
-static uint8_t ppe_tun_xcpn_mode_get(enum ppe_drv_tun_cmn_ctx_type type)
+static uint8_t ppe_tun_xcpn_mode_get(struct ppe_tun *tun)
 {
 	uint8_t action = PPE_TUN_XCPN_MODE_0;
 
-	switch (type) {
+	switch (tun->type) {
 	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP:
 		action = ptp->xcpn_mode.gretap;
 		break;
@@ -712,11 +745,17 @@ static uint8_t ppe_tun_xcpn_mode_get(enum ppe_drv_tun_cmn_ctx_type type)
 		action = ptp->xcpn_mode.gretun;
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3:
+		action = tun->exp_mode;
+		break;
+
 	default:
-		ppe_tun_info("Tunnel type %u is invalid or doesn't support xcpn mode.", type);
+		ppe_tun_info("Tunnel type %u is invalid or doesn't support xcpn mode.", tun->type);
 
 	}
 
+	tun->exp_mode = action;
 	return action;
 }
 
@@ -729,6 +768,7 @@ static ppe_vp_type_t ppe_tun_get_tun_vp_type(enum ppe_drv_tun_cmn_ctx_type type)
 	switch (type) {
 	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP:
 	case PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2:
 		return PPE_VP_TYPE_HW_L2TUN;
 
 	case PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6:
@@ -737,6 +777,7 @@ static ppe_vp_type_t ppe_tun_get_tun_vp_type(enum ppe_drv_tun_cmn_ctx_type type)
 	case PPE_DRV_TUN_CMN_CTX_TYPE_CUST:
 	case PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE:
 	case PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN:
+	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3:
 		return PPE_VP_TYPE_HW_L3TUN;
 
 	default:
@@ -861,6 +902,8 @@ EXPORT_SYMBOL(ppe_tun_deconfigure);
 bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr, struct ppe_tun_excp *tun_cb)
 {
 	struct ppe_tun *tun = ppe_tun_get_tun_by_netdev_and_ref(dev);
+	void *add_cb = ppe_tun_activate_with_conn_entry;
+	void *del_cb = ppe_tun_deactivate_with_conn_entry;
 	ppe_vp_num_t vp_num;
 	uint8_t action;
 	bool status;
@@ -878,8 +921,14 @@ bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_h
 		return false;
 	}
 
-	status = ppe_drv_tun_configure(vp_num, tun_hdr, ppe_tun_activate_with_conn_entry,
-				       ppe_tun_deactivate_with_conn_entry);
+	if ((tun->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2 ||
+			tun->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3)) {
+		add_cb = NULL;
+		del_cb = NULL;
+		tun->exp_mode = tun_hdr->tun.user.decap_data.exp_mode;
+	}
+
+	status = ppe_drv_tun_configure(vp_num, tun_hdr, add_cb, del_cb);
 	if (!status) {
 		ppe_tun_trace("%p: tunnel driver configuration failed", tun);
 		ppe_tun_deref(tun);
@@ -889,9 +938,10 @@ bool ppe_tun_configure(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_h
 	/*
 	 * Set exception mode.
 	 */
-	action = ppe_tun_xcpn_mode_get(tun->type);
-	if (!ppe_drv_port_xcpn_mode_set(tun->vp_num, action)) {
+	action = ppe_tun_xcpn_mode_get(tun);
+	if (!ppe_drv_port_xcpn_mode_set(vp_num, action)) {
 		ppe_tun_warn("%p: xcpn_mode set failed for dev %s", ptp, dev->name);
+		ppe_drv_tun_deconfigure(vp_num);
 		ppe_tun_deref(tun);
 		return false;
 	}
@@ -1044,7 +1094,9 @@ bool ppe_tun_alloc(struct net_device *dev, enum ppe_drv_tun_cmn_ctx_type type)
 	tun->vp_num = vp_num;
 	tun->idx = idx;
 
-	if (type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2) {
+	if (type == PPE_DRV_TUN_CMN_CTX_TYPE_L2TP_V2 ||
+			type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2 ||
+			type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3) {
 		tun->tun_data = ppe_tun_alloc_tun_data();
 		if (!tun->tun_data) {
 			spin_unlock_bh(&ptp->lock);
@@ -1103,6 +1155,337 @@ bool ppe_tun_setup(struct net_device *dev, struct ppe_drv_tun_cmn_ctx *tun_hdr)
 	return true;
 }
 EXPORT_SYMBOL(ppe_tun_setup);
+
+/*
+ * ppe_tun_parse_custom_tun
+ *     Parser Custom tunnel user parameter
+ */
+static bool ppe_tun_parse_custom_tun(struct ppe_tun_custom_tun *ctun, struct ppe_drv_tun_cmn_ctx *ctx)
+{
+	/*
+	 * Fill L2 information
+	 */
+	ctx->l2.eth_type = ctun->l2.eth_type;
+
+	ctx->l2.smac[0] = htons(ctun->l2.smac[0]);
+	ctx->l2.smac[1] = htons(ctun->l2.smac[1]);
+	ctx->l2.smac[2] = htons(ctun->l2.smac[2]);
+
+	ctx->l2.dmac[0] = htons(ctun->l2.dmac[0]);
+	ctx->l2.dmac[1] = htons(ctun->l2.dmac[1]);
+	ctx->l2.dmac[2] = htons(ctun->l2.dmac[2]);
+
+	ctx->l2.xmit_port = ppe_drv_port_num_from_ifname(ctun->l2.phy_port);
+	if (ctx->l2.xmit_port == PPE_DRV_PORT_ID_INVALID) {
+		ppe_tun_warn("%p: Invalid xmit port for %s", ctun, ctun->l2.phy_port);
+		return false;
+	}
+
+	if (ctun->inner_type == PPE_TUN_INNER_TYPE_ETHER) {
+		ctx->type = PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2;
+	} else if (ctun->inner_type == PPE_TUN_INNER_TYPE_IP) {
+		ctx->type = PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3;
+	} else {
+		ppe_tun_warn("%p: invalid inner type %d", ctun, ctun->inner_type);
+		return false;
+	}
+
+	if (ctun->l2.vlan_enabled) {
+		ctx->l2.vlan[0].tpid = ctun->l2.vlan.cvlan_tpid;
+		ctx->l2.vlan[0].tci = ctun->l2.vlan.cvlan_tci;
+		ctx->l2.flags |= PPE_DRV_TUN_CMN_CTX_L2_CVLAN_VALID;
+
+		if (ctun->l2.vlan.svlan_valid) {
+			ctx->l2.vlan[1].tpid = ctun->l2.vlan.svlan_tpid;
+			ctx->l2.vlan[1].tci = ctun->l2.vlan.svlan_tci;
+			ctx->l2.flags |= PPE_DRV_TUN_CMN_CTX_L2_SVLAN_VALID;
+		}
+	}
+
+	if (ctun->l2.pppoe_enabled) {
+		memcpy(&ctx->l2.pppoe.ph, &ctun->l2.pppoe.ph, sizeof(ctx->l2.pppoe.ph));
+		ctx->l2.pppoe.ppp_proto = ctun->l2.pppoe.ppp_protocol;
+		memcpy(ctx->l2.pppoe.server_mac, ctun->l2.pppoe.pppoe_server_mac, sizeof(ctx->l2.pppoe.server_mac));
+		ctx->l2.flags |= PPE_DRV_TUN_CMN_CTX_L2_PPPOE_VALID;
+	}
+
+	/*
+	 * Fill L3 information
+	 */
+	if (ctun->l3.l3_type == PPE_TUN_L3_HDR_TYPE_IPV4) {
+		ctx->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_IPV4;
+		ctx->l3.saddr[0] = ctun->l3.saddr[0];
+		ctx->l3.daddr[0] = ctun->l3.daddr[0];
+		ctx->l3.proto = ctun->l3.proto;
+	} else if (ctun->l3.l3_type == PPE_TUN_L3_HDR_TYPE_IPV6) {
+		ctx->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_IPV6;
+		ctx->l3.saddr[0] = ctun->l3.saddr[0];
+		ctx->l3.saddr[1] = ctun->l3.saddr[1];
+		ctx->l3.saddr[2] = ctun->l3.saddr[2];
+		ctx->l3.saddr[3] = ctun->l3.saddr[3];
+		ctx->l3.daddr[0] = ctun->l3.daddr[0];
+		ctx->l3.daddr[1] = ctun->l3.daddr[1];
+		ctx->l3.daddr[2] = ctun->l3.daddr[2];
+		ctx->l3.daddr[3] = ctun->l3.daddr[3];
+		ctx->l3.proto = ctun->l3.proto;
+	} else {
+		ppe_tun_warn("%p: invalid L3 header type %d", ctun, ctun->l3.l3_type);
+		return false;
+	}
+
+	/*
+	 * Fill L4 information
+	 */
+	if (ctun->udp_hdr_valid) {
+		ctx->tun.user.udp_hdr_valid = true;
+		memcpy(&ctx->tun.user.udph, &ctun->udph, sizeof(ctx->tun.user.udph));
+	}
+
+	(!ctun->ecap.copy_ttl) ? (ctx->l3.ttl = ctun->ecap.ttl) : (ctx->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_TTL);
+	(!ctun->ecap.copy_dscp) ? (ctx->l3.dscp = ctun->ecap.dscp) : (ctx->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DSCP);
+	if (ctun->ecap.copy_df_bit) {
+		ctx->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_INHERIT_DF;
+	} else if (ctun->ecap.df_bit) {
+		ctx->l3.flags |= PPE_DRV_TUN_CMN_CTX_L3_DF_BIT_SET;
+	}
+
+	/*
+	 * Copy encap configurations
+	 */
+	ctx->l3.encap_ecn_mode = (enum ppe_drv_tun_cmn_ctx_encap_ecn)ctun->ecap.ecn_mode;
+
+	if (ctun->ecap.encap_hdr_data_len > PPE_TUN_ENCAP_HDR_DATA_LEN) {
+		ppe_tun_warn("%p: encap_hdr_data_len %u exceeds maximum %u",
+			     ctun, ctun->ecap.encap_hdr_data_len, PPE_TUN_ENCAP_HDR_DATA_LEN);
+		return false;
+	}
+
+	ctx->tun.user.encap_data.encap_hdr_data_len = ctun->ecap.encap_hdr_data_len;
+	memcpy(ctx->tun.user.encap_data.encap_hdr_data, ctun->ecap.encap_hdr_data,
+	       ctun->ecap.encap_hdr_data_len);
+	if (ctun->ecap.proto_update.proto_update_en) {
+		if (ctun->ecap.proto_update.proto_size > PPE_TUN_ENCAP_HDR_DATA_LEN) {
+			ppe_tun_warn("%p: proto_size %u exceeds maximum %u bits",
+				     ctun, ctun->ecap.proto_update.proto_size, PPE_TUN_ENCAP_HDR_DATA_LEN);
+			return false;
+		}
+
+		ctx->tun.user.encap_data.proto_update_en = true;
+		ctx->tun.user.encap_data.proto_offset = ctun->ecap.proto_update.proto_offset;
+		ctx->tun.user.encap_data.proto_size = ctun->ecap.proto_update.proto_size;
+		ctx->tun.user.encap_data.ipv4_proto = ctun->ecap.proto_update.ipv4_proto;
+		ctx->tun.user.encap_data.ipv6_proto = ctun->ecap.proto_update.ipv6_proto;
+	}
+
+	/*
+	 * Copy decap configurations
+	 */
+	ctx->l3.decap_ecn_mode = (enum ppe_drv_tun_cmn_ctx_decap_ecn)ctun->dcap.dcap_ecn;
+	if (ctun->dcap.ctrl.sip_match)
+		ppe_drv_tun_cust_match_flag_set(&ctx->tun.user.decap_data.match_bitmap,
+						PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_SIP_EN);
+	if (ctun->dcap.ctrl.dip_match)
+		ppe_drv_tun_cust_match_flag_set(&ctx->tun.user.decap_data.match_bitmap,
+						PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_DIP_EN);
+	if (ctun->dcap.ctrl.proto_match)
+		ppe_drv_tun_cust_match_flag_set(&ctx->tun.user.decap_data.match_bitmap,
+						PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_PROTO_EN);
+	if (ctun->dcap.ctrl.sport_match)
+		ppe_drv_tun_cust_match_flag_set(&ctx->tun.user.decap_data.match_bitmap,
+						PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_SPORT_EN);
+	if (ctun->dcap.ctrl.dport_match)
+		ppe_drv_tun_cust_match_flag_set(&ctx->tun.user.decap_data.match_bitmap,
+						PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_DPORT_EN);
+
+	if (ctun->dcap.id ==  PPE_TUN_DECAP_TUN_IDENTIFIER_ETHERNET_PROTO) {
+		ctx->tun.user.decap_data.tunnel_identifier = PPE_DRV_TUN_CMN_CTX_CUST_TUN_ID_ETH_PROTO;
+	} else if (ctun->dcap.id ==  PPE_TUN_DECAP_TUN_IDENTIFIER_IP_PROTO) {
+		ctx->tun.user.decap_data.tunnel_identifier = PPE_DRV_TUN_CMN_CTX_CUST_TUN_ID_IP_PROTO;
+	} else if (ctun->dcap.id == PPE_TUN_DECAP_TUN_IDENTIFIER_UDP_PORT) {
+		ctx->tun.user.decap_data.tunnel_identifier = PPE_DRV_TUN_CMN_CTX_CUST_TUN_ID_UDP_PORT;
+	} else {
+		ppe_tun_warn("%p: invalid tunnel identifier type %d", ctun, ctun->dcap.id);
+		return false;
+	}
+
+	if (ctun->dcap.offset_type == PPE_TUN_CUSTOM_TUN_DECAP_UDF_OFFSET_L2_START) {
+		ctx->tun.user.decap_data.offset_type = PPE_DRV_TUN_CMN_CTX_CUST_TUN_OFFSET_L2_START;
+	} else if (ctun->dcap.offset_type == PPE_TUN_CUSTOM_TUN_DECAP_UDF_OFFSET_L3_START) {
+		ctx->tun.user.decap_data.offset_type = PPE_DRV_TUN_CMN_CTX_CUST_TUN_OFFSET_L3_START;
+	} else if (ctun->dcap.offset_type == PPE_TUN_CUSTOM_TUN_DECAP_UDF_OFFSET_L4_START) {
+		ctx->tun.user.decap_data.offset_type = PPE_DRV_TUN_CMN_CTX_CUST_TUN_OFFSET_L4_START;
+	} else {
+		ppe_tun_warn("%p: invalid offset type %d", ctun, ctun->dcap.offset_type);
+		return false;
+	}
+
+	/*
+	 * Copy UDF offset configurations
+	 */
+	ctx->tun.user.decap_data.udf0_offset = ctun->dcap.udf_offset.udf0_offset;
+	ctx->tun.user.decap_data.udf1_offset = ctun->dcap.udf_offset.udf1_offset;
+	ctx->tun.user.decap_data.udf2_offset = ctun->dcap.udf_offset.udf2_offset;
+	ctx->tun.user.decap_data.instance_udf0_offset = ctun->dcap.udf_offset.instance_udf0_offset;
+	ctx->tun.user.decap_data.instance_udf1_offset = ctun->dcap.udf_offset.instance_udf1_offset;
+
+	/*
+	 * Copy instance match configuration (tunnel UDF for instance identification)
+	 */
+	ctx->tun.user.decap_data.instance_match.instance_udf0_en = ctun->dcap.instance_match.instance_udf0_en;
+	ctx->tun.user.decap_data.instance_match.instance_udf0_val = ctun->dcap.instance_match.instance_udf0_val;
+	ctx->tun.user.decap_data.instance_match.instance_udf0_mask = ctun->dcap.instance_match.instance_udf0_mask;
+	ctx->tun.user.decap_data.instance_match.instance_udf1_en = ctun->dcap.instance_match.instance_udf1_en;
+	ctx->tun.user.decap_data.instance_match.instance_udf1_val = ctun->dcap.instance_match.instance_udf1_val;
+	ctx->tun.user.decap_data.instance_match.instance_udf1_mask = ctun->dcap.instance_match.instance_udf1_mask;
+
+	if (ctun->dcap.udp_csum_zero_en) {
+		ctx->tun.user.decap_data.udp_csum_zero_en = true;
+	}
+
+	/*
+	 * Copy type match configuration (program UDF entries for tunnel type identification)
+	 * Note: type_match contains multiple entries with udf0/1/2 fields for packet type matching
+	 */
+	if (ctun->dcap.type_match.num_entries == 0 ||
+			ctun->dcap.type_match.num_entries > PPE_TUN_PRGM_UDF_MAX_ENTRIES) {
+		ppe_tun_warn("%p: type_match.num_entries %u is invalid (must be 1-%u)",
+			     ctun, ctun->dcap.type_match.num_entries, PPE_TUN_PRGM_UDF_MAX_ENTRIES);
+		return false;
+	}
+
+	memcpy(&ctx->tun.user.decap_data.type_match, &ctun->dcap.type_match, sizeof(ctx->tun.user.decap_data.type_match));
+
+	ctx->tun.user.decap_data.exp_mode = ctun->dcap.dcap_exp_mode;
+	ctx->tun.user.decap_data.decap_data_len = ctun->dcap.outer_hdr_length;
+
+	return true;
+}
+
+/*
+ * ppe_tun_custom_tun_exp_handler
+ *     Custom tunnel Exception packet handler
+ */
+static bool ppe_tun_custom_tun_exp_handler(struct ppe_vp_cb_info *info, ppe_tun_data *tun_data)
+{
+	ppe_tun_custom_exp_method_t cb = tun_data->cust_info.exp_cb;
+
+	if (!cb) {
+		ppe_tun_warn("No exception callback registered for custom tunnel, dropping packet\n");
+		dev_kfree_skb_any(info->skb);
+		return false;
+	}
+
+	if (!cb(info->skb, tun_data->cust_info.custom_tunnel_data)) {
+		ppe_tun_warn("exception packet handling failed\n");
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * ppe_tun_custom_tun_stats_update
+ *    Custom tunnel Stats update handler
+ */
+static bool ppe_tun_custom_tun_stats_update(struct net_device *dev, ppe_tun_hw_stats *stats, ppe_tun_data *tun_data)
+{
+	ppe_tun_custom_stats_method_t cb = tun_data->cust_info.stats_cb;
+	struct ppe_drv_tun_custom_tun_stats dev_stats = {0};
+
+	if (!cb) {
+		ppe_tun_trace("No stats callback registered for custom tunnel");
+		return true;
+	}
+
+	dev_stats.rx_pkt_cnt = stats->rx_pkt_cnt;
+	dev_stats.rx_byte_cnt = stats->rx_byte_cnt;
+	dev_stats.rx_drop_pkt_cnt = stats->rx_drop_pkt_cnt;
+	dev_stats.rx_drop_byte_cnt = stats->rx_drop_byte_cnt;
+	dev_stats.tx_pkt_cnt = stats->tx_pkt_cnt;
+	dev_stats.tx_byte_cnt = stats->tx_byte_cnt;
+	dev_stats.tx_drop_pkt_cnt = stats->tx_drop_pkt_cnt;
+	dev_stats.tx_drop_byte_cnt = stats->tx_drop_byte_cnt;
+
+	cb(dev, &dev_stats, tun_data->cust_info.custom_tunnel_data);
+
+	return true;
+}
+
+/*
+ * ppe_tun_destroy_custom_tunnel
+ *      Destroy custom tunnel
+ */
+ppe_tun_ret_t ppe_tun_destroy_custom_tunnel(struct net_device *dev)
+{
+	if (!ppe_tun_deactivate(dev)) {
+		ppe_tun_warn("%p: Custom tunnel deactivation failed", dev);
+		return PPE_TUN_RET_CUSTOM_TUN_DEACTIVATE_FAILED;
+	}
+
+	if (!ppe_tun_deconfigure(dev)) {
+		ppe_tun_warn("%p: Custom tunnel deconfigure failed", dev);
+		return PPE_TUN_RET_CUSTOM_TUN_DECONFIGURE_FAILED;
+	}
+
+	if (!ppe_tun_free(dev)) {
+		ppe_tun_warn("%p: Custom tunnel free failed", dev);
+		return PPE_TUN_RET_CUSTOM_TUN_FREE_FAILED;
+	}
+
+	ppe_tun_info("%p: Custom tunnel destroy successful", dev);
+	return PPE_TUN_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_tun_destroy_custom_tunnel);
+
+/*
+ * ppe_tun_create_custom_tunnel
+ *      Create custom tunnel
+ */
+ppe_tun_ret_t ppe_tun_create_custom_tunnel(struct net_device *dev, struct ppe_tun_custom_tun *ctun)
+{
+	struct ppe_drv_tun_cmn_ctx ctx = {0};
+	struct ppe_tun_excp tun_cb = {0};
+	ppe_tun_data tun_data = {0};
+
+	if (!ppe_tun_parse_custom_tun(ctun, &ctx)) {
+		ppe_tun_warn("Failed to parse custom tunnel args");
+		return PPE_TUN_RET_CUSTOM_TUN_INVALID_INPUT;
+	}
+
+	if (!ppe_tun_alloc(dev, ctx.type)) {
+		ppe_tun_warn("Failed to alloc tunnel instance for %s dev", dev->name);
+		return PPE_TUN_RET_CUSTOM_TUN_ALLOC_FAILED;
+	}
+
+	tun_cb.tun_data = &tun_data;
+	tun_cb.src_excp_method = ppe_tun_custom_tun_exp_handler;
+	tun_cb.stats_update_method = ppe_tun_custom_tun_stats_update;
+	tun_cb.tun_data->cust_info.custom_tunnel_data = ctun->tunnel_data;
+	tun_cb.tun_data->cust_info.exp_cb = ctun->excp_cb;
+	tun_cb.tun_data->cust_info.stats_cb = ctun->stats_cb;
+
+	if (!ppe_tun_configure(dev, &ctx, &tun_cb)) {
+		ppe_tun_warn("Failed to configure tunnel for %s dev", dev->name);
+		goto err_cleanup_alloc;
+	}
+
+	if (!ppe_tun_activate(dev)) {
+		ppe_tun_warn("Failed to Activate tunnel for %s dev", dev->name);
+		goto err_cleanup_configure;
+	}
+
+	return PPE_TUN_RET_SUCCESS;
+
+err_cleanup_configure:
+	ppe_tun_deconfigure(dev);
+	ppe_tun_free(dev);
+	return PPE_TUN_RET_CUSTOM_TUN_ACTIVATE_FAILED;
+
+err_cleanup_alloc:
+	ppe_tun_free(dev);
+	return PPE_TUN_RET_CUSTOM_TUN_CONFIGURE_FAILED;
+}
+EXPORT_SYMBOL(ppe_tun_create_custom_tunnel);
 
 /*
  * ppe_tun_destroy()

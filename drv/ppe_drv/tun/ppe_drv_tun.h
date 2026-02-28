@@ -16,6 +16,8 @@
 #include "ppe_drv_tun_gre.h"
 #include "ppe_drv_tun_prgm_prsr_gre.h"
 #include "ppe_drv_tun_l2tp.h"
+#include "ppe_drv_tun_custom.h"
+
 #ifdef NSS_PPE_TUNNEL_TPR_ENABLE
 #include "ppe_drv_tun_tpr.h"
 #endif
