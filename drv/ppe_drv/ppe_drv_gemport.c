@@ -192,11 +192,10 @@ struct ppe_drv_gem_port_ctx *ppe_drv_gem_port_alloc()
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_gem_port *gemport = p->gemport;
 
-	spin_lock_bh(&p->lock);
 	ctx = ppe_drv_gem_port_ctx_alloc();
 	if (!ctx) {
 		ppe_drv_warn("Alloc failed, out of memory \n");
-		goto fail;
+		return NULL;
 	}
 
 	spin_lock_bh(&p->lock);
