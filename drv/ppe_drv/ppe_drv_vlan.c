@@ -1828,7 +1828,7 @@ static bool ppe_drv_vlan_rule_fill(struct ppe_drv_vlan_ctx *ctx, struct ppe_drv_
 	if (rule->flags & PPE_DRV_VLAN_RULE_FLAG_CTPID) {
 		fal_rule->ctpid_idx = rule->ctpid;
 		fal_rule->ctpid_idx_en = A_TRUE;
-		ppe_drv_trace("%p: rule CTPID: %d", ctx, rule->ctpid);
+		ppe_drv_trace("%p: rule CTPID: 0x%x", ctx, rule->ctpid);
 	}
 
 	if (rule->flags & PPE_DRV_VLAN_RULE_FLAG_DHCP_TYPE) {

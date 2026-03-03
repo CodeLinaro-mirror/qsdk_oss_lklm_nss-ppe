@@ -266,9 +266,9 @@ struct ppe_drv_vlan_action {
 	uint8_t cdeitranslation;			/**< Translation CDEI */
 	uint8_t tags_to_remove;				/**< Tags to remove */
 	ppe_drv_vlan_tag_cmd_t stpid_cmd;		/**< STPID command */
-	uint16_t stpid_action;				/**< STPID value for translation */
+	int16_t stpid_action;				/**< STPID value for translation */
 	ppe_drv_vlan_tag_cmd_t ctpid_cmd;		/**< CTPID command */
-	uint16_t ctpid_action;				/**< CTPID value for translation */
+	int16_t ctpid_action;				/**< CTPID value for translation */
 	ppe_drv_vlan_dscp_pbit_index_t dscp_p_bit_map_ind;/**< DSCP to P bit index */
 	uint8_t counter_id;				/**< VLAN device counter ID */
 	ppe_drv_vlan_counter_mode_t counter_mode;	/**< Counter mode */
@@ -313,8 +313,8 @@ struct ppe_drv_vlan_rule_match {
 	uint32_t vsi;					/**< VSI value */
 	ppe_drv_vlan_vni_resv_type_t vni_resv_type;	/**< Type of VNI or GRE key field */
 	uint32_t vni_resv;				/**< VNI or GRE key field */
-	uint16_t stpid;					/**< STPID Value: For inner outer TPID match */
-	uint16_t ctpid;					/**< CTPID Value: For inner outer TPID match */
+	int16_t stpid;					/**< STPID Value: For inner outer TPID match */
+	int16_t ctpid;					/**< CTPID Value: For inner outer TPID match */
 	uint8_t dhcp_type;				/**< DHCP Type */
 	uint8_t mc_type;				/**< Multicast Type */
 
