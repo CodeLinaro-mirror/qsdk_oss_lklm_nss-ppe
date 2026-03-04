@@ -246,7 +246,7 @@ static int nss_ppenl_pm_ops_counter_gen_destroy_rule(struct sk_buff *skb, struct
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error, status = 0;
+	int error = 0;
 	ppe_pm_ret_t ret;
 
 	/*
@@ -282,14 +282,12 @@ static int nss_ppenl_pm_ops_counter_gen_destroy_rule(struct sk_buff *skb, struct
 	 */
 	ppe_pm_counter_gen_rule_dump(&nl_pm_rule->counter_gen);
 
-	status = ppe_pm_counter_gen_rule_destroy(nl_pm_rule->counter_gen.counter_id);
-	if (status == PPE_PM_RET_SUCCESS) {
-		nss_ppenl_info("%s: PPE rule destroy success\n", __func__);
+	ret = ppe_pm_counter_gen_rule_destroy(nl_pm_rule->counter_gen.counter_id);
+	if (ret == PPE_PM_RET_SUCCESS) {
+		nss_ppenl_info("PPE PM counter gen rule destroy successfully\n");
 	} else {
-		nss_ppenl_info("destroy rule in ppe driver failed, error = %d\n", status);
+		nss_ppenl_info("destroy rule in ppe driver failed, error = %d\n", ret);
 	}
-
-	ret = nl_pm_rule->counter_gen.ret;
 
 	/*
 	 * Send the response code to user application
