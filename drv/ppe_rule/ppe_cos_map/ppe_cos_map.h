@@ -67,7 +67,9 @@ struct ppe_cos_map_rule {
  *	Structure for CoS port group.
  */
 struct ppe_cos_map_port_group {
-	bool is_configured;		/* Is configured */
+	struct list_head list;		/* List of ports */
+	char dev[IFNAMSIZ];		/* Device name */
+	uint32_t port_id;		/* Port ID */
 	struct ppe_drv_cos_map_port_group_cfg cfg;	/* Port group info */
 };
 
@@ -79,7 +81,7 @@ struct ppe_cos_map_base {
 	spinlock_t lock;                                	/* PPE lock */
 	struct ppe_cos_map_stats stats;			/* CoS map statistics */
 	struct dentry *dentry;				/* Debugfs entry */
-	struct ppe_cos_map_port_group port_grp_cfg[PPE_DRV_QOS_PORT_MAX];	/* Port group info */
+	struct list_head port_list;			/* List of ports for port group maping */
 	struct list_head active_rules;			/* List of active CoS map rules */
 	int cos_map_dump_major_id;	/* Device ID for CoS map dump character device. */
 };

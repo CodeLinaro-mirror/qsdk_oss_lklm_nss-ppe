@@ -17,6 +17,61 @@
 struct ppe_cos_map_base gbl_ppe_cos_map = {0};
 
 /*
+ * ppe_cos_map_get_port_id()
+ *	Get the Port ID
+ */
+static int ppe_cos_map_get_port_id(char *dev_name)
+{
+	struct net_device *dev = NULL;
+	int port_id;
+
+	dev = dev_get_by_name(&init_net, dev_name);
+	if (!dev) {
+		ppe_cos_map_warn("failed to find valid dev");
+		return -1;
+	}
+
+	port_id = ppe_drv_port_num_from_dev(dev);
+	if ((port_id < 0) || (port_id >= PPE_DRV_PORTS_MAX)) {
+		ppe_cos_map_warn("invalid port_num");
+		dev_put(dev);
+		return -1;
+	}
+
+	dev_put(dev);
+
+	ppe_cos_map_trace("dev:%s port_id:%d", dev_name, port_id);
+	return port_id;
+}
+
+/*
+ * ppe_cos_map_port_group_delete()
+ * 	Delete CoS map port groups
+ */
+static void ppe_cos_map_port_group_delete(void)
+{
+	struct ppe_cos_map_base *g_cos_map = &gbl_ppe_cos_map;
+	struct ppe_cos_map_port_group *port_grp, *tmp;
+
+	spin_lock_bh(&g_cos_map->lock);
+	if (list_empty(&g_cos_map->port_list)) {
+		spin_unlock_bh(&g_cos_map->lock);
+		ppe_cos_map_trace("CoS map port list already empty!\n");
+		return;
+	}
+
+	/*
+	 * Iterating through port list to delete all CoS map port groups
+	 */
+	list_for_each_entry_safe(port_grp, tmp, &g_cos_map->port_list, list) {
+		list_del(&port_grp->list);
+		kfree(port_grp);
+	}
+
+	spin_unlock_bh(&g_cos_map->lock);
+}
+
+/*
  * ppe_cos_map_alloc
  *	Alloc ppe CoS map alloc
  */
@@ -106,11 +161,11 @@ static struct ppe_cos_map_rule *ppe_cos_map_rule_find_by_type(uint32_t group_id,
 		}
 	}
 
-	ppe_cos_map_warn("%p: No valid CoS map rule for cos type:%d", g_cos_map, type);
+	ppe_cos_map_trace("%p: No valid CoS map rule for cos type:%d", g_cos_map, type);
 	return NULL;
 
 rule_found:
-	ppe_cos_map_info("%p: CoS map rule:%p ID:%d found for group_id:%d type:%d",
+	ppe_cos_map_trace("%p: CoS map rule:%p ID:%d found for group_id:%d type:%d",
 			g_cos_map, rule, rule->rule_id, rule->cfg.group_id, rule->type_flag);
 	return rule;
 }
@@ -127,13 +182,13 @@ static struct ppe_cos_map_rule *ppe_cos_map_rule_find_by_id(int16_t id)
 	if (!list_empty(&g_cos_map->active_rules)) {
 		list_for_each_entry(rule, &g_cos_map->active_rules, list) {
 			if (rule->rule_id == id) {
-				ppe_cos_map_info("%p: qoS map rule: %p found for ID: %d", g_cos_map, rule, id);
+				ppe_cos_map_trace("%p: qoS map rule: %p found for ID: %d", g_cos_map, rule, id);
 				return rule;
 			}
 		}
 	}
 
-	ppe_cos_map_warn("%p: No valid CoS map rule for ID: %d", g_cos_map, id);
+	ppe_cos_map_trace("%p: No valid CoS map rule for ID: %d", g_cos_map, id);
 	return NULL;
 }
 
@@ -361,40 +416,76 @@ EXPORT_SYMBOL(ppe_cos_map_create);
 ppe_cos_map_ret_t ppe_cos_map_port_group_set(struct ppe_cos_map_port_group_info *info)
 {
 	struct ppe_cos_map_base *g_cos_map = &gbl_ppe_cos_map;
+	struct ppe_cos_map_port_group *port_grp;
+	int port_id;
+	bool exists = false;
 
 	if (!info) {
 		ppe_cos_map_warn("%p cos port group configuration iinfo not valid", g_cos_map);
 		return PPE_COS_MAP_PORT_GROUP_SET_FAIL;
 	}
 
-	if (info->port_id >= PPE_DRV_PHYSICAL_MAX) {
+	port_id = ppe_cos_map_get_port_id(info->dev);
+	if (port_id < 0) {
 		ppe_cos_map_stats_inc(&g_cos_map->stats.set_cos_map_port_group_failed);
-		ppe_cos_map_warn("cos port group configuration failed, invalid port:%d", info->port_id);
+		ppe_cos_map_warn("cos port group configuration failed, invalid dev:%s", info->dev);
 		return PPE_COS_MAP_PORT_GROUP_SET_FAIL;
 	}
 
 	if ((info->tci_grp_id >= PPE_COS_MAP_MAX_GROUP) || (info->tos_grp_id >= PPE_COS_MAP_MAX_GROUP)) {
 		ppe_cos_map_stats_inc(&g_cos_map->stats.set_cos_map_port_group_failed);
-		ppe_cos_map_warn("cos port group configuration failed for port:%d", info->port_id);
+		ppe_cos_map_warn("cos port group configuration failed for dev:%s", info->dev);
 		return PPE_COS_MAP_PORT_GROUP_SET_FAIL;
 	}
 
+	/*
+	 * Check if the configuration for the given port already exists, overwrite it
+	 */
 	spin_lock_bh(&g_cos_map->lock);
-	g_cos_map->port_grp_cfg[info->port_id].cfg.tci_grp_id = info->tci_grp_id;
-	g_cos_map->port_grp_cfg[info->port_id].cfg.tos_grp_id = info->tos_grp_id;
+	if (!list_empty(&g_cos_map->port_list)) {
+		list_for_each_entry(port_grp,  &g_cos_map->port_list, list) {
+			if (port_grp->port_id == port_id) {
+				exists = true;
+				ppe_cos_map_trace("cos port group configuration will be updated for dev:%s", info->dev);
+				break;
+			}
+		}
+	}
 
-	if (ppe_drv_cos_map_port_group_set(info->port_id, &g_cos_map->port_grp_cfg[info->port_id].cfg) != PPE_DRV_RET_SUCCESS) {
+	if (!exists) {
+		port_grp = kzalloc(sizeof(struct ppe_cos_map_port_group), GFP_ATOMIC);
+		if (!port_grp) {
+			ppe_cos_map_stats_inc(&g_cos_map->stats.cos_map_rule_mem_alloc_failed);
+			spin_unlock_bh(&g_cos_map->lock);
+			ppe_cos_map_warn("cos port group configuration failed for dev:%s", info->dev);
+			return PPE_COS_MAP_PORT_GROUP_SET_FAIL;
+		}
+	}
+
+	strlcpy(port_grp->dev, info->dev, IFNAMSIZ);
+	port_grp->port_id = port_id;
+	port_grp->cfg.tci_grp_id = info->tci_grp_id;
+	port_grp->cfg.tos_grp_id = info->tos_grp_id;
+
+	if (ppe_drv_cos_map_port_group_set(port_id, &port_grp->cfg) != PPE_DRV_RET_SUCCESS) {
 		ppe_cos_map_stats_inc(&g_cos_map->stats.set_cos_map_port_group_failed);
+		if (!exists) {
+			kfree(port_grp);
+		}
+
 		spin_unlock_bh(&g_cos_map->lock);
-		ppe_cos_map_warn("cos port group configuration failed for port:%d", info->port_id);
+		ppe_cos_map_warn("cos port group configuration failed for dev:%s", info->dev);
 		return PPE_COS_MAP_PORT_GROUP_SET_FAIL;
 	}
 
-	g_cos_map->port_grp_cfg[info->port_id].is_configured = true;
+	if (!exists) {
+		list_add(&port_grp->list, &g_cos_map->port_list);
+	}
+
 	ppe_cos_map_stats_inc(&g_cos_map->stats.set_cos_map_port_group_success);
 	spin_unlock_bh(&g_cos_map->lock);
 
-	ppe_cos_map_trace("cos port group configuration successful for port:%d", info->port_id);
+	ppe_cos_map_trace("cos port group configuration successful for dev:%s", info->dev);
 	return PPE_COS_MAP_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_cos_map_port_group_set);
@@ -405,6 +496,8 @@ EXPORT_SYMBOL(ppe_cos_map_port_group_set);
  */
 void ppe_cos_map_deinit(void)
 {
+	ppe_cos_map_rule_flush();
+	ppe_cos_map_port_group_delete();
 	ppe_cos_map_dump_exit();
 	ppe_cos_map_stats_debugfs_exit();
 }
@@ -418,6 +511,7 @@ void ppe_cos_map_init(struct dentry *d_rule)
 	struct ppe_cos_map_base *g_cos_map = &gbl_ppe_cos_map;
 
 	spin_lock_init(&g_cos_map->lock);
+	INIT_LIST_HEAD(&g_cos_map->port_list);
 	INIT_LIST_HEAD(&g_cos_map->active_rules);
 	ppe_cos_map_stats_debugfs_init(d_rule);
 	ppe_cos_map_dump_init(d_rule);
