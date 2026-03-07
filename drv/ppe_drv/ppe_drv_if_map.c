@@ -419,7 +419,7 @@ static ssize_t ppe_drv_if_map_dev_read(struct file *file,	/* see include/linux/f
 		return -ENOMEM;
 	}
 
-        ppe_drv_assert(file->private_data == NULL, "unexpected double open: %px?\n", file->private_data);
+        ppe_drv_assert(file->private_data != NULL, "unexpected double open: %px?\n", file->private_data);
 
 	/*
 	 * If there is still some message remaining to be output then complete that first
