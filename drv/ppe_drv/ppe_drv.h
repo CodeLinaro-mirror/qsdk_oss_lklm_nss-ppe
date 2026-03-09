@@ -608,6 +608,7 @@ struct ppe_drv {
 	int ppe_drv_pon_port_start_pq;		/* Start queue number mapped to pon port. */
 	int ppe_drv_pon_port_max_pq;		/* max pq to be used for pon port. */
 #endif
+	struct ppe_drv_iface *pon_iface;	/* Memory for PPE PON interface */
 };
 
 /*

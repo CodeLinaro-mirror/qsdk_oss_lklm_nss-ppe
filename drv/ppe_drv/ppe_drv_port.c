@@ -1016,7 +1016,6 @@ int32_t ppe_drv_port_ucast_queue_profile_get(int port)
 		ppe_drv_warn("error %d getting queue base for port %d\n", err, port);
 		return -1;
 	}
-
 	return profile;
 }
 EXPORT_SYMBOL(ppe_drv_port_ucast_queue_profile_get);
