@@ -35,8 +35,8 @@ ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *inf
 	 * Validate priority map values (0-7 for unicast queue classes)
 	 */
 	for (i = 0; i < PPE_DRV_MAX_PRIORITY; i++) {
-		if (info->prio_map[i] > 7) {
-			ppe_qos_warn("Invalid unicast queue class %u at index %d (max: 7)",
+		if (info->prio_map[i] > (PPE_DRV_QOS_PRIORITY_MAX - 1)) {
+			ppe_qos_warn("Invalid unicast queue class %u at index %d (max:7)",
 				info->prio_map[i], i);
 			ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_ucast_prio_map_fail);
 			return PPE_QOS_SET_UCAST_PRIO_MAP_FAIL;
@@ -69,6 +69,17 @@ ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *inf
 	 */
 	spin_lock_bh(&gbl_ppe_qos.lock);
 	profile_id = ppe_drv_port_ucast_queue_profile_get(port_id);
+	if (profile_id == -1) {
+		spin_unlock_bh(&gbl_ppe_qos.lock);
+		ppe_qos_warn("Failed to configure unicast priority map for device %s", dev->name);
+		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_ucast_prio_map_fail);
+		dev_put(dev);
+		return PPE_QOS_SET_UCAST_PRIO_MAP_FAIL;
+	}
+
+	/*
+	 * Configure the unicast priority map
+	 */
 	if (!ppe_drv_confgiure_ucast_prio_map_tbl(profile_id, info->prio_map)) {
 		spin_unlock_bh(&gbl_ppe_qos.lock);
 		dev_put(dev);
@@ -122,9 +133,9 @@ ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *inf
 	 * Validate priority map values (0-3 for multicast queue classes)
 	 */
 	for (i = 0; i < PPE_DRV_MAX_PRIORITY; i++) {
-		if (info->prio_map[i] > PPE_DRV_MCAST_QUEUE_CLASS_MAX) {
+		if (info->prio_map[i] > (PPE_DRV_MCAST_QUEUE_CLASS_MAX - 1)) {
 			ppe_qos_warn("Invalid multicast queue class %u at index %d (max: %d)",
-			            info->prio_map[i], i, PPE_DRV_MCAST_QUEUE_CLASS_MAX);
+					info->prio_map[i], i, PPE_DRV_MCAST_QUEUE_CLASS_MAX - 1);
 			ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_mcast_prio_map_fail);
 			return PPE_QOS_FAIL;
 		}

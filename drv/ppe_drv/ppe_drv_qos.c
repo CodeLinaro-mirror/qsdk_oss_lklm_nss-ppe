@@ -145,7 +145,7 @@ void ppe_drv_qos_queue_stats_get(uint32_t qid, bool is_red, struct ppe_drv_qos_q
 	fal_queue_stats_t info;
 
 	spin_lock_bh(&p->lock);
-	fal_queue_counter_get(0, qid, &info);
+	fal_queue_counter_get(PPE_DRV_SWITCH_ID, qid, &info);
 	spin_unlock_bh(&p->lock);
 
 	stats->tx_pkts = info.tx_packets;
@@ -172,7 +172,7 @@ void ppe_drv_qos_queue_stats_reset(uint32_t qid)
 	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
-	fal_queue_counter_cleanup(0, qid);
+	fal_queue_counter_cleanup(PPE_DRV_SWITCH_ID, qid);
 	spin_unlock_bh(&p->lock);
 
 	ppe_drv_info("%px:reset queue stats successful for qid:%u", p, qid);
@@ -188,7 +188,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_enqueue_ctrl(uint32_t qid, bool enable)
 	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
-	if (fal_qm_enqueue_ctrl_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, enable ? A_TRUE : A_FALSE) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue enqueue control failed for qid:%u enable:%d", p, qid, enable);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -209,7 +209,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_dequeue_ctrl(uint32_t qid, bool enable)
 	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
-	if (fal_scheduler_dequeue_ctrl_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+	if (fal_scheduler_dequeue_ctrl_set(PPE_DRV_SWITCH_ID, qid, enable ? A_TRUE : A_FALSE) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue dequeue control failed for qid:%u enable:%d", p, qid, enable);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -231,7 +231,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_dequeue_drop_ctrl(uint32_t qid, bool enable)
 
 	spin_lock_bh(&p->lock);
 
-	if (fal_qm_dequeue_drop_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+	if (fal_qm_dequeue_drop_set(PPE_DRV_SWITCH_ID, qid, enable ? A_TRUE : A_FALSE) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue dequeue drop control failed for qid:%u enable:%d", p, qid, enable);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -255,19 +255,19 @@ ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 	 * Disable queue enqueue, dequeue and flush the queue.
 	 */
 	spin_lock_bh(&p->lock);
-	if (fal_qm_enqueue_ctrl_set(0, qid, A_FALSE) != 0) {
+	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_FALSE) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue enqueue failed for port:%u qid:%u", p, port_id, qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	}
 
-	if (fal_scheduler_dequeue_ctrl_set(0, qid, A_FALSE) != 0) {
+	if (fal_scheduler_dequeue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_FALSE) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue dequeue failed for port:%u qid:%u", p, port_id, qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	}
 
-	if (fal_queue_flush(0, port_id, qid) != 0) {
+	if (fal_queue_flush(PPE_DRV_SWITCH_ID, port_id, qid) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue flush failed for port:%u qid:%u", p, port_id, qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -292,13 +292,13 @@ ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid)
 	 * Enable queue enqueue and dequeue.
 	 */
 	spin_lock_bh(&p->lock);
-	if (fal_qm_enqueue_ctrl_set(0, qid, A_TRUE) != 0) {
+	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_TRUE) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue enqueue failed for qid:%u", p, qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	}
 
-	if (fal_scheduler_dequeue_ctrl_set(0, qid, A_TRUE) != 0) {
+	if (fal_scheduler_dequeue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_TRUE) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue dequeue failed for qid:%u", p, qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -320,14 +320,14 @@ ppe_drv_ret_t ppe_drv_qos_tcont_stats_get(uint32_t tcont_id, struct ppe_drv_qos_
 	fal_queue_tcont_stat_t info;
 
 	spin_lock_bh(&p->lock);
-	if (fal_qm_tcont_stat_get(0, tcont_id, &info) != 0) {
+	if (fal_qm_tcont_stat_get(PPE_DRV_SWITCH_ID, tcont_id, &info) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:tcont stats get failed for tcont:%u", p, tcont_id);
-		return PPE_DRV_RET_QOS_TCONT_CFG_FAIL;
+		return PPE_DRV_RET_QOS_TCONT_STATS_FAIL;
 	}
 
 	spin_unlock_bh(&p->lock);
-	stats->bytes = info.bytes;
+	stats->pend_bytes = info.bytes;
 	stats->credit = info.credit;
 
 	ppe_drv_info("%px:get tcont stats get successful for tcont_id:%u", p, tcont_id);
@@ -345,15 +345,15 @@ ppe_drv_ret_t ppe_drv_qos_tcont_credit_reset(uint32_t tcont_id)
 	fal_queue_tcont_stat_t stats = {0};
 
 	spin_lock_bh(&p->lock);
-	if (fal_qm_tcont_stat_set(0, tcont_id, &stats) != 0) {
+	if (fal_qm_tcont_stat_set(PPE_DRV_SWITCH_ID, tcont_id, &stats) != SW_OK) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px:tcont stats setting failed for tcont:%u", p, tcont_id);
+		ppe_drv_warn("%px:tcont stats resetting failed for tcont:%u", p, tcont_id);
 		return PPE_DRV_RET_QOS_TCONT_CFG_FAIL;
 	}
 
 	spin_unlock_bh(&p->lock);
 
-	ppe_drv_info("%px:tcont stats setting successful for tcont:%u", p, tcont_id);
+	ppe_drv_info("%px:tcont stats resetting successful for tcont:%u", p, tcont_id);
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_qos_tcont_credit_reset);
@@ -373,7 +373,7 @@ ppe_drv_ret_t ppe_drv_qos_tcont_set(struct ppe_drv_qos_res *res, uint32_t tcont_
 
 	ppe_drv_trace("%px:tcont configuration: queue_id:%u, tcont_id:%u, tcont_valid=%u",
 			p, res->q.ucast_qid, tcont_id, valid);
-	if (fal_qm_tcont_set(0, res->q.ucast_qid, &cfg) != 0) {
+	if (fal_qm_tcont_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:tcont configuration failed for tcont:%u", p, tcont_id);
 		return PPE_DRV_RET_QOS_TCONT_CFG_FAIL;
@@ -425,7 +425,7 @@ ppe_drv_ret_t ppe_drv_qos_l1_scheduler_set(struct ppe_drv_qos_res *res, uint32_t
 
 	ppe_drv_trace("%px:level1 configuration: port:%u, l0spid:%u, l1spid:%u, c_drrid:%u, c_pri:%u, c_drr_wt:%u, e_drrid:%u, e_pri:%u, e_drr_wt:%u, l1spid:%u",
 			p, port_id, res->l0spid, res->l1spid, l1cfg.c_drr_id, l1cfg.c_pri, l1cfg.c_drr_wt, l1cfg.e_drr_id, l1cfg.e_pri, l1cfg.e_drr_wt, l1cfg.sp_id);
-	if (fal_queue_scheduler_set(0, res->l0spid, PPE_DRV_QOS_FLOW_LEVEL - 1, port_id, &l1cfg) != 0) {
+	if (fal_queue_scheduler_set(PPE_DRV_SWITCH_ID, res->l0spid, PPE_DRV_QOS_FLOW_LEVEL - 1, port_id, &l1cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:level1 queue scheduler configuration failed for port:%u", p, port_id);
 		return PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL;
@@ -459,7 +459,7 @@ ppe_drv_ret_t ppe_drv_qos_l0_scheduler_reset(struct ppe_drv_qos_res *res, uint32
 
 	ppe_drv_trace("%px:level0 configuration: port:%u, ucast_qid:%u, c_drrid:%u, c_pri:%u, c_drr_wt:%u, e_drrid:%u, e_pri:%u, e_drr_wt:%u, l0spid:%u",
 			p, port_id, res->q.ucast_qid, l0cfg.c_drr_id, l0cfg.c_pri, l0cfg.c_drr_wt, l0cfg.e_drr_id, l0cfg.e_pri, l0cfg.e_drr_wt, l0cfg.sp_id);
-	if (fal_queue_scheduler_set(0, res->q.ucast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != 0) {
+	if (fal_queue_scheduler_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:level0 queue scheduler configuration failed for port:%u", p, port_id);
 		return PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL;
@@ -500,7 +500,7 @@ ppe_drv_ret_t ppe_drv_qos_l0_scheduler_set(struct ppe_drv_qos_res *res, uint32_t
 
 	ppe_drv_trace("%px:level0 configuration: port:%u, ucast_qid:%u, c_drrid:%u, c_pri:%u, c_drr_wt:%u, e_drrid:%u, e_pri:%u, e_drr_wt:%u, l0spid:%u",
 			p, port_id, res->q.ucast_qid, l0cfg.c_drr_id, l0cfg.c_pri, l0cfg.c_drr_wt, l0cfg.e_drr_id, l0cfg.e_pri, l0cfg.e_drr_wt, l0cfg.sp_id);
-	if (fal_queue_scheduler_set(0, res->q.ucast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != 0) {
+	if (fal_queue_scheduler_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:level0 queue scheduler configuration failed for port:%u", p, port_id);
 		return PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL;
@@ -518,7 +518,7 @@ ppe_drv_ret_t ppe_drv_qos_l0_scheduler_set(struct ppe_drv_qos_res *res, uint32_t
 	if (res->q.mcast_qid) {
 		ppe_drv_trace("%px:level0 configuration: port:%u, mcast_qid:%u, c_drrid:%u, c_pri:%u, c_drr_wt:%u, e_drrid:%u, e_pri:%u, e_drr_wt:%u, l0spid:%u",
 				p, port_id, res->q.mcast_qid, l0cfg.c_drr_id, l0cfg.c_pri, l0cfg.c_drr_wt, l0cfg.e_drr_id, l0cfg.e_pri, l0cfg.e_drr_wt, l0cfg.sp_id);
-		if (fal_queue_scheduler_set(0, res->q.mcast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != 0) {
+		if (fal_queue_scheduler_set(PPE_DRV_SWITCH_ID, res->q.mcast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != SW_OK) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("%px:level0 multicast queue scheduler configuration failed for port:%u", p, port_id);
 			return PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL;
@@ -543,7 +543,7 @@ ppe_drv_ret_t ppe_drv_qos_port_shaper_reset(struct ppe_drv_qos_res *res, uint32_
 
 	spin_lock_bh(&p->lock);
 	ppe_drv_trace("%px:port shaper reset for port:%u", p, port_id);
-	if (fal_port_shaper_set(0, port_id, &cfg) != 0) {
+	if (fal_port_shaper_set(PPE_DRV_SWITCH_ID, port_id, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:port shaper configuration failed for port:%u",
 				p, port_id);
@@ -575,7 +575,7 @@ ppe_drv_ret_t ppe_drv_qos_port_shaper_set(struct ppe_drv_qos_res *res, uint32_t 
 
 	ppe_drv_trace("%px:port token set for port:%u, c_token_number:%x, e_token_number:%x",
 		p, port_id, token.c_token_number, token.e_token_number);
-	if (fal_port_shaper_token_number_set(0, port_id, &token) != 0) {
+	if (fal_port_shaper_token_number_set(PPE_DRV_SWITCH_ID, port_id, &token) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:port shaper token configuration failed for port:%u",
 				p, port_id);
@@ -594,7 +594,7 @@ ppe_drv_ret_t ppe_drv_qos_port_shaper_set(struct ppe_drv_qos_res *res, uint32_t 
 
 	ppe_drv_trace("%px:port shaper configuration for port:%u, couple_en:%u, meter_unit:%u, c_shaper_en:%u, cbs:%u, cir:%u, ebs:%u, eir:%u, shaper_frame_mode:%u",
 			p, port_id, cfg.couple_en, cfg.meter_unit, cfg.c_shaper_en, cfg.cbs, cfg.cir, cfg.ebs, cfg.eir, cfg.shaper_frame_mode);
-	if (fal_port_shaper_set(0, port_id, &cfg) != 0) {
+	if (fal_port_shaper_set(PPE_DRV_SWITCH_ID, port_id, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:port shaper configuration failed for port:%u",
 				p, port_id);
@@ -621,7 +621,7 @@ ppe_drv_ret_t ppe_drv_qos_flow_shaper_reset(struct ppe_drv_qos_res *res)
 	 */
 	spin_lock_bh(&p->lock);
 	ppe_drv_trace("%px:flow shaper reset for l0spid:%u", p, res->l0spid);
-	if (fal_flow_shaper_set(0, res->l0spid, &cfg) != 0) {
+	if (fal_flow_shaper_set(PPE_DRV_SWITCH_ID, res->l0spid, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:flow shaper configuration failed for l0spid:%u",
 			p, res->l0spid);
@@ -653,7 +653,7 @@ ppe_drv_ret_t ppe_drv_qos_flow_shaper_set(struct ppe_drv_qos_res *res)
 
 	ppe_drv_trace("%px:flow token set for l0spid:%u, c_token_number:%x, e_token_number:%x",
 		p, res->l0spid, token.c_token_number, token.e_token_number);
-	if (fal_flow_shaper_token_number_set(0, res->l0spid, &token) != 0) {
+	if (fal_flow_shaper_token_number_set(PPE_DRV_SWITCH_ID, res->l0spid, &token) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:flow shaper token configuration failed for l0spid:%u",
 			p, res->l0spid);
@@ -675,7 +675,7 @@ ppe_drv_ret_t ppe_drv_qos_flow_shaper_set(struct ppe_drv_qos_res *res)
 
 	ppe_drv_trace("%px:flow shaper configuration: l0spid:%u, couple_en:%u, meter_unit:%u, c_shaper_en:%u, cbs:%u, cir:%u, ebs:%u, eir:%u, shaper_frame_mode:%u",
 		p, res->l0spid, cfg.couple_en, cfg.meter_unit, cfg.c_shaper_en, cfg.cbs, cfg.cir, cfg.ebs, cfg.eir, cfg.shaper_frame_mode);
-	if (fal_flow_shaper_set(0, res->l0spid, &cfg) != 0) {
+	if (fal_flow_shaper_set(PPE_DRV_SWITCH_ID, res->l0spid, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:flow shaper configuration failed for l0spid:%u",
 			p, res->l0spid);
@@ -699,7 +699,7 @@ ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_reset(struct ppe_drv_qos_res *res)
 
 	spin_lock_bh(&p->lock);
 	ppe_drv_trace("%px:multicast queue shaper reset for mcast_qid:%u", p, res->q.mcast_qid);
-	if (fal_queue_shaper_set(0, res->q.mcast_qid, &cfg) != 0) {
+	if (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, res->q.mcast_qid, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:multicast queue shaper configuration failed for mcast_qid:%u",
 			p, res->q.mcast_qid);
@@ -728,13 +728,13 @@ ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_set(struct ppe_drv_qos_res *res)
 
 	ppe_drv_trace("%px:multicast queue token set for mcast_qid:%u, c_token_number:%x, e_token_number:%x",
 		p, res->q.mcast_qid, token.c_token_number, token.e_token_number);
-	if (fal_queue_shaper_token_number_set(0, res->q.mcast_qid, &token) != 0) {
+	if (fal_queue_shaper_token_number_set(PPE_DRV_SWITCH_ID, res->q.mcast_qid, &token) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:multicast queue shaper token configuration failed for mcast_qid:%u", p, res->q.mcast_qid);
 		return PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
 	}
 
-	if (fal_queue_shaper_get(0, res->q.ucast_qid, &cfg) != 0) {
+	if (fal_queue_shaper_get(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue shaper configuration fetch failed for ucast_qid:%u", p, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
@@ -742,7 +742,7 @@ ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_set(struct ppe_drv_qos_res *res)
 
 	ppe_drv_trace("%px:multicast queue shaper configuration for mcast_qid:%u, couple_en:%u, meter_unit:%u, c_shaper_en:%u, cbs:%u, cir:%u, ebs:%u, eir:%u, shaper_frame_mode:%u",
 		p, res->q.mcast_qid, cfg.couple_en, cfg.meter_unit, cfg.c_shaper_en, cfg.cbs, cfg.cir, cfg.ebs, cfg.eir, cfg.shaper_frame_mode);
-	if (fal_queue_shaper_set(0, res->q.mcast_qid, &cfg) != 0) {
+	if (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, res->q.mcast_qid, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:multicast queue shaper configuration failed for mcast_qid:%u", p, res->q.mcast_qid);
 		return PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
@@ -769,7 +769,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_shaper_reset(struct ppe_drv_qos_res *res)
 	spin_lock_bh(&p->lock);
 	ppe_drv_trace("%px:queue shaper reset for ucast_qid:%u",
 			p, res->q.ucast_qid);
-	if (fal_queue_shaper_set(0, res->q.ucast_qid, &cfg) != 0) {
+	if (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue shaper configuration failed for ucast_qid:%u",
 			p, res->q.ucast_qid);
@@ -801,7 +801,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_shaper_set(struct ppe_drv_qos_res *res)
 
 	ppe_drv_trace("%px:queue token set for ucast_qid:%u, c_token_number:%x, e_token_number:%x",
 		p, res->q.ucast_qid, token.c_token_number, token.e_token_number);
-	if (fal_queue_shaper_token_number_set(0, res->q.ucast_qid, &token) != 0) {
+	if (fal_queue_shaper_token_number_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &token) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue shaper token configuration failed for ucast_qid:%u", p, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
@@ -822,7 +822,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_shaper_set(struct ppe_drv_qos_res *res)
 
 	ppe_drv_trace("%px:queue shaper configuration for ucast_qid:%u, couple_en:%u, meter_unit:%u, c_shaper_en:%u, cbs:%u, cir:%u, ebs:%u, eir:%u, shaper_frame_mode:%u",
 		p, res->q.ucast_qid, cfg.couple_en, cfg.meter_unit, cfg.c_shaper_en, cfg.cbs, cfg.cir, cfg.ebs, cfg.eir, cfg.shaper_frame_mode);
-	if (fal_queue_shaper_set(0, res->q.ucast_qid, &cfg) != 0) {
+	if (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue shaper configuration failed for ucast_qid:%u", p, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
@@ -838,7 +838,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_shaper_set(struct ppe_drv_qos_res *res)
 	if (res->q.mcast_qid) {
 		ppe_drv_trace("%px:multicast queue shaper configuration for mcast_qid:%u, couple_en:%u, meter_unit:%u, c_shaper_en:%u, cbs:%u, cir:%u, ebs:%u, eir:%u, shaper_frame_mode:%u",
 			p, res->q.mcast_qid, cfg.couple_en, cfg.meter_unit, cfg.c_shaper_en, cfg.cbs, cfg.cir, cfg.ebs, cfg.eir, cfg.shaper_frame_mode);
-		if (fal_queue_shaper_set(0, res->q.mcast_qid, &cfg) != 0) {
+		if (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, res->q.mcast_qid, &cfg) != SW_OK) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("%px:multicast queue shaper configuration failed for mcast_qid:%u", p, res->q.mcast_qid);
 			return PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
@@ -862,7 +862,7 @@ ppe_drv_ret_t ppe_drv_qos_mcast_queue_set(struct ppe_drv_qos_res *res, uint32_t 
 
 	spin_lock_bh(&p->lock);
 	ppe_drv_trace("%px:level0 configuration get for port:%u, ucast_qid:%u", p, port_id, res->q.ucast_qid);
-	if (fal_queue_scheduler_get(0, res->q.ucast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, &port_id, &l0cfg) != 0) {
+	if (fal_queue_scheduler_get(PPE_DRV_SWITCH_ID, res->q.ucast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, &port_id, &l0cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:level0 unicast queue scheduler configuration fetch failed for port:%u, ucast_qid:%u", p, port_id, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -870,7 +870,7 @@ ppe_drv_ret_t ppe_drv_qos_mcast_queue_set(struct ppe_drv_qos_res *res, uint32_t 
 
 	ppe_drv_trace("%px:level0 configuration: port:%u, mcast_qid:%u, c_drrid:%u, c_pri:%u, c_drr_wt:%u, e_drrid:%u, e_pri:%u, e_drr_wt:%u, l0spid:%u",
 			p, port_id, res->q.mcast_qid, l0cfg.c_drr_id, l0cfg.c_pri, l0cfg.c_drr_wt, l0cfg.e_drr_id, l0cfg.e_pri, l0cfg.e_drr_wt, l0cfg.sp_id);
-	if (fal_queue_scheduler_set(0, res->q.mcast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != 0) {
+	if (fal_queue_scheduler_set(PPE_DRV_SWITCH_ID, res->q.mcast_qid, PPE_DRV_QOS_QUEUE_LEVEL - 1, port_id, &l0cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:level0 multicast queue scheduler configuration failed for port:%u, ucast_qid:%u", p, port_id, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -909,13 +909,13 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 	ctrl_cfg.ac_fc_en = 1;
 
 	ppe_drv_trace("%px:queue flow control set for ucast_qid:%u, enable:%u", p, res->q.ucast_qid, ctrl_cfg.ac_fc_en);
-	if (fal_ac_ctrl_set(0, &obj, &ctrl_cfg) != 0) {
+	if (fal_ac_ctrl_set(PPE_DRV_SWITCH_ID, &obj, &ctrl_cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue flow control set failed for ucast_qid:%u", p, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	}
 
-	if (fal_ac_dynamic_threshold_get(0, res->q.ucast_qid, &dynamic_cfg) != 0) {
+	if (fal_ac_dynamic_threshold_get(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &dynamic_cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue dynamic threshold get failed for ucast_qid:%u", p, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -944,7 +944,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 		dynamic_cfg.green_min_off, dynamic_cfg.yel_min_off, dynamic_cfg.yel_max_off,
 		dynamic_cfg.red_min_off, dynamic_cfg.red_max_off,
 		dynamic_cfg.green_resume_off, dynamic_cfg.yel_resume_off, dynamic_cfg.red_resume_off);
-	if (fal_ac_dynamic_threshold_set(0, res->q.ucast_qid, &dynamic_cfg) != 0) {
+	if (fal_ac_dynamic_threshold_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &dynamic_cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue dynamic threshold failed for ucast_qid:%u", p, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -954,7 +954,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 	 * Multicast queue configuration.
 	 */
 	if (res->q.mcast_qid) {
-		if (fal_ac_static_threshold_get(0, &obj, &static_cfg) != 0) {
+		if (fal_ac_static_threshold_get(PPE_DRV_SWITCH_ID, &obj, &static_cfg) != SW_OK) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("%px:queue static threshold get failed for mcast_qid:%u", p, res->q.mcast_qid);
 			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -965,7 +965,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 		}
 
 		ppe_drv_trace("%px:multicast queue buffer set for mcast_qid:%u, qlimit:%u", p, res->q.mcast_qid, res->q.qlimit);
-		if (fal_ac_prealloc_buffer_set(0, &obj, res->q.qlimit) != 0) {
+		if (fal_ac_prealloc_buffer_set(PPE_DRV_SWITCH_ID, &obj, res->q.qlimit) != SW_OK) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("%px:multicast queue buffer allocation failed for mcast_qid:%u", p, res->q.mcast_qid);
 			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -973,7 +973,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 
 		ppe_drv_trace("%px:multicast queue ac threshold set for mcast_qid:%u, wred_enable:%u, green_max:%u, green_min_off:%u",
 			p, res->q.mcast_qid, static_cfg.wred_enable, static_cfg.green_max, static_cfg.green_min_off);
-		if (fal_ac_static_threshold_set(0, &obj, &static_cfg) != 0) {
+		if (fal_ac_static_threshold_set(PPE_DRV_SWITCH_ID, &obj, &static_cfg) != SW_OK) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("%px:multicast queue static threshold failed for mcast_qid:%u", p, res->q.mcast_qid);
 			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
@@ -1015,7 +1015,7 @@ ppe_drv_ret_t ppe_drv_qos_default_conf_set(uint32_t port_id)
 	 * Invoke SSDK API to reset the default configuration for a given port.
 	 */
 	spin_lock_bh(&p->lock);
-	if (fal_port_scheduler_cfg_reset(0, port_id) != 0) {
+	if (fal_port_scheduler_cfg_reset(PPE_DRV_SWITCH_ID, port_id) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:reset default queue configuration failed for port:%u", p, port_id);
 		return PPE_DRV_RET_QOS_PORT_CFG_FAIL;
@@ -1041,7 +1041,7 @@ ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port
 	 * Get boot time QoS resource information for a given port
 	 */
 	spin_lock_bh(&p->lock);
-	if (fal_port_scheduler_resource_get(0, port_id, &cfg) != 0) {
+	if (fal_port_scheduler_resource_get(PPE_DRV_SWITCH_ID, port_id, &cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:port QoS resources info failed for port:%u", p, port_id);
 		return PPE_DRV_RET_FAILURE_NO_RESOURCE;
