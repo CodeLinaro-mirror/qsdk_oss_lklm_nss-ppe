@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <fal/fal_acl.h>
@@ -22,15 +11,21 @@
 /*
  * ACL list ID macros.
  */
-#define PPE_DRV_ACL_LIST_ID_MAX 		1024
+#ifdef NSS_PPE_ACL_RULE_RANGE
+#define PPE_DRV_ACL_LIST_ID_IPO_MAX		128
+#define PPE_DRV_ACL_LIST_ID_MAX 		256
+#else
+#define PPE_DRV_ACL_LIST_ID_IPO_MAX             512
+#define PPE_DRV_ACL_LIST_ID_MAX                 1024
+#endif
 #define PPE_DRV_ACL_LIST_ID_USED		1
 #define PPE_DRV_ACL_LIST_ID_FREE		2
 #define PPE_DRV_ACL_LIST_ID_RESERVED		3
-#define PPE_DRV_ACL_LIST_ID_IPO_MAX		512
 #define PPE_DRV_ACL_LIST_ID_IPO_START 		0
 #define PPE_DRV_ACL_LIST_ID_IPO_END		(PPE_DRV_ACL_LIST_ID_IPO_MAX - 1)
 #define PPE_DRV_ACL_LIST_ID_PRE_IPO_START	(PPE_DRV_ACL_LIST_ID_IPO_MAX)
 #define PPE_DRV_ACL_LIST_ID_PRE_IPO_END		(PPE_DRV_ACL_LIST_ID_MAX - 1)
+#define PPE_DRV_ACL_LIST_DEFAULT_PRI		0
 
 /*
  * RULE macros.
@@ -66,6 +61,9 @@ struct ppe_drv_acl_ctx {
 	bool rule_valid;			/* Rule valid flag to handle failure with partial configuration. */
 	bool rule_type_valid;			/* Indicate if rule type is already set. */
 	ppe_drv_acl_ipo_t type;			/* IPO type - IPO or pre-IPO? */
+	ppe_drv_acl_dev_type_t dev_type;	/**< Device type for ACL binding. */
+	uint8_t dev;				/**< ACL dev binding. */
+	bool dev_valid;				/**< Indicate if the dev type is already set. */
 
 	/*
 	 * Hardware stats.
@@ -124,6 +122,9 @@ struct ppe_drv_acl {
 	void *flow_app_data;					/* Flow callback app data. */
 	void *acl_rule_app_data;				/* ACL rule callback app data. */
 	void *mirror_core_app_data;				/* Mirror core selection callback app data. */
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+	uint16_t ppe_drv_acl_ipo_port_info[PPE_DRV_PORTS_MAX];	/* IPO rule counts per UNI destination ports. */
+#endif
 };
 
 /*
@@ -142,3 +143,9 @@ static inline void ppe_drv_acl_stats_add(struct ppe_drv_acl_ctx *ctx, uint32_t p
 void ppe_drv_acl_stats_update(struct ppe_drv_acl_ctx *ctx);
 void ppe_drv_acl_entries_free(struct ppe_drv_acl *acl);
 struct ppe_drv_acl *ppe_drv_acl_entries_alloc(void);
+
+/*
+ * Loopback APIs
+ */
+void ppe_drv_acl_uni_to_l2vp_sc_unmap(struct ppe_drv_acl_ctx *ctx);
+void ppe_drv_acl_uni_to_l2vp_sc_map(struct ppe_drv_acl_ctx *ctx);

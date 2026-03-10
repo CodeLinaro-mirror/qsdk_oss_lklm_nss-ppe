@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2024, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /**
@@ -84,6 +73,8 @@ enum ppe_drv_port_type {
 	PPE_DRV_PORT_VIRTUAL_PO,	/* Virtual point offload port */
 	PPE_DRV_PORT_ENQ_VP,		/* Enqueue VPort */
 	PPE_DRV_PORT_CPU_TYPE,		/* CPU Port */
+	PPE_DRV_PORT_VIRTUAL_GW,	/* Gateway Virtual Port */
+	PPE_DRV_PORT_VIRTUAL_PON,	/* PON  Virtual Port */
 };
 
 /*
@@ -102,6 +93,18 @@ enum ppe_drv_port_qos_res_pre {
 	PPE_DRV_PORT_QOS_RES_PREC_5,
 	PPE_DRV_PORT_QOS_RES_PREC_6,
 	PPE_DRV_PORT_QOS_RES_PREC_7,
+};
+
+/*
+ * ppe_drv_enq_vp_type
+ *	PPE enq_vp type
+ */
+enum ppe_drv_enq_vp_type {
+	PPE_DRV_ENQ_VP_DEFAULT,		/* Used for DS and other purpose */
+#ifdef NSS_PPE_PON_SUPPORT
+	PPE_DRV_ENQ_VP_PON,		/* Used for PON cases */
+	PPE_DRV_BASEQ_ENQ_VP_PON,	/* Used for mapoing base queue for PON cases */
+#endif
 };
 
 /**
@@ -235,6 +238,17 @@ bool ppe_drv_port_check_rfs_support(struct net_device *dev);
 bool ppe_drv_port_clear_hw_vp_stats(int16_t port);
 
 /**
+ * ppe_drv_port_ucast_queue_profile_get
+ * 	Get pri profile for the unicast queue
+ *
+ * @param[in] port
+ *
+ * @return
+ * pri profile.
+ */
+int32_t ppe_drv_port_ucast_queue_profile_get(int port);
+
+/**
  * ppe_drv_port_metadata_to_pri_prof
  * 	Get enqueue vport pri profile
  *
@@ -277,4 +291,20 @@ void ppe_drv_port_phy_rfs_clear(void);
  * none.
  */
 void ppe_drv_port_phy_rfs_set(void);
+
+/*
+ * ppe_drv_port_is_gem()
+ *      Check whether the given port number corresponds to a GEM port.
+ *
+ * This helper is used to validate whether a port number belongs to
+ * the GEM range supported by the PPE driver.
+ *
+ * @param[in] port_num
+ *      Port number to be evaluated.
+ *
+ * @return
+ *      true  – The port is identified as a GEM port.
+ *      false – The port is not a GEM port.
+ */
+bool ppe_drv_port_is_gem(uint16_t port_num);
 #endif /* _PPE_DRV_PORT_H_ */

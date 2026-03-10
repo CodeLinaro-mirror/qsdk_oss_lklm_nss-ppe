@@ -1,19 +1,8 @@
 /*
  **************************************************************************
  * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  **************************************************************************
  */
 #include "nss_pvxlanmgr_priv.h"
@@ -258,10 +247,16 @@ static nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_ppe_create_ipv4_rule(struct n
 {
 	struct ppe_drv_v4_rule_create pd4rc = {0};
 	struct ppe_drv_v4_rule_destroy pd4rd = {0};
-	struct ppe_acl_rule acl_rule = {0};
+	struct ppe_acl_rule *acl_rule;
 	struct net_device *wan_dev = NULL;
 	ppe_drv_ret_t ppe_status = PPE_DRV_RET_SUCCESS;
 	ppe_acl_ret_t ppe_acl_status = PPE_ACL_RET_SUCCESS;
+
+	acl_rule = kzalloc(sizeof(struct ppe_acl_rule), GFP_ATOMIC);
+	if (!acl_rule) {
+		nss_pvxlanmgr_warn("%px: acl rule allocation failed\n", dev);
+		return NSS_PVXLANMGR_FAILURE_BAD_PARAM;
+	}
 
 	/*
 	 * Copy over the 5 tuple details.
@@ -307,6 +302,7 @@ static nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_ppe_create_ipv4_rule(struct n
 	ppe_status = ppe_drv_v4_create(&pd4rc);
 	if (ppe_status != PPE_DRV_RET_SUCCESS) {
 		nss_pvxlanmgr_warn("%px:PPE flow rule create failed with ppe_status %d\n", dev, ppe_status);
+		kfree(acl_rule);
 		return NSS_PVXLANMGR_FAILURE_IP_RULE_PPE_FLOW_CREATE;
 	}
 
@@ -315,59 +311,62 @@ static nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_ppe_create_ipv4_rule(struct n
 	/*
 	 * Create the acl rule to match 4-tuple for the downlink flow.
 	 */
-	acl_rule.cmn.cmn_flags |= PPE_ACL_RULE_CMN_FLAG_IPV4;
+	acl_rule->cmn.cmn_flags |= PPE_ACL_RULE_CMN_FLAG_IPV4;
 
-	acl_rule.valid_flags |= PPE_ACL_RULE_MATCH_TYPE_SIP_VALID;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip_type = PPE_ACL_IP_TYPE_V4;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[0] = htonl(nircm->tuple.flow_ip);
+	acl_rule->valid_flags |= PPE_ACL_RULE_MATCH_TYPE_SIP_VALID;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip_type = PPE_ACL_IP_TYPE_V4;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[0] = htonl(nircm->tuple.flow_ip);
 
 
-	acl_rule.valid_flags |= PPE_ACL_RULE_MATCH_TYPE_DIP_VALID;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip_type = PPE_ACL_IP_TYPE_V4;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[0] = htonl(nircm->tuple.return_ip);
+	acl_rule->valid_flags |= PPE_ACL_RULE_MATCH_TYPE_DIP_VALID;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip_type = PPE_ACL_IP_TYPE_V4;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[0] = htonl(nircm->tuple.return_ip);
 
-	acl_rule.valid_flags |= PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR_VALID;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR].rule.proto_nexthdr.l3_v4proto_v6nexthdr =
+	acl_rule->valid_flags |= PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR_VALID;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR].rule.proto_nexthdr.l3_v4proto_v6nexthdr =
 				nircm->tuple.protocol;
 
-	acl_rule.valid_flags |= PPE_ACL_RULE_MATCH_TYPE_DPORT_VALID;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule_flags = PPE_ACL_RULE_FLAG_DPORT_MASK;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule.dport.l4_port_min = htons(nircm->tuple.flow_ident);
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule.dport.l4_port_max_mask = NSS_PVXLAN_ACL_PORT_MASK;
+	acl_rule->valid_flags |= PPE_ACL_RULE_MATCH_TYPE_DPORT_VALID;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule_flags = PPE_ACL_RULE_FLAG_DPORT_MASK;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule.dport.l4_port_min = htons(nircm->tuple.flow_ident);
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule.dport.l4_port_max_mask = NSS_PVXLAN_ACL_PORT_MASK;
 
 	/*
 	 * Bind the ACL rule to the WAN port
 	 */
-	acl_rule.stype = PPE_ACL_RULE_SRC_TYPE_DEV;
+	acl_rule->dev_type = PPE_ACL_RULE_DEV_TYPE_SRC_DEV;
 	wan_dev = ppe_drv_dev_get_by_iface_idx(nircm->conn_rule.flow_interface_num);
 	if (!wan_dev) {
 		nss_pvxlanmgr_warn("%px: Failed to lookup wan net device associated with flow interface number %d\n",
 					dev, nircm->conn_rule.flow_interface_num);
 		memcpy(&pd4rd, &nircm->tuple, sizeof(struct ppe_drv_v4_rule_destroy));
 		ppe_drv_v4_destroy(&pd4rd);
+		kfree(acl_rule);
 		return NSS_PVXLANMGR_FAILURE_IP_RULE_WAN_DEV_LOOKUP;
 	}
 
-	strlcpy(acl_rule.src.dev_name, wan_dev->name, IFNAMSIZ);
+	strlcpy(acl_rule->dev.dev_name, wan_dev->name, IFNAMSIZ);
 
 	/*
 	 * Redirect the packets matching the 4 tuple to the pvxlan VP.
 	 */
-	acl_rule.action.flags = PPE_ACL_RULE_ACTION_FLAG_DEST_INFO_CHANGE_EN;
-	strlcpy(acl_rule.action.dst.dev_name, dev->name, IFNAMSIZ);
-	acl_rule.cmn.cmn_flags |=  PPE_ACL_RULE_CMN_FLAG_NO_RULEID;
+	acl_rule->action.flags = PPE_ACL_RULE_ACTION_FLAG_DEST_INFO_CHANGE_EN;
+	strlcpy(acl_rule->action.dst.dev_name, dev->name, IFNAMSIZ);
+	acl_rule->cmn.cmn_flags |=  PPE_ACL_RULE_CMN_FLAG_NO_RULEID;
 
-	ppe_acl_status = ppe_acl_rule_create(&acl_rule);
+	ppe_acl_status = ppe_acl_rule_create(acl_rule);
 	if(!(ppe_acl_status == PPE_ACL_RET_SUCCESS)) {
 		nss_pvxlanmgr_warn("%px:PPE ACL rule create failed with ppe_acl_status = %d\n", dev, ppe_acl_status);
 		memcpy(&pd4rd, &nircm->tuple, sizeof(struct ppe_drv_v4_rule_destroy));
 		ppe_drv_v4_destroy(&pd4rd);
+		kfree(acl_rule);
 		return NSS_PVXLANMGR_FAILURE_IP_RULE_PPE_ACL_CREATE;
 	}
 
 	t->tunnel_state |= NSS_PVXLANMGR_TUNNEL_STATE_PPE_ACL_RULE_CONFIGURED;
-	t->acl_rule_id = acl_rule.rule_id;
+	t->acl_rule_id = acl_rule->rule_id;
 
+	kfree(acl_rule);
 	return NSS_PVXLANMGR_SUCCESS;
 }
 
@@ -379,10 +378,16 @@ static nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_ppe_create_ipv6_rule(struct n
 {
 	struct ppe_drv_v6_rule_create pd6rc = {0};
 	struct ppe_drv_v6_rule_destroy pd6rd = {0};
-	struct ppe_acl_rule acl_rule = {0};
+	struct ppe_acl_rule *acl_rule;
 	struct net_device *wan_dev = NULL;
 	ppe_drv_ret_t ppe_status = PPE_DRV_RET_SUCCESS;
 	ppe_acl_ret_t ppe_acl_status = PPE_ACL_RET_SUCCESS;
+
+	acl_rule = kzalloc(sizeof(struct ppe_acl_rule), GFP_ATOMIC);
+	if (!acl_rule) {
+		nss_pvxlanmgr_warn("%px: acl rule allocation failed\n", dev);
+		return NSS_PVXLANMGR_FAILURE_BAD_PARAM;
+	}
 
 	/*
 	 * Copy over the 5 tuple information.
@@ -424,6 +429,7 @@ static nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_ppe_create_ipv6_rule(struct n
 	ppe_status = ppe_drv_v6_create(&pd6rc);
 	if (ppe_status != PPE_DRV_RET_SUCCESS) {
 		nss_pvxlanmgr_warn("%px:PPE rule create failed\n", nircm);
+		kfree(acl_rule);
 		return NSS_PVXLANMGR_FAILURE_IP_RULE_PPE_FLOW_CREATE;
 	}
 
@@ -432,65 +438,68 @@ static nss_pvxlanmgr_status_t nss_pvxlanmgr_tunnel_ppe_create_ipv6_rule(struct n
 	/*
 	 * Create the acl rule to match 4-tuple for the downlink flow.
 	 */
-	acl_rule.cmn.cmn_flags |= PPE_ACL_RULE_CMN_FLAG_IPV6;
+	acl_rule->cmn.cmn_flags |= PPE_ACL_RULE_CMN_FLAG_IPV6;
 
-	acl_rule.valid_flags |= PPE_ACL_RULE_MATCH_TYPE_SIP_VALID;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip_type = PPE_ACL_IP_TYPE_V6;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[0] = htonl(nircm->tuple.flow_ip[0]);
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[1] = htonl(nircm->tuple.flow_ip[1]);
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[2] = htonl(nircm->tuple.flow_ip[2]);
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[3] = htonl(nircm->tuple.flow_ip[3]);
+	acl_rule->valid_flags |= PPE_ACL_RULE_MATCH_TYPE_SIP_VALID;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip_type = PPE_ACL_IP_TYPE_V6;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[0] = htonl(nircm->tuple.flow_ip[0]);
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[1] = htonl(nircm->tuple.flow_ip[1]);
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[2] = htonl(nircm->tuple.flow_ip[2]);
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_SIP].rule.sip.ip[3] = htonl(nircm->tuple.flow_ip[3]);
 
 
-	acl_rule.valid_flags |= PPE_ACL_RULE_MATCH_TYPE_DIP_VALID;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip_type = PPE_ACL_IP_TYPE_V6;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[0] = htonl(nircm->tuple.return_ip[0]);
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[1] = htonl(nircm->tuple.return_ip[1]);
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[2] = htonl(nircm->tuple.return_ip[2]);
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[3] = htonl(nircm->tuple.return_ip[3]);
+	acl_rule->valid_flags |= PPE_ACL_RULE_MATCH_TYPE_DIP_VALID;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip_type = PPE_ACL_IP_TYPE_V6;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[0] = htonl(nircm->tuple.return_ip[0]);
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[1] = htonl(nircm->tuple.return_ip[1]);
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[2] = htonl(nircm->tuple.return_ip[2]);
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DIP].rule.dip.ip[3] = htonl(nircm->tuple.return_ip[3]);
 
-	acl_rule.valid_flags |= PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR_VALID;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR].rule.proto_nexthdr.l3_v4proto_v6nexthdr =
+	acl_rule->valid_flags |= PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR_VALID;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR].rule.proto_nexthdr.l3_v4proto_v6nexthdr =
 				nircm->tuple.protocol;
 
-	acl_rule.valid_flags |= PPE_ACL_RULE_MATCH_TYPE_DPORT_VALID;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule_flags = PPE_ACL_RULE_FLAG_DPORT_MASK;
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule.dport.l4_port_min = htons(nircm->tuple.flow_ident);
-	acl_rule.rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule.dport.l4_port_max_mask = NSS_PVXLAN_ACL_PORT_MASK;
+	acl_rule->valid_flags |= PPE_ACL_RULE_MATCH_TYPE_DPORT_VALID;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule_flags = PPE_ACL_RULE_FLAG_DPORT_MASK;
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule.dport.l4_port_min = htons(nircm->tuple.flow_ident);
+	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_DPORT].rule.dport.l4_port_max_mask = NSS_PVXLAN_ACL_PORT_MASK;
 
 	/*
 	 * Bind the ACL rule to the WAN port
 	 */
-	acl_rule.stype = PPE_ACL_RULE_SRC_TYPE_DEV;
+	acl_rule->dev_type = PPE_ACL_RULE_DEV_TYPE_SRC_DEV;
 	wan_dev = ppe_drv_dev_get_by_iface_idx(nircm->conn_rule.flow_interface_num);
 	if (!wan_dev) {
 		nss_pvxlanmgr_warn("%px: Failed to lookup wan net device associated with flow interface number %d\n",
 					dev, nircm->conn_rule.flow_interface_num);
 		memcpy(&pd6rd, &nircm->tuple, sizeof(struct ppe_drv_v6_rule_destroy));
 		ppe_drv_v6_destroy(&pd6rd);
+		kfree(acl_rule);
 		return NSS_PVXLANMGR_FAILURE_IP_RULE_WAN_DEV_LOOKUP;
 	}
 
-	strlcpy(acl_rule.src.dev_name, wan_dev->name, IFNAMSIZ);
+	strlcpy(acl_rule->dev.dev_name, wan_dev->name, IFNAMSIZ);
 
 	/*
 	 * Redirect the packets matching the 4 tuple to the pvxlan VP.
 	 */
-	acl_rule.action.flags = PPE_ACL_RULE_ACTION_FLAG_DEST_INFO_CHANGE_EN;
-	strlcpy(acl_rule.action.dst.dev_name, dev->name, IFNAMSIZ);
-	acl_rule.cmn.cmn_flags |=  PPE_ACL_RULE_CMN_FLAG_NO_RULEID;
+	acl_rule->action.flags = PPE_ACL_RULE_ACTION_FLAG_DEST_INFO_CHANGE_EN;
+	strlcpy(acl_rule->action.dst.dev_name, dev->name, IFNAMSIZ);
+	acl_rule->cmn.cmn_flags |=  PPE_ACL_RULE_CMN_FLAG_NO_RULEID;
 
-	ppe_acl_status = ppe_acl_rule_create(&acl_rule);
+	ppe_acl_status = ppe_acl_rule_create(acl_rule);
 	if(!(ppe_acl_status == PPE_ACL_RET_SUCCESS)) {
 		nss_pvxlanmgr_warn("%px:PPE ACL rule create failed with ppe_acl_status = %d\n", dev, ppe_acl_status);
 		memcpy(&pd6rd, &nircm->tuple, sizeof(struct ppe_drv_v6_rule_destroy));
 		ppe_drv_v6_destroy(&pd6rd);
+		kfree(acl_rule);
 		return NSS_PVXLANMGR_FAILURE_IP_RULE_PPE_ACL_CREATE;
 	}
 
 	t->tunnel_state |= NSS_PVXLANMGR_TUNNEL_STATE_PPE_ACL_RULE_CONFIGURED;
-	t->acl_rule_id = acl_rule.rule_id;
+	t->acl_rule_id = acl_rule->rule_id;
 
+	kfree(acl_rule);
 	return NSS_PVXLANMGR_SUCCESS;
 }
 

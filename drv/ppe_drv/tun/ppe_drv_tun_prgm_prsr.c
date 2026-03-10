@@ -63,7 +63,7 @@ static void ppe_drv_tun_prgm_prsr_entry_free(struct kref *kref)
 	case PPE_DRV_TUN_PROGRAM_MODE_GRE:
 		if (!ppe_drv_tun_prgm_prsr_gre_deconfigure(pgm)) {
 			ppe_drv_warn("%p: error deleting tunnel progamable parser entry for type: %d, mode %d", pgm, pgm->parser_idx, pgm->ctx.mode);
-		}
+			}
 		break;
 
 	case PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2:
@@ -72,6 +72,15 @@ static void ppe_drv_tun_prgm_prsr_entry_free(struct kref *kref)
 					pgm, pgm->parser_idx, pgm->ctx.mode);
 		}
 		break;
+
+#ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
+	case PPE_DRV_TUN_PROGRAM_MODE_TPR_RPS:
+		if (!ppe_drv_tun_rps_prgm_prsr_deconfigure(pgm)){
+			ppe_drv_warn("%p: error deleting tunnel progamable parser entry for type: %d, mode %d",
+					pgm, pgm->parser_idx, pgm->ctx.mode);
+		}
+		break;
+#endif
 
 	default:
 		ppe_drv_warn("%p: unknown programable parser mode %d", pgm, pgm->ctx.mode);
@@ -160,7 +169,6 @@ bool ppe_drv_tun_prgm_prsr_deconfigure(struct ppe_drv_tun_prgm_prsr_cfg *prsr_cf
 	pgm.outer_hdr_type = PPE_DRV_TUN_PRGM_PRSR_OUT_HDR_TO_FAL_OUT_HDR(prsr_cfg->outer_hdr);
 	pgm.protocol = prsr_cfg->protocol;
 	pgm.protocol_mask = prsr_cfg->protocol_mask;
-
 #ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
 	pgm.protocol_pos_mode = ppe_drv_tun_get_proto_pos_modemode(prsr_cfg->proto_pos_mode);
 	pgm.protocol_pos_offset = prsr_cfg->protocol_pos_offset;
@@ -517,38 +525,67 @@ static bool ppe_drv_tun_prgm_prsr_compare_config(struct ppe_drv_tun_prgm_prsr *p
 	prsr_cfg = &dcap_cfg->prsr_cfg;
 
 	switch (pgm->ctx.mode) {
-		case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L2:
-		case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L3:
+	case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L2:
+	case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L3:
+		/*
+		 * For custom tunnels, check if configurations match
+		 */
+		if (ppe_drv_tun_prgm_prsr_cfg_equal(&pgm->ctx.prsr_cfg, prsr_cfg)) {
 			/*
-			 * For custom tunnels, check if configurations match
-			 */
-			if (ppe_drv_tun_prgm_prsr_cfg_equal(&pgm->ctx.prsr_cfg, prsr_cfg)) {
-				/*
-				 * Configuration matches, parser can be reused
-				 */
-				return true;
-			}
-
-			/*
-			 * Configuration doesn't match, cannot reuse this parser
-			 */
-			return false;
-
-		case PPE_DRV_TUN_PROGRAM_MODE_GRE:
-		case PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2:
-			/*
-			 * For predefined modes, parser can be reused without configuration check
-			 * as they are always updated with fixed configurations which would match
+			 * Configuration matches, parser can be reused
 			 */
 			return true;
+		}
 
-		case PPE_DRV_TUN_PROGRAM_MODE_TPR_RPS:
-			return false;
+		/*
+		 * Configuration doesn't match, cannot reuse this parser
+		 */
+		return false;
 
-		default:
-			ppe_drv_trace("%p: Unknown parser mode: %d\n", pgm, pgm->ctx.mode);
-			return false;
+	case PPE_DRV_TUN_PROGRAM_MODE_GRE:
+	case PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2:
+		/*
+		 * For predefined modes, parser can be reused without configuration check
+		 * as they are always updated with fixed configurations which would match
+		 */
+		return true;
+
+	case PPE_DRV_TUN_PROGRAM_MODE_TPR_RPS:
+		/*
+		 * TPR configured Parsers are not expected to be re-used
+		 */
+		return false;
+
+	default:
+		ppe_drv_trace("%p: Unknown parser mode: %d\n", pgm, pgm->ctx.mode);
+		return false;
 	}
+}
+
+/*
+ * ppe_drv_tun_prgm_prsr_reuse
+ *      Check if the Parser instance can be reused based on Parser mode
+ */
+static bool ppe_drv_tun_prgm_prsr_reuse(enum ppe_drv_tun_prgm_prsr_mode mode)
+{
+	switch (mode) {
+	case PPE_DRV_TUN_PROGRAM_MODE_GRE:
+	case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L2:
+	case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L3:
+	case PPE_DRV_TUN_PROGRAM_MODE_L2TP_V2:
+		return true;
+		break;
+
+	case PPE_DRV_TUN_PROGRAM_MODE_TPR_RPS:
+		return false;
+		break;
+
+	default:
+		ppe_drv_warn("Unexpected Program Parser mode %d", mode);
+		break;
+	}
+
+	return false;
 }
 
 /*
@@ -571,7 +608,7 @@ struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun
 		 * If prsr_cfg check is set check the configurations with existing parsers
 		 * to check if it can be reused along with the type
 		 */
-		if (pgm[i].ctx.mode == mode) {
+		if (pgm[i].ctx.mode == mode && ppe_drv_tun_prgm_prsr_reuse(mode)) {
 			if (dcap_cfg && ppe_drv_tun_prgm_prsr_compare_config(&pgm[i], dcap_cfg)) {
 				ppe_drv_tun_prgm_prsr_ref(&pgm[i]);
 				return &pgm[i];

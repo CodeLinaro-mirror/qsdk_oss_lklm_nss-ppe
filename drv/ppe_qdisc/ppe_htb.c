@@ -240,7 +240,7 @@ static void ppe_htb_class_params_fill(struct ppe_qdisc *pq, struct ppe_htb_param
 	pq->res.shaper.overhead = param->overhead;
 	pq->res.scheduler.drr_weight = ppe_qdisc_drr_weight_get(param->quantum, PPE_DRV_QOS_DRR_UNIT_BYTE);
 	pq->res.scheduler.drr_unit = PPE_DRV_QOS_DRR_UNIT_BYTE;
-	pq->res.scheduler.priority = param->priority;
+	pq->res.scheduler.priority = PPE_DRV_QOS_PRIORITY_MAX - param->priority - 1;
 }
 
 /*

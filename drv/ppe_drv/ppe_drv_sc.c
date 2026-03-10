@@ -96,8 +96,32 @@ void ppe_drv_sc_ucast_queue_set(ppe_drv_sc_t sc, uint8_t queue_id, uint8_t src_p
 		return;
 	}
 
-	ppe_drv_info("set port ucast queue base id: %d", queue_id);
+	ppe_drv_trace("set port ucast queue base id: %d for sc: %d", queue_id, sc);
 }
+
+#if defined(PPE_LOOPBACK_PORT_SUPPORT)
+static void ppe_drv_sc_config_lpbk_port_pon(ppe_drv_sc_t sc, fal_servcode_config_t *sc_cfg)
+{
+	switch (sc) {
+		case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC:
+			sc_cfg->bypass_bitmap[1] = (1 << EG_VLAN_MEMBER_CHECK_BYP);
+			sc_cfg->bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
+			sc_cfg->direction = PPE_DRV_SC_IN_L2_DIR_SRC;
+			sc_cfg->field_update_bitmap[0] = (1 << FLD_UPDATE_SRC_INFO_BYPASS);
+			sc_cfg->dest_port_valid = A_TRUE;
+			break;
+
+		case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT:
+			sc_cfg->bypass_bitmap[1] = (1 << L2_VP_SERVICE_CODE_ENQ_BYP);
+			sc_cfg->dest_port_valid = A_FALSE;
+			break;
+
+		default:
+			ppe_drv_warn("Invalid service code for pon loopback port\n");
+			break;
+	}
+}
+#endif
 
 /*
  * ppe_drv_sc_config()
@@ -121,7 +145,12 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 					| (1 << FAKE_L2_PROTO_BYP)
 					| (1 << MY_MAC_CHECK_BYP));
 
-		sc_cfg.bypass_bitmap[1] = ~(1 << ACL_POST_ROUTING_CHECK_BYP);
+		sc_cfg.bypass_bitmap[1] = ~((1ULL << ACL_POST_ROUTING_CHECK_BYP)
+#ifdef NSS_PPE_IPQ52XX
+				| (1ULL << DOT1P_MAPPER_BYP)
+				| (1ULL << DOT1P_DST_LOOKUP_BYPASS)
+#endif
+				);
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
@@ -318,6 +347,65 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 	case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_RETURN_SC_NEXT:
 		break;
 
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+	case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC:
+	case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT:
+		if (ppe_drv_loopback_port_ft_pon_enabled(p)) {
+			ppe_drv_sc_config_lpbk_port_pon(sc, &sc_cfg);
+		}
+		break;
+#endif
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC:
+		if (ppe_drv_loopback_port_ft_pon_hgu_us_enabled(p)) {
+			sc_cfg.direction = PPE_DRV_SC_IN_L2_DIR_DST;
+			sc_cfg.field_update_bitmap[0] = (1ULL << FLD_UP_SRC_WITH_DST)
+							| (1ULL << EPE_DST_INFO_WITH_PROFILE)
+							| (1ULL << FLD_UPDATE_FLOW_IDX)
+							| (1UL << FLD_UPDATE_DST_INFO_BYPASS);
+			sc_cfg.bypass_bitmap[1] = (1 << L2_VP_SERVICE_CODE_ENQ_BYP);
+			sc_cfg.dest_port_valid = A_FALSE;
+			ppe_drv_trace("Configured sc here bitmap[1]:%llu bitmap[2]:%llu dir:%u update_bitmap:%llu\n",
+					sc_cfg.bypass_bitmap[0], sc_cfg.bypass_bitmap[1], sc_cfg.direction, sc_cfg.field_update_bitmap[0]);
+		}
+		break;
+
+	case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT:
+		if (ppe_drv_loopback_port_ft_pon_hgu_us_enabled(p)) {
+			sc_cfg.bypass_bitmap[0] = (1 << FLOW_SERVICE_CODE_BYP)
+						| (1 << FLOW_LOOKUP_BYP);
+			sc_cfg.bypass_bitmap[1] = (1 << L2_SOURCE_SEC_BYP)
+						| (1 << EG_VLAN_MEMBER_CHECK_BYP);
+			sc_cfg.dest_port_valid = A_FALSE;
+		}
+		break;
+
+	case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC:
+		if (ppe_drv_loopback_port_ft_pon_hgu_ds_enabled(p)) {
+			sc_cfg.direction = PPE_DRV_SC_IN_L2_DIR_SRC;
+			sc_cfg.field_update_bitmap[0] = (1ULL << FLD_UP_SRC_WITH_DST)
+							| (1ULL << EPE_DST_INFO_WITH_PROFILE);
+			sc_cfg.dest_port_valid = A_FALSE;
+			ppe_drv_trace("Configured sc here bitmap[1]:%llu bitmap[2]:%llu dir:%u update_bitmap:%llu\n",
+					sc_cfg.bypass_bitmap[0], sc_cfg.bypass_bitmap[1], sc_cfg.direction, sc_cfg.field_update_bitmap[0]);
+		}
+		break;
+
+	case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT:
+		if (ppe_drv_loopback_port_ft_pon_hgu_ds_enabled(p)) {
+			sc_cfg.bypass_bitmap[0] = (1 << L3_MY_MAC_DST_BYP);
+			sc_cfg.bypass_bitmap[1] = (1 << L2_SOURCE_SEC_BYP);
+			sc_cfg.dest_port_valid = A_TRUE;
+		}
+		break;
+	case PPE_DRV_SC_FEATURE_PON_HGU_PPTP:
+		sc_cfg.bypass_bitmap[1] = (1 << EG_VLAN_MEMBER_CHECK_BYP);
+		sc_cfg.direction = PPE_DRV_SC_IN_L2_DIR_DST;
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+#endif
+
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	case PPE_DRV_SC_NPT66_HAIRPIN_NAT:
 		sc_cfg.bypass_bitmap[1] = ((1 << L2_PKT_EDIT_BYP) | (1 << L2_SOURCE_SEC_BYP));
 		break;
@@ -327,6 +415,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.bypass_bitmap[1] = ((1 << FDB_LEARN_BYP) | (1 << L2_SOURCE_SEC_BYP) | (1 << FDB_REFRESH_BYP));
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
+#endif
 
 	case PPE_DRV_SC_VP_RPS:
 		/*
@@ -420,6 +509,14 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
+	case PPE_DRV_SC_FDB_BYPASS:
+		/*
+		 * bypass the dest mac lookup forward
+		 */
+		sc_cfg.bypass_bitmap[1] =(1 << BRIDGING_FWD_BYP);
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+
 #ifdef NSS_PPE_FEATURE_EXCEPTION_EDIT
 	case PPE_DRV_SC_PKT_EXCEPTION_EDIT_EN:
 		/*
@@ -429,6 +526,20 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 #endif
+	case PPE_DRV_SC_GEM_LOOKUP:
+		/*
+		 * This service code is for GEM port lookup.
+		 * Initially bypass flow lookup and editing.
+		 */
+		sc_cfg.bypass_bitmap[0] = ~((1 << FAKE_MAC_HEADER_BYP)
+				| (1 << SERVICE_CODE_BYP)
+				| (1 << FAKE_L2_PROTO_BYP)
+				| (1 << MY_MAC_CHECK_BYP));
+
+		sc_cfg.bypass_bitmap[1] = ~((1 << ACL_POST_ROUTING_CHECK_BYP)
+				| (1 << DOT1P_MAPPER_BYP));
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
 
 	case PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP:
 		sc_cfg.offset_sel = PPE_DRV_SC_IN_L2_OFF_L3;
@@ -441,6 +552,27 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 			| (1ULL << FLD_UP_SRC_WITH_DST) /* Update source with destination for second pass */
 #endif /* PPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG */
 			);
+		break;
+
+	case PPE_DRV_SC_NOEDIT_TUN_RPS:
+		sc_cfg.dest_port_valid = A_FALSE;
+
+		/*
+		 * Don't update destination information and service code in EDMA.
+		 * Also disable decap as the packets would be decapsulated in host
+		 */
+		sc_cfg.field_update_bitmap[0] = ((1 << FLD_UPDATE_DEST_INFO) | (1 << FLD_UPDATE_SERVICE_CODE) |
+							(1 << FLD_UPDATE_MAC_HDR_BYPASS) | (1 << FLD_UPDATE_DECAP_DIS));
+
+		/*
+		 * Avoid any packet editing
+		 */
+		sc_cfg.bypass_bitmap[1] |= ((1 << L2_PKT_EDIT_BYP) | (1 << L3_PKT_EDIT_BYP));
+
+		/*
+		 * Avoid packet drop due to FAKE MAC entry mismatch
+		 */
+		sc_cfg.bypass_bitmap[1] |= (1 << FAKE_MAC_DROP_BYP);
 		break;
 
 	case PPE_DRV_SC_FLOW_ACL_FIRST ... PPE_DRV_SC_FLOW_ACL_LAST:
@@ -734,6 +866,8 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_FMAC_BYPASS, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP, PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_PORT_EIP197);
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH, PPE_DRV_SC_NOEDIT_REDIR_CORE0, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_FDB_BYPASS, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_GEM_LOOKUP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 
 	/*
 	 * Initialize FLOW ACL service code
@@ -762,6 +896,18 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 #ifdef NSS_PPE_FEATURE_EXCEPTION_EDIT
 	ppe_drv_sc_config(PPE_DRV_SC_PKT_EXCEPTION_EDIT_EN, PPE_DRV_SC_PKT_EXCEPTION_EDIT_EN, PPE_DRV_PORT_CPU);
 #endif
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT, p->loopback_port_info.port_id);
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+#endif
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT, p->loopback_port_info.port_id);
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT, p->loopback_port_info.port_id);
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_FEATURE_PON_HGU_PPTP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+#endif
+	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_TUN_RPS, PPE_DRV_SC_NOEDIT_TUN_RPS, PPE_DRV_PORT_CPU);
 
 	return sc;
 }

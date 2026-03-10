@@ -41,10 +41,34 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_NOEDIT_PRIORITY_SET",	/* PPE Priority service code */
 	"PPE_DRV_SC_NOEDIT_RULE",		/* PPE noedit rule service code */
 	"PPE_DRV_SC_FMAC_BYPASS",		/* Bypass FAKE mac check in PPE */
+	"PPE_DRV_SC_VP_MPSK",			/* Service code to bypass the egress VLAN table in case of MPSK */
+	"PPE_DRV_SC_LOOPBACK_RING",			/* Service code for EDMA LOOPBACK ring */
+	"PPE_DRV_SC_LOOPBACK_RING_NEXT",		/* Next Service code for EDMA LOOPBACK ring */
+	"PPE_DRV_SC_LOOPBACK_RING_GRETAP_MAPT",		/* Next Service code for EDMA LOOPBACK ring GRETAP to MAPT */
+	"PPE_DRV_SC_LOOPBACK_RING_MAPT_GRETAP",	/* Service code for EDMA LOOPBACK ring MAPT to GRETAP*/
+	"PPE_DRV_SC_LOOPBACK_RING_NEXT_GRETAP_N_MAPT",
+			/* Next Service code to dequeue packets from loopback ring and queue to GRETAP or MAPT ring */
 	"PPE_DRV_SC_NPT66_HAIRPIN_NAT",		/* Service code for Hairpin NAT loopback ring */
 	"PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT",	/* Next Service code for Hairpin NAT loopback ring */
+	"PPE_DRV_SC_PKT_EXCEPTION_EDIT_EN",
+			/* Service code to edit/commit packet when exceptioned */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_FLOW_SC",		/* Service code for loopback port first pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_FLOW_SC_NEXT",		/* Service code for loopback port second pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_RETURN_SC",		/* Service code for loopback port first pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_RETURN_SC_NEXT",	/* Service code for loopback port second pass */
+
 	"PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP",		/* Inline IPsec redirection from PPE TO EIP for encap direction */
 	"PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH",	/* Inline IPsec redirection from PPE TO EIP for decap dorection ACL match */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC",		/* Service code for loopback port for pon pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT",		/* Service code for loopback port for second pass */
+	"PPE_DRV_SC_FDB_BYPASS",		/* Service code for gem port table to bypass destination selection from FDB table */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC",	/* Service code for loopback port for pon pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT",	/* Service code for loopback port for second pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC",	/* Service code for loopback port for pon pass */
+	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT",	/* Service code for loopback port for second pass */
+	"PPE_DRV_SC_FEATURE_PON_HGU_PPTP",	/* Service code for enabling PPTP flow with HGU enabled */
+	"PPE_DRV_SC_GEM_LOOKUP",	/* Service code for GEM port lookup */
+	"PPE_DRV_SC_NOEDIT_TUN_RPS",		/* Service code for Tunnel RPS configuration */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 
@@ -102,6 +126,11 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"fail_ingress_vlan_over_bridge_add",		/* Ingress VLAN over bridge add rule failed */
 	"fail_ingress_vlan_over_bridge_del",		/* Ingress VLAN over bridge delete rule failed */
 	"fail_evp_full",				/* Create req fail due to enqueue port table full */
+	"fail_wlan_metadata_update",			/* Failed to update wlan metadata */
+	"fail_qos_mapping_update",			/* Failed to update qos mapping */
+	"fail_unidir_rule_entry_update",		/* Failed to update unidirection rule fwd_type */
+	"fail_unidir_rule_match",			/* Failed to find matching tuple information */
+	"unidir_update_rule_type_invalid",		/* Invalid rule type for unidirection update */
 };
 
 /*
@@ -127,6 +156,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_create_fail_if_hierarchy",		/* No of v4 create failure due to interface hierarchy walk fail */
 
 	"v4_create_fail_vlan_filter",		/* No of v4 create failure due to interface not in bridge */
+	"v4_create_fail_inner_vlan_pcp",	/* No of v4 create failure due to inner vlan pcp marking */
 	"v4_create_fail_bridge_noexist",	/* No of v4 create failure due to bridge interface not created */
 	"v4_stats_conn_not_found",		/* No of v4 stats sync failure due to connection not found */
 
@@ -204,6 +234,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_fail_if_hierarchy",		/* No of v6 create failure due to interface hierarchy walk fail */
 
 	"v6_create_fail_vlan_filter",		/* No of v6 create failure due to interface not in bridge */
+	"v6_create_fail_inner_vlan_pcp",	/* No of v6 create failure due to inner vlan pcp marking */
 	"v6_create_fail_bridge_noexist",	/* No of v6 create failure due to bridge interface not created */
 	"v6_stats_conn_not_found",		/* No of v6 stats sync failure due to connection not found */
 
@@ -289,6 +320,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_create_fail_if_hierarchy",	/* No of v4 create failure due to interface hierarchy walk fail */
 
 	"v4_tun_create_fail_vlan_filter",	/* No of v4 create failure due to interface not in bridge */
+	"v4_tun_create_fail_inner_vlan_pcp",	/* No of v4 create failure due to inner vlan pcp marking */
 	"v4_tun_create_fail_bridge_noexist",	/* No of v4 create failure due to bridge interface not created */
 	"v4_tun_stats_conn_not_found",          /* No of v4 stats sync failure due to connection not found */
 
@@ -367,6 +399,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_fail_if_hierarchy",	/* No of v6 create failure due to interface hierarchy walk fail */
 
 	"v6_tun_create_fail_vlan_filter",	/* No of v6 create failure due to interface not in bridge */
+	"v6_tun_create_fail_inner_vlan_pcp",	/* No of v6 create failure due to inner vlan pcp marking */
 	"v6_tun_create_fail_bridge_noexist",	/* No of v6 create failure due to bridge interface not created */
 	"v6_tun_stats_conn_not_found",		/* No of v6 stats sync failure due to connection not found */
 
@@ -445,6 +478,7 @@ static const char *ppe_drv_stats_acl_str[] = {
 	"rule_bind_fail",	/* ACL rule bind failures */
 	"rule_delete_fail",	/* ACL rule delete failures */
 	"list_delete_fail",	/* ACL list delete failures */
+	"rule_prio_upd_fail",	/* ACL rule update failures. */
 };
 
 /*
@@ -604,7 +638,7 @@ static int ppe_drv_conn_stats_sc_show(struct seq_file *m, void __attribute__((un
 
 	seq_puts(m, "\nPPE_sc_stats:\n\n");
 	stats_shadow = (uint64_t *)sc_stats;
-	for (i = 0; i <= PPE_DRV_SC_FMAC_BYPASS; i++) {
+	for (i = 0; i <= PPE_DRV_SC_NOEDIT_TUN_RPS; i++) {
 		uint64_t stats1 = *stats_shadow++;
 		uint64_t stats2 = *stats_shadow++;
 		uint64_t stats3 = *stats_shadow++;

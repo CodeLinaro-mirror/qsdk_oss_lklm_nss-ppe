@@ -13,6 +13,19 @@ ifeq ($(SoC),$(filter $(SoC),ipq95xx))
 ccflags-y += -DNSS_PPE_IPQ95XX
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq52xx))
+ccflags-y += -DNSS_PPE_IPQ52XX
+ccflags-y += -DNSS_PPE_PON_SUPPORT
+endif
+
+ifeq ($(SoC),$(filter $(SoC),ipq96xx))
+ccflags-y += -DNSS_PPE_IPQ96XX
+endif
+
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DNSS_PPE_DRV_HW_GRO
+endif
+
 ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx))
 ccflags-y += -DPPE_DRV_FLOW_IG_MAC_WAR
 endif
@@ -24,6 +37,8 @@ endif
 ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
 ccflags-y += -DNSS_PPE_FEATURE_EXCEPTION_EDIT
 ccflags-y += -DNSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
+ccflags-y += -DNSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+ccflags-y += -DNSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 endif
 
 obj-m += qca-nss-ppe.o
@@ -48,6 +63,7 @@ qca-nss-ppe-objs += ppe_drv_pppoe.o
 qca-nss-ppe-objs += ppe_drv_pppoe_session.o
 qca-nss-ppe-objs += ppe_drv_pub_ip.o
 qca-nss-ppe-objs += ppe_drv_qos.o
+qca-nss-ppe-objs += ppe_drv_cos_map.o
 qca-nss-ppe-objs += ppe_drv_sc.o
 qca-nss-ppe-objs += ppe_drv_stats.o
 qca-nss-ppe-objs += ppe_drv_vlan.o
@@ -59,6 +75,8 @@ qca-nss-ppe-objs += ppe_drv_flow_dump.o
 qca-nss-ppe-objs += ppe_drv_if_map.o
 ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
 qca-nss-ppe-objs += ppe_drv_dscp.o
+qca-nss-ppe-objs += ppe_drv_pm.o
+qca-nss-ppe-objs += ppe_drv_port_mgmt.o
 endif
 ifdef PPE_TUN_ENABLE
 ccflags-y += -DPPE_TUNNEL_ENABLE
@@ -113,13 +131,32 @@ ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq54xx ipq53xx))
 ccflags-y += -DPPE_LOOPBACK_RING_SUPPORT
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq52xx))
+ccflags-y += -DNSS_PPE_ACL_RULE_RANGE
+endif
+
 ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
 ccflags-y += -DPPE_LOOPBACK_PORT_SUPPORT
+ccflags-y += -DPPE_ACL_DEST_BIND_SUPPORT
+ccflags-y += -DNSS_PPE_DRV_PORT_ISOL_SUPPORT
+ccflags-y += -DNSS_PPE_DRV_PORT_MGMT_SUPPORT
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq54xx))
 ccflags-y += -DNSS_ATH_HDR_BASED_DSA_SUPPORT
 qca-nss-ppe-objs += ppe_drv_athtag.o
+endif
+
+ifeq ($(SoC),$(filter $(SoC),ipq52xx))
+ccflags-y += -DPPE_DRV_PON_PQ_MAPPING
+ccflags-y += -DNSS_PPE_FEATURE_DOT1P
+ccflags-y += -DNSS_PPE_FEATURE_GEMPORT
+ccflags-y += -DPPE_DRV_VEIP_FEATURE_SUPPORT
+ccflags-y += -DNSS_PPE_MCAST_FEATURE_SUPPORT
+qca-nss-ppe-objs += ppe_drv_dot1p.o
+qca-nss-ppe-objs += ppe_drv_gemport.o
+qca-nss-ppe-objs += ppe_drv_veip.o
+qca-nss-ppe-objs += ppe_drv_mcast.o
 endif
 
 ccflags-y += -Wall -Werror

@@ -1,18 +1,8 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
+
 /**
  * @file ppe_acl.h
  *	NSS PPE ACL definitions.
@@ -61,6 +51,12 @@ typedef enum ppe_acl_rule_match_type {
 	PPE_ACL_RULE_MATCH_TYPE_DPORT,			/**< L4 destination port rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_IP_GEN,			/**< General IP fields rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_UDF,			/**< User Defined fields (UDF) rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_CTPID,			/**< CTPID Index rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_STPID,			/**< STPID Index rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_CDEI,			/**< CDEI rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_SDEI,			/**< SDEI rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_DHCP_TYPE,		/**< DHCP rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_MC_TYPE,		/**< MC rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_DEFAULT,		/**< Default rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_MAX,			/**< Maximum rule type. */
 } ppe_acl_rule_match_type_t;
@@ -81,7 +77,7 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_MATCH_TYPE_TTL_HOPLIMIT_VALID	(1 << PPE_ACL_RULE_MATCH_TYPE_TTL_HOPLIMIT)
 #define PPE_ACL_RULE_MATCH_TYPE_TOS_TC_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_TOS_TC)
 #define PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR_VALID	(1 << PPE_ACL_RULE_MATCH_TYPE_PROTO_NEXTHDR)
-#define PPE_ACL_RULE_MATCH_TYPE_TCP_FLAG_VALID	(1 << PPE_ACL_RULE_MATCH_TYPE_TCP_FLAG)
+#define PPE_ACL_RULE_MATCH_TYPE_TCP_FLAG_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_TCP_FLAG)
 #define PPE_ACL_RULE_MATCH_TYPE_SIP_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_SIP)
 #define PPE_ACL_RULE_MATCH_TYPE_DIP_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_DIP)
 #define PPE_ACL_RULE_MATCH_TYPE_SPORT_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_SPORT)
@@ -89,6 +85,12 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_MATCH_TYPE_IP_GEN_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_IP_GEN)
 #define PPE_ACL_RULE_MATCH_TYPE_UDF_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_UDF)
 #define PPE_ACL_RULE_MATCH_TYPE_DEFAULT_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_DEFAULT)
+#define PPE_ACL_RULE_MATCH_TYPE_CTPID_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_CTPID)
+#define PPE_ACL_RULE_MATCH_TYPE_STPID_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_STPID)
+#define PPE_ACL_RULE_MATCH_TYPE_CDEI_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_CDEI)
+#define PPE_ACL_RULE_MATCH_TYPE_SDEI_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_SDEI)
+#define PPE_ACL_RULE_MATCH_TYPE_DHCP_TYPE_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_DHCP_TYPE)
+#define PPE_ACL_RULE_MATCH_TYPE_MC_TYPE_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_MC_TYPE)
 
 /*
  * ACL rule flag common
@@ -106,6 +108,7 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_CMN_FLAG_FLOW_QOS_OVERRIDE		0x00000400	/**< Rule common flag to override QOS parameters from flow entry. */
 #define PPE_ACL_RULE_CMN_FLAG_METADATA_EN		0x00000800	/**< Rule common flag to indicate METADATA ENABLE in ACL rule. */
 #define PPE_ACL_RULE_CMN_FLAG_GROUP_EN			0x00001000	/**< Rule common flag to indicate priority configuration. */
+#define PPE_ACL_RULE_CMN_FLOW_DIR_TYPE_US		0x00002000	/**< Rule commaon flag to indicate the flow direction type as upstream. */
 
 /*
  * ACL rule flag general - applicable for each rule separately.
@@ -116,11 +119,24 @@ typedef enum ppe_acl_rule_match_type {
 /*
  * VLAN ACL rule flag
  */
-#define PPE_ACL_RULE_FLAG_DEI_EN		(PPE_ACL_RULE_GEN_FLAG_LAST << 1)	/**< Rule match with DEI bit in 1p header. */
-#define PPE_ACL_RULE_FLAG_SVID_RANGE 		(PPE_ACL_RULE_GEN_FLAG_LAST << 2)	/**< Rule match with S-VID range. */
-#define PPE_ACL_RULE_FLAG_VID_RANGE		(PPE_ACL_RULE_GEN_FLAG_LAST << 3)	/**< Rule match with C-VID range. */
-#define PPE_ACL_RULE_FLAG_VID_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 4)	/**< Rule match with VID mask. */
-#define PPE_ACL_RULE_FLAG_PCP_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 5)	/**< Rule match with 802.1p mask. */
+#define PPE_ACL_RULE_FLAG_CDEI_EN		(PPE_ACL_RULE_GEN_FLAG_LAST << 1)	/**< Rule match with DEI bit in 1p header. */
+#define PPE_ACL_RULE_FLAG_SDEI_EN		(PPE_ACL_RULE_GEN_FLAG_LAST << 2)	/**< Rule match with DEI bit in 1p header. */
+#define PPE_ACL_RULE_FLAG_SVID_RANGE		(PPE_ACL_RULE_GEN_FLAG_LAST << 3)	/**< Rule match with S-VID range. */
+#define PPE_ACL_RULE_FLAG_CVID_RANGE		(PPE_ACL_RULE_GEN_FLAG_LAST << 4)	/**< Rule match with C-VID range. */
+#define PPE_ACL_RULE_FLAG_CVID_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 5)	/**< Rule match with VID mask. */
+#define PPE_ACL_RULE_FLAG_SVID_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 6)	/**< Rule match with VID mask. */
+#define PPE_ACL_RULE_FLAG_CPCP_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 7)	/**< Rule match with 802.1p mask. */
+#define PPE_ACL_RULE_FLAG_SPCP_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 8)	/**< Rule match with 802.1p mask. */
+#define PPE_ACL_RULE_FLAG_CTAG_FMT		(PPE_ACL_RULE_GEN_FLAG_LAST << 9)	/**< Rule match with ctagged format type. */
+#define PPE_ACL_RULE_FLAG_STAG_FMT		(PPE_ACL_RULE_GEN_FLAG_LAST << 10)	/**< Rule match with stagged format type. */
+
+/*
+ * EXT VLAN ACL rule flag
+ */
+#define PPE_ACL_RULE_FLAG_STPID_EN		(PPE_ACL_RULE_GEN_FLAG_LAST << 1)	/**< Rule match with PID bit. */
+#define PPE_ACL_RULE_FLAG_CTPID_EN		(PPE_ACL_RULE_GEN_FLAG_LAST << 2)	/**< Rule match with PID bit. */
+#define PPE_ACL_RULE_FLAG_DHCP_TYPE_EN		(PPE_ACL_RULE_GEN_FLAG_LAST << 3)	/**< Rule match with DHCP type. */
+#define PPE_ACL_RULE_FLAG_MC_TYPE_EN		(PPE_ACL_RULE_GEN_FLAG_LAST << 4)	/**< Rule match with MC type. */
 
 /*
  * L3 length rule flag.
@@ -142,6 +158,7 @@ typedef enum ppe_acl_rule_match_type {
  * Ethertype ACL rule flag.
  */
 #define PPE_ACL_RULE_FLAG_ETHTYPE_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 1)	/**< Rule match with ethertype mask. */
+#define PPE_ACL_RULE_EXT_ETH_TYPE_EN 		(PPE_ACL_RULE_GEN_FLAG_LAST << 2)	/**< Rule match for ext slices. */
 
 /*
  * TTL/HOPLIMIT rule flag.
@@ -213,22 +230,43 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_ACTION_FLAG_SVID_CHANGE_EN			0x00000200	/**< Rule action to change S-VID. */
 #define PPE_ACL_RULE_ACTION_FLAG_DEST_INFO_CHANGE_EN		0x00000400	/**< Rule action to change destination. */
 #define PPE_ACL_RULE_ACTION_FLAG_MIRROR_EN			0x00000800	/**< Rule action to enable mirroring. */
-#define PPE_ACL_RULE_ACTION_FLAG_CTAG_FMT_TAGGED		0x00001000	/**< Rule action to change C-tag format. */
-#define PPE_ACL_RULE_ACTION_FLAG_STAG_FMT_TAGGED		0x00002000	/**< Rule action to change S-tag format. */
+#define PPE_ACL_RULE_ACTION_FLAG_CTAG_VID_CMD			0x00001000	/**< ACL ctag VID command. */
+#define PPE_ACL_RULE_ACTION_FLAG_STAG_VID_CMD			0x00002000	/**< ACL stag VID command. */
 #define PPE_ACL_RULE_ACTION_FLAG_REDIR_TO_CORE_EN		0x00004000	/**< Rule action to enable redirection to a specific core. */
 #define PPE_ACL_RULE_ACTION_FLAG_FW_CMD				0x00008000	/**< Rule action to enable special forwarding - forward/drop/copu/redirect. */
 #define PPE_ACL_RULE_ACTION_FLAG_POLICER_EN			0x00010000	/**< Rule action to enable police. */
 #define PPE_ACL_RULE_ACTION_FLAG_REDIR_EDIT_EN			0x00020000	/**< Rule action to enable redirect with packet editing enable. */
 #define PPE_ACL_RULE_ACTION_FLAG_EXCEPTION_EDIT_EN		0x00040000	/**< Rule action to enable commit for packet edits. */
+#define PPE_ACL_RULE_ACTION_FLAG_CTAG_PID_CHANGE_EN		0x00040000	/**< Rule action to change C-TPID. */
+#define PPE_ACL_RULE_ACTION_FLAG_STAG_PID_CHANGE_EN		0x00080000	/**< Rule action to change S-TPID. */
+#define PPE_ACL_RULE_ACTION_FLAG_DSCP_PBIT_MAP_IDX		0x00100000	/**< Rule action to change PCPs by mapping it to DSCP. */
+#define PPE_ACL_RULE_ACTION_FLAG_COUNTER_EN			0x00200000	/**< Rule action to enable the COUNTER ID */
+#define PPE_ACL_RULE_ACTION_FLAG_TAGS_TO_RMV_EN			0x00800000	/**< Rule action to remove tags. */
+#define PPE_ACL_RULE_ACTION_FLAG_INT_DP_CHANGE_EN		0x01000000	/**< Rule action for internal drop precedence. */
+#define PPE_ACL_RULE_ACTION_FLAG_SRC_INFO			0x02000000	/**< Rule action for src info. */
+#define PPE_ACL_RULE_ACTION_FLAG_CTAG_VID_CHANGE_EN		0x04000000	/**< Rule action to change C-VID. */
+#define PPE_ACL_RULE_ACTION_FLAG_STAG_VID_CHANGE_EN		0x08000000	/**< Rule action to change S-VID. */
+
+#define PPE_ACL_RULE_ACTION_FLAG_CTAG_PID_CMD			0x00000001	/**< ACL ctag PID command. */
+#define PPE_ACL_RULE_ACTION_FLAG_STAG_PID_CMD			0x00000002	/**< ACL stag PID command. */
+#define PPE_ACL_RULE_ACTION_FLAG_CTAG_DEI_CMD			0x00000004	/**< ACL ctag DEI command. */
+#define PPE_ACL_RULE_ACTION_FLAG_STAG_DEI_CMD			0x00000008	/**< ACL stag DEI command. */
+#define PPE_ACL_RULE_ACTION_FLAG_CTAG_PCP_CMD			0x00000010	/**< ACL ctag PCP command. */
+#define PPE_ACL_RULE_ACTION_FLAG_STAG_PCP_CMD			0x00000020	/**< ACL stag PCP command. */
+
 /**
  * ppe_acl_rule_vlan_fmt
  *	VLAN format
  */
-typedef enum ppe_acl_vlan_fmt {
-	PPE_ACL_VLAN_FMT_TAGGED,		/**< VLAN tagged format. */
-	PPE_ACL_VLAN_FMT_PRI_TAGGED,		/**< VLAN priority tagged format. */
-	PPE_ACL_VLAN_FRM_UNTAGGED,		/**< VLAN untagged format. */
-} ppe_acl_vlan_fmt_t;
+typedef enum ppe_acl_vtag_fmt {
+	PPE_ACL_VTAG_FMT_UNTAGGED,		/**< VLAN untagged format. */
+	PPE_ACL_VTAG_FMT_TAGGED,		/**< VLAN tagged format. */
+	PPE_ACL_VTAG_FMT_PRI_TAGGED,		/**< VLAN priority tagged format. */
+	PPE_ACL_VTAG_FMT_UNTAG_PRITAG,		/**< VLAN untagged and priority tagged format. */
+	PPE_ACL_VTAG_FMT_UNTAG_TAG,		/**< VLAN untagged and tagged format. */
+	PPE_ACL_VTAG_FMT_TAG_PRIORITY,		/**< VLAN tagged and priority tagged format */
+	PPE_ACL_VTAG_FMT_ALL,			/**< VLAN untagged, tagged and priority tagged format. */
+} ppe_acl_vtag_fmt_t;
 
 /**
  * ppe_acl_rule_ip_type
@@ -251,14 +289,117 @@ typedef enum ppe_acl_fwd_cmd {
 } ppe_acl_fwd_cmd_t;
 
 /**
- * ppe_acl_rule_src_type
- *	PPE ACL rule source tyoe
+ * ppe_acl_rule_dev_type
+ *	PPE ACL rule device tyoe
  */
-typedef enum ppe_acl_rule_src_type {
-	PPE_ACL_RULE_SRC_TYPE_DEV = 1,		/**< Rule source is a net-device. */
-	PPE_ACL_RULE_SRC_TYPE_SC,		/**< Rule source is a service code. */
-	PPE_ACL_RULE_SRC_TYPE_FLOW		/**< Rule source is flow. */
-} ppe_acl_rule_src_type_t;
+typedef enum ppe_acl_rule_dev_type {
+	PPE_ACL_RULE_DEV_TYPE_SRC_DEV = 1,	/**< Rule device is a net-device. */
+	PPE_ACL_RULE_DEV_TYPE_SC,		/**< Rule device is a service code. */
+	PPE_ACL_RULE_DEV_TYPE_FLOW,		/**< Rule device is flow. */
+	PPE_ACL_RULE_DEV_TYPE_DEST_L2_PORT,	/**< Rule device is dest port. */
+	PPE_ACL_RULE_DEV_TYPE_DEST_L3_PORT,	/**< Rule device is L3 dest port. */
+} ppe_acl_rule_dev_type_t;
+
+/*
+ * ppe_acl_rule_dhcp_type
+ *      ACL DHCP type
+ */
+typedef enum ppe_acl_rule_dhcp_type {
+	PPE_ACL_RULE_DHCP_TYPE_NON=1,		/**< non dhcp rule. */
+	PPE_ACL_RULE_DHCP_TYPE_V4,		/**< V4 dhcp rule. */
+	PPE_ACL_RULE_DHCP_TYPE_V4_NON,		/**< V4 and non dhcp rule. */
+	PPE_ACL_RULE_DHCP_TYPE_V6,		/**< V6 dhcp rule. */
+	PPE_ACL_RULE_DHCP_TYPE_V6_NON,		/**< V6 and non dhcp rules. */
+	PPE_ACL_RULE_DHCP_TYPE_V6_V4,		/**< V6 and V4 dhcp rule. */
+	PPE_ACL_RULE_DHCP_TYPE_ALL,		/**< all dhcp rule. */
+} ppe_acl_rule_dhcp_type_t;
+
+/*
+ * ppe_acl_rule_mc
+ *      ACL MC type
+ */
+typedef enum ppe_acl_rule_mc_type {
+	PPE_ACL_RULE_MC_TYPE_NON=1,		/**< no MC rule. */
+	PPE_ACL_RULE_MC_TYPE_IP,		/**< IP MC rule. */
+	PPE_ACL_RULE_MC_TYPE_IP_NON,		/**< IP MC and No MC rule. */
+	PPE_ACL_RULE_MC_TYPE_NONIP,		/**< NONIP MC rule. */
+	PPE_ACL_RULE_MC_TYPE_NONIP_NON,		/**< NONIP MC rule and NO MC rule. */
+	PPE_ACL_RULE_MC_TYPE_IP_NONIP,		/**< IP and NON IP MC rule. */
+	PPE_ACL_RULE_MC_TYPE_ALL,		/**< all MC rule. */
+} ppe_acl_rule_mc_type_t;
+
+/* ppe_acl_src_info_type
+ * 	Source type: virtual port or L3 interface.
+ */
+typedef enum ppe_acl_src_info_type {
+	PPE_ACL_SRC_INFO_TYPE_VP,		/**< Virtual port. */
+	PPE_ACL_SRC_INFO_TYPE_L3_IF,		/**< L3 interface. */
+} ppe_acl_src_info_type_t;
+
+/* ppe_acl_dei_cmd
+ * 	DEI (Drop Eligibility Indicator) command.
+ */
+typedef enum ppe_acl_dei_cmd {
+	PPE_ACL_DEI_UNCHANGED,			/**< Keep DEI unchanged. */
+	PPE_ACL_DEI_REPLACE,			/**< Replace DEI. */
+	PPE_ACL_DEI_CPY_FRM_ORIG_SDEI,		/**< Copy from S‑Tag DEI. */
+	PPE_ACL_DEI_CPY_FRM_ORIG_CDEI,		/**< Copy from C‑Tag DEI. */
+} ppe_acl_dei_cmd_t;
+
+/* ppe_acl_pcp_cmd
+ * 	PCP (priority) command.
+ */
+typedef enum ppe_acl_pcp_cmd {
+	PPE_ACL_PCP_UNCHANGED,			/**< Keep PCP unchanged. */
+	PPE_ACL_PCP_REPLACE,			/**< Replace PCP. */
+	PPE_ACL_PCP_CPY_FRM_ORIG_SPCP,		/**< Copy from S‑Tag PCP. */
+	PPE_ACL_PCP_CPY_FRM_ORIG_CPCP,		/**< Copy from C‑Tag PCP. */
+	PPE_ACL_PCP_DSCP_TO_PBIT,		/**< Map DSCP to PCP. */
+	PPE_ACL_PCP_ADD_TAG_REPLACE_PCP,	/**< Add tag, replace PCP. */
+	PPE_ACL_PCP_ADD_TAG_CPY_FRM_ORIG_SPCP,	/**< Add tag, copy S‑Tag PCP. */
+	PPE_ACL_PCP_ADD_TAG_CPY_FRM_ORIG_CPCP,	/**< Add tag, copy C‑Tag PCP. */
+	PPE_ACL_PCP_ADD_TAG_DSCP_TO_PBIT,	/**< Add tag, map DSCP. */
+} ppe_acl_pcp_cmd_t;
+
+/* ppe_acl_vid_cmd
+ * 	VID (VLAN ID) command.
+ */
+typedef enum ppe_acl_vid_cmd {
+	PPE_ACL_VID_UNCHANGED,			/**< Keep VID unchanged. */
+	PPE_ACL_VID_REPLACE,			/**< Replace VID. */
+	PPE_ACL_VID_CPY_FRM_ORIG_SVID,		/**< Copy S‑Tag VID. */
+	PPE_ACL_VID_CPY_FRM_ORIG_CVID,		/**< Copy C‑Tag VID. */
+} ppe_acl_vid_cmd_t;
+
+/* ppe_acl_pid_cmd
+ * 	TPID command.
+ */
+typedef enum ppe_acl_pid_cmd {
+	PPE_ACL_PID_UNCHANGED,			/**< Keep TPID unchanged. */
+	PPE_ACL_PID_REPLACE,			/**< Replace TPID. */
+	PPE_ACL_PID_CPY_FRM_ORIG_STPID,		/**< Copy S‑Tag TPID. */
+	PPE_ACL_PID_CPY_FRM_ORIG_CTPID,		/**< Copy C‑Tag TPID. */
+} ppe_acl_pid_cmd_t;
+
+/*
+ * ppe_acl_counter_mode
+ * 	counter mode for VLAN or PM.
+ */
+typedef enum ppe_acl_counter_mode {
+	PPE_ACL_VLAN_DEV,			/**< VLAN dev type. */
+	PPE_ACL_PON_PM,				/**< PON dev type. */
+} ppe_acl_counter_mode_t;
+
+/*
+ * ppe_acl_dp_cmd
+ *      ACL drop precedence
+ */
+typedef enum ppe_acl_dp_cmd {
+	PPE_ACL_DP_0,                       /**< ACL drop precedence 0. */
+	PPE_ACL_DP_1,                       /**< ACL drop precedence 1. */
+	PPE_ACL_DP_2,                       /**< ACL drop precedence 2. */
+	PPE_ACL_DP_3,                       /**< ACL drop precedence 3. */
+} ppe_acl_dp_t;
 
 /**
  * ppe_acl_ret
@@ -275,9 +416,12 @@ typedef enum ppe_acl_ret {
 	PPE_ACL_RET_CREATE_FAIL_RULE_PARSE,		/**< Rule create failed due to rule parse failure. */
 	PPE_ACL_RET_CREATE_FAIL_SC_ALLOC,		/**< Rule create failed due to service code allocation failure. */
 	PPE_ACL_RET_CREATE_FAIL_ACTION_CONFIG,		/**< Rule create failed due to invalid action configuration. */
+	PPE_ACL_RET_CREATE_FAIL_PM_CTX,			/**< Rule create failed due to pm context failure. */
 	PPE_ACL_RET_CREATE_FAIL_INVALID_ID,		/**< Rule create failed due to invalid rule ID. */
 	PPE_ACL_RET_DESTROY_FAIL_INVALID_ID,		/**< Rule destroy failed due to invalid rule ID. */
 	PPE_ACL_RET_FLUSH_FAIL,				/**< Rule flush failed. */
+	PPE_ACL_RET_UPDATE_PRI_FAIL_INVALID_ID,		/**< Rule update priority failed due to invalid ID. */
+	PPE_ACL_RET_UPDATE_PRI_FAIL_INVALID_PRIORITY,	/**< Rule update priority failed due to out of bound priority. */
 } ppe_acl_ret_t;
 
 /**
@@ -307,9 +451,45 @@ struct ppe_acl_rule_match_mac {
  *	VLAN based ACL rule.
  */
 struct ppe_acl_rule_match_vlan {
-	ppe_acl_vlan_fmt_t tag_fmt;		/**< VLAN tag format for ACL match. */
+	ppe_acl_vtag_fmt_t tag_fmt;		/**< VLAN tag format for ACL match. */
+	uint8_t tag_fmt_mask;			/**< VLAN tag format mask for ACL match. */
 	uint16_t vid_min;			/**< VLAN ID for ACL match. */
 	uint16_t vid_mask_max;			/**< VLAN ID mask or maximum value for range. */
+};
+
+/**
+ * ppe_acl_rule_match_tpid
+ *	Tpid val based ACL rule.
+ */
+struct ppe_acl_rule_match_tpid {
+	uint8_t tpid_val;			/**< TPID index for ACL match. */
+	uint8_t tpid_mask;			/**< TPID index mask for ACL match.  */
+};
+
+/**
+ * ppe_acl_rule_match_dei
+ *	DEI based ACL rule.
+ */
+struct ppe_acl_rule_match_dei {
+	uint8_t dei;				/**< DEI for ACL match. */
+	uint8_t dei_mask;			/**< DEI mask for ACL match.  */
+};
+/**
+ * ppe_acl_rule_match_dscp_type
+ * 	Dscp type based ACL rule.
+ */
+struct ppe_acl_rule_match_dhcp_type {
+	ppe_acl_rule_dhcp_type_t dhcp_type;	/**< DHCP type for ACL match. */
+	uint8_t dhcp_mask;			/**< DHCP mask for ACL match. */
+};
+
+/**
+ * ppe_acl_rule_match_mc_type
+ * 	MC type based ACL rule.
+ */
+struct ppe_acl_rule_match_mc_type {
+	ppe_acl_rule_mc_type_t mc_type;		/**< MC type for ACL match. */
+	uint8_t mc_mask;			/**< MC mask for ACL match. */
 };
 
 /**
@@ -454,6 +634,8 @@ struct ppe_acl_rule_action {
 	uint8_t enqueue_pri;			/**< Changed enqueue priority. */
 	uint8_t ctag_pcp;			/**< Changed CPCP. */
 	uint8_t stag_pcp;			/**< Changed SPCP. */
+	uint8_t ctag_dei;                       /**< C-DEI change action. */
+	uint8_t stag_dei;                       /**< S-DEI change action. */
 	uint8_t tos_tc;				/**< Changed TOS/TC. */
 	uint16_t cvid;				/**< Changed CVID. */
 	uint16_t svid;				/**< Changed SVID. */
@@ -463,11 +645,30 @@ struct ppe_acl_rule_action {
 	uint8_t redir_core;			/**< Redirect core. */
 	uint16_t policer_id;			/**< Policer ID. */
 	ppe_acl_fwd_cmd_t fwd_cmd;		/**< Forward action for matched packets. */
+	uint8_t ctag_pid;                       /**< C-TPID change action. */
+	uint8_t stag_pid;                       /**< S-TPID change action. */
+	uint8_t dscp_pbit_map_idx;		/**< DSCP to pbit mapping index. */
+	uint8_t counter_id;                     /**< Counter ID for stats action. */
+	uint8_t hw_counter_id;			/**< HW Counter ID. */
+	uint8_t tags_to_rmv;                    /**< Tags to remove. */
+	uint8_t	src_info;			/**< source info. */
+	ppe_acl_src_info_type_t src_info_type;	/**< source info type. */
+	ppe_acl_counter_mode_t counter_mode;	/**< Counter mode for stats action. */
+	ppe_acl_dp_t int_dp;			/**< Internal Drop Precedence. */
+	ppe_acl_pcp_cmd_t ctag_pcp_cmd;		/**< C-tag pcp format action. */
+	ppe_acl_pcp_cmd_t stag_pcp_cmd;		/**< S-tag pcp format action. */
+	ppe_acl_dei_cmd_t ctag_dei_cmd;		/**< C-tag dei format action. */
+	ppe_acl_dei_cmd_t stag_dei_cmd;		/**< S-tag dei format action. */
+	ppe_acl_vid_cmd_t ctag_vid_cmd;		/**< C-tag vid format action. */
+	ppe_acl_vid_cmd_t stag_vid_cmd;		/**< S-tag vid format action. */
+	ppe_acl_pid_cmd_t ctag_pid_cmd;		/**< C-tag pid forward command. */
+	ppe_acl_pid_cmd_t stag_pid_cmd;		/**< S-tag pid forward command. */
 
 	/*
 	 * Action control flags.
 	 */
 	uint32_t flags;				/**< Action control flags. */
+	uint32_t flags_ext;			/**< Action control flags extended for PON */
 };
 
 /**
@@ -507,6 +708,16 @@ struct ppe_acl_rule_match_one {
 							/**< Rule with TTL/hop-limit match. */
 		struct ppe_acl_rule_match_udf udf;	/**< Rule with user-defined match. */
 		struct ppe_acl_rule_match_default def;	/**< Rule with default match. */
+		struct ppe_acl_rule_match_tpid ctpid;
+							/**< Rule with CTPID val match. */
+		struct ppe_acl_rule_match_tpid stpid;
+							/**< Rule with STPID val match. */
+		struct ppe_acl_rule_match_dei cdei;	/**< Rule with CDEI match. */
+		struct ppe_acl_rule_match_dei sdei;	/**< Rule with SDEI match. */
+		struct ppe_acl_rule_match_dhcp_type dhcp_type;
+							/**< Rule with DHCP type match. */
+		struct ppe_acl_rule_match_mc_type mc_type;
+							/**< Rule with MC type match. */
 	} rule;
 };
 
@@ -556,11 +767,11 @@ struct ppe_acl_rule {
 	struct ppe_acl_rule_match_one rules[PPE_ACL_RULE_MATCH_TYPE_MAX];
 							/**< Multiple single rule. */
 	struct ppe_acl_rule_action action;		/**< ACL action object. */
-	ppe_acl_rule_src_type_t stype;			/**< ACL source type. */
+	ppe_acl_rule_dev_type_t dev_type;		/**< ACL dev type. */
 	union {
-		uint8_t sc;				/**< ACL source a service code. */
-		char dev_name[IFNAMSIZ];		/**< ACL source dev name. */
-	} src;
+		uint8_t sc;				/**< ACL dev a service code. */
+		char dev_name[IFNAMSIZ];		/**< ACL dev dev name. */
+	} dev;
 
 	/*
 	 * Response
@@ -588,7 +799,7 @@ typedef bool (*ppe_acl_rule_process_callback_t)(void *app_data, void *skb);
  * @datatypes
  * ppe_acl_rule_flow_policer
  *
- * @param[IN] rule 	ACL rule information.
+ * @param[IN] rule	ACL rule information.
  *
  * @return
  * Status of flow policer create rule operation.
@@ -707,5 +918,20 @@ bool ppe_acl_rule_callback_register(ppe_acl_rule_id_t acl_id, ppe_acl_rule_proce
  * void.
  */
 void ppe_acl_rule_callback_unregister(ppe_acl_rule_id_t acl_id);
+
+/**
+ * ppe_acl_rule_prio_upd()
+ * 	Updates the priority of the existing ACL rules.
+ *
+ * @datatypes
+ * ppe_acl_rule_id_t
+ *
+ * @param[IN] acl_id		ACL rule information.
+ * @param[IN] priority		ACL rule priority.
+ *
+ * @return
+ * status of rule priority update.
+ */
+ppe_acl_ret_t ppe_acl_rule_prio_upd(ppe_acl_rule_id_t id, uint16_t priority);
 
 #endif /* _PPE_ACL_H_ */

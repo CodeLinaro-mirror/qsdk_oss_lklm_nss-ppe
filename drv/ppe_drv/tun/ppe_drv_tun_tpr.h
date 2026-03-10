@@ -79,4 +79,5 @@ void ppe_drv_tun_tpr_entry_ref(struct ppe_drv_tun_tpr  *tun_tpr);
 struct ppe_drv_tun_tpr *ppe_drv_tun_tpr_entry_alloc(struct ppe_drv *p);
 void ppe_drv_tun_tpr_free(struct ppe_drv_tun_tpr *tun_tpr);
 struct ppe_drv_tun_tpr *ppe_drv_tun_tpr_alloc(struct ppe_drv *p);
+bool ppe_drv_tun_rps_prgm_prsr_deconfigure(struct ppe_drv_tun_prgm_prsr *prsr);
 #endif /* _PPE_DRV_TUN_TPR_H_ */

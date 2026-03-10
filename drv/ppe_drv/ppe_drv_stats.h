@@ -79,6 +79,11 @@ struct ppe_drv_gen_stats {
 	atomic64_t fail_ingress_vlan_over_bridge_add;	/* Ingress VLAN over brige add rule failed */
 	atomic64_t fail_ingress_vlan_over_bridge_del;	/* Ingress VLAN over brige delete rule failed */
 	atomic64_t fail_evp_full;		/* Create req fail due to Enqueue VP full */
+	atomic64_t fail_wlan_metadata_update;		/* Failed to update wlan metadata */
+	atomic64_t fail_qos_mapping_update;		/* Failed to update qos mapping */
+	atomic64_t fail_unidir_rule_entry_update;	/* Failed to update unidirection rule fwd_type */
+	atomic64_t fail_unidir_rule_match;		/* Failed to find matching tuple information */
+	atomic64_t unidir_update_rule_type_invalid;	/* Invalid rule type for unidirection update */
 };
 
 /*
@@ -104,6 +109,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v4_create_fail_if_hierarchy;		/* No of v4 create failure due to interface hierarchy walk fail */
 
 	atomic64_t v4_create_fail_vlan_filter;		/* No of v4 create failure due to interface not in bridge */
+	atomic64_t v4_create_fail_inner_vlan_pcp;	/* No of v4 create failure due to inner vlan pcp marking */
 	atomic64_t v4_create_fail_bridge_noexist;	/* No of v4 create failure due to bridge interface not created */
 	atomic64_t v4_stats_conn_not_found;		/* No of v4 stats sync failure due to connection not found */
 
@@ -181,6 +187,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_fail_if_hierarchy;		/* No of v6 create failure due to interface hierarchy walk fail */
 
 	atomic64_t v6_create_fail_vlan_filter;		/* No of v6 create failure due to interface not in bridge */
+	atomic64_t v6_create_fail_inner_vlan_pcp;	/* No of v6 create failure due to inner vlan pcp marking */
 	atomic64_t v6_create_fail_bridge_noexist;	/* No of v6 create failure due to bridge interface not created */
 	atomic64_t v6_stats_conn_not_found;		/* No of v6 stats sync failure due to connection not found */
 
@@ -282,6 +289,7 @@ struct ppe_drv_stats_acl {
 	atomic64_t rule_bind_fail;	/* ACL rule bind failures */
 	atomic64_t rule_delete_fail;	/* ACL rule delete failures */
 	atomic64_t list_delete_fail;	/* ACL list delete failures */
+	atomic64_t rule_prio_upd_fail;	/* ACL rule priority update failed */
 };
 
 /*

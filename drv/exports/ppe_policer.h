@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /**
@@ -59,6 +48,29 @@ enum ppe_policer_type {
 	PPE_POLICER_TYPE_ACL = 0,		/**< Policer type ACL */
 	PPE_POLICER_TYPE_PORT,			/**< Policer type Port */
 };
+
+/*
+ * ppe_policer_frame_type
+ *	Policer frame type
+ */
+enum ppe_policer_frame_type {
+	PPE_POLICER_FRAME_TYPE_UNICAST = 0,		/**< Frame type unicast */
+	PPE_POLICER_FRAME_TYPE_UNKNOWN_UNICAST = 1,	/**< Frame type unknown unicast */
+	PPE_POLICER_FRAME_TYPE_MULTICAST = 2,		/**< Frame type multicast */
+	PPE_POLICER_FRAME_TYPE_UNKNOWN_MULTICAST = 3,	/**< Frame type unknown multicast */
+	PPE_POLICER_FRAME_TYPE_BROADCAST = 4,		/**< Frame type broadcast */
+};
+
+/*
+ * ppe_policer_direction
+ *	Direction
+ */
+enum ppe_policer_direction {
+	PPE_POLICER_DIRECTION_INVALID = 0,	/**< Invalid direction */
+	PPE_POLICER_DIRECTION_US,		/**< Upstream direction */
+	PPE_POLICER_DIRECTION_DS		/**< Downstream direction */
+};
+typedef enum ppe_policer_direction ppe_policer_direction_t;
 
 /*
  * ppe_policer_status
@@ -149,8 +161,11 @@ struct ppe_policer_create_info {
 	/* Only for ACL Policer */
 	uint16_t rule_id;				/**< Rule id for ACL + Policer */
 
+	ppe_policer_direction_t dir; 	/** Direction for the rule */
+
 	/* Only for Port Policer */
 	enum ppe_policer_type policer_type;		/**< Port policer is enabled */
+	enum ppe_policer_frame_type frame_type;		/**< Port policer frame type */
 	char name[IFNAMSIZ];				/**< Net device for port policer */
 
 	/*

@@ -1,19 +1,8 @@
 /*
  **************************************************************************
  * Copyright (c) 2017-2018, 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  **************************************************************************
  */
 
@@ -37,6 +26,8 @@
 #include <nss_ppe_vlan_mgr.h>
 #include <ref/ref_vsi.h>
 #include "nss_ppe_vlan_mgr_priv.h"
+
+#define TPID_SIZE	4	/* TPID Array size */
 
 static bool vlan_as_vp_invert = false;
 module_param(vlan_as_vp_invert, bool, S_IRUGO);
@@ -196,21 +187,28 @@ static bool nss_ppe_vlan_mgr_dsa_interface_supported(struct net_device *dev)
 static int nss_ppe_vlan_mgr_update_ppe_tpid(void)
 {
 	ppe_drv_ret_t ret;
-	uint32_t mask = FAL_TPID_CTAG_EN | FAL_TPID_STAG_EN;
-	uint16_t ctpid = vlan_mgr_ctx.ctpid;
-	uint16_t stpid = vlan_mgr_ctx.stpid;
 	fal_qinq_port_role_t port_role = FAL_QINQ_EDGE_PORT;
+	uint32_t mask = FAL_TPID_CTAG_EN | FAL_TPID_STAG_EN | FAL_EXT_TPID_CTAG_EN | FAL_EXT_TPID_STAG_EN | FAL_TPID_CTAG_MAP_EN | FAL_TPID_STAG_MAP_EN;
+	uint16_t tpid_arr[TPID_SIZE] = {
+		vlan_mgr_ctx.ctpid,
+		vlan_mgr_ctx.stpid,
+#ifdef NSS_EXT_VLAN_FEATURE_SUPPORT
+		vlan_mgr_ctx.ctpid_ext,
+		vlan_mgr_ctx.stpid_ext
+#endif
+	};
 
 #ifdef NSS_VLAN_MGR_PPE_VP_TUN_SUPPORT
-	mask |= (FAL_TUNNEL_TPID_CTAG_EN | FAL_TUNNEL_TPID_STAG_EN);
+	mask |= (FAL_TUNNEL_TPID_CTAG_EN | FAL_TUNNEL_TPID_STAG_EN | FAL_EXT_TUNNEL_TPID_CTAG_EN | FAL_EXT_TUNNEL_TPID_STAG_EN);
 #endif
 
 #ifdef NSS_VLAN_MGR_DEFAULT_ROLE_CORE
 	port_role = FAL_QINQ_CORE_PORT;
 #endif
-	ret = ppe_drv_vlan_tpid_set(ctpid, stpid, mask, port_role);
+	ret = ppe_drv_vlan_tpid_set(tpid_arr, mask, port_role);
 	if (ret != PPE_DRV_RET_SUCCESS) {
-		nss_ppe_vlan_mgr_warn("failed to set ctpid %d stpid %d, error = %d\n", ctpid, stpid, ret);
+		nss_ppe_vlan_mgr_warn("failed to set TPIDs: [%d, %d, %d, %d], error = %d\n",
+				tpid_arr[0], tpid_arr[1], tpid_arr[2], tpid_arr[3], ret);
 		return -1;
 	}
 
@@ -900,6 +898,36 @@ bool nss_ppe_vlan_mgr_vp_dst_exception(struct ppe_vp_cb_info *info, void *cb_dat
 	return false;
 }
 
+#ifdef NSS_VLAN_VEIP_FEATURE_SUPPORT
+/*
+ * nss_ppe_vlan_mgr_veip_exception()
+ *	VEIP VP callback: deliver to upper stack.
+ *	Assumes skb->dev and skb->protocol were set by ppe_vp_rx_dp_cb.
+ */
+bool nss_ppe_vlan_mgr_veip_exception(struct ppe_vp_cb_info *info, void *cb_data)
+{
+	struct sk_buff *skb = info->skb;
+
+	/*
+	 * If skb->dev is a VLAN device, switch to its base device and
+	 * update protocol before delivering to the network stack.
+	 */
+	if (is_vlan_dev(skb->dev)) {
+		struct net_device *real_dev = vlan_dev_real_dev(skb->dev);
+		if (real_dev) {
+			skb->dev = real_dev;
+			skb->skb_iif = real_dev->ifindex;
+			skb->protocol = eth_type_trans(skb, skb->dev);
+		}
+	}
+
+	/* Directly hand to the network stack as requested. */
+	netif_receive_skb(skb);
+
+	return true;
+}
+#endif
+
 /*
  * nss_ppe_vlan_mgr_deconfigure_vp()
  *	Deconfigure vlan instance configured as VP.
@@ -1234,6 +1262,160 @@ static int nss_ppe_vlan_mgr_alloc_configure_ppe_vp(struct nss_vlan_pvt *v, struc
 	return res;
 }
 
+#ifdef NSS_VLAN_VEIP_FEATURE_SUPPORT
+/*
+ * nss_ppe_vlan_mgr_alloc_configure_ppe_veip()
+ *	Configure PPE VEIP VP for VLAN devices using the upstream PON port.
+ */
+static int nss_ppe_vlan_mgr_alloc_configure_ppe_veip(struct nss_vlan_pvt *v, struct net_device *dev)
+{
+	struct net_device *base_dev;
+	struct ppe_drv_veip_vp_info vp_info;
+	struct ppe_vp_ai vpai = {0};
+	ppe_drv_ret_t ret;
+	int res = 0;
+
+	/*
+	 * PPE expects the underlying physical device (base_dev). For stacked VLANs (e.g., eth0.10.20),
+	 * this refers to the intermediate interface (eth0.10).
+	 */
+	base_dev = nss_ppe_vlan_mgr_get_real_dev(dev);
+	if (!base_dev) {
+		nss_ppe_vlan_mgr_warn("%s: failed to obtain base_dev", dev->name);
+		return -1;
+	}
+
+	/*
+	 * Allocate and initialize VEIP interface with both VP ports
+	 */
+	v->iface = ppe_drv_iface_alloc(PPE_DRV_IFACE_TYPE_VEIP, dev);
+	if (!v->iface) {
+		nss_ppe_vlan_mgr_warn("%s: failed to allocate IFACE for vlan device", dev->name);
+		return -1;
+	}
+
+	if (ppe_drv_veip_init(v->iface, base_dev, &vp_info) != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: failed to initialize VEIP interface\n", dev->name);
+		ppe_drv_iface_deref(v->iface);
+		v->iface = NULL;
+		return -1;
+	}
+
+	/*
+	 * Set MAC address for the VEIP interface
+	 */
+	ret = ppe_drv_iface_mac_addr_set(v->iface, v->dev_addr);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: Failed to set MAC address, error = %d\n", dev->name, ret);
+		goto free_ppe_iface;
+	}
+
+	/*
+	 * Set MTU for the VEIP interface
+	 */
+	ret = ppe_drv_iface_mtu_set(v->iface, v->mtu);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_trace("%s: Failed to set MTU, error = %d\n", dev->name, ret);
+		goto clear_mac_addr;
+	}
+
+	/*
+	 * Configure VP allocation info
+	 */
+	vpai.dst_cb = nss_ppe_vlan_mgr_veip_exception;
+	vpai.src_cb = nss_ppe_vlan_mgr_veip_exception;
+	vpai.type = PPE_VP_TYPE_SW_L2;
+
+	/*
+	 * Allocate VP structures for both GW and PON ports
+	 */
+	if (ppe_vp_veip_alloc_vps(v->iface, vp_info.gw_vp_num, vp_info.pon_vp_num, dev, &vpai) < 0) {
+		nss_ppe_vlan_mgr_warn("%s: failed to allocate VP structures\n", dev->name);
+		goto clear_mtu;
+	}
+
+	/*
+	 * Configure the source interface mapping
+	 */
+	v->is_vlan_as_veip_iface = true;
+	v->port[vp_info.gw_vp_num - 1] = v->xlate_info.port_id = vp_info.gw_vp_num;
+	v->port[vp_info.pon_vp_num - 1] = vp_info.pon_vp_num;
+
+	/*
+	 * Update the default port role to CORE PORT for both the base port as
+	 * well the VLAN virtual port.
+	 */
+	if (vlan_mgr_ctx.port_role[v->port[0]] != FAL_QINQ_CORE_PORT) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[0], FAL_QINQ_CORE_PORT)) {
+			nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", dev->name, v->port[0]);
+			goto free_vp_structs;
+		}
+		vlan_mgr_ctx.port_role[v->port[0]] = FAL_QINQ_CORE_PORT;
+		res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
+	}
+
+	if (vlan_mgr_ctx.port_role[v->port[vp_info.gw_vp_num - 1]] != FAL_QINQ_CORE_PORT) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[vp_info.gw_vp_num - 1], FAL_QINQ_CORE_PORT)) {
+			nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", dev->name, v->port[vp_info.gw_vp_num - 1]);
+			goto free_vp_structs;
+		}
+		vlan_mgr_ctx.port_role[v->port[vp_info.gw_vp_num - 1]] = FAL_QINQ_CORE_PORT;
+		res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
+	}
+
+	if (vlan_mgr_ctx.port_role[v->port[vp_info.pon_vp_num - 1]] != FAL_QINQ_CORE_PORT) {
+		if (!nss_ppe_vlan_mgr_ppe_update_port_role(v->iface, v->port[vp_info.pon_vp_num - 1], FAL_QINQ_CORE_PORT)) {
+			nss_ppe_vlan_mgr_warn("%s: failed to set %d as core port\n", dev->name, v->port[vp_info.pon_vp_num - 1]);
+			goto free_vp_structs;
+		}
+		vlan_mgr_ctx.port_role[v->port[vp_info.pon_vp_num - 1]] = FAL_QINQ_CORE_PORT;
+		res = NSS_PPE_VLAN_MGR_PORT_ROLE_CHANGED;
+	}
+
+	/*
+	 * Calculate the cvid and svid
+	 */
+	if (NSS_PPE_VLAN_MGR_TAG_CNT(v) == NSS_PPE_VLAN_MGR_TYPE_DOUBLE) {
+		v->ppe_cvid = v->vid;
+		v->ppe_svid = v->parent->vid;
+	} else {
+		if (((vlan_mgr_ctx.ctpid != vlan_mgr_ctx.stpid) && (v->tpid == vlan_mgr_ctx.ctpid)) ||
+				((vlan_mgr_ctx.ctpid == vlan_mgr_ctx.stpid) &&
+				 (vlan_mgr_ctx.port_role[v->port[0]] == FAL_QINQ_EDGE_PORT))) {
+			v->ppe_cvid = v->vid;
+			v->ppe_svid = FAL_VLAN_INVALID;
+		} else {
+			v->ppe_cvid = FAL_VLAN_INVALID;
+			v->ppe_svid = v->vid;
+		}
+	}
+
+	v->xlate_info.br = NULL;
+	v->xlate_info.svid = v->ppe_svid;
+	v->xlate_info.cvid = v->ppe_cvid;
+
+	ret = ppe_drv_vlan_as_veip_add_xlate_rules(v->iface, &v->xlate_info);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		nss_ppe_vlan_mgr_warn("%s: failed to set vlan translation, error = %d \n", dev->name, ret);
+		goto free_vp_structs;
+	}
+
+	return res;
+
+free_vp_structs:
+	ppe_vp_veip_free_vps(v->iface);
+clear_mtu:
+	ppe_drv_iface_mtu_set(v->iface, 0);
+clear_mac_addr:
+	ppe_drv_iface_mac_addr_clear(v->iface);
+free_ppe_iface:
+	ppe_drv_veip_deinit(v->iface);
+	ppe_drv_iface_deref(v->iface);
+	v->iface = NULL;
+	return -1;
+}
+#endif
+
 /*
  * nss_ppe_vlan_mgr_configure_ppe()
  *	Configure PPE for non-bond devices
@@ -1461,6 +1643,47 @@ static void nss_ppe_vlan_mgr_instance_free(struct kref *kref)
 		kfree(v);
 		return;
 	}
+
+#ifdef NSS_VLAN_VEIP_FEATURE_SUPPORT
+	/*
+	 * VEIP based vlan instance cleanup.
+	 */
+	if (v->is_vlan_as_veip_iface && v->iface) {
+		nss_ppe_vlan_mgr_trace("Vlan as VEIP interface: %d\n", v->xlate_info.port_id);
+		if (v->parent) {
+			nss_ppe_vlan_mgr_instance_deref(v->parent);
+		}
+
+		ret = ppe_drv_vlan_as_veip_del_xlate_rules(v->iface, &v->xlate_info);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			nss_ppe_vlan_mgr_warn("%p: failed to delete vlan translation, error = %d \n", v, ret);
+		}
+		v->xlate_info.port_id = 0;
+
+		if (v->iface) {
+			/*
+			 * Free VP structures
+			 */
+			ppe_vp_veip_free_vps(v->iface);
+
+			/*
+			 * Clear MAC addresses (both port-level and L3_IF)
+			 */
+			ppe_drv_iface_mac_addr_clear(v->iface);
+
+			/*
+			 * Free PPE driver resources
+			 */
+			ppe_drv_veip_deinit(v->iface);
+			ppe_drv_iface_deref(v->iface);
+			v->iface = NULL;
+		}
+
+		nss_ppe_vlan_mgr_minidump_free(v, "nss_vlan_pvt");
+		kfree(v);
+		return;
+	}
+#endif
 
 	/*
 	 * VSI based vlan instance cleanup.
@@ -2054,6 +2277,11 @@ static int nss_ppe_vlan_mgr_register_event(struct netdev_notifier_info *info)
 	if (!is_bond_master) {
 		if (is_vlan_as_vp) {
 			res = nss_ppe_vlan_mgr_alloc_configure_ppe_vp(v, dev, real_dev);
+#ifdef NSS_VLAN_VEIP_FEATURE_SUPPORT
+		} else if (((port_id = nss_ppe_vlan_mgr_get_port_id(real_dev)) != NSS_PPE_VLAN_MGR_INVALID_PORT) &&
+			   ppe_drv_port_is_gem(port_id)) {
+			res = nss_ppe_vlan_mgr_alloc_configure_ppe_veip(v, dev);
+#endif
 		} else {
 			res = nss_ppe_vlan_mgr_configure_ppe(v, dev);
 		}
@@ -2304,6 +2532,22 @@ static struct ctl_table nss_vlan_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &nss_ppe_vlan_mgr_tpid_proc_handler,
 	},
+#ifdef NSS_EXT_VLAN_FEATURE_SUPPORT
+	{
+		.procname       = "ctpid_ext",
+		.data           = &vlan_mgr_ctx.ctpid_ext,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = &nss_ppe_vlan_mgr_tpid_proc_handler,
+	},
+	{
+		.procname       = "stpid_ext",
+		.data           = &vlan_mgr_ctx.stpid_ext,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = &nss_ppe_vlan_mgr_tpid_proc_handler,
+	},
+#endif
 	{ }
 };
 
@@ -3073,6 +3317,10 @@ int __init nss_ppe_vlan_mgr_init_module(void)
 #endif
 	vlan_mgr_ctx.ctpid = ETH_P_8021Q;
 	vlan_mgr_ctx.stpid = ETH_P_8021Q;
+#ifdef NSS_EXT_VLAN_FEATURE_SUPPORT
+	vlan_mgr_ctx.ctpid_ext = ETH_P_8021AD;
+	vlan_mgr_ctx.stpid_ext = ETH_P_8021AD;
+#endif
 
 	vlan_mgr_ctx.sys_hdr = register_sysctl("ppe/vlan_client", nss_vlan_table);
 	if (!vlan_mgr_ctx.sys_hdr) {

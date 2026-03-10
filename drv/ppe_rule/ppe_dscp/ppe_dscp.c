@@ -9,6 +9,7 @@
 #include <ppe_drv.h>
 #include <ppe_drv_dscp.h>
 #include "ppe_dscp.h"
+#include "ppe_dscp_dump.h"
 
 /*
  * Global DSCP context
@@ -31,6 +32,23 @@ static inline void *ppe_dscp_alloc(size_t size)
 static inline void ppe_dscp_free(void *rule)
 {
 	vfree(rule);
+}
+
+/*
+ * ppe_dscp_db_entry_find()
+ *	Find DSCP DB entry by TOS.
+ */
+static struct ppe_dscp_db_entry *ppe_dscp_db_entry_find(struct ppe_dscp_base *dscp_g, uint8_t tos)
+{
+	struct ppe_dscp_db_entry *entry;
+
+	list_for_each_entry(entry, &dscp_g->dscp_map, list) {
+		if (entry->tos == tos) {
+			return entry;
+		}
+	}
+
+	return NULL;
 }
 
 /*
@@ -98,7 +116,9 @@ ppe_dscp_ret_t ppe_dscp_p_tbl_configure(struct ppe_dscp_rule *rule)
 	uint8_t pcp1_valid = rule->p_bit_flags & PPE_DSCP_FLAG_PCP1;
 	struct ppe_dscp *dscp = NULL;
 	uint8_t ecn_values[] = {0, 1, 2, 3}; /* All possible ECN values */
+	struct ppe_dscp_db_entry *entry;
 	int i, num_tos;
+	uint8_t tos_val;
 	ppe_dscp_ret_t ret;
 
 	dscp = (struct ppe_dscp *)ppe_dscp_alloc(sizeof(struct ppe_dscp));
@@ -156,12 +176,47 @@ ppe_dscp_ret_t ppe_dscp_p_tbl_configure(struct ppe_dscp_rule *rule)
 			dscp->info.tos_val = (dscp->info.tos_val & PPE_DSCP_MASK) | ecn_values[i];
 		}
 
+		tos_val = dscp->info.tos_val;
+
 		/*
 		 * Program PCP0 mapping if requested.
 		 */
 		if (pcp0_valid) {
 			dscp->info.pcp_val = rule->pcp0;
 			dscp->info.group_id = PPE_DRV_DSCP_PBIT_GRP_PCP0;
+
+			/*
+			 * Configure dscp_p_bit table.
+			 */
+			if (ppe_drv_dscp_p_tbl_configure(&dscp->info) != PPE_DRV_RET_SUCCESS) {
+				ppe_dscp_warn("%p: failed to configure table with tos %u, pcp %u\n",
+						dscp_g, dscp->info.tos_val, dscp->info.pcp_val);
+				ret = PPE_DSCP_RET_CONFIG_FAIL_RULE;
+				goto config_fail;
+			}
+
+			/*
+			 * Update DB
+			 */
+			entry = ppe_dscp_db_entry_find(dscp_g, tos_val);
+			if (!entry) {
+				entry = kzalloc(sizeof(struct ppe_dscp_db_entry), GFP_ATOMIC);
+				if (entry) {
+					entry->tos = tos_val;
+					list_add(&entry->list, &dscp_g->dscp_map);
+				} else {
+					ppe_dscp_warn("%p: Failed to allocate DB entry for tos %d\n", dscp_g, tos_val);
+				}
+			}
+
+			if (entry) {
+				if (rule->dir == PPE_DSCP_RULE_UPSTREAM_DIR) {
+					entry->pcp0_upstream = rule->pcp0;
+				} else {
+					entry->pcp0_downstream = rule->pcp0;
+				}
+				entry->valid = true;
+			}
 		}
 
 		/*
@@ -170,16 +225,39 @@ ppe_dscp_ret_t ppe_dscp_p_tbl_configure(struct ppe_dscp_rule *rule)
 		if (pcp1_valid) {
 			dscp->info.pcp_val = rule->pcp1;
 			dscp->info.group_id = PPE_DRV_DSCP_PBIT_GRP_PCP1;
-		}
 
-		/*
-		 * Configure dscp_p_bit table.
-		 */
-		if (ppe_drv_dscp_p_tbl_configure(&dscp->info) != PPE_DRV_RET_SUCCESS) {
-			ppe_dscp_warn("%p: failed to configure table with tos %u, pcp %u\n",
-					dscp_g, dscp->info.tos_val, dscp->info.pcp_val);
-			ret = PPE_DSCP_RET_CONFIG_FAIL_RULE;
-			goto config_fail;
+			/*
+			 * Configure dscp_p_bit table.
+			 */
+			if (ppe_drv_dscp_p_tbl_configure(&dscp->info) != PPE_DRV_RET_SUCCESS) {
+				ppe_dscp_warn("%p: failed to configure table with tos %u, pcp %u\n",
+						dscp_g, dscp->info.tos_val, dscp->info.pcp_val);
+				ret = PPE_DSCP_RET_CONFIG_FAIL_RULE;
+				goto config_fail;
+			}
+
+			/*
+			 * Update DB
+			 */
+			entry = ppe_dscp_db_entry_find(dscp_g, tos_val);
+			if (!entry) {
+				entry = kzalloc(sizeof(struct ppe_dscp_db_entry), GFP_ATOMIC);
+				if (entry) {
+					entry->tos = tos_val;
+					list_add(&entry->list, &dscp_g->dscp_map);
+				} else {
+					ppe_dscp_warn("%p: Failed to allocate DB entry for tos %d\n", dscp_g, tos_val);
+				}
+			}
+
+			if (entry) {
+				if (rule->dir == PPE_DSCP_RULE_UPSTREAM_DIR) {
+					entry->pcp1_upstream = rule->pcp1;
+				} else {
+					entry->pcp1_downstream = rule->pcp1;
+				}
+				entry->valid = true;
+			}
 		}
 
 		ppe_dscp_info("%p: DSCP to P bit rule configured with tos: %d", dscp_g, dscp->info.tos_val);
@@ -214,6 +292,18 @@ EXPORT_SYMBOL(ppe_dscp_p_tbl_configure);
  */
 void ppe_dscp_deinit(void)
 {
+	struct ppe_dscp_base *dscp_g = &ppe_dscp_gbl;
+	struct ppe_dscp_db_entry *entry, *tmp;
+
+	ppe_dscp_dump_deinit();
+
+	spin_lock_bh(&dscp_g->lock);
+	list_for_each_entry_safe(entry, tmp, &dscp_g->dscp_map, list) {
+		list_del(&entry->list);
+		kfree(entry);
+	}
+	spin_unlock_bh(&dscp_g->lock);
+
 	ppe_dscp_info("%s\n",__FUNCTION__);
 
 }
@@ -228,6 +318,8 @@ void ppe_dscp_init(struct dentry *d_rule)
 	struct ppe_dscp_base *dscp_g = &ppe_dscp_gbl;
 
 	spin_lock_init(&dscp_g->lock);
+	INIT_LIST_HEAD(&dscp_g->dscp_map);
 
+	ppe_dscp_dump_init(d_rule);
 }
 EXPORT_SYMBOL(ppe_dscp_init);

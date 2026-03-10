@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include "ppe_drv.h"
@@ -165,6 +154,96 @@ void ppe_drv_acl_destroy(struct ppe_drv_acl_ctx *ctx)
 EXPORT_SYMBOL(ppe_drv_acl_destroy);
 
 /*
+ * ppe_drv_acl_rule_prio_upd()
+ *      Update the priority of acl rule.
+ */
+ppe_drv_ret_t ppe_drv_acl_rule_prio_upd(struct ppe_drv_acl_ctx *ctx, uint16_t priority)
+{
+	sw_error_t error;
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	if (ctx->rule_valid) {
+		error = fal_acl_rule_priority_set(PPE_DRV_SWITCH_ID, ctx->list_id, PPE_DRV_ACL_RULE_ID, priority);
+		if (error != SW_OK) {
+			ppe_drv_stats_inc(&p->stats.acl_stats.rule_prio_upd_fail);
+			ppe_drv_warn("%p: Rule priority update failed for list_id: %d error: %d\n", ctx, ctx->list_id, error);
+			spin_unlock_bh(&p->lock);
+			return PPE_DRV_RET_ACL_RULE_PRI_UPDATE_FAIL;
+		}
+	}
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_acl_rule_prio_upd);
+
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+/*
+ * ppe_drv_acl_uni_to_l2vp_sc_map()
+ *      Incement the IPO rules count for ACL-bound UNI port.
+ */
+void ppe_drv_acl_uni_to_l2vp_sc_map(struct ppe_drv_acl_ctx *ctx)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+
+	spin_lock_bh(&p->lock);
+	if (ctx->dev_valid) {
+		if (ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L2_PORT ||
+				ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L3_PORT) {
+
+			if (ctx->dev >= PPE_DRV_PORTS_MAX) {
+				ppe_drv_warn("%p: invalid port number: %d\n", ctx, ctx->dev);
+				spin_unlock_bh(&p->lock);
+				return;
+			}
+
+			if (!acl->ppe_drv_acl_ipo_port_info[ctx->dev])
+				if(!ppe_drv_l2vp_sc_add(ctx->dev)) {
+					ppe_drv_warn("%p: loopback info cfg failed.\n", p);
+					spin_unlock_bh(&p->lock);
+					return;
+				}
+			acl->ppe_drv_acl_ipo_port_info[ctx->dev]++;
+		}
+	}
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_uni_to_l2vp_sc_map);
+
+/*
+ * ppe_drv_acl_uni_to_l2vp_sc_unmap()
+ *      Decrement the IPO rules count for ACL-bound UNI port.
+ */
+void ppe_drv_acl_uni_to_l2vp_sc_unmap(struct ppe_drv_acl_ctx *ctx)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_acl *acl = p->acl;
+
+	spin_lock_bh(&p->lock);
+	if (ctx->dev_valid) {
+		if (ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L2_PORT ||
+				ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L3_PORT) {
+
+			if (ctx->dev >= PPE_DRV_PORTS_MAX) {
+				ppe_drv_warn("%p: invalid port number: %d\n", ctx, ctx->dev);
+				return;
+			}
+
+			acl->ppe_drv_acl_ipo_port_info[ctx->dev]--;
+			ctx->dev_valid = false;
+
+			if (acl->ppe_drv_acl_ipo_port_info[ctx->dev] == 0)
+				ppe_drv_l2vp_sc_rmv(ctx->dev);
+		}
+	}
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_acl_uni_to_l2vp_sc_unmap);
+#endif
+
+/*
  * ppe_drv_acl_rule_fill()
  *	Fill rule related information.
  */
@@ -239,6 +318,9 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 				fal_rule->stag_vid_val = slice->rule.vlan.svid;
 				fal_rule->stag_vid_mask = slice->rule.vlan.svid_mask;
 				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_MAC_STAG_VID);
+				fal_rule->stagged_val = slice->rule.vlan.stag_fmt;
+                                fal_rule->stagged_mask = slice->rule.vlan.stag_fmt_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_MAC_STAGGED);
 				ppe_drv_trace("%p: slice vlan svid: %d, mask: 0x%x",
 					ctx, slice->rule.vlan.svid, slice->rule.vlan.svid_mask);
 			}
@@ -249,6 +331,9 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 				fal_rule->ctag_vid_op = slice->rule.vlan.range_en ?
 						FAL_ACL_FIELD_RANGE : FAL_ACL_FIELD_MASK;
 				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_MAC_CTAG_VID);
+				fal_rule->ctagged_val = slice->rule.vlan.ctag_fmt;
+				fal_rule->ctagged_mask = slice->rule.vlan.ctag_fmt_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_MAC_CTAGGED);
 				ppe_drv_trace("%p: slice vlan cvid: %d, mask: 0x%x",
 					ctx, fal_rule->ctag_vid_val, fal_rule->ctag_vid_mask);
 			}
@@ -286,6 +371,51 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 			ctx->rule_type_valid = true;
 			fal_rule->rule_type = FAL_ACL_RULE_MAC;
 			break;
+
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+		case PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN:
+			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
+			if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_CTPID) {
+				int index = ppe_drv_get_tpid_index(slice->rule.ext_vlan.ctpid_val, "ctpid");
+				if (index > 0) {
+					fal_rule->ctag_tpid_index_val = index;
+					fal_rule->ctag_tpid_index_mask = slice->rule.ext_vlan.ctpid_mask;
+					FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_CTAG_TPID_INDEX);
+					ppe_drv_trace("%p: slice ext vlan ctpid_val: %d ctpid_index: %d", ctx, slice->rule.ext_vlan.ctpid_val, index);
+				}
+			}
+			if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_STPID) {
+				int index = ppe_drv_get_tpid_index(slice->rule.ext_vlan.stpid_val, "stpid");
+				if (index > 0) {
+					fal_rule->stag_tpid_index_val = index;
+					fal_rule->stag_tpid_index_mask = slice->rule.ext_vlan.stpid_mask;
+					FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_STAG_TPID_INDEX);
+					ppe_drv_trace("%p: slice ext vlan stpid_val: %d stpid_index: %d", ctx, slice->rule.ext_vlan.stpid_val, index);
+				}
+			}
+			if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_DHCP) {
+				fal_rule->dhcp_type = slice->rule.ext_vlan.dhcp_type;
+				fal_rule->dhcp_type_mask = slice->rule.ext_vlan.dhcp_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_DHCP_TYPE);
+				ppe_drv_trace("%p: slice ext vlan dhcp: %d", ctx, slice->rule.ext_vlan.dhcp_type);
+			}
+			if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_MC) {
+				fal_rule->mc_type = slice->rule.ext_vlan.mc_type;
+				fal_rule->mc_type_mask = slice->rule.ext_vlan.mc_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_MC_TYPE);
+				ppe_drv_trace("%p: slice ext vlan mc: %d", ctx, slice->rule.ext_vlan.mc_type);
+			}
+			if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_L2) {
+				fal_rule->l2_proto_type = slice->rule.ext_vlan.l2_type;
+				fal_rule->l2_proto_type_mask = slice->rule.ext_vlan.l2_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_L2_PROTO);
+				ppe_drv_trace("%p: slice ext vlan l2: %d", ctx, slice->rule.ext_vlan.l2_type);
+			}
+
+			ctx->rule_type_valid = true;
+			fal_rule->rule_type = FAL_ACL_RULE_MAC;
+			break;
+#endif
 
 		case PPE_DRV_ACL_SLICE_TYPE_L2_MISC:
 			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_L2_MISC];
@@ -698,6 +828,7 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 	fal_rule->post_routing = info->cmn.post_routing_en;
 	fal_rule->qos_res_prec = info->cmn.qos_res_pre;
 	fal_rule->acl_pool = info->cmn.res_chain;
+	fal_rule->pri = info->cmn.pri;
 	if (info->cmn.is_ip) {
 		fal_rule->is_ip_val = A_TRUE;
 		fal_rule->is_ip_mask = 1;
@@ -780,7 +911,6 @@ static bool ppe_drv_acl_action_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 
 	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_CTAG_PCP) {
 		fal_rule->ctag_pri = action->ctag_pcp;
-		fal_rule->ctag_fmt = 1;
 		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_REMARK_CTAG_PRI);
 		ppe_drv_trace("%p: action cpcp: %d", ctx, fal_rule->ctag_pri);
 	}
@@ -793,7 +923,6 @@ static bool ppe_drv_acl_action_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 
 	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_STAG_PCP) {
 		fal_rule->stag_pri = action->stag_pcp;
-		fal_rule->stag_fmt = 1;
 		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_REMARK_STAG_PRI);
 		ppe_drv_trace("%p: action spcp: %d", ctx, fal_rule->stag_pri);
 	}
@@ -807,14 +936,12 @@ static bool ppe_drv_acl_action_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 
 	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_CVID) {
 		fal_rule->ctag_vid = action->cvid;
-		fal_rule->ctag_fmt = 1;
 		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_REMARK_CTAG_VID);
 		ppe_drv_trace("%p: action cvid: %d", ctx, fal_rule->ctag_vid);
 	}
 
 	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_SVID) {
 		fal_rule->stag_vid = action->svid;
-		fal_rule->stag_fmt = 1;
 		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_REMARK_STAG_VID);
 		ppe_drv_trace("%p: action svid: %d", ctx, fal_rule->stag_vid);
 	}
@@ -876,18 +1003,6 @@ static bool ppe_drv_acl_action_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 		ppe_drv_trace("%p: action DP: %d", ctx, fal_rule->int_dp);
 	}
 
-	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_STAG_FMT_TAGGED) {
-		/*
-		 * TODO check this.
-		 */
-	}
-
-	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_CTAG_FMT_TAGGED) {
-		/*
-		 * TODO check this.
-		 */
-	}
-
 	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_MIRROR_EN) {
 		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_MIRROR);
 		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_METADATA_EN);
@@ -899,6 +1014,87 @@ static bool ppe_drv_acl_action_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 		ppe_drv_trace("%p: ACL metadata mirroring", ctx);
 	}
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_CTAG_PID) {
+		fal_rule->ctag_tpid_index = action->ctag_pid;
+		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_REMARK_CTAG_TPID);
+		ppe_drv_trace("%p: action ctpid: %d", ctx, fal_rule->ctag_tpid_index);
+	}
+
+	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_STAG_PID) {
+		fal_rule->stag_tpid_index = action->stag_pid;
+		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_REMARK_STAG_TPID);
+		ppe_drv_trace("%p: action stpid: %d", ctx, fal_rule->stag_tpid_index);
+	}
+
+	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_TAGS_TO_RMV) {
+		fal_rule->tags_to_remove = action->tags_to_rmv;
+		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_REMOVE_TAGS);
+		ppe_drv_trace("%p: action tags to rmv: %d", ctx, fal_rule->tags_to_remove);
+	}
+
+	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_SRC_INFO_EN) {
+		fal_rule->src_info = action->src_info;
+		fal_rule->src_info_type = action->src_info_type;
+		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_SRC_INFO);
+		ppe_drv_trace("%p: action src info type: %d src info: %d", ctx,
+				fal_rule->src_info_type, fal_rule->src_info);
+	}
+
+	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_DSCP_PBIT_IDX) {
+		fal_rule->dscp_pcp_mapping_index = action->dscp_pbit_map_idx;
+		ppe_drv_trace("%p: action dscp to pcp mapping index: %d", ctx, fal_rule->dscp_pcp_mapping_index);
+	}
+
+	if (action->flags_ext & PPE_DRV_ACL_ACTION_FLAG_CTAG_PID_CMD) {
+		fal_rule->ctag_tpid_cmd = action->ctag_pid_cmd;
+		ppe_drv_trace("%p: action ctpid command: %d", ctx, fal_rule->ctag_tpid_cmd);
+	}
+
+	if (action->flags_ext & PPE_DRV_ACL_ACTION_FLAG_STAG_PID_CMD) {
+		fal_rule->stag_tpid_cmd = action->stag_pid_cmd;
+		ppe_drv_trace("%p: action stpid command: %d", ctx, fal_rule->stag_tpid_cmd);
+	}
+
+	if (action->flags_ext & PPE_DRV_ACL_ACTION_FLAG_CTAG_DEI_CMD) {
+		fal_rule->ctag_cfi_change_cmd = action->ctag_dei_cmd;
+		ppe_drv_trace("%p: action cdei command: %d", ctx, fal_rule->ctag_cfi_change_cmd);
+	}
+
+	if (action->flags_ext & PPE_DRV_ACL_ACTION_FLAG_STAG_DEI_CMD) {
+		fal_rule->stag_dei_change_cmd = action->stag_dei_cmd;
+		ppe_drv_trace("%p: action sdei command: %d", ctx, fal_rule->stag_dei_change_cmd);
+	}
+
+	if (action->flags_ext & PPE_DRV_ACL_ACTION_FLAG_CTAG_PCP_CMD) {
+		fal_rule->ctag_pri_change_cmd = action->ctag_pcp_cmd;
+		ppe_drv_trace("%p: action cpcp command: %d", ctx, fal_rule->ctag_pri_change_cmd);
+	}
+
+	if (action->flags_ext & PPE_DRV_ACL_ACTION_FLAG_STAG_PCP_CMD) {
+		fal_rule->stag_pri_change_cmd = action->stag_pcp_cmd;
+		ppe_drv_trace("%p: action spcp command: %d", ctx, fal_rule->stag_pri_change_cmd);
+	}
+
+	if (action->flags_ext & PPE_DRV_ACL_ACTION_FLAG_CTAG_VID_CMD) {
+		fal_rule->ctag_fmt = action->ctag_vid_cmd;
+		ppe_drv_trace("%p: action cvid command: %d", ctx, fal_rule->ctag_fmt);
+	}
+
+	if (action->flags_ext & PPE_DRV_ACL_ACTION_FLAG_STAG_VID_CMD) {
+		fal_rule->stag_fmt = action->stag_vid_cmd;
+		ppe_drv_trace("%p: action svid command: %d", ctx, fal_rule->stag_fmt);
+	}
+
+	if (action->flags & PPE_DRV_ACL_ACTION_FLAG_COUNTER_EN) {
+		/* Fill hw counter id */
+		fal_rule->counter_id = action->hw_counter_id;
+		fal_rule->counter_mode = action->counter_mode;
+		FAL_ACTION_FLG_SET(fal_rule->action_flg, FAL_ACL_ACTION_COUNTER);
+		ppe_drv_trace("%p: action counter id: %d counter mode: %d", ctx,
+				fal_rule->counter_id, fal_rule->counter_mode);
+	}
+#endif
 	return true;
 }
 
@@ -922,20 +1118,27 @@ static bool ppe_drv_acl_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_acl_rul
 }
 
 /*
- * ppe_drv_acl_src_get()
- *	Map the source for ACL binding.
+ * ppe_drv_acl_dev_get()
+ *	Map the device for ACL binding.
  */
-static void ppe_drv_acl_src_get(struct ppe_drv_acl_rule *info, fal_acl_bind_obj_t *bind_obj)
+static void ppe_drv_acl_dev_get(struct ppe_drv_acl_rule *info, fal_acl_bind_obj_t *bind_obj)
 {
-	if (info->stype == PPE_DRV_ACL_SRC_TYPE_PORT_BITMAP) {
+	if (info->dev_type == PPE_DRV_ACL_DEV_TYPE_PORT_BITMAP) {
 		*bind_obj = FAL_ACL_BIND_PORTBITMAP;
-	} else if (info->stype == PPE_DRV_ACL_SRC_TYPE_PORT_NUM) {
+	} else if (info->dev_type == PPE_DRV_ACL_DEV_TYPE_PORT_NUM) {
 		*bind_obj = FAL_ACL_BIND_PORT;
-	} else if (info->stype == PPE_DRV_ACL_SRC_TYPE_SC) {
+	} else if (info->dev_type == PPE_DRV_ACL_DEV_TYPE_SC) {
 		*bind_obj = FAL_ACL_BIND_SERVICE_CODE;
-	} else if (info->stype == PPE_DRV_ACL_SRC_TYPE_DEST_L3) {
+	} else if (info->dev_type == PPE_DRV_ACL_DEV_TYPE_DST_L3_IF) {
 		*bind_obj = FAL_ACL_BIND_L3_IF;
 	}
+#ifdef PPE_ACL_DEST_BIND_SUPPORT
+	else if (info->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L3_PORT) {
+		*bind_obj = FAL_ACL_BIND_L3_DST_PORT;
+	} else if (info->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L2_PORT) {
+		*bind_obj = FAL_ACL_BIND_DST_PORT;
+	}
+#endif
 }
 
 /*
@@ -948,8 +1151,6 @@ void ppe_drv_acl_stats_update(struct ppe_drv_acl_ctx *ctx)
 	uint32_t delta_pkts;
 	uint32_t delta_bytes;
 	fal_entry_counter_t acl_cntrs = {0};
-
-	ppe_drv_trace("%p: updating acl stats", ctx);
 
 	err = fal_acl_counter_get(PPE_DRV_SWITCH_ID, ctx->fal_rule.hw_info.hw_rule_id, &acl_cntrs);
 	if (err != SW_OK) {
@@ -1088,6 +1289,7 @@ ppe_drv_ret_t ppe_drv_acl_configure(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 {
 	sw_error_t error;
 	fal_acl_bind_obj_t bind_obj;
+	fal_acl_direc_t dir = FAL_ACL_DIREC_IN;
 	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
@@ -1107,10 +1309,17 @@ ppe_drv_ret_t ppe_drv_acl_configure(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 	}
 
 	/*
-	 * Bind ACL list with source
+	 * Bind ACL list with devices.
 	 */
-	ppe_drv_acl_src_get(info, &bind_obj);
-	error = fal_acl_list_bind(PPE_DRV_SWITCH_ID, ctx->list_id, FAL_ACL_DIREC_IN, bind_obj, info->src);
+	ppe_drv_acl_dev_get(info, &bind_obj);
+
+	/*
+	 * ACL direction: ingress at Pre-IPO, else egress
+	 */
+#ifdef PPE_ACL_DEST_BIND_SUPPORT
+	dir = (ctx->type == PPE_DRV_ACL_PREIPO) ? FAL_ACL_DIREC_IN : FAL_ACL_DIREC_EG;
+#endif
+	error = fal_acl_list_bind(PPE_DRV_SWITCH_ID, ctx->list_id, dir, bind_obj, info->dev);
 	if (error != SW_OK) {
 		ppe_drv_stats_inc(&p->stats.acl_stats.rule_bind_fail);
 		ppe_drv_warn("%p: Could not bind ACL list, error = %d, list_id: %d\n", ctx, error, ctx->list_id);
@@ -1125,6 +1334,9 @@ ppe_drv_ret_t ppe_drv_acl_configure(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 	}
 
 	ctx->rule_valid = true;
+	ctx->dev = info->dev;
+	ctx->dev_type = info->dev_type;
+	ctx->dev_valid = true;
 	ppe_drv_acl_dump(ctx);
 	ppe_drv_info("Created ACL rule\n");
 	spin_unlock_bh(&p->lock);
@@ -1224,7 +1436,7 @@ nxt_list:
 		goto fail;
 	}
 
-	error = fal_acl_list_creat(PPE_DRV_SWITCH_ID, list_id, pri);
+	error = fal_acl_list_creat(PPE_DRV_SWITCH_ID, list_id, PPE_DRV_ACL_LIST_DEFAULT_PRI);
 	if (error != SW_OK) {
 		/*
 		 * If this list id is already used by other sub system, mark it

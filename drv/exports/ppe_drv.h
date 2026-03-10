@@ -19,6 +19,10 @@
 #include <linux/if_ether.h>
 #include "ppe_drv_iface.h"
 #include <linux/netdevice.h>
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+#include "ppe_drv_veip.h"
+#endif
+#include "ppe_drv_sc.h"
 
 /*
  * FSE flags
@@ -33,14 +37,21 @@
 #define PPE_DRV_INT_PRI_MIN 0
 #define PPE_DRV_INT_PRI_MAX 15
 
+/*
+ * PPE Multicast Queue Class Max value
+ */
+#define PPE_DRV_MCAST_QUEUE_CLASS_MAX 3			/**< Maximum multicast queue class (0-3) */
+
 #define PPE_DRV_MHT_SWITCH_ID	1			/**< MHT switch ID */
 
 /*
  * PPE Assist feature flags
  */
-#define PPE_DRV_ASSIST_FEATURE_RFS_ETH	0x00000001      /* PPE Assist feature to configure RFS */
-#define PPE_DRV_ASSIST_FEATURE_RFS_WLAN	0x00000002      /* PPE Assist feature to configure RFS for WLAN flows */
-#define PPE_DRV_ASSIST_FEATURE_PRIORITY	0x00000004      /* PPE Assist feature to configure Priority */
+#define PPE_DRV_ASSIST_FEATURE_RFS_ETH		0x00000001      /* PPE Assist feature to configure RFS */
+#define PPE_DRV_ASSIST_FEATURE_RFS_WLAN		0x00000002      /* PPE Assist feature to configure RFS for WLAN flows */
+#define PPE_DRV_ASSIST_FEATURE_PRIORITY		0x00000004      /* PPE Assist feature to configure Priority */
+#define PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL	0x00000008		/* PPE Assist feature to configure RFS for Tunnel flows */
+#define PPE_DRV_ASSIST_FEATURE_RFS_DEFAULT	0x00000010      /* PPE Assist feature to configure RFS */
 
 #define PPE_DRV_SERVICE_CLASS_IS_VALID(sc)	((sc >= PPE_DRV_SAWF_SC_START) && (sc <= PPE_DRV_SAWF_SC_END))
 
@@ -100,6 +111,13 @@
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT	0x8	/* Hairpin NAT loopback feature */
 
 #define PPE_DRV_JUMBO_MAX				9216	/* Maximum MRU value */
+
+/*
+ * Update rule type
+ */
+#define PPE_DRV_UPDATE_RULE_TYPE_QOS	0x01
+#define PPE_DRV_UPDATE_RULE_TYPE_DSCP	0x02
+#define PPE_DRV_UPDATE_RULE_TYPE_SAWF	0x04
 
 /*
  * ppe_drv_ip_type
@@ -265,6 +283,15 @@ struct ppe_drv_vp_dl_qdisc_rule {
 };
 
 /**
+ * ppe_drv_accel_rule_dir
+ *	Information about direction to accelerate.
+ */
+struct ppe_drv_accel_rule_dir {
+	bool flow_accel;	/**< Set if acceleration enabled in flow direction. */
+	bool return_accel;	/**< Set if acceleration enabled in return direction. */
+};
+
+/**
  * ppe_drv_top_if_rule
  *	Information for top interface in hierarchy.
  */
@@ -282,6 +309,7 @@ struct ppe_drv_service_class_rule {
 	uint32_t return_mark;		/**< SAWF metadata information in return direction. */
 	uint8_t flow_service_class;	/**< Service class id in flow direction. */
 	uint8_t return_service_class;	/**< Service class id in return direction. */
+	uint16_t valid_flags;		/**< Flags associated with SAWF mark update. */
 };
 
 /**
@@ -416,6 +444,26 @@ struct ppe_drv_notifier_ops {
 	struct list_head entry;				/* List head */
 };
 
+/*
+ * ppe_drv_flow_rule_dir
+ *	Identifies the direction of flow entry
+ */
+typedef enum ppe_drv_flow_rule_dir {
+	PPE_DRV_FLOW_RULE_DIR_FLOW = 0,		/* Rule is of flow direction */
+	PPE_DRV_FLOW_RULE_DIR_RETURN = 1,	/* Rule is of return direction */
+} ppe_drv_flow_rule_dir_t;
+
+/*
+ * ppe_drv_unidir_update_info
+ *	Unidirection rule update
+ */
+struct ppe_drv_unidir_update_info {
+	struct ppe_drv_qos_rule qos;	/**< QoS information to update. */
+	struct ppe_drv_dscp_rule dscp; /**< DSCP information to update. */
+	ppe_drv_flow_rule_dir_t dir;	/**< Flow rule direction to update. */
+	uint16_t valid_flags;		/**< Flags associated with QoS/DSCP update. */
+};
+
 /**
  * enum ppe_drv_ret
  *	PPE return status
@@ -431,6 +479,8 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_FAILURE_INVALID_PARAM,		/**< Failure due to invalid parameter */
 	PPE_DRV_RET_PORT_NOT_FOUND,			/**< Port not found */
 	PPE_DRV_RET_VSI_NOT_FOUND,			/**< VSI not found */
+	PPE_DRV_RET_VSI_MEMBER_NOT_FOUND,		/**< VSI member not found */
+	PPE_DRV_RET_VSI_MEMBER_NOT_SET,			/**< VSI memeber not set */
 	PPE_DRV_RET_L3_IF_NOT_FOUND,			/**< L3_IF not found */
 	PPE_DRV_RET_PORT_ALLOC_FAIL,			/**< Port allocation fails */
 	PPE_DRV_RET_L3_IF_ALLOC_FAIL,			/**< L3_IF allocation fails */
@@ -453,6 +503,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_BASE_IFACE_NOT_FOUND,		/**< Base interface not found */
 	PPE_DRV_RET_VLAN_TPID_FAIL,			/**< VLAN TPID not found */
 	PPE_DRV_RET_PORT_ROLE_FAIL,			/**< Port role configuration failed */
+	PPE_DRV_RET_VLAN_RULE_INVALID,			/**< VLAN rule invalid */
 	PPE_DRV_RET_INGRESS_VLAN_FAIL,			/**< Ingress vlan configuration failed */
 	PPE_DRV_RET_EGRESS_VLAN_FAIL,			/**< Egress vlan configuration failed */
 	PPE_DRV_RET_VLAN_INGRESS_DEL_FAIL,		/**< Ingress vlan deletion configuration failed */
@@ -492,10 +543,12 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL,		/**< QoS scheduler configuration failed. */
 	PPE_DRV_RET_QOS_SHAPER_CFG_FAIL,		/**< QoS shaper configuration failed. */
 	PPE_DRV_RET_QOS_PORT_CFG_FAIL,			/**< QoS port configuration failed. */
+	PPE_DRV_RET_QOS_TCONT_CFG_FAIL,			/**< QoS tcont configuration failed. */
 	PPE_DRV_RET_PORT_NO_OFFLOAD,			/**< Offload is disabled on the PPE port */
 	PPE_DRV_RET_ACL_RULE_INVALID,			/**< ACL rule invalid */
 	PPE_DRV_RET_ACL_RULE_ADD_FAIL,			/**< Failed to add ACL rule */
 	PPE_DRV_RET_ACL_RULE_BIND_FAIL,			/**< Failed to bind ACL rule to src */
+	PPE_DRV_RET_ACL_RULE_PRI_UPDATE_FAIL,		/**< Failed to update the acl rule priority */
 	PPE_DRV_RET_POLICER_RULE_BIND_FAIL,		/**< Failed to bind Policer rule */
 	PPE_DRV_RET_BASE_DEV_NOT_FOUND,			/**< Base Device not found */
 	PPE_DRV_RET_BASE_PORT_NOT_FOUND,		/**< Base Port not found */
@@ -529,6 +582,50 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_DSCP_PBIT_TBL_CONFIG_FAIL,		/**< Failed to configure DSCP_PBIT_MAP table. */
 	PPE_DRV_RET_DSCP_PBIT_TBL_RST_FAIL,		/**< Failed to reset DSCP_PBIT_MAP table. */
 	PPE_DRV_RET_L2_DSCP_PBIT_TBL_CONFIG_FAIL,	/**< Failed to configure L2_DSCP_PBIT_MAP table. */
+	PPE_DRV_RET_FAILURE_VLAN_PCP_MARKING,		/**< Failure due to invalid VLAN PCP marking */
+	PPE_DRV_RET_PM_GEN_RULE_INVALID,		/**< PM gen rule invalid */
+	PPE_DRV_RET_IN_PM_COUNTER_GEN_CREATE_FAIL,	/**< Failed to create the PM counter gen rule in PRE_IPO_PM_COUNTER_TBL. */
+	PPE_DRV_RET_EG_PM_COUNTER_GEN_CREATE_FAIL,	/**< Failed to create the PM counter gen rule in EG_PM_COUNTER_TBL. */
+	PPE_DRV_RET_PM_COUNTER_GET_FAIL,		/**< Failed to get the PM counter stats. */
+	PPE_DRV_RET_WLAN_METADATA_UPDATE_FAIL,		/**< Failure to update wlan qos entry which includes fields such as wifi_qos, tree_id, flow_cookie, etc. */
+	PPE_DRV_RET_QOS_UPDATE_FAIL,			/**< Failure to update generic qos entry which includes fields such as int_pri, dscp, pcp values. */
+	PPE_DRV_RET_FLOW_ENTRY_UPDATE_FAIL,		/**< Failure to update flow entry in hardware */
+	PPE_DRV_RET_UNIDIR_CONN_MATCH_FAIL,		/**< Failure to find connection object at the time of unidirection update */
+	PPE_DRV_RET_PORT_MGMT_ISOL_CONFIG_FAIL,		/**< Failed to configure the port isolation. */
+	PPE_DRV_RET_PORT_MGMT_ACT_CONFIG_FAIL,		/**< Failed to configure the action control info. */
+	PPE_DRV_RET_PORT_MGMT_ISOL_DEFAULT_FAIL,	/**< Failed to configure the default isol config. */
+	PPE_DRV_RET_PORT_MGMT_MAC_LRN_LMT_CONFIG_FAIL,	/**< Failed to configure the mac learn limit. */
+	PPE_DRV_RET_PORT_MGMT_FID_GET_FAIL,		/**< Failed to get the vsi for the port. */
+	PPE_DRV_RET_PORT_MGMT_MAC_FILTER_CLR_FAIL,	/**< Failed to clear the mac filter table. */
+	PPE_DRV_RET_PORT_MGMT_MAC_FILTER_SET_FAIL,	/**< Failed to config the mac filter. */
+	PPE_DRV_RET_UCAST_PRIO_TBL_MAP_FAIL,		/**< Failed to set profile id for a port. */
+	PPE_DRV_RET_DOT1P_RULE_INVALID,			/**< DOT1P rule invalid */
+	PPE_DRV_RET_DOT1P_RULE_ADD_FAIL,		/**< Failed to add DOT1P rule */
+	PPE_DRV_RET_DOT1P_RULE_BIND_GEMPORT_FAIL,	/**< Failed to bind DOT1P rule to gemport cfg */
+	PPE_DRV_RET_DOT1P_RULE_ENABLE_FAIL,		/**< Failed to enable gemport gen */
+	PPE_DRV_RET_DOT1P_RULE_BIND_POLICER_ID_FAIL,	/**< Failed to bind DOT1P rule to policer id */
+	PPE_DRV_RET_DOT1P_GLOBAL_CFG_FAIL,		/**< DOT1P global config failed */
+	PPE_DRV_RET_DOT1P_DEFAULT_CFG_FAIL,		/**< DOT1P default config failed */
+	PPE_DRV_RET_GEMPORT_RULE_INVALID,		/**< Gemport rule invalid */
+	PPE_DRV_RET_GEMPORT_RULE_ADD_FAIL,		/**< Failed to add Gemport rule */
+	PPE_DRV_RET_GEMPORT_RULE_ENABLE_FAIL,		/**< Failed to enable gemport mapping */
+	PPE_DRV_RET_COS_MAP_CFG_FAIL,			/**< Failed to configure QoS mapping. */
+	PPE_DRV_RET_VLAN_RULE_HW_ID_NOT_FOUND,		/**< Invalid HW index in VLAN tables */
+	PPE_DRV_RET_VEIP_LIST_DEL_FAIL,			/**< VEIP list deletion failed. */
+	PPE_DRV_RET_VEIP_VSI_REMAP_FAIL,		/**< VSI Remapping failed. */
+	PPE_DRV_RET_VEIP_VPGROUP_SET_FAIL,		/**< VP group set failed in EG_VP table. */
+	PPE_DRV_RET_VEIP_VPGROUP_CLEAR_FAIL,		/**< VP group clear failed in EG_VP table. */
+	PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD,		/**< HGU US flow rule addition. */
+	PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD_FAIL,		/**< HGU US flow rule addition failed. */
+	PPE_DRV_RET_VEIP_VSI_ATTACH_FAIL,		/**< VSI attach failed for VEIP VP. */
+	PPE_DRV_RET_VEIP_VSI_DETACH_FAIL,		/**< VSI detach failed for VEIP VP. */
+	PPE_DRV_RET_VEIP_INIT_FAIL,			/**< VEIP init failed. */
+	PPE_DRV_RET_MCAST_ENTRY_ADD_FAIL,		/**< Multicast entry add fail */
+	PPE_DRV_RET_MCAST_ENTRY_DELETE_FAIL, 		/**< Multicast entry delete fail */
+	PPE_DRV_RET_MCAST_STATUS_SET_FAIL,		/**< Multicast set status failed */
+	PPE_DRV_RET_MCAST_GLOBAL_CFG_FAIL,		/**< Multicast global configuration failed */
+	PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL,		/**< RPS Create Rule return failed */
+	PPE_DRV_RET_TUN_RPS_DESTROY_RULE_FAIL,		/**< RPS Destroy Rule return failed */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 
@@ -563,6 +660,18 @@ int16_t ppe_drv_queue_from_core(uint8_t core);
  * none.
  */
 void ppe_drv_loopback_base_queue(uint8_t queue_id, uint32_t loopback_feature_type);
+
+/**
+ * ppe_drv_gro_core2queue_mapping
+ *	Provide core to queue gro mapping.
+ *
+ * @param[in] core core_id.
+ * @param[in] queue_id  queue_id.
+ *
+ * @return
+ * none.
+ */
+void ppe_drv_gro_core2queue_mapping(uint8_t core, uint8_t queue_id);
 
 /**
  * ppe_drv_core2queue_mapping
@@ -757,4 +866,127 @@ int8_t ppe_drv_get_qdisc_rule_flag(int32_t flow_index);
  */
 void ppe_drv_wlan_rfs_enable_set(bool enable);
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+/**
+ * ppe_drv_get_tpid_index
+ *	Return TPID table index for the given TPID value.
+ *
+ * @datatypes
+ * uint16_t
+ *
+ * @param[in] tpid   TPID value to look up.
+ * @param[in] type   TPID type string (e.g., "stag", "ctag"), used for logging.
+ *
+ * @return
+ * TPID index (0-based) on success; negative value on failure
+ * (e.g., TPID not supported or type invalid).
+ */
+int ppe_drv_get_tpid_index(uint16_t tpid, const char *type);
+
+/**
+ * ppe_drv_get_vsi_num
+ *	Get the number of VSIs supported by the PPE driver.
+ *
+ * @datatypes
+ * int
+ *
+ * @return
+ * Total number of supported VSIs (>=0). Returns a negative value on error.
+ * Valid VSI indices range from 0 to (returned_value - 1).
+ */
+int ppe_drv_get_vsi_num(void);
+#endif
+
+/*
+ * ppe_drv_l2vp_sc_add
+ * 	Add the sc configs in L2_VP port tbl.
+ *
+ * @datatypes
+ * int32_t
+ *
+ * @param[in] dest_port_id    UNI port id for PON.
+ *
+ * @return
+ * Success or error code.
+ */
+bool ppe_drv_l2vp_sc_add(uint32_t dest_port_id);
+
+/*
+ * ppe_drv_l2vp_sc_rmv()
+ *      Remove the sc configs in L2_VP port tbl.
+ *
+ * @datatypes
+ * int32_t
+ *
+ * @param[in] dest_port_id    UNI port id for PON.
+ *
+ * @return
+ * Success or error code.
+ */
+bool ppe_drv_l2vp_sc_rmv(uint32_t dest_port_id);
+
+/**
+ * ppe_drv_confgiure_ucast_prio_map_tbl
+ *	Configure unicast priority map table for RFS/DS flows
+ *
+ * @param[in] profile_id Profile ID for which priority map is to be configured.
+ * @param[in] prio_map   Array of priority values.
+ *
+ * @return
+ * true if successful, false otherwise.
+ */
+bool ppe_drv_confgiure_ucast_prio_map_tbl(uint8_t profile_id, uint8_t *prio_map);
+
+/**
+ * ppe_drv_port_mcast_priority_class_set
+ *	Set multicast priority to queue class mapping for a port.
+ *
+ * @param[in] port_id    Port ID (must be < PPE_DRV_PHYSICAL_MAX).
+ * @param[in] priority   Priority value (must be < PPE_DRV_MAX_PRIORITY).
+ * @param[in] queue_class Queue class (0-PPE_DRV_MCAST_QUEUE_CLASS_MAX).
+ *
+ * @return
+ * true if successful, false otherwise.
+ */
+bool ppe_drv_port_mcast_priority_class_set(uint32_t port_id, uint8_t priority, uint8_t queue_class);
+
+#ifdef NSS_PPE_PON_SUPPORT
+/**
+ * ppe_drv_pon_get_pq_config
+ *	Provides pq to enq_vp and int_pri mapping.
+ *
+ * @param[in] pq	priority queue.
+ * @param[in] enq_vp	enqueue vp.
+ * @param[in] int_pri	int_pri.
+ *
+ * @return
+ * true or false
+ */
+bool ppe_drv_pon_get_pq_config(uint8_t pq, uint8_t *enq_vp, uint8_t *int_pri);
+
+/**
+ * ppe_drv_pon_map_enq_vp_to_base_pq
+ *	Provides enq_vp mapped to the given base pq.
+ *
+ * @param[in] base_pq	base priority queue.
+ * @param[in] enq_vp	enqueue vp.
+ *
+ * @return
+ * success or error code
+ */
+ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp);
+
+#endif
+
+/**
+ * ppe_drv_hw_gro_feature_set
+ *	Set HW GRO feature state
+ *
+ * @param[in] dev	Netdevice on which HW GRO is enabled or disabled
+ * @param[in] enable	Enable or disable for HW GRO
+ *
+ * @return
+ * none.
+ */
+bool ppe_drv_hw_gro_feature_set(struct net_device *dev, bool enable);
 #endif /* _PPE_DRV_H_ */

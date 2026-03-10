@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /*
@@ -81,12 +70,16 @@
 
 #define PPE_DRV_V4_CONN_FLAG_FLOW_SW_MDATA_VALID	0x00800000
 					/* Flow has valid flow idx set*/
-
 #define PPE_DRV_V4_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP	0x01000000
 					/* Flow is full inline encap direction */
 
 #define PPE_DRV_V4_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP	0x02000000
 					/* Flow is full inline encap direction */
+#define PPE_DRV_V4_CONN_FLAG_FLOW_ACCEL_DISABLE			0x04000000
+					/* Disable PPE acceleration of this Flow. */
+#define PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO	0x08000000
+					/* Flow has HW GRO enabled */
+
 /*
  * ppe_drv_v4_addr_equal()
  *	compare ipv4 address
@@ -188,6 +181,8 @@ struct ppe_drv_v4_conn_flow {
 	atomic_t rx_bytes;			/* Number of Rx bytes */
 	atomic_t tx_packets;			/* Number of Tx packets */
 	atomic_t tx_bytes;			/* Number of Tx bytes */
+
+	bool no_stats_update;			/* No stats update for the flow */
 };
 
 /**
@@ -911,6 +906,15 @@ static inline void ppe_drv_v4_conn_flow_host_qdisc_info_set(struct ppe_drv_v4_co
 	pcf->qdisc_info.flags = flags;
 	pcf->qdisc_info.class_id = class_id;
 	pcf->qdisc_info.qdisc_xmit_dev = dev;
+}
+
+/*
+ * ppe_drv_v4_conn_flow_tree_id_type_get()
+ *	Get flow metadata type.
+ */
+static inline ppe_drv_tree_id_type_t ppe_drv_v4_conn_flow_tree_id_type_get(struct ppe_drv_v4_conn_flow *pcf)
+{
+	return pcf->fl_mdata.tree_id_data.type;
 }
 
 /*

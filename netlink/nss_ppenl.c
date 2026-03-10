@@ -1,7 +1,7 @@
 /*
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
- * SPDX-License-Identifier: ISC
- */
+* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+* SPDX-License-Identifier: ISC
+*/
 
 #include <linux/if.h>
 #include <linux/kernel.h>
@@ -22,9 +22,43 @@
 #include "nss_ppenl_qos_if.h"
 #include "nss_ppenl_exception.h"
 #include "nss_ppenl_exception_if.h"
+#include "nss_ppenl_cos_map.h"
+#include "nss_ppenl_cos_map_if.h"
 #ifdef NSS_PPE_DSCP_PBIT_FEATURE_SUPPORT
 #include "nss_ppenl_dscp.h"
 #include "nss_ppenl_dscp_if.h"
+#endif
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+#include "nss_ppenl_pm.h"
+#include "nss_ppenl_pm_if.h"
+#endif
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+#include "nss_ppenl_vlan.h"
+#include "nss_ppenl_vlan_if.h"
+#endif
+#ifdef NSS_PPE_PPENL_PORT_MGMT_SUPPORT
+#include "nss_ppenl_port_mgmt.h"
+#include "nss_ppenl_port_mgmt_if.h"
+#endif
+#ifdef NSS_PPE_FEATURE_DOT1P
+#include "nss_ppenl_dot1p.h"
+#include "nss_ppenl_dot1p_if.h"
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+#include "nss_ppenl_gemport.h"
+#include "nss_ppenl_gemport_if.h"
+#endif
+#ifdef NSS_PPE_EDMA_DDRQ_FEATURE_SUPPORT
+#include "nss_ppenl_edma_ddrq.h"
+#include "nss_ppenl_edma_ddrq_if.h"
+#endif
+#ifdef NSS_PPE_MCAST_FEATURE_SUPPORT
+#include "nss_ppenl_mcast.h"
+#include "nss_ppenl_mcast_if.h"
+#endif
+#if defined(CONFIG_NSS_PPENL_TUN_RPS)
+#include "nss_ppenl_tun_rps.h"
+#include "nss_ppenl_tun_rps_if.h"
 #endif
 
 /*
@@ -75,6 +109,37 @@ static struct nss_ppenl_family family_handlers[] = {
         },
 	{
 		/*
+		 * NSS_PPENL_COS_MAP
+		 */
+		.name = NSS_PPENL_COS_MAP_FAMILY,       	/* CosMap Family */
+		.entry = NSS_PPENL_COS_MAP_INIT,        	/* Init */
+		.exit = NSS_PPENL_COS_MAP_EXIT,		/* exit */
+		.valid = CONFIG_NSS_PPENL_COS_MAP       	/* 1 or 0 */
+	},
+#ifdef NSS_PPE_FEATURE_DOT1P
+        {
+                /*
+                 * NSS_PPENL_DOT1P
+                 */
+                .name = NSS_PPENL_DOT1P_FAMILY,       	/* Dot1p Family */
+                .entry = NSS_PPENL_DOT1P_INIT,        	/* Init */
+                .exit = NSS_PPENL_DOT1P_EXIT,		/* exit */
+                .valid = CONFIG_NSS_PPENL_DOT1P       	/* 1 or 0 */
+        },
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+        {
+                /*
+                 * NSS_PPENL_GEM_PORT
+                 */
+                .name = NSS_PPENL_GEM_PORT_FAMILY,      /* Gemp port Family */
+                .entry = NSS_PPENL_GEM_PORT_INIT,	/* Init */
+                .exit = NSS_PPENL_GEM_PORT_EXIT,	/* exit */
+                .valid = CONFIG_NSS_PPENL_GEM_PORT      /* 1 or 0 */
+        },
+#endif
+	{
+		/*
 		 * NSS_PPENL_EXCEPTION
 		 */
 		.name = NSS_PPENL_EXCEPTION_FAMILY,		/* Exception Family */
@@ -93,7 +158,72 @@ static struct nss_ppenl_family family_handlers[] = {
 		.valid = CONFIG_NSS_PPENL_DSCP		/* 1 or 0 */
 	},
 #endif
-
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	{
+		/*
+		 * NSS_PPENL_PM
+		 */
+		.name = NSS_PPENL_PM_FAMILY,		/* PM Family */
+		.entry = NSS_PPENL_PM_INIT,		/* Init */
+		.exit = NSS_PPENL_PM_EXIT,		/* exit */
+		.valid = CONFIG_NSS_PPENL_PM		/* 1 or 0 */
+	},
+#endif
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	{
+		/*
+		 * NSS_PPENL_VLAN
+		 */
+		.name = NSS_PPENL_VLAN_FAMILY,           /* VLAN Family */
+		.entry = NSS_PPENL_VLAN_INIT,            /* Init */
+		.exit = NSS_PPENL_VLAN_EXIT,             /* exit */
+		.valid = CONFIG_NSS_PPENL_VLAN           /* 1 or 0 */
+	},
+#endif
+#ifdef NSS_PPE_PPENL_PORT_MGMT_SUPPORT
+	{
+		/*
+		 * NSS_PPENL_PORT_MGMT
+		 */
+		.name = NSS_PPENL_PORT_MGMT_FAMILY,		/* PORT_MGMT Family */
+		.entry = NSS_PPENL_PORT_MGMT_INIT,		/* Init */
+		.exit = NSS_PPENL_PORT_MGMT_EXIT,		/* exit */
+		.valid = CONFIG_NSS_PPENL_PORT_MGMT		/* 1 or 0 */
+	},
+#endif
+#ifdef NSS_PPE_EDMA_DDRQ_FEATURE_SUPPORT
+	{
+		/*
+		 * NSS_PPENL_EDMA_DDRQ
+		 */
+		.name = NSS_PPENL_EDMA_DDRQ_FAMILY,	/* EDMA DDRQ Family */
+		.entry = NSS_PPENL_EDMA_DDRQ_INIT,	/* Init */
+		.exit = NSS_PPENL_EDMA_DDRQ_EXIT,	/* exit */
+		.valid = CONFIG_NSS_PPENL_EDMA_DDRQ	/* 1 or 0 */
+	},
+#endif
+#if defined(CONFIG_NSS_PPENL_TUN_RPS)
+	{
+		/*
+		 * NSS_PPENL_TUN_RPS
+		 */
+		.name = NSS_PPENL_TUN_RPS_FAMILY,		/* Tunnel RPS Family */
+		.entry = NSS_PPENL_TUN_RPS_INIT,		/* Init */
+		.exit = NSS_PPENL_TUN_RPS_EXIT,			/* exit */
+		.valid = CONFIG_NSS_PPENL_TUN_RPS		/* 1 or 0 */
+	},
+#endif
+#ifdef NSS_PPE_MCAST_FEATURE_SUPPORT
+	{
+		/*
+		 * NSS_PPENL_MCAST
+		 */
+		.name = NSS_PPENL_MCAST_FAMILY,       	/* Multicast Family */
+		.entry = NSS_PPENL_MCAST_INIT,        	/* Init */
+		.exit = NSS_PPENL_MCAST_EXIT,		/* exit */
+		.valid = CONFIG_NSS_PPENL_MCAST       	/* 1 or 0 */
+	},
+#endif
 };
 
 #define NSS_PPENL_FAMILY_HANDLER_SZ ARRAY_SIZE(family_handlers)

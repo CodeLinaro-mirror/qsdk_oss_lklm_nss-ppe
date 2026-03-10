@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/debugfs.h>
@@ -58,7 +47,73 @@ static const char *ppe_acl_dump_slice_type_str[] = {
         "SLICE_IP_MISC",         /* ACL IP miscellaneous slice type. */
         "SLICE_UDF_012",         /* ACL UDF 012 slice type. */
         "SLICE_UDF_123",         /* ACL UDF 123 slice type. */
+	"SLICE_EXT_VLAN",	 /* ACL ext VLAN slice type. */
 };
+
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+static const char *ppe_acl_dump_counter_mode_type_str[] = {
+	"VLAN_DEV",		/* ACL counter mode vlan dev type. */
+	"PON_PM",		/* ACL counter mode PON pm type. */
+};
+
+static const char *ppe_acl_dump_src_info_type_str[] = {
+	"VP",			/* ACL src info type is VP. */
+	"L3_IF",		/* ACL src info is L3_IF type. */
+};
+
+static const char *ppe_acl_dump_mc_type_str[] = {
+	"NO_MC_RULE",		/* ACL no multicast rule. */
+	"IP_MC_RULE",		/* ACL IP multicast rule. */
+	"IP NO_MC RULE",	/* ACL IP_MC and NO_MC rule. */
+	"NONIP_MC_RULE",	/* ACL NON IP multicast rule. */
+	"NONIP NO_MC rule",	/* ACL NONIP and NO MC tyoe rule. */
+	"IP NONIP rule",	/* ACL IPMC NONIP rule. */
+	"NO_MC IP NONIP rule",	/* ACL all MC  rules. */
+};
+
+static const char *ppe_acl_dump_dhcp_type_str[] = {
+	"NO_DHCP_RULE",		/* ACL no DHCP rule. */
+	"V4_DHCP_RULE",		/* ACL v4 DHCP rule. */
+	"V4 NO_DHCP RULE",	/* ACL v4 No DHCP rule. */
+	"V6_DHCP_RULE",		/* ACL v6 DHCP rule. */
+	"V6 NO DHCP RULE",	/* ACL v6 No DHCP rule. */
+	"V6 V4 DHCP RULE",	/* ACL v4 v6 DHCP rule. */
+	"V4 V6 NON_DHCP RULE",	/* ACL all DHCP rule. */
+};
+
+static const char *ppe_acl_dump_pcp_cmd_type_str[] = {
+	"UNCHANGED",		/* ACL pcp no action command. */
+	"REPLACE",		/* ACL pcp replace action command. */
+	"COPY_SPCP",		/* ACL copy SPCP action command. */
+	"COPY_CPCP",		/* ACL copy CPCP action command. */
+	"DSCP2PBIT",		/* ACL DSCP to PBIT map bit. */
+	"TAG_REPLACE",		/* ACL replace action command in tag. */
+	"TAG_COPY_SPCP",	/* ACL copy SPCP action command in tag. */
+	"TAG_COPY_CPCP",	/* ACL copy CPCP action command in tag. */
+	"TAG_DSCP2PBIT",	/* ACL DSCP to PBIT map bit in tag. */
+};
+
+static const char *ppe_acl_dump_dei_cmd_type_str[] = {
+	"UNCHANGED",		/* ACL dei unchanged. */
+	"REPLACE",		/* ACL dei replace command. */
+	"COPY_SDEI",		/* ACL copy sdei action command. */
+	"COPY_CDEI",		/* ACL copy cdei action command. */
+};
+
+static const char *ppe_acl_dump_pid_cmd_type_str[] = {
+	"UNCHANGED",		/* ACL pid unchanged. */
+	"REPLACE",		/* ACL pid replace command. */
+	"COPY_STPID",		/* ACL copy stpid action command. */
+	"COPY_CTPID",		/* ACL copy ctpid action command. */
+};
+
+static const char *ppe_acl_dump_vid_cmd_type_str[] = {
+	"DELETE",		/* ACL vid unchanged. */
+	"REPLACE",		/* ACL vid replace command. */
+	"COPY_SVID",		/* ACL copy svid action command. */
+	"COPY_CVID",		/* ACL copy cvid action command. */
+};
+#endif
 
 /*
  * ppe_acl_dump_write_reset()
@@ -194,7 +249,7 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 {
 	int result;
 	uint64_t pkts, bytes;
-	ppe_acl_rule_src_type_t stype;
+	ppe_acl_rule_dev_type_t dev_type;
 	struct ppe_acl_rule_match_one *r;
 	ppe_acl_rule_match_type_t rule_t;
 	enum ppe_drv_acl_slice_type slice_t;
@@ -246,28 +301,42 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 		goto error;
 	}
 
-	if ((result = ppe_acl_dump_write(adi, "src_type", "%s", ppe_acl_dump_src_type_str[acl->rule.stype]))) {
+	if ((result = ppe_acl_dump_write(adi, "src_type", "%s", ppe_acl_dump_src_type_str[acl->rule.dev_type]))) {
 		goto error;
 	}
 
-	stype = acl->rule.stype;
-	switch (stype) {
-	case PPE_ACL_RULE_SRC_TYPE_DEV:
-		if ((result = ppe_acl_dump_write(adi, "src_dev", "%s", acl->rule.src.dev_name))) {
+	dev_type = acl->rule.dev_type;
+	switch (dev_type) {
+	case PPE_ACL_RULE_DEV_TYPE_SRC_DEV:
+		if ((result = ppe_acl_dump_write(adi, "src_dev", "%s", acl->rule.dev.dev_name))) {
 			goto error;
 		}
 
 		break;
 
-	case PPE_ACL_RULE_SRC_TYPE_SC:
-		if ((result = ppe_acl_dump_write(adi, "src_sc", "%d", acl->rule.src.sc))) {
+	case PPE_ACL_RULE_DEV_TYPE_SC:
+		if ((result = ppe_acl_dump_write(adi, "dev_sc", "%d", acl->rule.dev.sc))) {
 			goto error;
 		}
 
 		break;
 
-	case PPE_ACL_RULE_SRC_TYPE_FLOW:
-		if ((result = ppe_acl_dump_write(adi, "src_flow", "%d", "true"))) {
+	case PPE_ACL_RULE_DEV_TYPE_FLOW:
+		if ((result = ppe_acl_dump_write(adi, "dev_flow", "%d", "true"))) {
+			goto error;
+		}
+
+		break;
+
+	case PPE_ACL_RULE_DEV_TYPE_DEST_L2_PORT:
+		if ((result = ppe_acl_dump_write(adi, "dst_dev", "%s", acl->rule.dev.dev_name))) {
+			goto error;
+		}
+
+		break;
+
+	case PPE_ACL_RULE_DEV_TYPE_DEST_L3_PORT:
+		if ((result = ppe_acl_dump_write(adi, "l3 dst_dev", "%s", acl->rule.dev.dev_name))) {
 			goto error;
 		}
 
@@ -368,7 +437,18 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 				goto error;
 			}
 
-			if (r->rule_flags & PPE_ACL_RULE_FLAG_VID_MASK) {
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_STAG_FMT) {
+				if ((result = ppe_acl_dump_write(adi, "tag fmt", "%d",
+								r->rule.svid.tag_fmt))) {
+					goto error;
+				}
+				if ((result = ppe_acl_dump_write(adi, "tag fmt mask", "%d",
+								r->rule.svid.tag_fmt_mask))) {
+					goto error;
+				}
+			}
+
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_SVID_MASK) {
 				if ((result = ppe_acl_dump_write(adi, "mask_max", "%d",
 							r->rule.svid.vid_mask_max))) {
 					goto error;
@@ -403,7 +483,18 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 				goto error;
 			}
 
-			if (r->rule_flags & PPE_ACL_RULE_FLAG_VID_MASK) {
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_CTAG_FMT) {
+				if ((result = ppe_acl_dump_write(adi, "tag fmt", "%d",
+								r->rule.cvid.tag_fmt))) {
+					goto error;
+				}
+				if ((result = ppe_acl_dump_write(adi, "tag fmt mask", "%d",
+								r->rule.cvid.tag_fmt_mask))) {
+					goto error;
+				}
+			}
+
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_CVID_MASK) {
 				if ((result = ppe_acl_dump_write(adi, "mask_max", "%d",
 							r->rule.cvid.vid_mask_max))) {
 					goto error;
@@ -417,7 +508,7 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 			}
 
 			if ((result = ppe_acl_dump_write(adi, "range_en", "%s",
-						(r->rule_flags & PPE_ACL_RULE_FLAG_VID_RANGE)
+						(r->rule_flags & PPE_ACL_RULE_FLAG_CVID_RANGE)
 						? "true": "false"))) {
 				goto error;
 			}
@@ -438,7 +529,7 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 				goto error;
 			}
 
-			if (r->rule_flags & PPE_ACL_RULE_FLAG_PCP_MASK) {
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_SPCP_MASK) {
 				if ((result = ppe_acl_dump_write(adi, "mask", "%d",
 							r->rule.spcp.pcp_mask))) {
 					goto error;
@@ -467,7 +558,7 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 				goto error;
 			}
 
-			if (r->rule_flags & PPE_ACL_RULE_FLAG_PCP_MASK) {
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_CPCP_MASK) {
 				if ((result = ppe_acl_dump_write(adi, "mask", "%d",
 							r->rule.cpcp.pcp_mask))) {
 					goto error;
@@ -838,7 +929,7 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 
 				if (r->rule_flags & PPE_ACL_RULE_FLAG_DIP_MASK) {
 					if ((result = ppe_acl_dump_write(adi, "mask", "%pI4",
-								&r->rule.dip.ip_mask[0]))) {
+									&r->rule.dip.ip_mask[0]))) {
 						goto error;
 					}
 				}
@@ -856,7 +947,7 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 
 				if (r->rule_flags & PPE_ACL_RULE_FLAG_DIP_MASK) {
 					if ((result = ppe_acl_dump_write(adi, "mask", "%pI6",
-								&r->rule.dip.ip_mask[0]))) {
+									&r->rule.dip.ip_mask[0]))) {
 						goto error;
 					}
 				}
@@ -1030,6 +1121,181 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 
 			break;
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+		case PPE_ACL_RULE_MATCH_TYPE_CTPID:
+			if ((result = ppe_acl_dump_prefix_add(adi, "CTPID"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "ctpid_val", "%d",
+							r->rule.ctpid.tpid_val))) {
+				goto error;
+			}
+
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_CTPID_EN) {
+				if ((result = ppe_acl_dump_write(adi, "ctpid_mask", "%d",
+								r->rule.ctpid.tpid_mask))) {
+					goto error;
+				}
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "inverse_en", "%s",
+							(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN)
+							? "true": "false"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_prefix_remove(adi))) {
+				goto error;
+			}
+
+			break;
+
+		case PPE_ACL_RULE_MATCH_TYPE_STPID:
+			if ((result = ppe_acl_dump_prefix_add(adi, "STPID"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "stpid_val", "%d",
+							r->rule.stpid.tpid_val))) {
+				goto error;
+			}
+
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_STPID_EN) {
+				if ((result = ppe_acl_dump_write(adi, "stpid_mask", "%d",
+								r->rule.stpid.tpid_mask))) {
+					goto error;
+				}
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "inverse_en", "%s",
+							(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN)
+							? "true": "false"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_prefix_remove(adi))) {
+				goto error;
+			}
+
+			break;
+
+		case PPE_ACL_RULE_MATCH_TYPE_CDEI:
+			if ((result = ppe_acl_dump_prefix_add(adi, "CDEI"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "cdei", "%d",
+							r->rule.cdei.dei))) {
+				goto error;
+			}
+
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_CDEI_EN) {
+				if ((result = ppe_acl_dump_write(adi, "cdei_mask", "%d",
+								r->rule.cdei.dei_mask))) {
+					goto error;
+				}
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "inverse_en", "%s",
+							(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN)
+							? "true": "false"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_prefix_remove(adi))) {
+				goto error;
+			}
+
+			break;
+
+		case PPE_ACL_RULE_MATCH_TYPE_SDEI:
+			if ((result = ppe_acl_dump_prefix_add(adi, "SDEI"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "sdei", "%d",
+							r->rule.sdei.dei))) {
+				goto error;
+			}
+
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_SDEI_EN) {
+				if ((result = ppe_acl_dump_write(adi, "sdei_mask", "%d",
+								r->rule.sdei.dei_mask))) {
+					goto error;
+				}
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "inverse_en", "%s",
+							(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN)
+							? "true": "false"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_prefix_remove(adi))) {
+				goto error;
+			}
+
+			break;
+
+		case PPE_ACL_RULE_MATCH_TYPE_DHCP_TYPE:
+			if ((result = ppe_acl_dump_prefix_add(adi, "DHCP_TYPE"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "dhcp_type", "%s",
+						ppe_acl_dump_dhcp_type_str[r->rule.dhcp_type.dhcp_type]))) {
+				goto error;
+			}
+
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_DHCP_TYPE_EN) {
+				if ((result = ppe_acl_dump_write(adi, "dhcp_mask", "%d",
+								r->rule.dhcp_type.dhcp_mask))) {
+					goto error;
+				}
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "inverse_en", "%s",
+							(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN)
+							? "true": "false"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_prefix_remove(adi))) {
+				goto error;
+			}
+
+			break;
+
+		case PPE_ACL_RULE_MATCH_TYPE_MC_TYPE:
+			if ((result = ppe_acl_dump_prefix_add(adi, "MC_TYPE"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "mc_type", "%s",
+						ppe_acl_dump_mc_type_str[r->rule.mc_type.mc_type]))) {
+				goto error;
+			}
+
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_MC_TYPE_EN) {
+				if ((result = ppe_acl_dump_write(adi, "mc_mask", "%d",
+								r->rule.mc_type.mc_mask))) {
+					goto error;
+				}
+			}
+
+			if ((result = ppe_acl_dump_write(adi, "inverse_en", "%s",
+							(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN)
+							? "true": "false"))) {
+				goto error;
+			}
+
+			if ((result = ppe_acl_dump_prefix_remove(adi))) {
+				goto error;
+			}
+
+			break;
+#endif
 		case PPE_ACL_RULE_MATCH_TYPE_DEFAULT:
 			if ((result = ppe_acl_dump_write(adi, "default_rule", "%s", "true"))) {
 				goto error;
@@ -1082,12 +1348,6 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 		}
 	}
 
-	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_CTAG_PCP_CHANGE_EN) {
-		if ((result = ppe_acl_dump_write(adi, "ctag_pcp", "%d", r_action->ctag_pcp))) {
-			goto error;
-		}
-	}
-
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_STAG_DEI_CHANGE_EN) {
 		if ((result = ppe_acl_dump_write(adi, "stag_dei", "%s", "true"))) {
 			goto error;
@@ -1130,18 +1390,6 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 		}
 	}
 
-	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_CTAG_FMT_TAGGED) {
-		if ((result = ppe_acl_dump_write(adi, "ctag_fmt", "%s", "true"))) {
-			goto error;
-		}
-	}
-
-	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_STAG_FMT_TAGGED) {
-		if ((result = ppe_acl_dump_write(adi, "stag_fmt", "%s", "true"))) {
-			goto error;
-		}
-	}
-
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_REDIR_TO_CORE_EN) {
 		if ((result = ppe_acl_dump_write(adi, "redir_core", "%d", r_action->redir_core))) {
 			goto error;
@@ -1168,6 +1416,120 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 	}
 #endif
 
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_CTAG_PCP_CHANGE_EN) {
+		if ((result = ppe_acl_dump_write(adi, "ctag_pcp", "%d", r_action->ctag_pcp))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_CTAG_PID_CHANGE_EN) {
+		if ((result = ppe_acl_dump_write(adi, "ctag_pid", "%d", r_action->ctag_pid))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_STAG_PID_CHANGE_EN) {
+		if ((result = ppe_acl_dump_write(adi, "stag_pid", "%d", r_action->stag_pid))) {
+			goto error;
+		}
+	}
+
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_STAG_DEI_CMD) {
+		if ((result = ppe_acl_dump_write(adi, "stag_dei_cmd", "%s",
+						ppe_acl_dump_dei_cmd_type_str[r_action->stag_dei_cmd]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_CTAG_DEI_CMD) {
+		if ((result = ppe_acl_dump_write(adi, "ctag_dei_cmd", "%s",
+						ppe_acl_dump_dei_cmd_type_str[r_action->ctag_dei_cmd]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_STAG_PCP_CMD) {
+		if ((result = ppe_acl_dump_write(adi, "stag_pcp_cmd", "%s",
+						ppe_acl_dump_pcp_cmd_type_str[r_action->stag_pcp_cmd]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_CTAG_PCP_CMD) {
+		if ((result = ppe_acl_dump_write(adi, "ctag_pcp_cmd", "%s",
+						ppe_acl_dump_pcp_cmd_type_str[r_action->ctag_pcp_cmd]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_STAG_VID_CMD) {
+		if ((result = ppe_acl_dump_write(adi, "stag_vid_cmd", "%s",
+						ppe_acl_dump_vid_cmd_type_str[r_action->stag_vid_cmd]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_CTAG_VID_CMD) {
+		if ((result = ppe_acl_dump_write(adi, "ctag_vid_cmd", "%s",
+						ppe_acl_dump_vid_cmd_type_str[r_action->ctag_vid_cmd]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_STAG_PID_CMD) {
+		if ((result = ppe_acl_dump_write(adi, "stag_pid_cmd", "%s",
+						ppe_acl_dump_pid_cmd_type_str[r_action->stag_pid_cmd]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_CTAG_PID_CMD) {
+		if ((result = ppe_acl_dump_write(adi, "ctag_pid_cmd", "%s",
+						ppe_acl_dump_pid_cmd_type_str[r_action->ctag_pid_cmd]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_DSCP_PBIT_MAP_IDX) {
+		if ((result = ppe_acl_dump_write(adi, "dscp_pbit_map_idx", "%d", r_action->dscp_pbit_map_idx))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_COUNTER_EN) {
+		if ((result = ppe_acl_dump_write(adi, "counter id", "%d", r_action->counter_id))) {
+			goto error;
+		}
+		if ((result = ppe_acl_dump_write(adi, "counter mode", "%s",
+						ppe_acl_dump_counter_mode_type_str[r_action->counter_mode]))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_TAGS_TO_RMV_EN) {
+		if ((result = ppe_acl_dump_write(adi, "Tags to remove", "%d", r_action->tags_to_rmv))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_INT_DP_CHANGE_EN) {
+		if ((result = ppe_acl_dump_write(adi, "Internal drop precedence", "%d", r_action->int_dp))) {
+			goto error;
+		}
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_SRC_INFO) {
+		if ((result = ppe_acl_dump_write(adi, "Source info type", "%s",
+						ppe_acl_dump_src_info_type_str[r_action->src_info_type]))) {
+			goto error;
+		}
+
+		if ((result = ppe_acl_dump_write(adi, "Source info", "%d", r_action->src_info))) {
+			goto error;
+		}
+	}
+#endif
 	/*
 	 * Remove the 'action' prefix for next interation
 	 */

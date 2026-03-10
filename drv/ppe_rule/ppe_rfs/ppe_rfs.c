@@ -1,18 +1,8 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
+
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/of_net.h>
@@ -48,11 +38,24 @@ MODULE_PARM_DESC(wlan_rfs_enable, "PPE RFS enable/disable for DL flows");
  * ppe_rfs_rule_eligible()
  *	Checks if RFS is eligible
  */
-bool ppe_rfs_rule_eligible_get(int src_interface_num, int dst_interface_num, bool mcast_flow)
+bool ppe_rfs_rule_eligible_get(int src_interface_num, int dst_interface_num, bool mcast_flow, uint32_t valid_flags)
 {
-	struct net_device *src_dev, *dst_dev;
+	struct net_device *src_dev = NULL, *dst_dev = NULL;
 	bool dst_rfs_enabled = false;
 	bool status = false;
+	bool tun_flow = valid_flags & PPE_RFS_ELIG_VALID_FLAG_TUNNEL_FLOW;
+
+	if (valid_flags & PPE_RFS_ELIG_VALID_FLAG_TUNNEL_OUTER_FLOW) {
+		status = false;
+		ppe_rfs_warn("Outer tunnel flows are not supported for RFS.\n");
+		goto ret_status;
+	}
+
+	if (mcast_flow) {
+		status = false;
+		ppe_rfs_warn("Multicast flows are currently not supported.\n");
+		goto ret_status;
+	}
 
 	src_dev = dev_get_by_index(&init_net, src_interface_num);
 	if (!src_dev) {
@@ -60,27 +63,25 @@ bool ppe_rfs_rule_eligible_get(int src_interface_num, int dst_interface_num, boo
 		goto ret_status;
 	};
 
-
 	dst_dev = dev_get_by_index(&init_net, dst_interface_num);
 	if (!dst_dev) {
 		ppe_rfs_warn("dev not found during ppe dummy config for flow iface: %d\n", dst_interface_num);
-		if (!mcast_flow)
-			goto ret_status;
+		goto ret_status;
 	};
 
 	dst_rfs_enabled = ppe_drv_port_check_rfs_support(dst_dev);
 
-	if (mcast_flow) {
+	/*
+	 * If the source net device is a tunnel or wlan device,
+	 * then flow is not eligible for RFS support.
+	 */
+	if (src_dev->phydev == NULL) {
 		status = false;
 		goto ret_status;
-	}
-
-	if (dst_rfs_enabled && src_dev->ieee80211_ptr) {
-		status = false;
+	} else if (tun_flow || dst_rfs_enabled) {
+		status = true;
 		goto ret_status;
 	}
-
-	status = dst_rfs_enabled;
 
 ret_status:
 	if (src_dev) {
@@ -137,9 +138,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 	struct net_device *rx_dev = NULL;
 	struct net_device *tx_dev = NULL;
 	struct net_device *top_rule_rx_dev, *top_rule_tx_dev;
-	uint32_t feature = PPE_DRV_ASSIST_FEATURE_RFS_ETH;
-	bool tx_rfs_enabled = false;
-	bool rx_rfs_enabled = false;
+	uint32_t feature = PPE_DRV_ASSIST_FEATURE_RFS_DEFAULT;
 	ppe_drv_iface_t top_rx_if, rx_if;
 	ppe_drv_iface_t top_tx_if, tx_if;
 	ppe_drv_ret_t ret;
@@ -148,40 +147,46 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 
 	rx_dev = dev_get_by_index(&init_net, create_ipv6->conn_rule.flow_interface_num);
 	if (!rx_dev) {
-		ppe_rfs_warn("dev not found during ppe dummy config for flow iface: %d\n", create_ipv6->conn_rule.flow_interface_num);
+		ppe_rfs_warn("dev not found during ppe dummy config for flow iface: %d\n",
+										create_ipv6->conn_rule.flow_interface_num);
 		ppe_rfs_stats_inc(&p->stats.v6_create_flow_interface_fail);
 		return PPE_RFS_RET_FAILURE;
 	};
 
 	tx_dev = dev_get_by_index(&init_net, create_ipv6->conn_rule.return_interface_num);
 	if (!tx_dev) {
-		ppe_rfs_warn("dev not found during ppe dummy config for return iface: %d\n", create_ipv6->conn_rule.return_interface_num);
+		ppe_rfs_warn("dev not found during ppe dummy config for return iface: %d\n",
+										create_ipv6->conn_rule.return_interface_num);
 		ppe_rfs_stats_inc(&p->stats.v6_create_return_interface_fail);
 		dev_put(rx_dev);
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	if (tx_dev->ieee80211_ptr) {
-		feature = PPE_DRV_ASSIST_FEATURE_RFS_WLAN;
-	}
-	if (rx_dev->ieee80211_ptr) {
+	if (!rx_dev->phydev) {
 		dev_put(tx_dev);
 		dev_put(rx_dev);
 		ppe_rfs_warn("%p: Rule cannot be pushed in this direction\n", create_ipv6);
 		return PPE_RFS_RET_FAILURE;
 	}
 
+	if (tx_dev->phydev) {
+		feature = PPE_DRV_ASSIST_FEATURE_RFS_ETH;
+	} else if (tx_dev->ieee80211_ptr) {
+		feature = PPE_DRV_ASSIST_FEATURE_RFS_WLAN;
+	} else if (create_ipv6->rule_flags & PPE_RFS_V6_RULE_FLAG_TUN_FLOW) {
+		feature = PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL;
+	}
+
 	rx_if = ppe_drv_iface_idx_get_by_dev(rx_dev);
-	rx_rfs_enabled = ppe_drv_port_check_rfs_support(rx_dev);
 	dev_put(rx_dev);
 
 	tx_if = ppe_drv_iface_idx_get_by_dev(tx_dev);
-	tx_rfs_enabled = ppe_drv_port_check_rfs_support(tx_dev);
 	dev_put(tx_dev);
 
 	top_rule_rx_dev = dev_get_by_index(&init_net, create_ipv6->conn_rule.flow_top_interface_num);
 	if (!top_rule_rx_dev) {
-		ppe_rfs_warn("Top rule dev not found during ppe dummy config for flow iface: %d\n", create_ipv6->conn_rule.flow_top_interface_num);
+		ppe_rfs_warn("Top rule dev not found during ppe dummy config for flow iface: %d\n",
+												create_ipv6->conn_rule.flow_top_interface_num);
 		ppe_rfs_stats_inc(&p->stats.v6_create_flow_top_interface_fail);
 		return PPE_RFS_RET_FAILURE;
 	};
@@ -191,19 +196,14 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 
 	top_rule_tx_dev = dev_get_by_index(&init_net, create_ipv6->conn_rule.return_top_interface_num);
 	if (!top_rule_tx_dev) {
-		ppe_rfs_warn("Top rule return dev not found during ppe dummy config for flow iface: %d\n", create_ipv6->conn_rule.return_top_interface_num);
+		ppe_rfs_warn("Top rule return dev not found during ppe dummy config for flow iface: %d\n",
+													create_ipv6->conn_rule.return_top_interface_num);
 		ppe_rfs_stats_inc(&p->stats.v6_create_return_top_interface_fail);
 		return PPE_RFS_RET_FAILURE;
 	};
 
 	top_tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
 	dev_put(top_rule_tx_dev);
-
-	if (!tx_rfs_enabled && !rx_rfs_enabled) {
-		ppe_rfs_warn("RFS disable on both tx(%d) and rx interface(%d)\n", create_ipv6->conn_rule.return_interface_num, create_ipv6->conn_rule.flow_interface_num);
-		ppe_rfs_stats_inc(&p->stats.v6_create_rfs_not_enabled);
-		return PPE_RFS_RET_FAILURE;
-	}
 
 	if (create_ipv6->rule_flags & PPE_RFS_V6_RULE_FLAG_BRIDGE_FLOW) {
 		pd6rc.rule_flags |= PPE_DRV_V6_RULE_FLAG_BRIDGE_FLOW;
@@ -215,40 +215,38 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 
 	pd6rc.rule_flags |= PPE_DRV_V6_RULE_FLAG_FLOW_VALID;
 
-	if (tx_rfs_enabled) {
-		pd6rc.tuple.flow_ip[0] = create_ipv6->tuple.flow_ip[3];
-		pd6rc.tuple.flow_ip[1] = create_ipv6->tuple.flow_ip[2];
-		pd6rc.tuple.flow_ip[2] = create_ipv6->tuple.flow_ip[1];
-		pd6rc.tuple.flow_ip[3] = create_ipv6->tuple.flow_ip[0];
-		pd6rc.tuple.flow_ident = create_ipv6->tuple.flow_ident;
-		pd6rc.tuple.return_ip[0] = create_ipv6->tuple.return_ip[3];
-		pd6rc.tuple.return_ip[1] = create_ipv6->tuple.return_ip[2];
-		pd6rc.tuple.return_ip[2] = create_ipv6->tuple.return_ip[1];
-		pd6rc.tuple.return_ip[3] = create_ipv6->tuple.return_ip[0];
-		pd6rc.tuple.return_ident = create_ipv6->tuple.return_ident;
-		pd6rc.tuple.protocol = create_ipv6->tuple.protocol;
-		pd6rc.conn_rule.flow_mtu = create_ipv6->conn_rule.return_mtu;
+	pd6rc.tuple.flow_ip[0] = create_ipv6->tuple.flow_ip[3];
+	pd6rc.tuple.flow_ip[1] = create_ipv6->tuple.flow_ip[2];
+	pd6rc.tuple.flow_ip[2] = create_ipv6->tuple.flow_ip[1];
+	pd6rc.tuple.flow_ip[3] = create_ipv6->tuple.flow_ip[0];
+	pd6rc.tuple.flow_ident = create_ipv6->tuple.flow_ident;
+	pd6rc.tuple.return_ip[0] = create_ipv6->tuple.return_ip[3];
+	pd6rc.tuple.return_ip[1] = create_ipv6->tuple.return_ip[2];
+	pd6rc.tuple.return_ip[2] = create_ipv6->tuple.return_ip[1];
+	pd6rc.tuple.return_ip[3] = create_ipv6->tuple.return_ip[0];
+	pd6rc.tuple.return_ident = create_ipv6->tuple.return_ident;
+	pd6rc.tuple.protocol = create_ipv6->tuple.protocol;
+	pd6rc.conn_rule.flow_mtu = create_ipv6->conn_rule.return_mtu;
 
-		/*
-		 * Fill from and to interface for this direction.
-		 */
-		pd6rc.conn_rule.rx_if = rx_if;
-		pd6rc.top_rule.rx_if = top_rx_if;
-		pd6rc.conn_rule.tx_if = tx_if;
-		pd6rc.top_rule.tx_if = top_tx_if;
+	/*
+	 * Fill from and to interface for this direction.
+	 */
+	pd6rc.conn_rule.rx_if = rx_if;
+	pd6rc.top_rule.rx_if = top_rx_if;
+	pd6rc.conn_rule.tx_if = tx_if;
+	pd6rc.top_rule.tx_if = top_tx_if;
 
-		if (create_ipv6->rule_flags & PPE_RFS_V6_RULE_FLAG_QOS_VALID) {
-			pd6rc.qos_rule.flow_qos_tag = create_ipv6->qos_rule.flow_qos_tag;
-			pd6rc.qos_rule.return_qos_tag = create_ipv6->qos_rule.return_qos_tag;
-			pd6rc.valid_flags |= PPE_DRV_V6_VALID_FLAG_QOS;
-		}
+	if (create_ipv6->rule_flags & PPE_RFS_V6_RULE_FLAG_QOS_VALID) {
+		pd6rc.qos_rule.flow_qos_tag = create_ipv6->qos_rule.flow_qos_tag;
+		pd6rc.qos_rule.return_qos_tag = create_ipv6->qos_rule.return_qos_tag;
+		pd6rc.valid_flags |= PPE_DRV_V6_VALID_FLAG_QOS;
+	}
 
-		ret = ppe_drv_v6_assist_rule_create(&pd6rc, feature);
-		if (ret != PPE_DRV_RET_SUCCESS) {
-			ppe_rfs_warn("%p: Error in pushing Passive PPE RFS rules\n", create_ipv6);
-			ppe_rfs_stats_inc(&p->stats.v6_create_ppe_rule_fail);
-			return PPE_RFS_RET_FAILURE;
-		}
+	ret = ppe_drv_v6_assist_rule_create(&pd6rc, feature);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_rfs_warn("%p: Error in pushing Passive PPE RFS rules\n", create_ipv6);
+		ppe_rfs_stats_inc(&p->stats.v6_create_ppe_rule_fail);
+		return PPE_RFS_RET_FAILURE;
 	}
 
 	return PPE_RFS_RET_SUCCESS;
@@ -292,9 +290,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 	struct net_device *rx_dev = NULL;
 	struct net_device *tx_dev = NULL;
 	struct net_device *top_rule_rx_dev, *top_rule_tx_dev;
-	uint32_t feature = PPE_DRV_ASSIST_FEATURE_RFS_ETH;
-	bool tx_rfs_enabled = false;
-	bool rx_rfs_enabled = false;
+	uint32_t feature = PPE_DRV_ASSIST_FEATURE_RFS_DEFAULT;
 	ppe_drv_iface_t top_rx_if, rx_if;
 	ppe_drv_iface_t top_tx_if, tx_if;
 	ppe_drv_ret_t ret;
@@ -303,40 +299,46 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 
 	rx_dev = dev_get_by_index(&init_net, create_ipv4->conn_rule.flow_interface_num);
 	if (!rx_dev) {
-		ppe_rfs_warn("dev not found during ppe dummy config for flow iface: %d\n", create_ipv4->conn_rule.flow_interface_num);
+		ppe_rfs_warn("dev not found during ppe dummy config for flow iface: %d\n",
+										create_ipv4->conn_rule.flow_interface_num);
 		ppe_rfs_stats_inc(&p->stats.v4_create_flow_interface_fail);
 		return PPE_RFS_RET_FAILURE;
 	};
 
 	tx_dev = dev_get_by_index(&init_net, create_ipv4->conn_rule.return_interface_num);
 	if (!tx_dev) {
-		ppe_rfs_warn("dev not found during ppe dummy config for return iface: %d\n", create_ipv4->conn_rule.return_interface_num);
+		ppe_rfs_warn("dev not found during ppe dummy config for return iface: %d\n",
+										create_ipv4->conn_rule.return_interface_num);
 		ppe_rfs_stats_inc(&p->stats.v4_create_return_interface_fail);
 		dev_put(rx_dev);
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	if (tx_dev->ieee80211_ptr) {
-		feature = PPE_DRV_ASSIST_FEATURE_RFS_WLAN;
-	}
-	if (rx_dev->ieee80211_ptr) {
+	if (!rx_dev->phydev) {
 		dev_put(tx_dev);
 		dev_put(rx_dev);
 		ppe_rfs_warn("%p: Rule cannot be pushed in this direction\n", create_ipv4);
 		return PPE_RFS_RET_FAILURE;
 	}
 
+	if (tx_dev->phydev) {
+		feature = PPE_DRV_ASSIST_FEATURE_RFS_ETH;
+	} else if (tx_dev->ieee80211_ptr) {
+		feature = PPE_DRV_ASSIST_FEATURE_RFS_WLAN;
+	} else if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_FLAG_TUN_FLOW) {
+		feature = PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL;
+	}
+
 	rx_if = ppe_drv_iface_idx_get_by_dev(rx_dev);
-	rx_rfs_enabled = ppe_drv_port_check_rfs_support(rx_dev);
 	dev_put(rx_dev);
 
 	tx_if = ppe_drv_iface_idx_get_by_dev(tx_dev);
-	tx_rfs_enabled = ppe_drv_port_check_rfs_support(tx_dev);
 	dev_put(tx_dev);
 
 	top_rule_rx_dev = dev_get_by_index(&init_net, create_ipv4->conn_rule.flow_top_interface_num);
 	if (!top_rule_rx_dev) {
-		ppe_rfs_warn("Top rule dev not found during ppe dummy config for flow iface: %d\n", create_ipv4->conn_rule.flow_top_interface_num);
+		ppe_rfs_warn("Top rule dev not found during ppe dummy config for flow iface: %d\n",
+												create_ipv4->conn_rule.flow_top_interface_num);
 		ppe_rfs_stats_inc(&p->stats.v4_create_flow_top_interface_fail);
 		return PPE_RFS_RET_FAILURE;
 	};
@@ -345,18 +347,13 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 
 	top_rule_tx_dev = dev_get_by_index(&init_net, create_ipv4->conn_rule.return_top_interface_num);
 	if (!top_rule_tx_dev) {
-		ppe_rfs_warn("Top rule return dev not found during ppe dummy config for flow iface: %d\n", create_ipv4->conn_rule.return_top_interface_num);
+		ppe_rfs_warn("Top rule return dev not found during ppe dummy config for flow iface: %d\n",
+													create_ipv4->conn_rule.return_top_interface_num);
 		ppe_rfs_stats_inc(&p->stats.v4_create_return_top_interface_fail);
 		return PPE_RFS_RET_FAILURE;
 	};
 	top_tx_if = ppe_drv_iface_idx_get_by_dev(top_rule_tx_dev);
 	dev_put(top_rule_tx_dev);
-
-	if (!tx_rfs_enabled && !rx_rfs_enabled) {
-		ppe_rfs_warn("RFS disable on both tx(%d) and rx interface(%d)\n", create_ipv4->conn_rule.return_interface_num, create_ipv4->conn_rule.flow_interface_num);
-		ppe_rfs_stats_inc(&p->stats.v4_create_rfs_not_enabled);
-		return PPE_RFS_RET_FAILURE;
-	}
 
 	if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_FLAG_BRIDGE_FLOW) {
 		pd4rc.rule_flags |= PPE_DRV_V4_RULE_FLAG_BRIDGE_FLOW;
@@ -366,43 +363,41 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 	}
 	pd4rc.rule_flags |= PPE_DRV_V4_RULE_FLAG_FLOW_VALID;
 
-	if (tx_rfs_enabled) {
-		pd4rc.tuple.flow_ip = create_ipv4->tuple.flow_ip;
-		pd4rc.tuple.flow_ident = create_ipv4->tuple.flow_ident;
-		pd4rc.tuple.return_ip = create_ipv4->tuple.return_ip;
-		pd4rc.tuple.return_ident = create_ipv4->tuple.return_ident;
-		pd4rc.tuple.protocol = create_ipv4->tuple.protocol;
-		pd4rc.conn_rule.flow_mtu = create_ipv4->conn_rule.return_mtu;
+	pd4rc.tuple.flow_ip = create_ipv4->tuple.flow_ip;
+	pd4rc.tuple.flow_ident = create_ipv4->tuple.flow_ident;
+	pd4rc.tuple.return_ip = create_ipv4->tuple.return_ip;
+	pd4rc.tuple.return_ident = create_ipv4->tuple.return_ident;
+	pd4rc.tuple.protocol = create_ipv4->tuple.protocol;
+	pd4rc.conn_rule.flow_mtu = create_ipv4->conn_rule.return_mtu;
 
-		/*
-		 * PPE RFS does not support NAT on egress interface; hence filling xlate apis
-		 * to be same as that of original tupe
-		 */
-		pd4rc.conn_rule.flow_ip_xlate =  pd4rc.tuple.flow_ip;
-		pd4rc.conn_rule.flow_ident_xlate =  pd4rc.tuple.flow_ident;
-		pd4rc.conn_rule.return_ip_xlate =  pd4rc.tuple.return_ip;
-		pd4rc.conn_rule.return_ident_xlate =  pd4rc.tuple.return_ident;
+	/*
+	 * PPE RFS does not support NAT on egress interface; hence filling xlate apis
+	 * to be same as that of original tupe
+	 */
+	pd4rc.conn_rule.flow_ip_xlate =  pd4rc.tuple.flow_ip;
+	pd4rc.conn_rule.flow_ident_xlate =  pd4rc.tuple.flow_ident;
+	pd4rc.conn_rule.return_ip_xlate =  pd4rc.tuple.return_ip;
+	pd4rc.conn_rule.return_ident_xlate =  pd4rc.tuple.return_ident;
 
-		/*
-		 * Fill from and to interface for this direction.
-		 */
-		pd4rc.conn_rule.rx_if = rx_if;
-		pd4rc.top_rule.rx_if = top_rx_if;
-		pd4rc.conn_rule.tx_if = tx_if;
-		pd4rc.top_rule.tx_if = top_tx_if;
+	/*
+	 * Fill from and to interface for this direction.
+	 */
+	pd4rc.conn_rule.rx_if = rx_if;
+	pd4rc.top_rule.rx_if = top_rx_if;
+	pd4rc.conn_rule.tx_if = tx_if;
+	pd4rc.top_rule.tx_if = top_tx_if;
 
-		if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_FLAG_QOS_VALID) {
-			pd4rc.qos_rule.flow_qos_tag = create_ipv4->qos_rule.flow_qos_tag;
-			pd4rc.qos_rule.return_qos_tag = create_ipv4->qos_rule.return_qos_tag;
-			pd4rc.valid_flags |= PPE_DRV_V4_VALID_FLAG_QOS;
-		}
+	if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_FLAG_QOS_VALID) {
+		pd4rc.qos_rule.flow_qos_tag = create_ipv4->qos_rule.flow_qos_tag;
+		pd4rc.qos_rule.return_qos_tag = create_ipv4->qos_rule.return_qos_tag;
+		pd4rc.valid_flags |= PPE_DRV_V4_VALID_FLAG_QOS;
+	}
 
-		ret = ppe_drv_v4_assist_rule_create(&pd4rc, feature);
-		if (ret != PPE_DRV_RET_SUCCESS) {
-			ppe_rfs_warn("%p: Error in pushing Passive PPE RFS rules\n", create_ipv4);
-			ppe_rfs_stats_inc(&p->stats.v4_create_ppe_rule_fail);
-			return PPE_RFS_RET_FAILURE;
-		}
+	ret = ppe_drv_v4_assist_rule_create(&pd4rc, feature);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_rfs_warn("%p: Error in pushing Passive PPE RFS rules\n", create_ipv4);
+		ppe_rfs_stats_inc(&p->stats.v4_create_ppe_rule_fail);
+		return PPE_RFS_RET_FAILURE;
 	}
 
 	return PPE_RFS_RET_SUCCESS;

@@ -34,6 +34,10 @@ static bool inherit_ttl = true;
 module_param(inherit_ttl, bool, 0644);
 MODULE_PARM_DESC(inherit_ttl, "TTL 0:Dont Inherit inner, 1:Inherit inner");
 
+static uint8_t ipv6_flow_label = PPE_DRV_TUN_CMN_CTX_FLOW_LABEL_FIX ;
+module_param(ipv6_flow_label, byte, 0444);
+MODULE_PARM_DESC(ipv6_flow_label, "IPv6 flow label mode 0:Fix, 1:Hash, 2:Copy from Inner");
+
 /*
  * ppe_gre_mgr_gretun_src_exception()
  *	Handle the source VP exception for GRETUN
@@ -334,6 +338,11 @@ static bool ppe_gre_mgr_ip6_dev_parse_param(struct net_device *netdev, struct pp
 		l3->decap_ecn_mode = decap_ecn_mode;
 	}
 
+	if (ipv6_flow_label == PPE_DRV_TUN_CMN_CTX_FLOW_LABEL_FIX) {
+		l3->flow_label_val = flowi6_get_flowlabel(fl6);
+	}
+	l3->flow_label = ipv6_flow_label;
+
 	tun_hdr->type = type;
 
 	return ppe_gre_mgr_set_gre_flags(gre, tunnel->parms.i_flags, tunnel->parms.o_flags, tunnel->parms.i_key, tunnel->parms.o_key);
@@ -618,6 +627,13 @@ int ppe_gre_mgr_init(struct gre_mgr_cmn_ctx *gre_ctx)
 	if (decap_ecn_mode > PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC6040_MODE) {
 		ppe_gre_mgr_dentry_deinit(ppe_ctx);
 		gre_mgr_warning("Invalid Decap ECN mode %u\n", decap_ecn_mode);
+		kfree(ppe_ctx);
+		return 0;
+	}
+
+	if (ipv6_flow_label > PPE_DRV_TUN_CMN_CTX_FLOW_LABEL_COPY) {
+		ppe_gre_mgr_dentry_deinit(ppe_ctx);
+		gre_mgr_warning("Invalid flow label mode %u\n", ipv6_flow_label);
 		kfree(ppe_ctx);
 		return 0;
 	}

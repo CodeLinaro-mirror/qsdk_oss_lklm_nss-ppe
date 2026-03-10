@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /*
@@ -109,6 +98,14 @@ struct ppe_drv_flow_mapt_info {
 };
 
 /*
+ * ppe_drv_flow_unidir_info
+ *	Flow configuration for unidirection update
+ */
+struct ppe_drv_flow_unidir_info {
+	fal_flow_entry_t *flow_cfg;	/* Storing flow configuration for unidirection update. */
+};
+
+/*
  * ppe_drv_flow
  *	Flow information
  */
@@ -129,6 +126,7 @@ struct ppe_drv_flow {
 	uint8_t service_code;		/* Service code used by this entry */
 	uint8_t pri_profile;		/* Pri_profile for flow entry */
 	struct ppe_drv_flow_mapt_info mapt_info; /* MAP-T specific entries used for stats */
+	struct ppe_drv_flow_unidir_info unidir_info;	/* Unidirection acceleration info */
 };
 
 bool ppe_drv_flow_valid_set(struct ppe_drv_flow *pf, bool enable);
@@ -146,8 +144,6 @@ bool ppe_drv_flow_v6_qos_clear(struct ppe_drv_flow *pf);
 bool ppe_drv_flow_v6_qos_set(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_flow *pf);
 
 bool ppe_drv_flow_del(struct ppe_drv_flow *pf);
-bool ppe_drv_flow_v4_sawf_mark_update(struct ppe_drv_v4_conn_flow *pcf);
-bool ppe_drv_flow_v6_sawf_mark_update(struct ppe_drv_v6_conn_flow *pcf);
 struct ppe_drv_flow *ppe_drv_flow_v4_get(struct ppe_drv_v4_5tuple *tuple);
 struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf,
 		struct ppe_drv_nexthop *nh, struct ppe_drv_host *host, bool entry_valid);
@@ -163,3 +159,7 @@ void ppe_drv_flow_entries_free(struct ppe_drv_flow *flow);
 struct ppe_drv_flow *ppe_drv_flow_entries_alloc(void);
 bool ppe_drv_flow_v4_detach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4);
 bool ppe_drv_flow_v4_attach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4, struct ppe_drv_v6_conn_flow *pcf_v6, uint8_t length_adjust);
+
+bool ppe_drv_flow_accel_enable(struct ppe_drv_flow *flow);
+bool ppe_drv_flow_v4_wlan_metadata_set(struct ppe_drv_v4_conn_flow *pcf);
+bool ppe_drv_flow_v6_wlan_metadata_set(struct ppe_drv_v6_conn_flow *pcf);

@@ -1,18 +1,7 @@
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include "ppe_qdisc.h"
@@ -119,6 +108,7 @@ static int ppe_qdisc_res_l1_alloc(struct ppe_qdisc *pq)
 	pq->res.l0spid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L0_SP) + l0sp->offset;
 	pq->res.scheduler.l1c_drrid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_CDRR) + l1c_drr->offset;
 	pq->res.scheduler.l1e_drrid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_EDRR) + l1e_drr->offset;
+	pq->res.l1spid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_L1_SP);
 
 	ppe_qdisc_info("Qdisc:%px level1 scheduler resource allocation successful", pq->qdisc);
 	return 0;
@@ -760,7 +750,6 @@ int ppe_qdisc_res_init(struct ppe_qdisc *pq)
 
 	memset(&pq->res, 0, sizeof(struct ppe_drv_qos_res));
 	pq->res.q.qlimit = dev->tx_queue_len ? : 1;
-	pq->res.scheduler.priority = PPE_DRV_QOS_PRIORITY_MAX;
 
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
 

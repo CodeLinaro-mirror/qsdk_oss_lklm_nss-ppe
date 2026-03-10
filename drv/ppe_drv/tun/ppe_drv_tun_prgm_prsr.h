@@ -246,6 +246,26 @@ struct ppe_drv_tun_prgm_prsr_cfg {
 	} conf;
 };
 
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+/*
+ * ppe_drv_tun_prgm_prsr_tpr
+ *	Program Parser TPR configuration
+ */
+struct ppe_drv_tun_prgm_prsr_tpr {
+	uint16_t pppoe_session_id;	/* PPPoE session id */
+	bool ipv4_udf_valid;		/* IPv4 User defined field valid */
+	bool ipv6_udf_valid;		/* IPv6 User defined field valid */
+	bool eth_udf_valid;		/* Ethernet User defined field valid */
+	bool pppoe_en;			/* PPPoE enabled */
+	uint8_t pppoe_server_mac[ETH_ALEN];	/* PPPoE server MAC address */
+	struct ppe_drv_tun_tpr *tpr;	/* TPR confiugrations used for RPS */
+	struct ppe_drv_tun_prgm_prsr_prgm_udf ipv4_udf;	/* IPv4 UDF fields */
+	struct ppe_drv_tun_prgm_prsr_prgm_udf ipv6_udf;	/* IPv6 UDF fields */
+	struct ppe_drv_tun_prgm_prsr_prgm_udf eth_udf;	/* Ethernet UDF fields */
+	struct ppe_drv_tun_l3_if *tun_l3_if;		/* tl_l3_if */
+};
+#endif
+
 /*
  * ppe_drv_tun_prgm_prsr_decap_cfg
  *      Tunnel program parser tunnel data
@@ -258,7 +278,7 @@ struct ppe_drv_tun_prgm_prsr_decap_cfg {
 		struct ppe_drv_tun_prgm_prsr_l2tp l2tp;	/* L2TP specific data */
 		struct ppe_drv_tun_prgm_prsr_gre gre; /* GRE specific data */
 #ifdef NSS_PPE_TUNNEL_TPR_ENABLE
-		struct ppe_drv_tun_tpr *tpr;	/* TPR configurations used for RPS */
+		struct ppe_drv_tun_prgm_prsr_tpr rps;	/* Tunnel RPS specific data */
 #endif
 	} data;
 };

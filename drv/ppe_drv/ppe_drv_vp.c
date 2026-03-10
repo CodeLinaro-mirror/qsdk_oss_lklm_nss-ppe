@@ -223,6 +223,13 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_inf
 	port->core_mask = port->shadow_core_mask = info->core_mask;
 	port->user_type = info->usr_type;
 
+	/*
+	 * If netdevice type is NETFN offload then set port type as NETFN_OFFLOAD
+	 */
+	if (info->netfn_ol_enabled) {
+		ppe_drv_port_flags_set(port, PPE_DRV_PORT_FLAG_NETFN_OL);
+	}
+
 	if (info->core_mask) {
 		port->flags |= PPE_DRV_PORT_RFS_ENABLED;
 	}

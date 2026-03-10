@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /**
@@ -74,22 +63,24 @@
 /*
  * v6 valid flags
  */
-#define PPE_DRV_V6_VALID_FLAG_PPPOE_FLOW	0x0001  /**< PPPoE fields are valid for flow direction. */
-#define PPE_DRV_V6_VALID_FLAG_PPPOE_RETURN	0x0002  /**< PPPoE fields are valid for return direction. */
-#define PPE_DRV_V6_VALID_FLAG_VLAN		0x0004  /**< VLAN fields are valid. */
-#define PPE_DRV_V6_VALID_FLAG_QOS		0x0008  /**< QoS fields are valid. */
-#define PPE_DRV_V6_VALID_FLAG_DSCP_MARKING	0x0010  /**< DSCP fields are valid. */
-#define PPE_DRV_V6_VALID_FLAG_SAWF		0x0020  /**< SAWF fields are valid. */
-#define PPE_DRV_V6_VALID_FLAG_ACL_POLICER	0x0040  /**< ACL/Policer fields are valid. */
-#define PPE_DRV_V6_VALID_FLAG_WIFI_TID		0x0080	/**< HLOS TID fields are valid. */
-#define PPE_DRV_V6_VALID_FLAG_SCS		0x0100	/**< SCS fields are valid. */
-#define PPE_DRV_V6_VALID_FLAG_FLOW_WIFI_MDATA	0x0200  /**< Wi-Fi flow metadata is valid. */
-#define PPE_DRV_V6_VALID_FLAG_RETURN_WIFI_MDATA	0x0400  /**< Wi-Fi return metadata is valid. */
-#define PPE_DRV_V6_VALID_FLAG_FLOW_WIFI_DS	0x0800  /**< Wi-Fi DS flow field is valid. */
-#define PPE_DRV_V6_VALID_FLAG_RETURN_WIFI_DS	0x1000  /**< Wi-Fi DS return field is valid. */
-#define PPE_DRV_V6_VALID_FLAG_WIFI_TAG		0x2000  /**< Wi-Fi valid flag. */
-#define PPE_DRV_V6_VALID_FLAG_FLOW_HOST_QDISC_VALID	0x4000  /**< Qdisc info is valid in flow direction. */
-#define PPE_DRV_V6_VALID_FLAG_RETURN_HOST_QDISC_VALID	0x8000  /**< Qdisc info is valid in return direction. */
+#define PPE_DRV_V6_VALID_FLAG_PPPOE_FLOW	0x00000001	/**< PPPoE fields are valid for flow direction. */
+#define PPE_DRV_V6_VALID_FLAG_PPPOE_RETURN	0x00000002	/**< PPPoE fields are valid for return direction. */
+#define PPE_DRV_V6_VALID_FLAG_VLAN		0x00000004	/**< VLAN fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_QOS		0x00000008	/**< QoS fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_DSCP_MARKING	0x00000010	/**< DSCP fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_SAWF		0x00000020	/**< SAWF fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_ACL_POLICER	0x00000040	/**< ACL/Policer fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_WIFI_TID		0x00000080	/**< HLOS TID fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_SCS		0x00000100	/**< SCS fields are valid. */
+#define PPE_DRV_V6_VALID_FLAG_FLOW_WIFI_MDATA	0x00000200	/**< Wi-Fi flow metadata is valid. */
+#define PPE_DRV_V6_VALID_FLAG_RETURN_WIFI_MDATA	0x00000400	/**< Wi-Fi return metadata is valid. */
+#define PPE_DRV_V6_VALID_FLAG_FLOW_WIFI_DS	0x00000800	/**< Wi-Fi DS flow field is valid. */
+#define PPE_DRV_V6_VALID_FLAG_RETURN_WIFI_DS	0x00001000	/**< Wi-Fi DS return field is valid. */
+#define PPE_DRV_V6_VALID_FLAG_WIFI_TAG		0x00002000	/**< Wi-Fi valid flag. */
+#define PPE_DRV_V6_VALID_FLAG_FLOW_HOST_QDISC_VALID	0x00004000  /**< Qdisc info is valid in flow direction. */
+#define PPE_DRV_V6_VALID_FLAG_RETURN_HOST_QDISC_VALID	0x00008000  /**< Qdisc info is valid in return direction. */
+#define PPE_DRV_V6_VALID_FLAG_FLOW_LABEL		0x00010000	/** < IPv6 header flow label valid. */
+#define PPE_DRV_V6_VALID_FLAG_UNIDIR_RULE	0x00020000	/**< Unidirectional rule is valid. */
 
 #define PPE_DRV_V6_MAX_CONN_COUNT               1024
 
@@ -106,13 +97,17 @@ struct ppe_drv_v6_5tuple {
 };
 
 /**
- * ppe_drv_v6_sawf_mark_update
- *	PPE IPv6 SAWF rule update structure
+ * ppe_drv_v6_rule_update_msg
+ *	PPE IPv6 rule update structure
  */
-struct ppe_drv_v6_sawf_mark_update {
-	struct ppe_drv_v6_5tuple tuple;			/**< Holds values of the 5 tuple. */
-	struct ppe_drv_service_class_rule sawf_rule;	/**< Service class related information. */
-	uint16_t valid_flags;				/**< Flags associated with SAWF mark update. */
+struct ppe_drv_v6_rule_update_msg  {
+	struct ppe_drv_v6_5tuple tuple;		/**< Holds values of the original 5 tuple. */
+	uint8_t rule_type;			/**< Type of rule to be updated. */
+
+	union ppe_drv_v6_update_info {
+		struct ppe_drv_unidir_update_info unidir;	/**< Unidirectional update related information. */
+		struct ppe_drv_service_class_rule sawf;		/**< Service class related information. */
+	} info;
 };
 
 /**
@@ -128,6 +123,7 @@ struct ppe_drv_v6_connection_rule {
 	uint32_t return_ip_xlate[4];		/**< Translated return IP address. */
 	uint32_t flow_ident_xlate;		/**< Translated flow identifier (e.g., port). */
 	uint32_t return_ident_xlate;		/**< Translated return identifier (e.g., port). */
+	uint32_t flow_label;			/**< flow label value. */
 	ppe_drv_iface_t rx_if;			/**< From PPE interface number */
 	ppe_drv_iface_t tx_if;			/**< To PPE interface number */
 };
@@ -152,7 +148,7 @@ struct ppe_drv_v6_rule_create {
 	/*
 	 * Request
 	 */
-	uint16_t valid_flags;				/**< Bit flags associated with the validity of parameters. */
+	uint32_t valid_flags;				/**< Bit flags associated with the validity of parameters. */
 	uint32_t rule_flags;				/**< Bit flags associated with the rule. */
 	struct ppe_drv_v6_5tuple tuple;			/**< Holds values of the 5 tuple. */
 	struct ppe_drv_v6_connection_rule conn_rule;	/**< Basic connection-specific data. */
@@ -167,6 +163,7 @@ struct ppe_drv_v6_rule_create {
 	struct ppe_drv_wifi_mdata_rule wifi_rule;	/**< Wi-Fi metadata rule ID information. */
 	struct ppe_drv_nptv6_rule npt6_rule;		/**< NPTv6 configured rule. */
 	struct ppe_drv_vp_dl_qdisc_rule qdisc_rule;	/**< Qdisc rule information. */
+	struct ppe_drv_accel_rule_dir rule_dir;		/**< Information about direction to accelerate. */
 
 	/*
 	 * Response.
@@ -391,18 +388,18 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy);
 ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create);
 
 /**
- * ppe_drv_v6_rule_sawf_mark_update
- *	Update SAWF rule in PPE.
+ * ppe_drv_v6_rule_update
+ * 	Update bidirection rule in PPE.
  *
  * @datatypes
- * ppe_drv_v6_sawf_mark_update
+ * ppe_drv_v6_rule_update_msg
  *
- * @param[in] update	Pointer to the NSS PPE SAWF rule update message.
+ * @param[in] update_msg	Pointer to the PPE rule update message.
  *
  * @return
- * Status of the mark update operation.
+ * Status of the update operation.
  */
-ppe_drv_ret_t ppe_drv_v6_rule_sawf_mark_update(struct ppe_drv_v6_sawf_mark_update *update);
+ppe_drv_ret_t ppe_drv_v6_rule_update(struct ppe_drv_v6_rule_update_msg *update_msg);
 
 /**
  * ppe_drv_v6_nsm_stats_update

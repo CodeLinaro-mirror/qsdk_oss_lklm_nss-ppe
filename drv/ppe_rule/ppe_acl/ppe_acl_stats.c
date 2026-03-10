@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/atomic.h>
@@ -27,6 +16,7 @@ static const char *ppe_acl_stats_cmn_str[] = {
 	"acl_destroy_req",			/* ACL destroy requests. */
 	"acl_flush_req",			/* ACL flush requests. */
 	"acl_free_req",				/* ACL rule free. */
+	"acl_prio_upd_req",			/* ACL rule priority update req. */
 	"rule_id_invalid",			/* ACL rule ID invalid. */
 	"hw_index_invalid",			/* ACL rule Hardware index invalid. */
 	"rule_not_found", 			/* ACL rule not found based on rule ID. */
@@ -47,6 +37,7 @@ static const char *ppe_acl_stats_cmn_str[] = {
 	"acl_create_fail_action_config",	/* ACL rule create failure due to invalid action. */
 	"acl_create_fail_invalid_id",		/* ACL rule create failure due to invalid rule-ID. */
 	"acl_destroy_fail_invalid_id",		/* ACL destroy failure due to invalid rule ID. */
+	"acl_rule_prio_upd_fail_invalid_id",	/* ACL rule priority update fail invalid rule ID. */
 };
 
 /*

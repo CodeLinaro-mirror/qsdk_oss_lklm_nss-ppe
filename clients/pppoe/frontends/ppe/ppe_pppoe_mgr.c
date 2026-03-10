@@ -21,6 +21,7 @@
  * Store all the PPPoE session.
  */
 static DEFINE_HASHTABLE(ppe_pppoe_session_table, HASH_BUCKET_SIZE);
+static DEFINE_SPINLOCK(ppe_pppoe_lock);
 
 /*
  * struct ppe_pppoe_mgr_session_entry
@@ -66,9 +67,7 @@ static void ppe_pppoe_mgr_remove_session(struct ppe_pppoe_mgr_session_entry *ppe
 				   entry, info->session_id, info->server_mac, info->local_mac);
 
 	pppoe_stats_inc(&ctx->stats.pppoe_session_remove_success);
-
 	hash_del_rcu(&ppe_entry->session_list);
-	synchronize_rcu();
 }
 
 /*
@@ -92,6 +91,7 @@ static int ppe_pppoe_mgr_disconnect(struct net_device *dev)
 		return NOTIFY_DONE;
 	}
 
+	spin_lock(&ppe_pppoe_lock);
 	hash_for_each_possible_safe(ppe_pppoe_session_table, ppe_entry,
 				     temp, session_list, dev->ifindex) {
 		entry = &ppe_entry->pppoe_pvt;
@@ -101,10 +101,14 @@ static int ppe_pppoe_mgr_disconnect(struct net_device *dev)
 
 		/*
 		 * In the hash list, there must be only one entry match with this net device.
+		 * delete the entry after finding it
 		 */
+		iface = ppe_entry->iface;
 		found = true;
+		ppe_pppoe_mgr_remove_session(ppe_entry);
 		break;
 	}
+	spin_unlock(&ppe_pppoe_lock);
 
 	if (!found) {
 		pppoe_mgr_warn("%px: PPPoE session is not found for device: %s\n", dev, dev->name);
@@ -112,7 +116,7 @@ static int ppe_pppoe_mgr_disconnect(struct net_device *dev)
 		return NOTIFY_DONE;
 	}
 
-	iface = ppe_entry->iface;
+	synchronize_rcu();
 	ret = ppe_drv_pppoe_session_deinit(iface);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		pppoe_mgr_warn("%px: Unable to deinitialize PPPoE session in PPE\n", dev);
@@ -120,7 +124,6 @@ static int ppe_pppoe_mgr_disconnect(struct net_device *dev)
 	}
 
 	ppe_drv_iface_deref(iface);
-	ppe_pppoe_mgr_remove_session(ppe_entry);
 	pppoe_mgr_minidump_free(ppe_entry, "ppe_pppoe_mgr_session_entry");
 	kfree(ppe_entry);
 	pppoe_stats_inc(&ctx->stats.pppoe_disconnect_event_success);
@@ -175,7 +178,9 @@ static int ppe_pppoe_mgr_connect(struct net_device *dev)
 
 	pppoe_mgr_init_session(dev, &opt, &ppe_entry->pppoe_pvt);
 	ppe_entry->iface = iface;
+	spin_lock(&ppe_pppoe_lock);
 	ppe_pppoe_mgr_add_session(ppe_entry, dev);
+	spin_unlock(&ppe_pppoe_lock);
 
 	entry = &ppe_entry->pppoe_pvt;
 	info = &entry->info;
@@ -229,7 +234,10 @@ fail2:
 
 fail:
 	ppe_drv_iface_deref(iface);
+	spin_lock(&ppe_pppoe_lock);
 	ppe_pppoe_mgr_remove_session(ppe_entry);
+	spin_unlock(&ppe_pppoe_lock);
+	synchronize_rcu();
 	kfree(ppe_entry);
 	return NOTIFY_DONE;
 }
@@ -254,6 +262,7 @@ static int ppe_pppoe_mgr_changemtu_event(struct net_device *dev)
 		return NOTIFY_DONE;
 	}
 
+	spin_lock(&ppe_pppoe_lock);
 	hash_for_each_possible_safe(ppe_pppoe_session_table, ppe_entry,
 				     temp, session_list, dev->ifindex) {
 		entry = &ppe_entry->pppoe_pvt;
@@ -267,6 +276,7 @@ static int ppe_pppoe_mgr_changemtu_event(struct net_device *dev)
 		found = true;
 		break;
 	}
+	spin_unlock(&ppe_pppoe_lock);
 
 	if (!found) {
 		pppoe_mgr_warn("%px: PPPoE session is not found for device: %s\n", dev, dev->name);

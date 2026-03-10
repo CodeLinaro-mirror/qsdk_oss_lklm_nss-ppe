@@ -42,8 +42,10 @@ struct ppe_drv_policer_port {
  *	 Policer ACL interface information
  */
 struct ppe_drv_policer_acl {
+	uint32_t num_acl_reserved;		/* Number of ACL reserved */
 	uint16_t acl_index;			/* Policer index */
 	bool in_use;				/* Entry in use */
+	bool is_configured;			/* Is ACL configured? */
 
 	/*
 	 * Hardware stats.

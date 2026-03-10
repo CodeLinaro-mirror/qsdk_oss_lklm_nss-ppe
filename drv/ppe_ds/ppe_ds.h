@@ -134,7 +134,6 @@ struct ppe_ds {
 	bool timer_enabled;			/* Timer enabled flag */
 	bool en_process_irq;			/* Safe to handle irq */
 	struct ppe_ds_wlan_ops *wlan_ops;	/* PPE-DS WLAN operations */
-	struct ppe_ds_wlan_ops_v2 *wlan_ops_v2;	/* PPE-DS WLAN operations */
 	struct nss_dp_ppeds_ops *dp_ops;	/* PPE-DS EDMA operations */
 	uint32_t node_cfg_idx;			/* Index of PPE-DS node configuration */
 	uint16_t last_reo2ppe_cons_idx;		/* Last read WLAN REO2PPE consumer index */

@@ -152,6 +152,10 @@ void ppe_drv_flow_v6_stats_update(struct ppe_drv_v6_conn_flow *pcf)
 	struct ppe_drv_v6_conn *cn = pcf->conn;
 	uint8_t service_class;
 
+	if (pcf->tx_port == NULL || pcf->rx_port == NULL) {
+		return;
+	}
+
 	err = fal_flow_counter_get(PPE_DRV_SWITCH_ID, pf->index, &flow_cntrs);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: failed to get stats for flow at index: %u", pf, pf->index);
@@ -227,6 +231,10 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 	struct ppe_drv_v6_conn_flow *mapt_pcf_v6, *mapt_pcr_v6;
 	struct ppe_drv_v6_conn *mapt_cn_v6;
 	uint8_t service_class;
+
+	if (pcf->tx_port == NULL || pcf->rx_port == NULL) {
+		return;
+	}
 
 	err = fal_flow_counter_get(PPE_DRV_SWITCH_ID, pf->index, &flow_cntrs);
 	if (err != SW_OK) {
@@ -320,10 +328,11 @@ bool ppe_drv_flow_v6_qos_set(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_fl
 	/*
 	 * Check if flow needs PCP marking, set PCP fields in QoS config
 	 */
-	if ((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_VLAN_PRI_MARKING))
-			&& (ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf) == 1)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_VLAN_PRI_MARKING)) {
 		/*
-		 * Note: PPE does not have flow based support for double vlan tagging.
+		 * Note: PCP marking is supported for both single and double VLAN tagging.
+		 * - For single VLAN: PCP is marked on that VLAN (index 0)
+		 * - For double VLAN: PCP is marked on outer VLAN only (index 0)
 		 * We do not need to mask unsigned integer.
 		 */
 		qos_cfg.internal_pcp = ppe_drv_v6_conn_flow_egress_vlan_get(pcf, 0)->tci >> PPE_DRV_VLAN_PRIORITY_SHIFT;;
@@ -358,6 +367,23 @@ bool ppe_drv_flow_v6_qos_clear(struct ppe_drv_flow *pf)
 	ppe_drv_trace("%p qos mapping configuration done for flow", pf);
 	return true;
 }
+
+#ifdef NSS_PPE_DRV_HW_GRO
+static bool ppe_drv_hw_gro_is_enabled(struct ppe_drv *p, struct ppe_drv_port *tx_port, struct ppe_drv_port *rx_port)
+{
+	if ((ppe_drv_port_flags_check(tx_port, PPE_DRV_PORT_FLAG_NETFN_OL)) && rx_port->hw_gro_en) {
+		if (atomic_read(&p->gro_ctx.num_hw_gro_flows) < NSS_PPE_DRV_MAX_GRO_FLOWS)
+			return true;
+	}
+
+	if ((ppe_drv_port_flags_check(rx_port, PPE_DRV_PORT_FLAG_NETFN_OL)) && tx_port->hw_gro_en) {
+		if (atomic_read(&p->gro_ctx.num_hw_gro_flows) < NSS_PPE_DRV_MAX_GRO_FLOWS)
+			return true;
+	}
+
+	return false;
+}
+#endif
 
 #ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
 /*
@@ -623,7 +649,7 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8
 	 * so that EDMA can fill the MLO assit data in skb->mark which is needed by default
 	 * for wlan vp flows.
 	 */
-	if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP ||
+	if ((pcf->tx_port && (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP)) ||
 	    ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_VP_VALID)) {
 		*wifi_qos_en = true;
 	}
@@ -853,8 +879,14 @@ bool ppe_drv_flow_v6_pri_profile_get(struct ppe_drv_v6_conn_flow *pcf, struct pp
 	if (ppe_drv_is_wlan_vp_port_type(pp->user_type)) {
 		if (pp->core_mask) {
 			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			BUG_ON(next_core >= NR_CPUS);
 			pp->shadow_core_mask &= ~(1 << next_core);
-			enq_vp = p->rfs.core2enq_vp[next_core];
+#if defined(NSS_PPE_DRV_HW_GRO)
+        		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO))
+				enq_vp = p->gro_ctx.gro_info.core2enq_vp[next_core];
+			else
+#endif
+				enq_vp = p->rfs.core2enq_vp[next_core];
 			evp_pri_profile = ppe_drv_port_enq_vp_to_pri_prof(enq_vp);
 			if (!pp->shadow_core_mask) {
 				pp->shadow_core_mask = pp->core_mask;
@@ -877,7 +909,22 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	struct ppe_drv_port *port_rx = pcf->rx_port;
 	ppe_drv_sc_t service_code = *scp;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	ppe_drv_ret_t ret;
 
+	ret = ppe_drv_veip_gw_port_sc(ppe_drv_v6_conn_flow_tx_port_get(pcf), &sc);
+	if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD) {
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+					pcf, service_code, sc);
+			return false;
+		}
+		*scp = service_code;
+	} else if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD_FAIL) {
+		ppe_drv_warn("%p: VEIP US v6 flow add failed ret=%d, sc=%u\n", pcf, ret, sc);
+		return false;
+	}
+#endif
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST)) {
 		/*
 		 * Service code to set priority for PPE assisted flows.
@@ -1157,10 +1204,10 @@ struct ppe_drv_flow *ppe_drv_flow_v6_get(struct ppe_drv_v6_5tuple *tuple)
 }
 
 /*
- * ppe_drv_flow_v6_sawf_mark_update()
- *	Update sawf mark in PPE
+ * ppe_drv_flow_v6_wlan_metadata_set()
+ *	Set flow QOS information for the v6 flow.
  */
-bool ppe_drv_flow_v6_sawf_mark_update(struct ppe_drv_v6_conn_flow *pcf)
+bool ppe_drv_flow_v6_wlan_metadata_set(struct ppe_drv_v6_conn_flow *pcf)
 {
 	fal_flow_qos_t flow_qos = {0};
 	uint16_t index;
@@ -1197,7 +1244,7 @@ bool ppe_drv_flow_v6_sawf_mark_update(struct ppe_drv_v6_conn_flow *pcf)
 #endif
 
 	if (!ppe_drv_flow_v6_wifi_qos_get(pcf, &flow_qos.qos, &wifi_qos_en)) {
-		ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
+		ppe_drv_warn("%p: failed to obtain wifi qos %d", pcf, flow_qos.qos);
 		return false;
 	}
 
@@ -1205,7 +1252,8 @@ bool ppe_drv_flow_v6_sawf_mark_update(struct ppe_drv_v6_conn_flow *pcf)
 
 	err = fal_flow_qos_set(PPE_DRV_SWITCH_ID, index, &flow_qos);
 	if (err != SW_OK) {
-		ppe_drv_warn("%px: Mark rule update failed in PPE", pcf);
+		ppe_drv_warn("%px: failed to set wifi metadata in PPE with tree id %px and wifi qos %u",
+				pcf, flow_qos.tree_id, flow_qos.qos);
 		return false;
 	}
 
@@ -1230,10 +1278,15 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	uint8_t service_class;
 	struct ppe_drv_iface *port_if = ppe_drv_v6_conn_flow_eg_port_if_get(pcf);
 	struct ppe_drv_port *pp = NULL;
+#ifdef NSS_PPE_DRV_HW_GRO
+	struct ppe_drv_port *tx_port = NULL;
+	struct ppe_drv_port *rx_port = NULL;
+#endif
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
 	bool wifi_qos_en = false;
 	uint16_t xmit_mtu;
+	fal_flow_entry_t *unidir_flow_cfg = NULL;
 	sw_error_t err;
 
 	/*
@@ -1266,6 +1319,24 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	flow_cfg.deacclr_en = A_FALSE;
 	flow_cfg.invalid = !entry_valid;
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
+
+#if defined(NSS_PPE_DRV_HW_GRO)
+	/*
+	 * Enable HW GRO only if:
+	 * 1. Flow has valid SW metadata (PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID)
+	 *    This ensures the flow has proper metadata tracking for GRO processing
+	 * 2. We haven't exceeded the maximum number of concurrent GRO flows
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID)) {
+		tx_port = ppe_drv_v6_conn_flow_tx_port_get(pcf);
+		rx_port = ppe_drv_v6_conn_flow_rx_port_get(pcf);
+
+		if (ppe_drv_hw_gro_is_enabled(p, tx_port, rx_port)) {
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO);
+			atomic_inc(&p->gro_ctx.num_hw_gro_flows);
+		}
+	}
+#endif
 
 	if (!ppe_drv_flow_v6_pri_profile_get(pcf, pp, &flow_cfg.pri_profile)) {
 		ppe_drv_warn("%p: failed to obtain a valid pri_profile value", pcf);
@@ -1305,6 +1376,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 		return NULL;
 	}
 #endif
+
 	/*
 	 * Get the VPN ID corresponding to flow.
 	 */
@@ -1529,13 +1601,47 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	ppe_drv_trace("%p: flow_tbl[PMTU]: %u", pcf, xmit_mtu);
 
 	/*
+	 * Changing the fwd_type to RDT_TO_CPU in case of unidirectional acceleration,
+	 * when one of the flow is not accelerated (flow or return)
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACCEL_DISABLE)) {
+		unidir_flow_cfg = kzalloc(sizeof(fal_flow_entry_t), GFP_ATOMIC);
+		if (unidir_flow_cfg) {
+			memcpy(unidir_flow_cfg, &flow_cfg, sizeof(fal_flow_entry_t));
+		} else {
+			ppe_drv_warn("%p: failed to allocate flow_cfg, unidirectional updates will be disabled", pcf);
+		}
+		flow_cfg.fwd_type = FAL_FLOW_RDT_TO_CPU;
+	}
+
+	/*
 	 * Add the flow
 	 */
 	err = fal_flow_entry_add(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_KEY, &flow_cfg);
 	if (err != SW_OK) {
 		ppe_drv_trace("%p: flow entry add failed", pcf);
+		if (unidir_flow_cfg) {
+			kfree(unidir_flow_cfg);
+		}
 		return NULL;
 	}
+
+#ifdef NSS_PPE_DRV_HW_GRO
+	/*
+	 * GRO enable
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO)) {
+		err = fal_flow_gro_en_set(PPE_DRV_SWITCH_ID, flow_cfg.entry_id, A_TRUE);
+		if (err != SW_OK) {
+			/*
+			 * If HW GRO failed, then expectation is to fall back to SW GRO
+			 */
+			ppe_drv_warn("%p: Setting of GRO failed, err=%d. Rolling back GRO state", pcf, err);
+			ppe_drv_v6_conn_flow_flags_clear(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO);
+			atomic_dec(&p->gro_ctx.num_hw_gro_flows);
+		}
+	}
+#endif
 
 	/*
 	 * Get the sw instance of flow entry.
@@ -1571,6 +1677,10 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	flow->entry_type = flow_cfg.entry_type;
 	flow->pri_profile = flow_cfg.pri_profile;
 	flow->pcf.v6 = pcf;
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACCEL_DISABLE)) {
+		flow->unidir_info.flow_cfg = unidir_flow_cfg;
+	}
+
 	ppe_drv_trace("%p: flow_tbl entry added at index: %u", pcf, flow_cfg.entry_id);
 	return flow;
 }
@@ -1604,10 +1714,11 @@ bool ppe_drv_flow_v4_qos_set(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_fl
 	/*
 	 * Check if flow needs PCP marking, set PCP fields in QoS config
 	 */
-	if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_VLAN_PRI_MARKING))
-			&& (ppe_drv_v4_conn_flow_egress_vlan_cnt_get(pcf) == 1)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_VLAN_PRI_MARKING)) {
 		/*
-		 * Note: PPE does not have flow based support for double vlan tagging.
+		 * Note: PCP marking is supported for both single and double VLAN tagging.
+		 * - For single VLAN: PCP is marked on that VLAN (index 0)
+		 * - For double VLAN: PCP is marked on outer VLAN only (index 0)
 		 * We do not need to mask unsigned integer.
 		 */
 		qos_cfg.internal_pcp = ppe_drv_v4_conn_flow_egress_vlan_get(pcf, 0)->tci >> PPE_DRV_VLAN_PRIORITY_SHIFT;;
@@ -1833,7 +1944,7 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8
 	 * so that EDMA can fill the MLO assit data in skb->mark which is needed by default
 	 * for wlan vp flows.
 	 */
-	if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP ||
+	if ((pcf->tx_port && (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP)) ||
 	    ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_VP_VALID)) {
 		*wifi_qos_en = true;
 	}
@@ -1994,8 +2105,14 @@ bool ppe_drv_flow_v4_pri_profile_get(struct ppe_drv_v4_conn_flow *pcf, struct pp
 	if (ppe_drv_is_wlan_vp_port_type(pp->user_type)) {
 		if (pp->core_mask) {
 			next_core = __builtin_ffs(pp->shadow_core_mask) - 1;
+			BUG_ON(next_core >= NR_CPUS);
 			pp->shadow_core_mask &= ~(1 << next_core);
-			enq_vp = p->rfs.core2enq_vp[next_core];
+#if defined(NSS_PPE_DRV_HW_GRO)
+        		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO))
+				enq_vp = p->gro_ctx.gro_info.core2enq_vp[next_core];
+			else
+#endif
+				enq_vp = p->rfs.core2enq_vp[next_core];
 			evp_pri_profile = ppe_drv_port_enq_vp_to_pri_prof(enq_vp);
 			if (!pp->shadow_core_mask) {
 				pp->shadow_core_mask = pp->core_mask;
@@ -2019,11 +2136,7 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	struct ppe_drv_port *port_rx = pcf->rx_port;
 	ppe_drv_sc_t service_code = *scp;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
-#ifdef PPE_TUNNEL_ENABLE
-#if defined(PPE_LOOPBACK_RING_SUPPORT)
-	ppe_drv_ret_t ret;
-#endif
-#endif
+	ppe_drv_ret_t ret __maybe_unused;
 
 #ifdef PPE_TUNNEL_ENABLE
 #if defined(PPE_LOOPBACK_RING_SUPPORT)
@@ -2035,6 +2148,22 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		return false;
 	}
 #endif
+#endif
+
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	ret = ppe_drv_veip_gw_port_sc(ppe_drv_v4_conn_flow_tx_port_get(pcf), &sc);
+	if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD) {
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+					pcf, service_code, sc);
+			return false;
+		}
+		*scp = service_code;
+		return true;
+	} else if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD_FAIL) {
+		ppe_drv_warn("%p: VEIP US v4 flow add failed ret=%d, veip_sc=%u\n", pcf, ret, sc);
+		return false;
+	}
 #endif
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST)) {
 		/*
@@ -2236,6 +2365,15 @@ bool ppe_drv_flow_del(struct ppe_drv_flow *pf)
 	pf->flags = 0;
 	pf->type = 0;
 	pf->entry_type = 0;
+
+	/*
+	 * Free the dynamically allocated flow_cfg memory
+	 */
+	if (pf->unidir_info.flow_cfg) {
+		kfree(pf->unidir_info.flow_cfg);
+		pf->unidir_info.flow_cfg = NULL;
+	}
+
 	ppe_drv_trace("%p: flow_tbl entry deleted at index: %u", pf, pf->index);
 	return true;
 }
@@ -2332,10 +2470,10 @@ struct ppe_drv_flow *ppe_drv_flow_v4_get(struct ppe_drv_v4_5tuple *tuple)
 
 
 /*
- * ppe_drv_flow_v4_sawf_mark_update()
- *	Update sawf mark in PPE
+ * ppe_drv_flow_v4_wlan_metadata_set()
+ *	Set flow QoS information for the v4 flow.
  */
-bool ppe_drv_flow_v4_sawf_mark_update(struct ppe_drv_v4_conn_flow *pcf)
+bool ppe_drv_flow_v4_wlan_metadata_set(struct ppe_drv_v4_conn_flow *pcf)
 {
 	fal_flow_qos_t flow_qos = {0};
 	uint16_t index;
@@ -2372,7 +2510,7 @@ bool ppe_drv_flow_v4_sawf_mark_update(struct ppe_drv_v4_conn_flow *pcf)
 #endif
 
 	if (!ppe_drv_flow_v4_wifi_qos_get(pcf, &flow_qos.qos, &wifi_qos_en)) {
-		ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
+		ppe_drv_warn("%p: failed to obtain wifi qos %d", pcf, flow_qos.qos);
 		return false;
 	}
 
@@ -2380,7 +2518,8 @@ bool ppe_drv_flow_v4_sawf_mark_update(struct ppe_drv_v4_conn_flow *pcf)
 
 	err = fal_flow_qos_set(PPE_DRV_SWITCH_ID, index, &flow_qos);
 	if (err != SW_OK) {
-		ppe_drv_warn("%px: Mark rule update failed in PPE", pcf);
+		ppe_drv_warn("%px: failed to set wifi metadata in PPE with tree id %px and wifi qos %u",
+			pcf, flow_qos.tree_id, flow_qos.qos);
 		return false;
 	}
 
@@ -2407,10 +2546,15 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	uint8_t service_class;
 	struct ppe_drv_iface *port_if = ppe_drv_v4_conn_flow_eg_port_if_get(pcf);
 	struct ppe_drv_port *pp = NULL;
+#ifdef NSS_PPE_DRV_HW_GRO
+	struct ppe_drv_port *tx_port = NULL;
+	struct ppe_drv_port *rx_port = NULL;
+#endif
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
 	bool wifi_qos_en = false;
 	uint16_t xmit_mtu;
+	fal_flow_entry_t *unidir_flow_cfg = NULL;
 	sw_error_t err;
 
 	/*
@@ -2444,6 +2588,24 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	flow_cfg.deacclr_en = A_FALSE;
 	flow_cfg.invalid = !entry_valid;
 	flow_cfg.sevice_code = PPE_DRV_SC_NONE;
+
+#if defined(NSS_PPE_DRV_HW_GRO)
+	/*
+	 * Enable HW GRO only if:
+	 * 1. Flow has valid SW metadata (PPE_DRV_V4_CONN_FLAG_FLOW_SW_MDATA_VALID)
+	 *    This ensures the flow has proper metadata tracking for GRO processing
+	 * 2. We haven't exceeded the maximum number of concurrent GRO flows
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_SW_MDATA_VALID)) {
+		tx_port = ppe_drv_v4_conn_flow_tx_port_get(pcf);
+		rx_port = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+
+		if (ppe_drv_hw_gro_is_enabled(p, tx_port, rx_port)) {
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO);
+			atomic_inc(&p->gro_ctx.num_hw_gro_flows);
+		}
+	}
+#endif
 
 	if (!ppe_drv_flow_v4_pri_profile_get(pcf, pp, &flow_cfg.pri_profile)) {
 		ppe_drv_warn("%p: failed to obtain a valid pri_profile value", pcf);
@@ -2554,6 +2716,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		} else {
 			flow_cfg.fwd_type = FAL_FLOW_ROUTE;
 			flow_cfg.route_port = PPE_DRV_PORT_CPU;
+			flow_cfg.route_nexthop = nh->index;
 		}
 		ppe_drv_trace("%p: RFS enabled flow\n", pcf);
 	} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST)) {
@@ -2722,13 +2885,47 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	ppe_drv_trace("%p: flow_tbl[PMTU]: %u", pcf, xmit_mtu);
 
 	/*
+	 * Changing the fwd_type to RDT_TO_CPU in case of unidirectional acceleration,
+	 * when one of the flow is not accelerated (flow or return)
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_ACCEL_DISABLE)) {
+		unidir_flow_cfg = kzalloc(sizeof(fal_flow_entry_t), GFP_ATOMIC);
+		if (unidir_flow_cfg) {
+			memcpy(unidir_flow_cfg, &flow_cfg, sizeof(fal_flow_entry_t));
+		} else {
+			ppe_drv_warn("%p: failed to allocate flow_cfg, unidirectional updates will be disabled", pcf);
+		}
+		flow_cfg.fwd_type = FAL_FLOW_RDT_TO_CPU;
+	}
+
+	/*
 	 * Add the flow
 	 */
 	err = fal_flow_entry_add(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_KEY, &flow_cfg);
 	if (err != SW_OK) {
 		ppe_drv_trace("%p: flow entry add failed", pcf);
+		if (unidir_flow_cfg) {
+			kfree(unidir_flow_cfg);
+		}
 		return NULL;
 	}
+
+#ifdef NSS_PPE_DRV_HW_GRO
+	/*
+	 * Enable GRO
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
+		err = fal_flow_gro_en_set(PPE_DRV_SWITCH_ID, flow_cfg.entry_id, A_TRUE);
+		if (err != SW_OK) {
+			/*
+			 * If HW GRO failed, then expectation is to fall back to SW GRO
+			 */
+			ppe_drv_warn("%p: Setting of GRO failed, err=%d. Rolling back GRO state", pcf, err);
+			ppe_drv_v4_conn_flow_flags_clear(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO);
+			atomic_dec(&p->gro_ctx.num_hw_gro_flows);
+		}
+	}
+#endif
 
 	/*
 	 * Get the sw instance of flow entry.
@@ -2765,6 +2962,11 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	flow->entry_type = flow_cfg.entry_type;
 	flow->pri_profile = flow_cfg.pri_profile;
 	flow->pcf.v4 = pcf;
+
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_ACCEL_DISABLE)) {
+		flow->unidir_info.flow_cfg = unidir_flow_cfg;
+	}
+
 	ppe_drv_trace("%p: flow_tbl entry added at index: %u", pcf, flow_cfg.entry_id);
 	return flow;
 }
@@ -2822,6 +3024,41 @@ static void ppe_drv_flow_table_free(void)
 		vfree(flow_table_info->qdisc_info);
 		vfree(flow_table_info);
 	}
+}
+
+/*
+ * ppe_drv_flow_accel_enable()
+ *	Accelerate the de-accelerated flow by updating the fwd_type.
+ * This will be called under the ppe_drv lock, taken at the
+ * time of update.
+ */
+bool ppe_drv_flow_accel_enable(struct ppe_drv_flow *flow)
+{
+	sw_error_t err;
+
+	if (!flow || !flow->unidir_info.flow_cfg) {
+		ppe_drv_warn("%p: invalid flow for acceleration", flow);
+		return false;
+	}
+
+	/*
+	 * Update the flow in FAL to change the forward type.
+	 */
+	err = fal_flow_entry_add(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_KEY, flow->unidir_info.flow_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: flow entry %u resume failed", flow, flow->unidir_info.flow_cfg->entry_id);
+		return false;
+	}
+
+	/*
+	 * Delete the flow_cfg reference
+	 */
+	if (flow->unidir_info.flow_cfg) {
+		kfree(flow->unidir_info.flow_cfg);
+		flow->unidir_info.flow_cfg = NULL;
+	}
+
+	return true;
 }
 
 /*

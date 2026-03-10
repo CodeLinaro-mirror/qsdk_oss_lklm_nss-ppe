@@ -67,6 +67,20 @@
 #define PPE_DSCP_ECN_CE			0x3	/* Congestion Experienced */
 
 /*
+ * ppe_dscp_db_entry
+ *	DSCP database entry structure
+ */
+struct ppe_dscp_db_entry {
+	struct list_head list;		/* List node */
+	uint8_t tos;			/* TOS value (DSCP + ECN) */
+	uint8_t pcp0_upstream;		/* PCP0 value for upstream */
+	uint8_t pcp1_upstream;		/* PCP1 value for upstream */
+	uint8_t pcp0_downstream;	/* PCP0 value for downstream */
+	uint8_t pcp1_downstream;	/* PCP1 value for downstream */
+	bool valid;			/* Entry is valid/configured */
+};
+
+/*
  * ppe_dscp
  *	Structure for dscp to p bit table rule.
  */
@@ -82,8 +96,13 @@ struct ppe_dscp {
  *	PPE dscp to p bit table base structure
  */
 struct ppe_dscp_base {
+	struct list_head dscp_map;		/* DSCP database list */
 	spinlock_t lock;			/* DSCP lock */
+	struct dentry *dentry;			/* Debugfs dentry */
+	int dscp_dump_major_id;			/* DSCP dump major ID */
 };
+
+extern struct ppe_dscp_base ppe_dscp_gbl;
 
 /*
  * DSCP manager APIs.

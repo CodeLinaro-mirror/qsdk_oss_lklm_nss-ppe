@@ -257,7 +257,7 @@ static int ppe_prio_graft(struct Qdisc *sch, unsigned long arg,
 		}
 
 		pq_new = qdisc_priv(new);
-		pq_new->res.scheduler.priority = band;
+		pq_new->res.scheduler.priority = PPE_DRV_QOS_PRIORITY_MAX - band - 1;
 		ppe_qdisc_info("%x ppeprio attaching new child with qos tag: %x, priority: %u",
 			q->pq.qos_tag, pq_new->qos_tag, band);
 		if (ppe_qdisc_node_attach(&q->pq, pq_new) < 0) {

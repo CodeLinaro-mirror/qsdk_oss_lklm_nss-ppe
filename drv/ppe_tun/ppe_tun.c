@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/types.h>
@@ -1957,11 +1946,18 @@ static int __init ppe_tun_module_init(void)
 {
 	struct dentry *dir;
 	ppe_acl_ret_t ret;
-	struct ppe_acl_rule rule = {0};
+	struct ppe_acl_rule *rule;
 
 	ptp = kzalloc(sizeof(struct ppe_tun_priv), GFP_ATOMIC);
 	if (!ptp) {
 		ppe_tun_warn("memory allocation for ptp failed");
+		return -ENOMEM;
+	}
+
+	rule = kzalloc(sizeof(struct ppe_acl_rule), GFP_ATOMIC);
+	if (!rule) {
+		kfree(ptp);
+		ppe_tun_warn("memory allocation for acl rule failed");
 		return -ENOMEM;
 	}
 
@@ -2082,20 +2078,21 @@ static int __init ppe_tun_module_init(void)
 		ppe_tun_warn("failed to create hybrid offload debugfs ntry got gretap");
 	}
 
-	rule.cmn.cmn_flags = rule.cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_NO_RULEID;
-	rule.stype = PPE_ACL_RULE_SRC_TYPE_SC;
-	rule.action.fwd_cmd = PPE_ACL_FWD_CMD_REDIR;
-	rule.valid_flags = (1 << PPE_ACL_RULE_MATCH_TYPE_DEFAULT);
-	rule.action.flags = PPE_ACL_RULE_ACTION_FLAG_FW_CMD;
-	rule.src.sc = PPE_DRV_SC_L2_TUNNEL_EXCEPTION;
-	ret = ppe_acl_rule_create(&rule);
+	rule->cmn.cmn_flags = rule->cmn.cmn_flags | PPE_ACL_RULE_CMN_FLAG_NO_RULEID;
+	rule->dev_type = PPE_ACL_RULE_DEV_TYPE_SC;
+	rule->action.fwd_cmd = PPE_ACL_FWD_CMD_REDIR;
+	rule->valid_flags = (1 << PPE_ACL_RULE_MATCH_TYPE_DEFAULT);
+	rule->action.flags = PPE_ACL_RULE_ACTION_FLAG_FW_CMD;
+	rule->dev.sc = PPE_DRV_SC_L2_TUNNEL_EXCEPTION;
+	ret = ppe_acl_rule_create(rule);
 	if (ret != PPE_ACL_RET_SUCCESS) {
 		ppe_tun_warn("Failed to create ACL rule for VXLAN tunnels. error:%d", ret);
 		goto fail;
 	}
 
-	ptp->ppe_tun_l2_tunnel_rule_id = rule.rule_id;
+	ptp->ppe_tun_l2_tunnel_rule_id = rule->rule_id;
 
+	kfree(rule);
 	ppe_tun_info("ppe tunnel driver initialized");
 	return 0;
 
@@ -2104,6 +2101,7 @@ fail:
 
 	nss_ppe_tun_minidump_free(ptp, "ppe_tun_priv");
 	kfree(ptp);
+	kfree(rule);
 	ptp = NULL;
 
 	ppe_tun_warn("ppe tunnel driver initialization failed");

@@ -35,7 +35,7 @@ static int name_to_lvl(const char *s, enum nss_log_level *out)
     return -EINVAL;
 }
 
-static nss_cat_mask_t name_to_cat(const char *name)
+static nss_debug_cat_mask_t name_to_cat(const char *name)
 {
     char buf[64];
     size_t i;
@@ -74,7 +74,7 @@ static nss_cat_mask_t name_to_cat(const char *name)
 /* print_enable */
 static int print_enable_show(struct seq_file *m, void *v)
 {
-    seq_printf(m, "%u\n", nss_get_print_enable() ? 1 : 0);
+    seq_printf(m, "%u\n", nss_debug_enable_get() ? 1 : 0);
     return 0;
 }
 
@@ -93,7 +93,7 @@ static ssize_t print_enable_write(struct file *file, const char __user *ubuf,
     if (!strcmp(kbuf, "1") || !strcmp(kbuf, "y") || !strcmp(kbuf, "Y") || !strcmp(kbuf, "true")) enable = true;
     else if (!strcmp(kbuf, "0") || !strcmp(kbuf, "n") || !strcmp(kbuf, "N") || !strcmp(kbuf, "false")) enable = false;
     else { kfree(kbuf); return -EINVAL; }
-    ret = nss_set_print_enable(enable);
+    ret = nss_debug_enable_set(enable);
     kfree(kbuf);
     return ret ? ret : len;
 }
@@ -112,7 +112,7 @@ static const struct proc_ops print_enable_ops = {
 /* global_level */
 static int global_level_show(struct seq_file *m, void *v)
 {
-    enum nss_log_level lvl = nss_get_level_global();
+    enum nss_log_level lvl = nss_debug_level_global_get();
     seq_printf(m, "%s (%u)\n", lvl_to_name(lvl), (unsigned)lvl);
     return 0;
 }
@@ -131,7 +131,7 @@ static ssize_t global_level_write(struct file *file, const char __user *ubuf,
     strim(kbuf);
     ret = name_to_lvl(kbuf, &lvl);
     if (ret) { kfree(kbuf); return ret; }
-    ret = nss_set_level_global(lvl);
+    ret = nss_debug_level_global_set(lvl);
     kfree(kbuf);
     return ret ? ret : len;
 }
@@ -150,7 +150,7 @@ static const struct proc_ops global_level_ops = {
 /* global_mask */
 static int global_mask_show(struct seq_file *m, void *v)
 {
-    seq_printf(m, "0x%08x\n", (unsigned int)nss_get_global_mask());
+    seq_printf(m, "0x%08x\n", (unsigned int)nss_debug_global_mask_get());
     return 0;
 }
 
@@ -158,7 +158,7 @@ static ssize_t global_mask_write(struct file *file, const char __user *ubuf,
                                  size_t len, loff_t *ppos)
 {
     char *kbuf, *p, *tok;
-    nss_cat_mask_t new_mask = 0;
+    nss_debug_cat_mask_t new_mask = 0;
     int ret = 0;
     if (len == 0 || len > 256) return -EINVAL;
     kbuf = kmalloc(len + 1, GFP_KERNEL);
@@ -171,22 +171,22 @@ static ssize_t global_mask_write(struct file *file, const char __user *ubuf,
         unsigned long val;
         ret = kstrtoul(kbuf, 16, &val);
         if (ret) { kfree(kbuf); return -EINVAL; }
-        new_mask = (nss_cat_mask_t)val;
+        new_mask = (nss_debug_cat_mask_t)val;
         /* Set mask exactly: clear all, then enable requested bits */
-        nss_disable_category(NSS_LOG_CAT_ALL);
-        nss_enable_category(new_mask);
+        nss_debug_category_disable(NSS_LOG_CAT_ALL);
+        nss_debug_category_enable(new_mask);
         kfree(kbuf);
         return len;
     }
 
     /* Comma-separated names */
     if (!strcmp(kbuf, "ALL")) {
-        nss_enable_category(NSS_LOG_CAT_ALL);
+        nss_debug_category_enable(NSS_LOG_CAT_ALL);
         kfree(kbuf);
         return len;
     }
     if (!strcmp(kbuf, "NONE")) {
-        nss_disable_category(NSS_LOG_CAT_ALL);
+        nss_debug_category_disable(NSS_LOG_CAT_ALL);
         kfree(kbuf);
         return len;
     }
@@ -198,8 +198,8 @@ static ssize_t global_mask_write(struct file *file, const char __user *ubuf,
         new_mask |= name_to_cat(tok);
     }
     /* Apply: set to exactly new_mask */
-    nss_disable_category(NSS_LOG_CAT_ALL);
-    nss_enable_category(new_mask);
+    nss_debug_category_disable(NSS_LOG_CAT_ALL);
+    nss_debug_category_enable(new_mask);
     kfree(kbuf);
     return len;
 }
@@ -218,9 +218,9 @@ static const struct proc_ops global_mask_ops = {
 /* status */
 static int status_show(struct seq_file *m, void *v)
 {
-    seq_printf(m, "print_enable=%u\n", nss_get_print_enable() ? 1 : 0);
-    seq_printf(m, "level=%s (%u)\n", lvl_to_name(nss_get_level_global()), (unsigned)nss_get_level_global());
-    seq_printf(m, "mask=0x%08x\n", (unsigned int)nss_get_global_mask());
+    seq_printf(m, "print_enable=%u\n", nss_debug_enable_get() ? 1 : 0);
+    seq_printf(m, "level=%s (%u)\n", lvl_to_name(nss_debug_level_global_get()), (unsigned)nss_debug_level_global_get());
+    seq_printf(m, "mask=0x%08x\n", (unsigned int)nss_debug_global_mask_get());
     return 0;
 }
 

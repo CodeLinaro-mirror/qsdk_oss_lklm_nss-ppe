@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/netdevice.h>
@@ -199,6 +188,44 @@ static void ppe_drv_port_dump(struct ppe_drv_port *pp)
 #endif
 
 /*
+ * ppe_drv_port_reset_state()
+ *	Initialise and reset the port structure variables.
+ */
+static void ppe_drv_port_reset_state(struct ppe_drv_port *port)
+{
+	INIT_LIST_HEAD(&port->l3_list);
+	port->flags = 0;
+	port->dev = NULL;
+	port->port_vsi = NULL;
+	port->br_vsi = NULL;
+	port->port_l3_if = NULL;
+	port->active_l3_if = NULL;
+	port->tl_l3_if = NULL;
+	port->port_tun = NULL;
+	port->l2_vp = NULL;
+	port->active_vlan = 0;
+	port->tunnel_vp_cfg = 0;
+	port->mac_valid = 0;
+	port->mtu = 0;
+	port->mru = 0;
+	port->type = PPE_DRV_PORT_VIRTUAL;
+	port->user_type = 0;
+	port->ucast_queue = 0;
+	port->src_profile = 0;
+	port->profile_id = 0;
+	port->core_mask = 0;
+	port->shadow_core_mask = 0;
+	port->next_core = 0;
+	port->xmit_port = 0;
+	port->active_l3_if_attached = false;
+	port->is_fdb_learn_enabled = false;
+	port->ingress_untag_vlan = false;
+	memset(port->mac_addr, 0, ETH_ALEN);
+	memset(&port->stats, 0, sizeof(port->stats));
+	memset(&port->evp, 0, sizeof(port->evp));
+}
+
+/*
  * ppe_drv_port_get_free_port()
  *	Returns a free port entry of given type.
  */
@@ -214,12 +241,15 @@ static inline struct ppe_drv_port *ppe_drv_port_get_free_port(enum ppe_drv_port_
 	switch (type) {
 	case PPE_DRV_PORT_VIRTUAL:
 	case PPE_DRV_PORT_VIRTUAL_PO:
+	case PPE_DRV_PORT_VIRTUAL_GW:
+	case PPE_DRV_PORT_VIRTUAL_PON:
 		/*
 		 * Fetch the first available virtual port
 		 */
 		for (i = PPE_DRV_VIRTUAL_START; i < (PPE_DRV_VIRTUAL_START + PPE_DRV_VIRTUAL_MAX); i++) {
 			if (!kref_read(&p->port[i].ref_cnt)) {
 				kref_init(&p->port[i].ref_cnt);
+				ppe_drv_port_reset_state(&p->port[i]);
 				return &p->port[i];
 			}
 		}
@@ -284,6 +314,7 @@ static void ppe_drv_port_destroy(struct kref *kref)
 
 	pp->mtu = 0;
 	pp->mru = 0;
+	pp->flags = 0;
 
 	/*
 	 * Clear MAC address
@@ -458,6 +489,9 @@ bool ppe_drv_port_l3_if_attach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 				return false;
 			}
 
+			ppe_drv_trace("%p port l3_if configuration done: %p port_num: %u l3_if_num: %u",
+                                                pp, pl3, pp->port, pl3->l3_if_index);
+
 			pp->active_l3_if_attached = A_TRUE;
 			pp->active_l3_if = pl3;
 		}
@@ -539,6 +573,67 @@ void ppe_drv_port_l3_if_detach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *pl
 	 */
 	ppe_drv_l3_if_deref(pl3);
 	ppe_drv_port_dump(pp);
+}
+
+/*
+ * ppe_drv_port_flood_vsi_override_en
+ * 	Enable UUC, UMC and BC flooding for all the ports.
+ */
+void ppe_drv_port_flood_vsi_override_en(uint32_t vsi_id)
+{
+	fal_vsi_member_t vsi_member;
+	sw_error_t rv;
+
+	rv = fal_vsi_member_get(PPE_DRV_SWITCH_ID, vsi_id, &vsi_member);
+	if( rv != SW_OK ) {
+		ppe_drv_warn("Invalid VSI member for a given VSI index: %d\n", vsi_id);
+		return;
+	}
+
+	/*
+	 * Set the flooding membership as port membership.
+	 */
+	vsi_member.uuc_ports = vsi_member.member_ports;
+	vsi_member.umc_ports = vsi_member.member_ports;
+	vsi_member.bc_ports = vsi_member.member_ports;
+
+	rv = fal_vsi_member_set(PPE_DRV_SWITCH_ID, vsi_id, &vsi_member);
+	if (rv != SW_OK) {
+		ppe_drv_warn("Flood membership override failed: vsi_num: %u", vsi_id);
+		return;
+	}
+
+	ppe_drv_trace("Flood membership enabled for UUC, UMC and BC: vsi_num: %u", vsi_id);
+}
+
+/*
+ * ppe_drv_port_flood_vsi_override_default
+ * 	Disable flooding for UUC, UMC and BC on all ports, except the PORT CPU.
+ */
+void ppe_drv_port_flood_vsi_override_default(uint32_t vsi_id)
+{
+	fal_vsi_member_t vsi_member;
+	sw_error_t rv;
+	rv = fal_vsi_member_get(PPE_DRV_SWITCH_ID, vsi_id, &vsi_member);
+	if( rv != SW_OK ) {
+		ppe_drv_warn("Invalid VSI member for a given VSI index: %d\n", vsi_id);
+		return;
+	}
+
+	/*
+	 * Reset the flooding membership to CPU port only.
+	 */
+	vsi_member.uuc_ports = 0x1;
+	vsi_member.umc_ports = 0x1;
+	vsi_member.bc_ports = 0x1;
+
+	rv = fal_vsi_member_set(PPE_DRV_SWITCH_ID, vsi_id, &vsi_member);
+	if (rv != SW_OK) {
+		ppe_drv_warn("Flood membership disable failed: vsi_num: %u", vsi_id);
+		return;
+	}
+
+	ppe_drv_trace("Flood membership disabled for UUC, UMC and BC: vsi_num: %u", vsi_id);
 }
 
 /*
@@ -629,7 +724,7 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		return;
 
 	default:
-		ppe_drv_assert(false, "%p: attaching port: %u of unknown type vsi :%u", pp, fal_port, vsi->type);
+		ppe_drv_assert("%p: attaching port: %u of unknown type vsi :%u", pp, fal_port, vsi->type);
 		ppe_drv_warn("%p: attaching port to unknown vsi type: %u", pp, vsi->type);
 		return;
 	}
@@ -670,6 +765,9 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		goto fail;
 	}
 
+	if (active_vsi->flood_vsi_en) {
+		ppe_drv_port_flood_vsi_override_en(active_vsi->index);
+	}
 	ppe_drv_trace("%p: attaching vsi %u to port %u", pp, active_vsi->index, fal_port);
 
 	ppe_drv_port_dump(pp);
@@ -921,6 +1019,7 @@ int32_t ppe_drv_port_ucast_queue_profile_get(int port)
 
 	return profile;
 }
+EXPORT_SYMBOL(ppe_drv_port_ucast_queue_profile_get);
 
 /*
  * ppe_drv_port_ucast_queue_get_by_port()
@@ -1232,6 +1331,28 @@ int32_t ppe_drv_port_num_from_dev(struct net_device *dev)
 EXPORT_SYMBOL(ppe_drv_port_num_from_dev);
 
 /*
+ * ppe_drv_port_num_from_ifname()
+ *	Get PPE port number from interface name
+ */
+int32_t ppe_drv_port_num_from_ifname(const char *ifname)
+{
+	struct net_device *dev;
+	int32_t port_num;
+
+	dev = dev_get_by_name(&init_net, ifname);
+	if (!dev) {
+		ppe_drv_warn("Failed to get netdev for interface %s", ifname);
+		return PPE_DRV_PORT_ID_INVALID;
+	}
+
+	port_num = ppe_drv_port_num_from_dev(dev);
+	dev_put(dev);
+
+	return port_num;
+}
+EXPORT_SYMBOL(ppe_drv_port_num_from_ifname);
+
+/*
  * ppe_drv_port_rfs_enabled()
  *	RFS enabled on a Port
  */
@@ -1512,6 +1633,10 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id)
 	 */
 	if (pp->type == PPE_DRV_PORT_VIRTUAL_PO) {
 		profile = FAL_QM_PROFILE_PO_ID;
+	}
+
+	if (pp->type == PPE_DRV_PORT_VIRTUAL_PON || pp->type == PPE_DRV_PORT_VIRTUAL_GW) {
+		profile = PPE_DRV_REDIR_PROFILE_ID;
 	}
 
 	if ((pp->type == PPE_DRV_PORT_VIRTUAL) && is_vlan_dev(pp->dev)) {
@@ -2216,26 +2341,84 @@ int ppe_drv_port_src_profile_get_byidx(uint8_t port_idx)
 
 /*
  * ppe_drv_port_l2_vp_sc_config()
- *	l2_vp service code config
+ * 	L2_VP service code config
  */
-bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc)
+bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint32_t phy_port)
 {
 	fal_enqueue_cfg_t enq_cfg = {0};
 	sw_error_t err;
 
 	enq_cfg.index_entry.enqueue_servcode.service_code = sc;
+	enq_cfg.index_entry.enqueue_servcode.phy_port = phy_port;
 	enq_cfg.index_entry.enqueue_en = A_TRUE;
 	enq_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_SERVCODE;
 	enq_cfg.rule_entry.dst_port = pp->port;
+	enq_cfg.index_entry.enqueue_servcode.queue_select_en = A_TRUE;
 
 	err = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enq_cfg);
 	if (err != SW_OK) {
-		printk("Failed to set service code config for port: %d", pp->port);
+		ppe_drv_warn("Failed to set service code config for port: %d", pp->port);
+		return false;
+	}
+	return true;
+}
+
+/*
+ * ppe_drv_port_l2_vp_sc_reset()
+ *	Reset service code in L2_VP.
+ */
+bool ppe_drv_port_l2_vp_sc_reset(struct ppe_drv_port *pp)
+{
+	fal_enqueue_cfg_t enq_cfg = {0};
+	sw_error_t err;
+
+	enq_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_SERVCODE;
+	enq_cfg.rule_entry.dst_port = pp->port;
+
+	err = fal_qm_enqueue_config_get(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to reset service code config for port: %d", pp->port);
+		return false;
+	}
+
+	enq_cfg.index_entry.enqueue_en = A_FALSE;
+	enq_cfg.index_entry.enqueue_servcode.queue_select_en = A_FALSE;
+
+	err = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to reset service code config for port: %d", pp->port);
 		return false;
 	}
 
 	return true;
 }
+
+/*
+ * ppe_drv_port_is_gem()
+ *	Check if a port is a GEM port.
+ */
+bool ppe_drv_port_is_gem(uint16_t port_num)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *pp;
+	bool ret = false;
+
+	if (port_num >= PPE_DRV_PORTS_MAX) {
+		ppe_drv_warn("%p: invalid port number: %u", p, port_num);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+	pp = &p->port[port_num];
+
+	if (kref_read(&pp->ref_cnt)) {
+		ret = !!(pp->flags & PPE_DRV_PORT_FLAG_PORT_GEM);
+	}
+
+	spin_unlock_bh(&p->lock);
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_port_is_gem);
 
 /*
  * ppe_drv_port_alloc()
@@ -2259,7 +2442,7 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	if (type == PPE_DRV_PORT_PHYSICAL) {
 		ppe_drv_warn("%p: physical port dynamic allocation not supported dev: %p", p, dev);
 		return NULL;
-	} else if (type == PPE_DRV_PORT_VIRTUAL || type == PPE_DRV_PORT_VIRTUAL_PO) {
+	} else if (type == PPE_DRV_PORT_VIRTUAL || type == PPE_DRV_PORT_VIRTUAL_PO || type == PPE_DRV_PORT_VIRTUAL_GW || type == PPE_DRV_PORT_VIRTUAL_PON) {
 		/*
 		 * Get a free virtual port entry
 		 */
@@ -2437,8 +2620,12 @@ struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_
 	pp->ucast_queue = 0;
 	INIT_LIST_HEAD(&pp->l3_list);
 
-	ppe_drv_info("%p: allocated ppe port:%u for dev(%s): %p", pp, port, netdev_name(dev), dev);
+	if(dev){
+		ppe_drv_info("%p: allocated ppe port:%u for dev(%s): %p", pp, port, netdev_name(dev), dev);
+	}
+
 	return pp;
+
 }
 
 /*
@@ -2577,8 +2764,11 @@ struct ppe_drv_port *ppe_drv_port_phy_alloc(uint8_t port_num, struct net_device 
 	pp->ucast_queue = 0;
 	INIT_LIST_HEAD(&pp->l3_list);
 
-	ppe_drv_info("%p: allocated physical port:%u for dev(%s): %p",
+	if(dev){
+		ppe_drv_info("%p: allocated physical port:%u for dev(%s): %p",
 			pp, port_num, netdev_name(dev), dev);
+	}
+
 	return pp;
 }
 

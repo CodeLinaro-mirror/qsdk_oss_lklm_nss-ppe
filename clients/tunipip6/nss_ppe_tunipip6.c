@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/version.h>
@@ -64,6 +53,10 @@ MODULE_PARM_DESC(inherit_dscp, "DSCP 0:Dont Inherit inner, 1:Inherit inner");
 static bool mape_br_enable = false; /**< Module parameter to enable/disable BR mode in MAP-E >*/
 module_param(mape_br_enable, bool, 0644);
 MODULE_PARM_DESC(mape_br_enable, "MAP-E BR enabled 0: In CE mode, 1: In BR mode");
+
+static uint8_t ipv6_flow_label = PPE_DRV_TUN_CMN_CTX_FLOW_LABEL_FIX ;
+module_param(ipv6_flow_label, byte, 0444);
+MODULE_PARM_DESC(ipv6_flow_label, "IPv6 flow label mode 0:Fix, 1:Hash, 2:Copy from Inner");
 
 /*
  * ppe_tun_tunipip6_iface_get()
@@ -274,6 +267,11 @@ static bool nss_ppe_tunipip6_dev_parse_param(struct net_device *dev, struct ppe_
 	if (decap_ecn_mode <= PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC6040_MODE) {
 		l3->decap_ecn_mode = decap_ecn_mode;
 	}
+
+	if (ipv6_flow_label == PPE_DRV_TUN_CMN_CTX_FLOW_LABEL_FIX) {
+		l3->flow_label_val = flowi6_get_flowlabel(fl6);
+	}
+	l3->flow_label = ipv6_flow_label;
 
 	l3->proto = tunnel->parms.proto;
 	l3->flags |= PPE_DRV_TUN_CMN_CTX_L3_IPV6;
@@ -532,6 +530,12 @@ int __init nss_ppe_tunipip6_init_module(void)
 	if (decap_ecn_mode > PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC6040_MODE) {
 		nss_ppe_tunipip6_dentry_deinit();
 		nss_ppe_tunipip6_warning("Invalid Decap ECN mode %u\n", decap_ecn_mode);
+		return -1;
+	}
+
+	if (ipv6_flow_label > PPE_DRV_TUN_CMN_CTX_FLOW_LABEL_COPY) {
+		nss_ppe_tunipip6_dentry_deinit();
+		nss_ppe_tunipip6_warning("Invalid flow label mode %u\n", ipv6_flow_label);
 		return -1;
 	}
 

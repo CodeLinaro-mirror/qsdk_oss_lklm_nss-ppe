@@ -1,22 +1,12 @@
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/types.h>
 
+#include <fal/fal_pon.h>
 #include <fal/fal_qm.h>
 #include <fal/fal_qos.h>
 #include <fal/fal_shaper.h>
@@ -190,10 +180,74 @@ void ppe_drv_qos_queue_stats_reset(uint32_t qid)
 EXPORT_SYMBOL(ppe_drv_qos_queue_stats_reset);
 
 /*
+ * ppe_drv_qos_queue_enqueue_ctrl()
+ *	Controls enqueue operation for a queue in PPE HW.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_enqueue_ctrl(uint32_t qid, bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	if (fal_qm_enqueue_ctrl_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue enqueue control failed for qid:%u enable:%d", p, qid, enable);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:queue enqueue control successful for qid:%u enable:%d", p, qid, enable);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_enqueue_ctrl);
+
+/*
+ * ppe_drv_qos_queue_dequeue_ctrl()
+ *	Controls dequeue operation for a queue in PPE HW.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_dequeue_ctrl(uint32_t qid, bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	if (fal_scheduler_dequeue_ctrl_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue dequeue control failed for qid:%u enable:%d", p, qid, enable);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:queue dequeue control successful for qid:%u enable:%d", p, qid, enable);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_dequeue_ctrl);
+
+/*
+ * ppe_drv_qos_queue_dequeue_drop_ctrl()
+ *	Controls dequeue drop operation for a queue in PPE HW.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_dequeue_drop_ctrl(uint32_t qid, bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+
+	if (fal_qm_dequeue_drop_set(0, qid, enable ? A_TRUE : A_FALSE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue dequeue drop control failed for qid:%u enable:%d", p, qid, enable);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:queue dequeue drop control successful for qid:%u enable:%d", p, qid, enable);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_dequeue_drop_ctrl);
+
+/*
  * ppe_drv_qos_res_queue_disable()
  *	Disables a queue in PPE HW.
  */
-void ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
+ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 
@@ -201,12 +255,28 @@ void ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 	 * Disable queue enqueue, dequeue and flush the queue.
 	 */
 	spin_lock_bh(&p->lock);
-	fal_qm_enqueue_ctrl_set(0, qid, A_FALSE);
-	fal_scheduler_dequeue_ctrl_set(0, qid, A_FALSE);
-	fal_queue_flush(0, port_id, qid);
+	if (fal_qm_enqueue_ctrl_set(0, qid, A_FALSE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue enqueue failed for port:%u qid:%u", p, port_id, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+
+	if (fal_scheduler_dequeue_ctrl_set(0, qid, A_FALSE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue dequeue failed for port:%u qid:%u", p, port_id, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+
+	if (fal_queue_flush(0, port_id, qid) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue flush failed for port:%u qid:%u", p, port_id, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+
 	spin_unlock_bh(&p->lock);
 
-	ppe_drv_info("%px:disable level0 queue scheduler successful for qid:%u", p, qid);
+	ppe_drv_info("%px:disable level0 queue scheduler successful for port:%u qid:%u", p, port_id, qid);
+	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_qos_queue_disable);
 
@@ -214,7 +284,7 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_disable);
  * ppe_drv_qos_queue_enable()
  *	Enables a queue in PPE.
  */
-void ppe_drv_qos_queue_enable(uint32_t qid)
+ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 
@@ -222,13 +292,108 @@ void ppe_drv_qos_queue_enable(uint32_t qid)
 	 * Enable queue enqueue and dequeue.
 	 */
 	spin_lock_bh(&p->lock);
-	fal_qm_enqueue_ctrl_set(0, qid, A_TRUE);
-	fal_scheduler_dequeue_ctrl_set(0, qid, A_TRUE);
+	if (fal_qm_enqueue_ctrl_set(0, qid, A_TRUE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue enqueue failed for qid:%u", p, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+
+	if (fal_scheduler_dequeue_ctrl_set(0, qid, A_TRUE) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue dequeue failed for qid:%u", p, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
 	spin_unlock_bh(&p->lock);
 
 	ppe_drv_info("%px:enable SSDK level0 queue scheduler successful for qid:%u", p, qid);
+	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_qos_queue_enable);
+
+/*
+ * ppe_drv_qos_tcont_stats_get()
+ *	API to fetch tcont statistics from PPE HW.
+ */
+ppe_drv_ret_t ppe_drv_qos_tcont_stats_get(uint32_t tcont_id, struct ppe_drv_qos_tcont_stat *stats)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_queue_tcont_stat_t info;
+
+	spin_lock_bh(&p->lock);
+	if (fal_qm_tcont_stat_get(0, tcont_id, &info) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:tcont stats get failed for tcont:%u", p, tcont_id);
+		return PPE_DRV_RET_QOS_TCONT_CFG_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+	stats->bytes = info.bytes;
+	stats->credit = info.credit;
+
+	ppe_drv_info("%px:get tcont stats get successful for tcont_id:%u", p, tcont_id);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_tcont_stats_get);
+
+/*
+ * ppe_drv_qos_tcont_credit_reset()
+ *	Resets T-cont credit to 0.
+ */
+ppe_drv_ret_t ppe_drv_qos_tcont_credit_reset(uint32_t tcont_id)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_queue_tcont_stat_t stats = {0};
+
+	spin_lock_bh(&p->lock);
+	if (fal_qm_tcont_stat_set(0, tcont_id, &stats) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:tcont stats setting failed for tcont:%u", p, tcont_id);
+		return PPE_DRV_RET_QOS_TCONT_CFG_FAIL;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:tcont stats setting successful for tcont:%u", p, tcont_id);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_tcont_credit_reset);
+
+/*
+ * ppe_drv_qos_tcont_set()
+ *	Sets T-cont configuration for a queue in PPE.
+ */
+ppe_drv_ret_t ppe_drv_qos_tcont_set(struct ppe_drv_qos_res *res, uint32_t tcont_id, bool valid)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_queue_tcont_cfg_t cfg = {0};
+
+	spin_lock_bh(&p->lock);
+	cfg.tcont_id = tcont_id;
+	cfg.valid = valid;
+
+	ppe_drv_trace("%px:tcont configuration: queue_id:%u, tcont_id:%u, tcont_valid=%u",
+			p, res->q.ucast_qid, tcont_id, valid);
+	if (fal_qm_tcont_set(0, res->q.ucast_qid, &cfg) != 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:tcont configuration failed for tcont:%u", p, tcont_id);
+		return PPE_DRV_RET_QOS_TCONT_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:tcont configuration successful for tcont:%u", p, tcont_id);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_tcont_set);
+
+/*
+ * ppe_drv_qos_pon_port_get()
+ *	Gets the PON port ID.
+ */
+uint32_t ppe_drv_qos_pon_port_get(void)
+{
+	return PON_PORT_ID;
+}
+EXPORT_SYMBOL(ppe_drv_qos_pon_port_get);
 
 /*
  * ppe_drv_qos_l1_scheduler_set()
@@ -246,20 +411,20 @@ ppe_drv_ret_t ppe_drv_qos_l1_scheduler_set(struct ppe_drv_qos_res *res, uint32_t
 	}
 
 	spin_lock_bh(&p->lock);
-	l1cfg.sp_id = port_id;
+	l1cfg.sp_id = res->l1spid;
 
 	l1cfg.c_drr_wt = res->scheduler.drr_weight ? res->scheduler.drr_weight : 1;
 	l1cfg.c_drr_unit = res->scheduler.drr_unit;
 	l1cfg.e_drr_wt = res->scheduler.drr_weight ? res->scheduler.drr_weight : 1;
 	l1cfg.e_drr_unit = res->scheduler.drr_unit;
-	l1cfg.c_pri = PPE_DRV_QOS_PRIORITY_MAX - res->scheduler.priority;
-	l1cfg.e_pri = PPE_DRV_QOS_PRIORITY_MAX - res->scheduler.priority;
+	l1cfg.c_pri = res->scheduler.priority;
+	l1cfg.e_pri = res->scheduler.priority;
 	l1cfg.c_drr_id = res->scheduler.l1c_drrid;
 	l1cfg.e_drr_id = res->scheduler.l1e_drrid;
 	l1cfg.drr_frame_mode = (fal_qos_drr_frame_mode_t)PPE_DRV_QOS_FRAME_MODE_FRAME_CRC;
 
-	ppe_drv_trace("%px:level1 configuration: port:%u, l0spid:%u, c_drrid:%u, c_pri:%u, c_drr_wt:%u, e_drrid:%u, e_pri:%u, e_drr_wt:%u, l1spid:%u",
-			p, port_id, res->l0spid, l1cfg.c_drr_id, l1cfg.c_pri, l1cfg.c_drr_wt, l1cfg.e_drr_id, l1cfg.e_pri, l1cfg.e_drr_wt, l1cfg.sp_id);
+	ppe_drv_trace("%px:level1 configuration: port:%u, l0spid:%u, l1spid:%u, c_drrid:%u, c_pri:%u, c_drr_wt:%u, e_drrid:%u, e_pri:%u, e_drr_wt:%u, l1spid:%u",
+			p, port_id, res->l0spid, res->l1spid, l1cfg.c_drr_id, l1cfg.c_pri, l1cfg.c_drr_wt, l1cfg.e_drr_id, l1cfg.e_pri, l1cfg.e_drr_wt, l1cfg.sp_id);
 	if (fal_queue_scheduler_set(0, res->l0spid, PPE_DRV_QOS_FLOW_LEVEL - 1, port_id, &l1cfg) != 0) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:level1 queue scheduler configuration failed for port:%u", p, port_id);
@@ -327,8 +492,8 @@ ppe_drv_ret_t ppe_drv_qos_l0_scheduler_set(struct ppe_drv_qos_res *res, uint32_t
 	l0cfg.c_drr_unit = res->scheduler.drr_unit;
 	l0cfg.e_drr_wt = res->scheduler.drr_weight ? res->scheduler.drr_weight : 1;
 	l0cfg.e_drr_unit = res->scheduler.drr_unit;
-	l0cfg.c_pri = PPE_DRV_QOS_PRIORITY_MAX - res->scheduler.priority;
-	l0cfg.e_pri = PPE_DRV_QOS_PRIORITY_MAX - res->scheduler.priority;
+	l0cfg.c_pri = res->scheduler.priority;
+	l0cfg.e_pri = res->scheduler.priority;
 	l0cfg.c_drr_id = res->scheduler.l0c_drrid;
 	l0cfg.e_drr_id = res->scheduler.l0e_drrid;
 	l0cfg.drr_frame_mode = (fal_qos_drr_frame_mode_t)PPE_DRV_QOS_FRAME_MODE_FRAME_CRC;
@@ -737,7 +902,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 
 	/*
 	 * Enable force drop for PPE qdisc.
-	 * When set to 1, the flow control will be overriden
+	 * When ac_en/ac_fc_en are set to 1, the flow control will be overriden
 	 * for that queue and packets drop gets enabled.
 	 */
 	ctrl_cfg.ac_en = 1;
@@ -755,12 +920,30 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 		ppe_drv_warn("%px:queue dynamic threshold get failed for ucast_qid:%u", p, res->q.ucast_qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	} else {
+		dynamic_cfg.color_enable = res->q.color_en;
 		dynamic_cfg.wred_enable = res->q.red_en;
 		dynamic_cfg.ceiling = res->q.qlimit;
+		dynamic_cfg.green_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
+		dynamic_cfg.yel_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+		dynamic_cfg.yel_max_off = res->q.max_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+		dynamic_cfg.red_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+		dynamic_cfg.red_max_off = res->q.max_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+
+		/*
+		 * Set resume offsets for all three colors.
+		 * Resume offsets control when the queue resumes accepting packets after dropping,
+		 * which helps prevent buffer oscillation.
+		 */
+		dynamic_cfg.green_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
+		dynamic_cfg.yel_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+		dynamic_cfg.red_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_RED];
 	}
 
-	ppe_drv_trace("%px:queue ac dynamic threshold set for ucast_qid:%u, wred_enable:%u, celing:%u, green_min_off:%u, ceiling/qlimit:%u",
-		p, res->q.ucast_qid, dynamic_cfg.wred_enable, dynamic_cfg.ceiling, dynamic_cfg.green_min_off, dynamic_cfg.ceiling);
+	ppe_drv_trace("%px:queue ac dynamic threshold set for ucast_qid:%u, color_en:%u, wred_enable:%u, ceiling:%u, green_min_off:%u, yel_min_off:%u, yel_max_off:%u, red_min_off:%u, red_max_off:%u, green_resume_off:%u, yel_resume_off:%u, red_resume_off:%u",
+		p, res->q.ucast_qid, dynamic_cfg.color_enable, dynamic_cfg.wred_enable, dynamic_cfg.ceiling,
+		dynamic_cfg.green_min_off, dynamic_cfg.yel_min_off, dynamic_cfg.yel_max_off,
+		dynamic_cfg.red_min_off, dynamic_cfg.red_max_off,
+		dynamic_cfg.green_resume_off, dynamic_cfg.yel_resume_off, dynamic_cfg.red_resume_off);
 	if (fal_ac_dynamic_threshold_set(0, res->q.ucast_qid, &dynamic_cfg) != 0) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue dynamic threshold failed for ucast_qid:%u", p, res->q.ucast_qid);
@@ -868,10 +1051,7 @@ ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port
 	port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] = cfg.ucastq_num;
 	port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] = cfg.ucastq_start;
 
-	/*
-	 * Even though we reserve more mcast queues in the device tree, we only use 1.
-	 */
-	port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] = PPE_DRV_QOS_MCAST_QUEUE_MAX;
+	port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] = cfg.mcastq_num;
 	port->base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] = cfg.mcastq_start;
 
 	port->max[PPE_DRV_QOS_RES_TYPE_L0_CDRR] = cfg.l0cdrr_num;
@@ -888,6 +1068,10 @@ ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port
 
 	port->max[PPE_DRV_QOS_RES_TYPE_L1_EDRR] = cfg.l1edrr_num;
 	port->base[PPE_DRV_QOS_RES_TYPE_L1_EDRR] = cfg.l1edrr_start;
+
+
+	port->max[PPE_DRV_QOS_RES_TYPE_L1_SP] = cfg.l1sp_num;
+	port->base[PPE_DRV_QOS_RES_TYPE_L1_SP] = cfg.l1sp_start;
 
 	ppe_drv_info("%px:port QoS resources infosuccessful for port:%u", p, port_id);
 	return PPE_DRV_RET_SUCCESS;

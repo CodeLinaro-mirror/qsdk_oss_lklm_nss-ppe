@@ -14,6 +14,8 @@
 #include <linux/module.h>
 #include <ppe_drv_port.h>
 
+struct ppe_drv_iface;
+
 #define PPE_VP_FLAG_DISABLE_TTL_DEC	0x1	/**< Set = TTL Decrement disabled, clear = TTL Decrement enabled */
 #define PPE_VP_FLAG_REDIR_ENABLE	0x2	/**< When set, the packets destined to VP are redirect to VP queue without RPS */
 #define PPE_VP_FLAG_IPSEC_FULL_INLINE	0x4	/**< Set = IPSEC full inline is enabled, clear is IPsec full inline is not enabled */
@@ -65,10 +67,46 @@ typedef enum ppe_vp_status {
 	PPE_VP_STATUS_HW_VP_STATS_CLEAR_FAILED,
 					/**< Failed to clear PPE VP hardware statistics */
 	PPE_VP_STATUS_UPDATE_FAIL,	/**< VP PPE update failed */
+	PPE_VP_STATUS_PORT_ALLOC_FAIL,	/**< PPE port alloc failed */
+	PPE_VP_STATUS_PORT_SET_FAIL,	/**< PPE port set failed */
+	PPE_VP_STATUS_PORT_LIST_ADD_FAIL,	/** PPE port addition to list failed */
+	PPE_VP_STATUS_PORT_LIST_GET_FAIL,	/** PPE port get failed from list */
+	PPE_VP_STATUS_PORT_LIST_DEL_FAIL,	/** PPE port deletion from list failed */
 	PPE_VP_STATUS_MAX,		/**< Maximum VP statuses */
 } ppe_vp_status_t;
 
 typedef int16_t ppe_vp_num_t;
+
+/*
+ * ppe_vp_cb_mdata_type
+ *	Metadata type
+ */
+enum ppe_vp_cb_mdata_type {
+	PPE_VP_CB_MDATA_TYPE_NONE = 0,		/**< No specific metadata */
+	PPE_VP_CB_MDATA_TYPE_HW_GRO = 1,	/**< HW GRO metadata */
+};
+
+/*
+ * ppe_vp_cb_mdata_info_gro
+ *	GRO metadata information
+ */
+struct ppe_vp_cb_mdata_info_gro {
+	bool hw_gro_en;		/**< HW GRO enable flag */
+	bool hw_gro_more;	/**< HW GRO more flag */
+	bool hw_gro_fin;	/**< HW GRO fin flag */
+	bool hw_gro_psh;	/**< HW GRO push flag */
+};
+
+/*
+ * ppe_vp_cb_mdata_info
+ *	PPE VP metadata info
+ */
+struct ppe_vp_cb_mdata_info {
+	enum ppe_vp_cb_mdata_type mdata_type;	/**< Metadata type */
+	union {
+		struct ppe_vp_cb_mdata_info_gro gro_info;
+	} minfo;
+};
 
 /**
  * ppe_vp_cb_info
@@ -82,6 +120,7 @@ struct ppe_vp_cb_info {
 	struct napi_struct *napi;	/**< RX napi */
 	struct net_device *phys_dev;	/**< Physical dev for tunnel */
 	uint32_t flow_idx;		/**< Flow index of a packet */
+	struct ppe_vp_cb_mdata_info mdata_info;	/**< Metadata info */
 };
 
 /**
@@ -152,6 +191,7 @@ typedef enum ppe_vp_user_type {
  */
 enum ppe_vp_net_dev_type {
 	PPE_VP_NET_DEV_TYPE_WIFI = 1,	/**< VP netdev is of type Wi-Fi */
+	PPE_VP_NET_DEV_TYPE_NETFN_OL,	/**< NETFN netdev */
 	PPE_VP_NET_DEV_TYPE_MAX,		/**< Maximum VP netdev types */
 };
 
@@ -342,6 +382,34 @@ extern ppe_vp_user_type_t ppe_vp_user_type_get(ppe_vp_num_t vp_num);
  * Status of the API.
  */
 extern ppe_vp_status_t ppe_vp_update_vp_stats_cb(int16_t vp_num, ppe_vp_stats_callback_t stats_cb);
+
+
+/**
+ * ppe_vp_veip_alloc_vps()
+ *      Allocate VP structures for both GW and PON ports.
+ *
+ * @param[in] ppe_iface         PPE interface.
+ * @param[in] gw_port_num       Gateway port number.
+ * @param[in] pon_port_num      PON port number.
+ * @param[in] netdev            Netdevice for the VP.
+ * @param[in] vpai              VP allocation info.
+ *
+ * @return
+ * 0 on success, -1 on failure.
+ */
+extern int ppe_vp_veip_alloc_vps(struct ppe_drv_iface *ppe_iface, uint8_t gw_port_num, uint8_t pon_port_num,
+			  struct net_device *netdev, struct ppe_vp_ai *vpai);
+
+/**
+ * ppe_vp_veip_free_vps()
+ *      Free VP structures for VEIP.
+ *
+ * @param[in] ppe_iface         PPE interface.
+ *
+ * @return
+ * None.
+ */
+extern void ppe_vp_veip_free_vps(struct ppe_drv_iface *ppe_iface);
 /** @} */ /* end_addtogroup ppe_vp_public_subsystem */
 
 #endif /* _PPE_VP_PUBLIC_H_ */

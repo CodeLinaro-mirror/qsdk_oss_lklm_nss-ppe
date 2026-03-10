@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /*
@@ -54,6 +43,7 @@
 static int nss_ppenl_acl_ops_create_rule(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_acl_ops_destroy_rule(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_acl_ops_flush_rule(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_acl_ops_prio_upd_rule(struct sk_buff *skb, struct genl_info* info);
 
 /*
  * operation table called by the generic netlink layer based on the command
@@ -62,6 +52,7 @@ static struct genl_ops nss_ppenl_acl_ops[] = {
 	{.cmd = NSS_PPE_ACL_CREATE_RULE_MSG, .doit = nss_ppenl_acl_ops_create_rule,},	/* rule create */
 	{.cmd = NSS_PPE_ACL_DESTROY_RULE_MSG, .doit = nss_ppenl_acl_ops_destroy_rule,},	/* rule destroy */
 	{.cmd = NSS_PPE_ACL_FLUSH_RULE_MSG, .doit = nss_ppenl_acl_ops_flush_rule,},	/* rule flush */
+	{.cmd = NSS_PPE_ACL_UPDATE_PRI_RULE_MSG, .doit = nss_ppenl_acl_ops_prio_upd_rule,},	/* rule update priority */
 };
 
 /*
@@ -89,7 +80,7 @@ static void ppe_acl_rule_dump_rule(struct ppe_acl_rule *rule) {
 			"valid_flag: %d"
 			"dev_name: %s\n"
 			"smac rule_flags: %d"
-			"stype: %d"
+			"dev_type: %d"
 			"smac.mac : %pM\n"
 			"smac.mac_mask : %pM\n"
 			"dmac rule_flags: %d"
@@ -110,8 +101,8 @@ static void ppe_acl_rule_dump_rule(struct ppe_acl_rule *rule) {
 			"SIP IPv4 : %pI4\n"
 			"SIP IPv6 : %pI6\n",
 			rule, rule->valid_flags,
-			rule->src.dev_name,
-			rule->rules[PPE_ACL_RULE_MATCH_TYPE_SMAC].rule_flags, rule->stype,
+			rule->dev.dev_name,
+			rule->rules[PPE_ACL_RULE_MATCH_TYPE_SMAC].rule_flags, rule->dev_type,
 			rule->rules[PPE_ACL_RULE_MATCH_TYPE_SMAC].rule.smac.mac,
 			rule->rules[PPE_ACL_RULE_MATCH_TYPE_SMAC].rule.smac.mac_mask,
 			rule->rules[PPE_ACL_RULE_MATCH_TYPE_DMAC].rule_flags,
@@ -325,6 +316,73 @@ static int nss_ppenl_acl_ops_flush_rule(struct sk_buff *skb, struct genl_info *i
 	nl_acl_rule->rule.ret = ret;
 
 	nss_ppenl_trace("Sending response to userspace: ret %d\n", nl_acl_rule->rule.ret);
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
+ * nss_ppenl_acl_ops_prio_upd_rule()
+ * 	rule priority update handler
+ */
+static int nss_ppenl_acl_ops_prio_upd_rule(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_acl_rule *nl_acl_rule;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	int error, status = 0;
+        ppe_acl_ret_t ret;
+
+	/*
+	 * extract the message payload
+	 */
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_acl_family, info, NSS_PPE_ACL_UPDATE_PRI_RULE_MSG);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract rule priority update data\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * Message validation required before accepting the configuration
+	 */
+	nl_acl_rule = container_of(nl_cm, struct nss_ppenl_acl_rule, cm);
+	pid = nl_cm->pid;
+	nss_ppenl_info("%s: pid: %d\n", __func__, pid);
+
+	/*
+	 * copy the NL message for response
+	 */
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
+		return error;
+	}
+
+	/*
+	 * setting that the rule is from userspace
+	 */
+	nl_acl_rule->rule.userspace_rule = true;
+
+	status = ppe_acl_rule_prio_upd(nl_acl_rule->rule.rule_id, nl_acl_rule->rule.cmn.pri);
+
+	if (status == PPE_ACL_RET_SUCCESS) {
+		nss_ppenl_info("%s: PPE rule priority update success\n", __func__);
+	} else {
+		nss_ppenl_info("Rule prority update in ppe driver failed, error = %d\n", status);
+	}
+
+	ret = nl_acl_rule->rule.ret;
+
+	/*
+	 * Send the response code to user application
+	 */
+	nl_acl_rule = nss_ppenl_get_data(resp);
+	nl_acl_rule->rule.ret = ret;
+
+	nss_ppenl_trace("Sending response to userspace: rule_id %d, ret %d\n", nl_acl_rule->rule.rule_id, nl_acl_rule->rule.ret);
 	nss_ppenl_ucast_resp(resp);
 	return 0;
 }

@@ -417,6 +417,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 	struct ppe_drv_iface *tx_port_if_orig = NULL, *tx_l3_if_orig = NULL;
 	sw_error_t err;
 	bool is_vlan_as_vp;
+	bool is_vlan_as_veip;
 	bool is_dsa_dev = false;
 
 	ppe_drv_v6_conn_flow_match_src_ip_get(pcf, match_src_ip);
@@ -520,6 +521,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 	iface_tx = ppe_drv_v6_conn_flow_eg_port_if_get(pcf);
 	if (iface_tx->dev) {
 		is_vlan_as_vp = is_vlan_dev(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
+		is_vlan_as_veip = is_vlan_dev(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VEIP);
 #ifdef NSS_VLAN_BASED_DSA_SUPPORT
 		is_dsa_dev = dsa_slave_dev_check(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 #endif
@@ -530,7 +532,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 	 */
 	iface_vsi = ppe_drv_v6_conn_flow_eg_vsi_if_get(pcf);
 	vsi = iface_vsi ? ppe_drv_iface_vsi_get(iface_vsi) : NULL;
-	if ((vtag == PPE_DRV_VLAN_TAGGED) && !vsi && !is_vlan_as_vp && !is_dsa_dev) {
+	if ((vtag == PPE_DRV_VLAN_TAGGED) && !vsi && !is_vlan_as_vp && !is_vlan_as_veip && !is_dsa_dev) {
 		ppe_drv_nexthop_deref(nh);
 		ppe_drv_warn("%p: vlan-vsi not configured on interface: %u in_vlan: %u, out_vlan: %u",
 				p, pp->port, in_vlan, out_vlan);
@@ -876,6 +878,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 	struct ppe_drv_iface *tx_port_if_orig = NULL, *tx_l3_if_orig = NULL;
 	sw_error_t err;
 	bool is_vlan_as_vp;
+	bool is_vlan_as_veip;
 	bool is_dsa_dev = false;
 
 	/*
@@ -994,6 +997,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 	iface_tx = ppe_drv_v4_conn_flow_eg_port_if_get(pcf);
 	if (iface_tx->dev) {
 		is_vlan_as_vp = is_vlan_dev(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
+		is_vlan_as_veip = is_vlan_dev(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VEIP);
 #ifdef NSS_VLAN_BASED_DSA_SUPPORT
 		is_dsa_dev = dsa_slave_dev_check(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 #endif
@@ -1004,7 +1008,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 	 */
 	iface_vsi = ppe_drv_v4_conn_flow_eg_vsi_if_get(pcf);
 	vsi = iface_vsi ? ppe_drv_iface_vsi_get(iface_vsi) : NULL;
-	if ((vtag == PPE_DRV_VLAN_TAGGED) && !vsi && !is_vlan_as_vp && !is_dsa_dev) {
+	if ((vtag == PPE_DRV_VLAN_TAGGED) && !vsi && !is_vlan_as_vp && !is_vlan_as_veip && !is_dsa_dev) {
 		ppe_drv_nexthop_deref(nh);
 		ppe_drv_warn("%p: vlan-vsi not configured on interface: %u in_vlan: %u, out_vlan: %u",
 				p, pp->port, in_vlan, out_vlan);

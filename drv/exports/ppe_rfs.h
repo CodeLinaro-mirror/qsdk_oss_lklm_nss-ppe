@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /**
@@ -30,17 +19,32 @@
 #define PPE_RFS_V4_RULE_FLAG_FLOW_VALID 0x4
 #define PPE_RFS_V4_RULE_FLAG_QOS_VALID 0x8
 #define PPE_RFS_V4_RULE_FLAG_PASSIVE_FLOW 0x10
+#define PPE_RFS_V4_RULE_FLAG_TUN_OUTER_FLOW 0x20
+#define PPE_RFS_V4_RULE_FLAG_TUN_FLOW 0x40
 
-#define PPE_RFS_V6_RULE_FLAG_BRIDGE_FLOW 0x20
-#define PPE_RFS_V6_RULE_FLAG_RETURN_VALID 0x40
-#define PPE_RFS_V6_RULE_FLAG_FLOW_VALID 0x80
-#define PPE_RFS_V6_RULE_FLAG_QOS_VALID 0x100
-#define PPE_RFS_V6_RULE_FLAG_PASSIVE_FLOW 0x200
+#define PPE_RFS_V6_RULE_FLAG_BRIDGE_FLOW 0x80
+#define PPE_RFS_V6_RULE_FLAG_RETURN_VALID 0x100
+#define PPE_RFS_V6_RULE_FLAG_FLOW_VALID 0x200
+#define PPE_RFS_V6_RULE_FLAG_QOS_VALID 0x400
+#define PPE_RFS_V6_RULE_FLAG_PASSIVE_FLOW 0x800
+#define PPE_RFS_V6_RULE_FLAG_TUN_OUTER_FLOW 0x1000
+#define PPE_RFS_V6_RULE_FLAG_TUN_FLOW 0x2000
 
-enum ppe_rfs_ret {
-	PPE_RFS_RET_SUCCESS = 0,	/**< RFS operation succeeded */
-	PPE_RFS_RET_FAILURE = 1,	/**< RFS operation failed */
-};
+/*
+ * PPE RFS eligible valid flags.
+ */
+#define PPE_RFS_ELIG_VALID_FLAG_NONE				0x1
+		/* Invalid flag */
+#define PPE_RFS_ELIG_VALID_FLAG_TUNNEL_OUTER_FLOW	0x2
+		/* This flag is set when flow is a tunnel outer flow. */
+#define PPE_RFS_ELIG_VALID_FLAG_TUNNEL_FLOW			0x4
+		/* This flag is set when flow is a tunnel flow either outer or inner. */
+
+
+typedef enum ppe_rfs_ret {
+	PPE_RFS_RET_SUCCESS = 0,				/**< RFS operation succeeded */
+	PPE_RFS_RET_FAILURE = 1,				/**< RFS operation failed */
+} ppe_rfs_ret_t;
 
 /**
  * QoS connection rule structure.
@@ -214,10 +218,11 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_destroy(struct ppe_rfs_ipv6_rule_destroy_msg 
  *
  * @param[in] src_interface_num		Interface number for source net device of flow.
  * @param[in] dst_interface_num		Interface number for the destination net device of flow.
- * @param[in] mcast_flow		True is flow is multicast flow.
+ * @param[in] mcast_flow			True if flow is multicast flow.
+ * @param[in] valid_flags			Different valid fields are set here.
  *
  * @return
  * True if RFS rule is valid in this direction
  */
-bool ppe_rfs_rule_eligible_get(int src_interface_num, int dst_interface_num, bool mcast_flow);
+bool ppe_rfs_rule_eligible_get(int src_interface_num, int dst_interface_num, bool mcast_flow, uint32_t valid_flags);
 #endif /* _PPE_DRV_RFS_H_ */

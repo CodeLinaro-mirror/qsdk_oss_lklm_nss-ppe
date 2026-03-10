@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/vmalloc.h>
@@ -22,6 +11,7 @@
 #include "../ppe_policer/ppe_policer.h"
 #endif
 #include "ppe_acl.h"
+#include "ppe_pm.h"
 
 /*
  * Global ACL context
@@ -151,10 +141,22 @@ static void ppe_acl_rule_free(struct kref *kref)
 		acl->sc = 0;
 	}
 
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	/*
+	 * Destroy PM context
+	 */
+	if (acl->counter_valid) {
+		ppe_pm_counter_deref(acl->counter_id);
+		acl->counter_valid = false;
+	}
+#endif
 	/*
 	 * Destroy the rule in PPE driver.
 	 */
 	if (acl->ctx) {
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+		ppe_drv_acl_uni_to_l2vp_sc_unmap(acl->ctx);
+#endif
 		ppe_drv_acl_destroy(acl->ctx);
 		acl->ctx = NULL;
 	}
@@ -394,6 +396,48 @@ ppe_acl_ret_t ppe_acl_rule_flush(ppe_acl_flush_type_t flush_type)
 EXPORT_SYMBOL(ppe_acl_rule_flush);
 
 /*
+ * ppe_acl_rule_prio_upd()
+ *	Update priority of ACL rule in PPE.
+ */
+ppe_acl_ret_t ppe_acl_rule_prio_upd(ppe_acl_rule_id_t id, uint16_t priority)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	struct ppe_acl *acl;
+
+	if (priority > PPE_ACL_PRI_MAX) {
+		ppe_acl_warn("%p: Invalid priority value: %u", acl_g, priority);
+		return PPE_ACL_RET_UPDATE_PRI_FAIL_INVALID_PRIORITY;
+	}
+
+	ppe_acl_stats_inc(&acl_g->stats.cmn.acl_prio_upd_req);
+	spin_lock_bh(&acl_g->lock);
+
+	acl = ppe_acl_rule_find_by_id(id);
+	if (!acl) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_rule_prio_upd_fail_invalid_id);
+		ppe_acl_warn("%p: failed to find the rule for ID: %d", acl_g, id);
+		spin_unlock_bh(&acl_g->lock);
+		return PPE_ACL_RET_UPDATE_PRI_FAIL_INVALID_ID;
+	}
+
+	/* Update hardware first */
+	if (ppe_drv_acl_rule_prio_upd(acl->ctx, priority)) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_rule_prio_upd_fail_invalid_id);
+		ppe_acl_warn("%p: failed to update the priority: %d", acl_g, id);
+		spin_unlock_bh(&acl_g->lock);
+		return PPE_ACL_RET_UPDATE_PRI_FAIL_INVALID_ID;
+	}
+
+	/* Only update software state after successful hardware update */
+	acl->pri = priority;
+
+	ppe_acl_info("%p: rule_id: %u priority:  %u", acl_g, id, acl->pri);
+	spin_unlock_bh(&acl_g->lock);
+	return PPE_ACL_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_acl_rule_prio_upd);
+
+/*
  * ppe_acl_rule_to_slice_type
  *	Map ACL rule to PPE slice type.
  */
@@ -412,11 +456,38 @@ static void ppe_acl_rule_to_slice_type(struct ppe_acl_rule_match_one *r, ppe_acl
 	case PPE_ACL_RULE_MATCH_TYPE_CVID:
 	case PPE_ACL_RULE_MATCH_TYPE_SPCP:
 	case PPE_ACL_RULE_MATCH_TYPE_CPCP:
+	case PPE_ACL_RULE_MATCH_TYPE_CDEI:
+	case PPE_ACL_RULE_MATCH_TYPE_SDEI:
 		slice_type[PPE_DRV_ACL_SLICE_TYPE_VLAN] = true;
 		break;
 
-	case PPE_ACL_RULE_MATCH_TYPE_PPPOE_SESS:
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	case PPE_ACL_RULE_MATCH_TYPE_CTPID:
+	case PPE_ACL_RULE_MATCH_TYPE_STPID:
+	case PPE_ACL_RULE_MATCH_TYPE_DHCP_TYPE:
+	case PPE_ACL_RULE_MATCH_TYPE_MC_TYPE:
+		slice_type[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN] = true;
+		break;
+
 	case PPE_ACL_RULE_MATCH_TYPE_ETHER_TYPE:
+		/*
+		 * EtherType uses EXT_VLAN slice only when EXT EtherType is enabled,
+		 * otherwise it falls back to L2_MISC.
+		 */
+		slice_type[(r->rule_flags & PPE_ACL_RULE_EXT_ETH_TYPE_EN) ?
+			PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN :
+			PPE_DRV_ACL_SLICE_TYPE_L2_MISC] = true;
+		break;
+#else
+	case PPE_ACL_RULE_MATCH_TYPE_ETHER_TYPE:
+		/*
+		 * Without EXT_VLAN support, EtherType always uses L2_MISC.
+		 */
+		slice_type[PPE_DRV_ACL_SLICE_TYPE_L2_MISC] = true;
+		break;
+#endif
+
+	case PPE_ACL_RULE_MATCH_TYPE_PPPOE_SESS:
 		slice_type[PPE_DRV_ACL_SLICE_TYPE_L2_MISC] = true;
 		break;
 
@@ -469,7 +540,6 @@ static void ppe_acl_rule_to_slice_type(struct ppe_acl_rule_match_one *r, ppe_acl
 			}
 		break;
 
-
 	case PPE_ACL_RULE_MATCH_TYPE_UDF:
 		if (r->rule.udf.udf_a_valid || r->rule.udf.udf_b_valid || r->rule.udf.udf_c_valid) {
 			slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF_012] = true;
@@ -511,6 +581,9 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 	struct ppe_drv_acl_ip_misc *ip;
 	struct ppe_drv_acl_udf *udf_012;
 	struct ppe_drv_acl_udf *udf_123;
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	struct ppe_drv_acl_ext_vlan *ext_vlan;
+#endif
 	uint32_t sip[4], sip_mask[4];
 	uint32_t dip[4], dip_mask[4];
 	bool flag_en;
@@ -547,13 +620,13 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		break;
 
 	case PPE_ACL_RULE_MATCH_TYPE_SVID:
-		if ((r->rule_flags & PPE_ACL_RULE_FLAG_VID_RANGE)) {
+		if ((r->rule_flags & PPE_ACL_RULE_FLAG_SVID_RANGE)) {
 			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_L2_MISC];
 			l2 = &slice->rule.l2;
 
 			l2->svid_min = r->rule.svid.vid_min;
 			l2->svid_mask_max = r->rule.svid.vid_mask_max;
-			l2->range_en = !!(r->rule_flags & PPE_ACL_RULE_FLAG_VID_RANGE);
+			l2->range_en = !!(r->rule_flags & PPE_ACL_RULE_FLAG_SVID_RANGE);
 			l2->inverse_en = !(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
 
 			slice->sub_rule_cnt++;
@@ -568,10 +641,16 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_VLAN];
 		vlan = &slice->rule.vlan;
 
-		vlan->stag_fmt = (ppe_drv_acl_vtag_fmt_t)r->rule.svid.tag_fmt;
+		memset(&vlan->stag_fmt, 0xff, sizeof(vlan->stag_fmt));
+		memset(&vlan->stag_fmt_mask, 0xff, sizeof(vlan->stag_fmt_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_STAG_FMT) {
+			vlan->stag_fmt = (ppe_drv_acl_vtag_fmt_t)r->rule.svid.tag_fmt;
+			vlan->stag_fmt_mask = r->rule.svid.tag_fmt_mask;
+		}
+
 		vlan->svid = r->rule.svid.vid_min;
 		memset(&vlan->svid_mask, 0xff, sizeof(vlan->svid_mask));
-		if ((r->rule_flags & PPE_ACL_RULE_FLAG_VID_MASK) && !(r->rule_flags & PPE_ACL_RULE_FLAG_VID_RANGE)) {
+		if ((r->rule_flags & PPE_ACL_RULE_FLAG_SVID_MASK) && !(r->rule_flags & PPE_ACL_RULE_FLAG_SVID_RANGE)) {
 			vlan->svid_mask = r->rule.svid.vid_mask_max;
 		}
 
@@ -595,12 +674,17 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_VLAN];
 		vlan = &slice->rule.vlan;
 
-		vlan->ctag_fmt = (ppe_drv_acl_vtag_fmt_t)r->rule.cvid.tag_fmt;
+		memset(&vlan->ctag_fmt, 0xff, sizeof(vlan->ctag_fmt));
+		memset(&vlan->ctag_fmt_mask, 0xff, sizeof(vlan->ctag_fmt_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_CTAG_FMT) {
+			vlan->ctag_fmt = (ppe_drv_acl_vtag_fmt_t)r->rule.cvid.tag_fmt;
+			vlan->ctag_fmt_mask = r->rule.cvid.tag_fmt_mask;
+		}
 		vlan->cvid_min = r->rule.cvid.vid_min;
 		memset(&vlan->cvid_mask_max, 0xff, sizeof(vlan->cvid_mask_max));
-		if ((r->rule_flags & PPE_ACL_RULE_FLAG_VID_MASK) || (r->rule_flags & PPE_ACL_RULE_FLAG_VID_RANGE)) {
+		if ((r->rule_flags & PPE_ACL_RULE_FLAG_CVID_MASK) || (r->rule_flags & PPE_ACL_RULE_FLAG_CVID_RANGE)) {
 			vlan->cvid_mask_max = r->rule.cvid.vid_mask_max;
-			vlan->range_en = !!(r->rule_flags & PPE_ACL_RULE_FLAG_VID_RANGE);
+			vlan->range_en = !!(r->rule_flags & PPE_ACL_RULE_FLAG_CVID_RANGE);
 		}
 
 		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
@@ -625,7 +709,7 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 
 		slice->rule.vlan.spcp = r->rule.spcp.pcp;
 		memset(&vlan->spcp_mask, 0xff, sizeof(vlan->spcp_mask));
-		if (r->rule_flags & PPE_ACL_RULE_FLAG_PCP_MASK) {
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_SPCP_MASK) {
 			vlan->spcp_mask = r->rule.spcp.pcp_mask;
 		}
 
@@ -651,7 +735,7 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 
 		vlan->cpcp = r->rule.cpcp.pcp;
 		memset(&vlan->cpcp_mask, 0xff, sizeof(vlan->cpcp_mask));
-		if (r->rule_flags & PPE_ACL_RULE_FLAG_PCP_MASK) {
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_CPCP_MASK) {
 			vlan->cpcp_mask = r->rule.cpcp.pcp_mask;
 		}
 
@@ -698,6 +782,34 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		break;
 
 	case PPE_ACL_RULE_MATCH_TYPE_ETHER_TYPE:
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+		if (r->rule_flags & PPE_ACL_RULE_EXT_ETH_TYPE_EN) {
+			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
+			ext_vlan = &slice->rule.ext_vlan;
+
+			ext_vlan->l2_type = r->rule.ether_type.l2_proto;
+			memset(&ext_vlan->l2_mask, 0xff, sizeof(ext_vlan->l2_mask));
+			if (r->rule_flags & PPE_ACL_RULE_FLAG_ETHTYPE_MASK) {
+				ext_vlan->l2_mask = r->rule.ether_type.l2_proto_mask;
+			}
+
+			flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
+			if (slice->sub_rule_cnt && (ext_vlan->inverse_en != flag_en)) {
+				ppe_acl_warn("%p: invalid rule flags, expect all ext vlan rules to have "
+						"same inverse logic type:%d flags: 0x%x",
+						r, type, r->rule_flags);
+				return false;
+			}
+
+			ext_vlan->inverse_en = flag_en;
+
+			slice->sub_rule_cnt++;
+			slice->flags |= PPE_DRV_ACL_EXT_VLAN_FLAG_L2;
+			slice->type = PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN;
+			slice->valid = true;
+			break;
+		}
+#endif
 		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_L2_MISC];
 		l2 = &slice->rule.l2;
 
@@ -710,8 +822,8 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
 		if (slice->sub_rule_cnt && (l2->inverse_en != flag_en)) {
 			ppe_acl_warn("%p: invalid rule flags, expect all l2 misc rules to have "
-				       "same inverse logic type:%d flags: 0x%x",
-				       r, type, r->rule_flags);
+					"same inverse logic type:%d flags: 0x%x",
+					r, type, r->rule_flags);
 			return false;
 		}
 
@@ -1302,6 +1414,167 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		slice->valid = true;
 		break;
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	case PPE_ACL_RULE_MATCH_TYPE_CTPID:
+		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
+		ext_vlan = &slice->rule.ext_vlan;
+
+		slice->rule.ext_vlan.ctpid_val = r->rule.ctpid.tpid_val;
+		memset(&ext_vlan->ctpid_mask, 0xff, sizeof(ext_vlan->ctpid_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_CTPID_EN) {
+			ext_vlan->ctpid_mask = r->rule.ctpid.tpid_val;
+		}
+
+		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
+		if (slice->sub_rule_cnt && (ext_vlan->inverse_en != flag_en)) {
+			ppe_acl_warn("%p: invalid rule flags, expect all ext vlan rules to have "
+					"same inverse logic type:%d flags: 0x%x",
+					r, type, r->rule_flags);
+			return false;
+		}
+
+		ext_vlan->inverse_en = flag_en;
+
+		slice->sub_rule_cnt++;
+		slice->flags |= PPE_DRV_ACL_EXT_VLAN_FLAG_CTPID;
+		slice->type = PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN;
+		slice->valid = true;
+		break;
+
+	case PPE_ACL_RULE_MATCH_TYPE_STPID:
+		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
+		ext_vlan = &slice->rule.ext_vlan;
+
+		slice->rule.ext_vlan.stpid_val = r->rule.stpid.tpid_val;
+		memset(&ext_vlan->stpid_mask, 0xff, sizeof(ext_vlan->stpid_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_STPID_EN) {
+			ext_vlan->stpid_mask = r->rule.stpid.tpid_mask;
+		}
+
+		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
+		if (slice->sub_rule_cnt && (ext_vlan->inverse_en != flag_en)) {
+			ppe_acl_warn("%p: invalid rule flags, expect all ext vlan rules to have "
+				       "same inverse logic type:%d flags: 0x%x",
+				       r, type, r->rule_flags);
+			return false;
+		}
+
+		ext_vlan->inverse_en = flag_en;
+
+		slice->sub_rule_cnt++;
+		slice->flags |= PPE_DRV_ACL_EXT_VLAN_FLAG_STPID;
+		slice->type = PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN;
+		slice->valid = true;
+		break;
+
+	case PPE_ACL_RULE_MATCH_TYPE_DHCP_TYPE:
+		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
+		ext_vlan = &slice->rule.ext_vlan;
+
+		memset(&ext_vlan->dhcp_type, 0xff, sizeof(ext_vlan->dhcp_type));
+		memset(&ext_vlan->dhcp_mask, 0xff, sizeof(ext_vlan->dhcp_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_DHCP_TYPE_EN) {
+			ext_vlan->dhcp_type =
+				(ppe_drv_acl_dhcp_type_t)r->rule.dhcp_type.dhcp_type;
+			ext_vlan->dhcp_mask = r->rule.dhcp_type.dhcp_mask;
+		}
+
+		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
+		if (slice->sub_rule_cnt && (ext_vlan->inverse_en != flag_en)) {
+			ppe_acl_warn("%p: invalid rule flags, expect all ext vlan rules to have "
+					"same inverse logic type:%d flags: 0x%x",
+					r, type, r->rule_flags);
+			return false;
+		}
+
+		ext_vlan->inverse_en = flag_en;
+
+		slice->sub_rule_cnt++;
+		slice->flags |= PPE_DRV_ACL_EXT_VLAN_FLAG_DHCP;
+		slice->type = PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN;
+		slice->valid = true;
+		break;
+
+	case PPE_ACL_RULE_MATCH_TYPE_MC_TYPE:
+		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
+		ext_vlan = &slice->rule.ext_vlan;
+
+		memset(&ext_vlan->mc_type, 0xff, sizeof(ext_vlan->mc_type));
+		memset(&ext_vlan->mc_mask, 0xff, sizeof(ext_vlan->mc_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_MC_TYPE_EN) {
+			ext_vlan->mc_type = (ppe_drv_acl_mc_type_t)r->rule.mc_type.mc_type;
+			ext_vlan->mc_mask = r->rule.mc_type.mc_mask;
+		}
+
+		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
+		if (slice->sub_rule_cnt && (ext_vlan->inverse_en != flag_en)) {
+			ppe_acl_warn("%p: invalid rule flags, expect all ext vlan rules to have "
+					"same inverse logic type:%d flags: 0x%x",
+					r, type, r->rule_flags);
+			return false;
+		}
+
+		ext_vlan->inverse_en = flag_en;
+
+		slice->sub_rule_cnt++;
+		slice->flags |= PPE_DRV_ACL_EXT_VLAN_FLAG_MC;
+		slice->type = PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN;
+		slice->valid = true;
+		break;
+#endif
+
+	case PPE_ACL_RULE_MATCH_TYPE_CDEI:
+		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_VLAN];
+		vlan = &slice->rule.vlan;
+
+		slice->rule.vlan.cdei_en = r->rule.cdei.dei;
+		memset(&vlan->cdei_en_mask, 0xff, sizeof(vlan->cdei_en_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_CDEI_EN) {
+			vlan->cdei_en_mask = r->rule.cdei.dei_mask;
+		}
+
+		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
+		if (slice->sub_rule_cnt && (vlan->inverse_en != flag_en)) {
+			ppe_acl_warn("%p: invalid rule flags, expect all vlan rules to have "
+					"same inverse logic type:%d flags: 0x%x",
+					r, type, r->rule_flags);
+			return false;
+		}
+
+		vlan->inverse_en = flag_en;
+
+		slice->sub_rule_cnt++;
+		slice->flags |= PPE_DRV_ACL_VLAN_FLAG_CDEI;
+		slice->type = PPE_DRV_ACL_SLICE_TYPE_VLAN;
+		slice->valid = true;
+		break;
+
+	case PPE_ACL_RULE_MATCH_TYPE_SDEI:
+		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_VLAN];
+		vlan = &slice->rule.vlan;
+
+		slice->rule.vlan.sdei_en = r->rule.sdei.dei;
+		memset(&vlan->sdei_en_mask, 0xff, sizeof(vlan->sdei_en_mask));
+		if (r->rule_flags & PPE_ACL_RULE_FLAG_SDEI_EN) {
+			vlan->sdei_en_mask = r->rule.sdei.dei_mask;
+		}
+
+		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
+		if (slice->sub_rule_cnt && (vlan->inverse_en != flag_en)) {
+			ppe_acl_warn("%p: invalid rule flags, expect all vlan rules to have "
+					"same inverse logic type:%d flags: 0x%x",
+					r, type, r->rule_flags);
+			return false;
+		}
+
+		vlan->inverse_en = flag_en;
+
+		slice->sub_rule_cnt++;
+		slice->flags |= PPE_DRV_ACL_VLAN_FLAG_SDEI;
+		slice->type = PPE_DRV_ACL_SLICE_TYPE_VLAN;
+		slice->valid = true;
+		break;
+
 	default:
 		ppe_acl_warn("%p: invalid rule type: %d", r, type);
 		break;
@@ -1309,6 +1582,56 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 
 	return true;
 }
+
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+/*
+ * ppe_acl_create_pm_ctx()
+ *	Creates the PM entry by calling the PM counter
+ *	for the given ACL counter ID
+ */
+static bool ppe_acl_create_pm_ctx(struct ppe_acl *acl, struct ppe_acl_rule_action *r_action)
+{
+	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
+	ppe_pm_rule_dir_t dir;
+	int hw_idx;
+
+	/*
+	 * Get PM counter context only for pon mode.
+	 */
+	if (r_action->counter_mode != PPE_ACL_PON_PM)
+		return true;
+
+	/*
+	 * Get the flow direction.
+	 */
+	dir  = (acl->ipo == PPE_DRV_ACL_PREIPO) ? PPE_PM_RULE_DIR_INGRESS : PPE_PM_RULE_DIR_EGRESS;
+
+	/*
+	 * Allocate context and fill ppe acl action fields.
+	 */
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_COUNTER_EN) {
+		/*
+		 * Get the PM counter hw idx.
+		 */
+		hw_idx  = ppe_pm_counter_alloc(r_action->counter_id, dir);
+		if (hw_idx < 0) {
+			ppe_acl_warn("Couldn't allocate PM  counter context for counter_id: %d\n",
+					r_action->counter_id);
+			ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_action_config);
+			return false;
+		}
+
+		/*
+		 * Set values in ppe_acl.
+		 */
+		r_action->hw_counter_id = hw_idx;
+		acl->counter_id = r_action->counter_id;
+		acl->counter_valid = true;
+	}
+
+	return true;
+}
+#endif
 
 /*
  * ppe_acl_action_fill()
@@ -1338,6 +1661,7 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 	}
 
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_CTAG_DEI_CHANGE_EN) {
+		acl_action->ctag_dei = (ppe_drv_acl_dei_cmd_t)r_action->ctag_dei;
 		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_CTAG_DEI;
 	}
 
@@ -1347,6 +1671,7 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 	}
 
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_STAG_DEI_CHANGE_EN) {
+		acl_action->stag_dei = r_action->stag_dei;
 		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_STAG_DEI;
 	}
 
@@ -1406,14 +1731,6 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_MIRROR_EN;
 	}
 
-	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_CTAG_FMT_TAGGED) {
-		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_CTAG_FMT_TAGGED;
-	}
-
-	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_STAG_FMT_TAGGED) {
-		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_STAG_FMT_TAGGED;
-	}
-
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_REDIR_TO_CORE_EN) {
 		if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_SERVICE_CODE_EN) {
 			ppe_acl_warn("%p: both sc and rdt can't be enabled together: %d\n",
@@ -1437,14 +1754,14 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 		case 2:
 			acl_action->service_code = (r_action->flags
 					& PPE_ACL_RULE_ACTION_FLAG_REDIR_EDIT_EN)
-					? PPE_DRV_SC_EDIT_REDIR_CORE2
-					: PPE_DRV_SC_NOEDIT_REDIR_CORE2;
+				? PPE_DRV_SC_EDIT_REDIR_CORE2
+				: PPE_DRV_SC_NOEDIT_REDIR_CORE2;
 			break;
 		case 3:
 			acl_action->service_code = (r_action->flags
 					& PPE_ACL_RULE_ACTION_FLAG_REDIR_EDIT_EN)
-					? PPE_DRV_SC_EDIT_REDIR_CORE3
-					: PPE_DRV_SC_NOEDIT_REDIR_CORE3;
+				? PPE_DRV_SC_EDIT_REDIR_CORE3
+				: PPE_DRV_SC_NOEDIT_REDIR_CORE3;
 			break;
 		default:
 			ppe_acl_warn("%p: invalid redirect core: %d", r_action, r_action->redir_core);
@@ -1458,7 +1775,7 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 		acl_action->policer_index = ppe_policer_id_to_hwidx(r_action->policer_id);
 		if (acl_action->policer_index < 0) {
 			ppe_acl_warn("%p: no valid hw policer index for id: %d",
-				r_action, r_action->policer_id);
+					r_action, r_action->policer_id);
 			return false;
 		}
 
@@ -1476,77 +1793,207 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 	}
 #endif
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_CTAG_PID_CHANGE_EN) {
+		acl_action->ctag_pid = r_action->ctag_pid;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_CTAG_PID;
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_STAG_PID_CHANGE_EN) {
+		acl_action->stag_pid = r_action->stag_pid;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_STAG_PID;
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_DSCP_PBIT_MAP_IDX) {
+		acl_action->dscp_pbit_map_idx = r_action->dscp_pbit_map_idx;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_DSCP_PBIT_IDX;
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_TAGS_TO_RMV_EN) {
+		acl_action->tags_to_rmv = r_action->tags_to_rmv;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_TAGS_TO_RMV;
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_INT_DP_CHANGE_EN) {
+		acl_action->int_dp = (ppe_drv_acl_dp_t)r_action->int_dp;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_INT_DP;
+	}
+
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_SRC_INFO) {
+		acl_action->src_info_type = (ppe_drv_acl_src_info_type_t)r_action->src_info_type;
+		acl_action->src_info = r_action->src_info;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_SRC_INFO_EN;
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_CTAG_PID_CMD) {
+		acl_action->ctag_pid = (ppe_drv_acl_pid_cmd_t)r_action->ctag_pid_cmd;
+		acl_action->flags_ext |= PPE_DRV_ACL_ACTION_FLAG_CTAG_PID_CMD;
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_STAG_PID_CMD) {
+		acl_action->stag_pid = (ppe_drv_acl_pid_cmd_t)r_action->stag_pid_cmd;
+		acl_action->flags_ext |= PPE_DRV_ACL_ACTION_FLAG_STAG_PID_CMD;
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_CTAG_VID_CMD) {
+		acl_action->ctag_vid_cmd = (ppe_drv_acl_vid_cmd_t)r_action->ctag_vid_cmd;
+		acl_action->flags_ext |= PPE_DRV_ACL_ACTION_FLAG_CTAG_VID_CMD;
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_STAG_VID_CMD) {
+		acl_action->stag_vid_cmd = (ppe_drv_acl_vid_cmd_t)r_action->stag_vid_cmd;
+		acl_action->flags_ext |= PPE_DRV_ACL_ACTION_FLAG_STAG_VID_CMD;
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_CTAG_DEI_CMD) {
+		acl_action->ctag_dei_cmd = (ppe_drv_acl_dei_cmd_t)r_action->ctag_dei_cmd;
+		acl_action->flags_ext |= PPE_DRV_ACL_ACTION_FLAG_CTAG_DEI_CMD;
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_STAG_DEI_CMD) {
+		acl_action->stag_dei_cmd = (ppe_drv_acl_dei_cmd_t)r_action->stag_dei_cmd;
+		acl_action->flags_ext |= PPE_DRV_ACL_ACTION_FLAG_STAG_DEI_CMD;
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_CTAG_PCP_CMD) {
+		acl_action->ctag_pcp_cmd = (ppe_drv_acl_pcp_cmd_t)r_action->ctag_pcp_cmd;
+		acl_action->flags_ext |= PPE_DRV_ACL_ACTION_FLAG_CTAG_PCP_CMD;
+	}
+
+	if (r_action->flags_ext & PPE_ACL_RULE_ACTION_FLAG_STAG_PCP_CMD) {
+		acl_action->stag_pcp_cmd = (ppe_drv_acl_pcp_cmd_t)r_action->stag_pcp_cmd;
+		acl_action->flags_ext |= PPE_DRV_ACL_ACTION_FLAG_STAG_PCP_CMD;
+	}
+#endif
+
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_COUNTER_EN) {
+		acl_action->hw_counter_id = r_action->hw_counter_id;
+		acl_action->counter_mode = (ppe_drv_acl_counter_mode_t)r_action->counter_mode;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_COUNTER_EN;
+	}
+#endif
 	return true;
 }
 
 /*
- * ppe_acl_rule_src_fill()
- *	Extract source information
+ * ppe_acl_get_port_num_by_name()
+ * 	Returns the port number for the port name
  */
-static bool ppe_acl_rule_src_fill(struct ppe_acl *acl, struct ppe_acl_rule *rule)
-{
-	struct ppe_drv_acl_rule *info = &acl->info;
+static int32_t ppe_acl_get_port_num_by_name(struct ppe_acl_rule *rule) {
 	struct net_device *dev;
 	struct ppe_drv_iface *iface;
 	int32_t port_num;
+
+	dev = dev_get_by_name(&init_net, rule->dev.dev_name);
+	if (!dev) {
+		ppe_acl_warn("%p: failed to find valid src for dev %s\n",
+				rule, rule->dev.dev_name);
+		return -1;
+	}
+
+	iface = ppe_drv_iface_get_by_dev(dev);
+	if (!iface) {
+		ppe_acl_warn("%p: failed to find PPE interface for dev: %p(%s)\n",
+				rule, dev, rule->dev.dev_name);
+		dev_put(dev);
+		return -1;
+	}
+
+	port_num = ppe_drv_iface_port_idx_get(iface);
+	if (port_num < 0) {
+		ppe_acl_warn("%p: failed to find PPE port for iface: %p\n",
+				rule, iface);
+		dev_put(dev);
+		return -1;
+	}
+
+	dev_put(dev);
+	return port_num;
+}
+
+/*
+ * ppe_acl_rule_dev_fill()
+ *	Extract net device information
+ */
+static bool ppe_acl_rule_dev_fill(struct ppe_acl *acl, struct ppe_acl_rule *rule)
+{
+	struct ppe_drv_acl_rule *info = &acl->info;
+	int8_t port_num;
 	uint8_t sc;
 
-	switch (rule->stype) {
-	case PPE_ACL_RULE_SRC_TYPE_DEV:
-		dev = dev_get_by_name(&init_net, rule->src.dev_name);
-		if (!dev) {
-			ppe_acl_warn("%p: failed to find valid src for dev %s\n",
-					rule, rule->src.dev_name);
+	switch (rule->dev_type) {
+		case PPE_ACL_RULE_DEV_TYPE_SRC_DEV:
+			port_num = ppe_acl_get_port_num_by_name(rule);
+			if (port_num < 0) {
+				ppe_acl_warn("%p: Invalid dev name \n", rule);
+				return false;
+			}
+
+			info->dev_type = PPE_DRV_ACL_DEV_TYPE_PORT_NUM;
+			info->dev = port_num;
+			ppe_acl_info("%p: Binding ACL rule to port number: %d\n", rule, info->dev);
+			break;
+
+		case PPE_ACL_RULE_DEV_TYPE_SC:
+			info->dev_type = PPE_DRV_ACL_DEV_TYPE_SC;
+			info->dev = rule->dev.sc;
+			acl->sc = info->dev;
+
+			ppe_acl_info("%p: Binding ACL rule to servcie code number: %d\n", rule, info->dev);
+			break;
+
+		case PPE_ACL_RULE_DEV_TYPE_FLOW:
+
+			/*
+			 * Get a free service code for this ACL rule.
+			 */
+			sc = ppe_drv_acl_sc_get();
+			if (!sc) {
+				ppe_acl_warn("%p: not able to find a free service code\n", rule);
+				return false;
+			}
+
+			info->dev_type = PPE_DRV_ACL_DEV_TYPE_SC;
+			info->dev = sc;
+			acl->sc = info->dev;
+
+			ppe_acl_info("%p: FLOW + ACL rule servcie code number: %d\n", rule, info->dev);
+			break;
+
+#ifdef PPE_ACL_DEST_BIND_SUPPORT
+		case PPE_ACL_RULE_DEV_TYPE_DEST_L3_PORT:
+			port_num = ppe_acl_get_port_num_by_name(rule);
+			if (port_num < 0) {
+				ppe_acl_warn("%p: Invalid dev name \n", rule);
+				return false;
+			}
+
+			info->dev_type = PPE_DRV_ACL_DEV_TYPE_DEST_L3_PORT;
+			info->dev = port_num;
+			ppe_acl_info("%p: Binding ACL rule to port number: %d\n", rule, info->dev);
+			break;
+
+		case PPE_ACL_RULE_DEV_TYPE_DEST_L2_PORT:
+			port_num = ppe_acl_get_port_num_by_name(rule);
+			if (port_num < 0) {
+				ppe_acl_warn("%p: Invalid dev name \n", rule);
+				return false;
+			}
+
+			info->dev_type = PPE_DRV_ACL_DEV_TYPE_DEST_L2_PORT;
+			info->dev = port_num;
+			ppe_acl_info("%p: Binding ACL rule to port number: %d\n", rule, info->dev);
+			break;
+#else
+		case PPE_ACL_RULE_DEV_TYPE_DEST_L3_PORT:
+		case PPE_ACL_RULE_DEV_TYPE_DEST_L2_PORT:
+			ppe_acl_warn("%p: Feature not supported: %d", rule, rule->dev_type);
 			return false;
-		}
-
-		iface = ppe_drv_iface_get_by_dev(dev);
-		if (!iface) {
-			ppe_acl_warn("%p: failed to find PPE interface for dev: %p(%s)\n",
-					rule, dev, rule->src.dev_name);
-			dev_put(dev);
+#endif
+		default:
+			ppe_acl_warn("%p: Invalid device type: %d", rule, rule->dev_type);
 			return false;
-		}
-
-		port_num = ppe_drv_iface_port_idx_get(iface);
-		if (port_num < 0) {
-			ppe_acl_warn("%p: failed to find PPE port for iface: %p\n",
-					rule, iface);
-			dev_put(dev);
-			return false;
-		}
-
-		info->stype = PPE_DRV_ACL_SRC_TYPE_PORT_NUM;
-		info->src = port_num;
-		dev_put(dev);
-		ppe_acl_info("%p: Binding ACL rule to port number: %d\n", rule, info->src);
-		break;
-
-	case PPE_ACL_RULE_SRC_TYPE_SC:
-		info->stype = PPE_DRV_ACL_SRC_TYPE_SC;
-		info->src = rule->src.sc;
-		acl->sc = info->src;
-
-		ppe_acl_info("%p: Binding ACL rule to servcie code number: %d\n", rule, info->src);
-		break;
-
-	case PPE_ACL_RULE_SRC_TYPE_FLOW:
-
-		/*
-		 * Get a free service code for this ACL rule.
-		 */
-		sc = ppe_drv_acl_sc_get();
-		if (!sc) {
-			ppe_acl_warn("%p: not able to find a free service code", rule);
-			return false;
-		}
-
-		info->stype = PPE_DRV_ACL_SRC_TYPE_SC;
-		info->src = sc;
-		acl->sc = info->src;
-
-		ppe_acl_info("%p: FLOW + ACL rule servcie code number: %d\n", rule, info->src);
-		break;
 	}
 
 	return true;
@@ -1573,7 +2020,9 @@ static bool ppe_acl_rule_cmn_fill(struct ppe_acl *acl, struct ppe_acl_rule *rule
 	info->cmn.post_routing_en = !!(rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_POST_RT_EN);
 	acl->pri = !!(rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_PRI_EN)
 			? rule->cmn.pri : PPE_ACL_PRI_NOMINAL;
-	acl->ipo = !!(rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_OUTER_HDR_MATCH)
+	info->cmn.pri = acl->pri; /* Fill the rule wise priority in ACL */
+	acl->ipo = !!((rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLAG_OUTER_HDR_MATCH) ||
+			(rule->cmn.cmn_flags & PPE_ACL_RULE_CMN_FLOW_DIR_TYPE_US))
 			? PPE_DRV_ACL_PREIPO : PPE_DRV_ACL_IPO;
 	info->cmn.qos_res_pre = !!(acl->ipo == PPE_DRV_ACL_PREIPO)
 			? PPE_DRV_PORT_QOS_RES_PREC_4 : PPE_DRV_PORT_QOS_RES_PREC_5;
@@ -1612,6 +2061,9 @@ static bool ppe_acl_rule_exist(struct ppe_acl *acl)
 	struct ppe_drv_acl_mac *dmac, *ae_dmac;
 	struct ppe_drv_acl_mac *smac, *ae_smac;
 	struct ppe_drv_acl_vlan *vlan, *ae_vlan;
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	struct ppe_drv_acl_ext_vlan *ext_vlan, *ae_ext_vlan;
+#endif
 	struct ppe_drv_acl_l2_misc *l2, *ae_l2;
 	struct ppe_drv_acl_ipv4 *sip_v4, *ae_sip_v4;
 	struct ppe_drv_acl_ipv4 *dip_v4, *ae_dip_v4;
@@ -1656,7 +2108,7 @@ static bool ppe_acl_rule_exist(struct ppe_acl *acl)
 		/*
 		 * If source is different this is a new rule.
 		 */
-		if ((ae->info.stype != acl->info.stype) || ae->info.src != acl->info.src) {
+		if ((ae->info.dev_type != acl->info.dev_type) || ae->info.dev != acl->info.dev) {
 			/*
 			 * Go to next rule.
 			 */
@@ -1776,6 +2228,49 @@ static bool ppe_acl_rule_exist(struct ppe_acl *acl)
 
 				break;
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+			case PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN:
+				ae_ext_vlan = &ae->info.chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN].rule.ext_vlan;
+				ext_vlan = &acl->info.chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN].rule.ext_vlan;
+				slice = &ae->info.chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
+
+				if (ae->info.chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN].flags !=
+						acl->info.chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN].flags) {
+					goto next_entry;
+				}
+
+				if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_MC) {
+					if (ae_ext_vlan->mc_type != ext_vlan->mc_type) {
+						goto next_entry;
+					}
+				}
+
+				if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_DHCP) {
+					if (ae_ext_vlan->dhcp_type != ext_vlan->dhcp_type) {
+						goto next_entry;
+					}
+				}
+
+				if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_STPID) {
+					if (ae_ext_vlan->stpid_val != ext_vlan->stpid_val) {
+						goto next_entry;
+					}
+				}
+
+				if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_CTPID) {
+					if (ae_ext_vlan->ctpid_val != ext_vlan->ctpid_val) {
+						goto next_entry;
+					}
+				}
+
+				if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_L2) {
+					if (ae_ext_vlan->l2_type != ext_vlan->l2_type) {
+						goto next_entry;
+					}
+				}
+
+				break;
+#endif
 			case PPE_DRV_ACL_SLICE_TYPE_L2_MISC:
 				ae_l2 = &ae->info.chain[PPE_DRV_ACL_SLICE_TYPE_L2_MISC].rule.l2;
 				l2 = &acl->info.chain[PPE_DRV_ACL_SLICE_TYPE_L2_MISC].rule.l2;
@@ -2162,7 +2657,6 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	struct ppe_acl_base *acl_g = &ppe_acl_gbl;
 	struct ppe_drv_acl_rule_match_one *slice;
 	struct ppe_drv_acl_ctx *ctx = NULL;
-	struct ppe_drv_acl_rule info = {0};
 	ppe_acl_rule_id_t gen_id = -1;
 	struct ppe_acl *acl = NULL;
 	ppe_acl_ret_t ret;
@@ -2204,11 +2698,11 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 		goto fail;
 	}
 
-	info.stype = PPE_DRV_ACL_SRC_TYPE_SC;
-	info.src = sc;
+	acl->info.dev_type = PPE_DRV_ACL_DEV_TYPE_SC;
+	acl->info.dev = sc;
 	acl->sc = sc;
 
-	ppe_acl_info("%p: FLOW + ACL rule servcie code number: %d\n", rule, info.src);
+	ppe_acl_info("%p: FLOW + ACL rule servcie code number: %d\n", rule, acl->info.dev);
 
 	/*
 	 * Allocate empty rule slices in driver.
@@ -2227,7 +2721,7 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	/*
 	 * Configure a default rule just for binding FLOW and ACL with service code.
 	 */
-	slice = &info.chain[PPE_DRV_ACL_SLICE_TYPE_SRC_MAC];
+	slice = &acl->info.chain[PPE_DRV_ACL_SLICE_TYPE_SRC_MAC];
 	memset(slice->rule.smac.mac, 0x0, ETH_ALEN);
 	memset(slice->rule.smac.mac_mask, 0x0, ETH_ALEN);
 	slice->type = PPE_DRV_ACL_SLICE_TYPE_SRC_MAC;
@@ -2236,15 +2730,15 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	/*
 	 * Fill policer index as ACL rule action
 	 */
-	info.action.policer_index = rule->hw_policer_idx;
-	info.action.flags |= PPE_DRV_ACL_ACTION_FLAG_POLICER_INDEX;
+	acl->info.action.policer_index = rule->hw_policer_idx;
+	acl->info.action.flags |= PPE_DRV_ACL_ACTION_FLAG_POLICER_INDEX;
 
 	if (rule->pkt_noedit) {
-		info.action.flags |= PPE_DRV_ACL_ACTION_FLAG_SC;
-		info.action.service_code = PPE_DRV_SC_NOEDIT_ACL_POLICER;
+		acl->info.action.flags |= PPE_DRV_ACL_ACTION_FLAG_SC;
+		acl->info.action.service_code = PPE_DRV_SC_NOEDIT_ACL_POLICER;
 	}
 
-	if (ppe_drv_acl_configure(ctx, &info) != PPE_DRV_RET_SUCCESS) {
+	if (ppe_drv_acl_configure(ctx, &acl->info) != PPE_DRV_RET_SUCCESS) {
 		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_rule_config);
 		ppe_acl_warn("%p: failed to configure ACL rule: %p", acl_g, ctx);
 		ret = PPE_ACL_RET_CREATE_FAIL_RULE_CONFIG;
@@ -2282,7 +2776,14 @@ ppe_acl_ret_t ppe_acl_rule_flow_policer_create(struct ppe_acl_rule_flow_policer 
 	return PPE_ACL_RET_SUCCESS;
 
 fail:
+	if (gen_id >= 0) {
+		ppe_acl_rule_return_gen_id(gen_id);
+	}
+
 	if (ctx) {
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+		ppe_drv_acl_uni_to_l2vp_sc_unmap(ctx);
+#endif
 		ppe_drv_acl_destroy(ctx);
 	}
 
@@ -2291,6 +2792,12 @@ fail:
 			ppe_drv_acl_sc_return(acl->sc);
 		}
 
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+		if (acl->counter_valid) {
+			ppe_pm_counter_deref(acl->counter_id);
+			acl->counter_valid = false;
+		}
+#endif
 		ppe_acl_free(acl);
 	}
 
@@ -2313,6 +2820,7 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 	struct ppe_acl *acl = NULL;
 	uint8_t slice_cnt = 0;
 	ppe_acl_ret_t ret;
+	bool has_ext_vlan_related = false;
 
 	ppe_acl_info("%p: rule create request: %p", acl_g, rule);
 
@@ -2349,6 +2857,19 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 			ret = PPE_ACL_RET_CREATE_FAIL_INVALID_ID;
 			goto fail;
 		}
+	}
+
+	has_ext_vlan_related =
+		(rule->valid_flags & PPE_ACL_RULE_MATCH_TYPE_CTPID)     ||
+		(rule->valid_flags & PPE_ACL_RULE_MATCH_TYPE_STPID)     ||
+		(rule->valid_flags & PPE_ACL_RULE_MATCH_TYPE_DHCP_TYPE) ||
+		(rule->valid_flags & PPE_ACL_RULE_MATCH_TYPE_MC_TYPE);
+
+	if (has_ext_vlan_related &&
+			(rule->valid_flags & PPE_ACL_RULE_MATCH_TYPE_ETHER_TYPE) &&
+			!(rule->valid_flags & PPE_ACL_RULE_MATCH_TYPE_PPPOE_SESS)) {
+
+		rule->rules[PPE_ACL_RULE_MATCH_TYPE_ETHER_TYPE].rule_flags |= PPE_ACL_RULE_EXT_ETH_TYPE_EN;
 	}
 
 	/*
@@ -2426,9 +2947,9 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 	}
 
 	/*
-	 * Fill the source to which this ACL rule need to be binded.
+	 * Fill the device info to which this ACL rule need to be binded.
 	 */
-	if (!ppe_acl_rule_src_fill(acl, rule)) {
+	if (!ppe_acl_rule_dev_fill(acl, rule)) {
 		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_invalid_src);
 		ppe_acl_warn("%p: failed to find valid src for rule %p\n", acl_g, rule);
 		ret = PPE_ACL_RET_CREATE_FAIL_INVALID_SRC;
@@ -2447,6 +2968,17 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 		goto fail;
 	}
 
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	/*
+	 * Create or fetch the PM ctx.
+	 */
+	if (!ppe_acl_create_pm_ctx(acl, &rule->action)) {
+		ppe_acl_stats_inc(&acl_g->stats.cmn.acl_create_fail_action_config);
+		ppe_acl_warn("%p: failed to get the PM ctx: %p", acl_g, ctx);
+		ret = PPE_ACL_RET_CREATE_FAIL_ACTION_CONFIG;
+		goto fail;
+	}
+#endif
 	/*
 	 * Fill ACL rule action
 	 */
@@ -2489,12 +3021,21 @@ ppe_acl_ret_t ppe_acl_rule_create(struct ppe_acl_rule *rule)
 	kref_init(&acl->ref_cnt);
 	acl->slice_cnt = slice_cnt;
 	memcpy(&acl->rule, rule, sizeof(struct ppe_acl_rule));
-
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+	ppe_drv_acl_uni_to_l2vp_sc_map(ctx);
+#endif
 	spin_unlock_bh(&acl_g->lock);
 	return PPE_ACL_RET_SUCCESS;
 
 fail:
+	if (gen_id >= 0) {
+		ppe_acl_rule_return_gen_id(gen_id);
+	}
+
 	if (ctx) {
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+		ppe_drv_acl_uni_to_l2vp_sc_unmap(ctx);
+#endif
 		ppe_drv_acl_destroy(ctx);
 	}
 
@@ -2503,6 +3044,12 @@ fail:
 			ppe_drv_acl_sc_return(acl->sc);
 		}
 
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+		if (acl->counter_valid) {
+			ppe_pm_counter_deref(acl->counter_id);
+			acl->counter_valid = false;
+		}
+#endif
 		ppe_acl_free(acl);
 	}
 

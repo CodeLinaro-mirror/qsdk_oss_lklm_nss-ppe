@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/module.h>
@@ -29,6 +18,11 @@
 						/* General ACL rule ID start */
 #define PPE_ACL_RULE_ID_MAX 2048		/* Maximum number of ACL rule ID */
 #define PPE_ACL_GEN_RULE_ID_MAX 1024 		/* Maximum number of general ACL rule ID */
+#ifdef NSS_PPE_ACL_RULE_RANGE
+#define PPE_ACL_PRI_MAX 128
+#else
+#define PPE_ACL_PRI_MAX 256
+#endif
 
 /*
  * PPE ACL debug macros
@@ -103,6 +97,12 @@ struct ppe_acl {
 	 * service code for flow combination
 	 */
 	uint8_t sc;
+
+	/*
+	 * Counter ID for PON PM case
+	 */
+	uint16_t counter_id;
+	bool counter_valid;
 
 	/*
 	 * Registered callback info.

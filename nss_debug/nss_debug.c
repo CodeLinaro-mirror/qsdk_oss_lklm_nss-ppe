@@ -18,14 +18,14 @@
  */
 static enum nss_log_level g_level = NSS_DEFAULT_LOG_LEVEL;
 /* Default categories: enable all by default */
-static nss_cat_mask_t g_cat_mask = NSS_LOG_CAT_ALL;
-static bool g_print_enable = true;
+static nss_debug_cat_mask_t g_cat_mask = NSS_LOG_CAT_ALL;
+static bool g_print_enable = false;
 
-struct nss_module_cfg {
+struct nss_debug_module_cfg {
     char *tag;
     enum nss_log_level level;
     bool level_set;
-    nss_cat_mask_t cat_mask;
+    nss_debug_cat_mask_t cat_mask;
     bool mask_set;
     struct list_head node;
 };
@@ -34,9 +34,9 @@ static LIST_HEAD(cfg_list);
 static DEFINE_SPINLOCK(cfg_lock);
 
 
-static struct nss_module_cfg *nss_find_cfg(const char *module_tag)
+static struct nss_debug_module_cfg *nss_debug_find_cfg(const char *module_tag)
 {
-    struct nss_module_cfg *it;
+    struct nss_debug_module_cfg *it;
     list_for_each_entry(it, &cfg_list, node) {
         if (strcmp(it->tag, module_tag) == 0)
             return it;
@@ -44,35 +44,35 @@ static struct nss_module_cfg *nss_find_cfg(const char *module_tag)
     return NULL;
 }
 
-static enum nss_log_level nss_effective_level(const char *module_tag)
+static enum nss_log_level nss_debug_effective_level(const char *module_tag)
 {
     unsigned long flags;
     enum nss_log_level lvl = g_level;
-    struct nss_module_cfg *cfg;
+    struct nss_debug_module_cfg *cfg;
 
     spin_lock_irqsave(&cfg_lock, flags);
-    cfg = nss_find_cfg(module_tag);
+    cfg = nss_debug_find_cfg(module_tag);
     if (cfg && cfg->level_set)
         lvl = cfg->level;
     spin_unlock_irqrestore(&cfg_lock, flags);
     return lvl;
 }
 
-static nss_cat_mask_t nss_effective_mask(const char *module_tag)
+static nss_debug_cat_mask_t nss_debug_effective_mask(const char *module_tag)
 {
     unsigned long flags;
-    nss_cat_mask_t mask = g_cat_mask;
-    struct nss_module_cfg *cfg;
+    nss_debug_cat_mask_t mask = g_cat_mask;
+    struct nss_debug_module_cfg *cfg;
 
     spin_lock_irqsave(&cfg_lock, flags);
-    cfg = nss_find_cfg(module_tag);
+    cfg = nss_debug_find_cfg(module_tag);
     if (cfg && cfg->mask_set)
         mask = cfg->cat_mask;
     spin_unlock_irqrestore(&cfg_lock, flags);
     return mask;
 }
 
-static const char *nss_level_str(enum nss_log_level level)
+static const char *nss_debug_level_str(enum nss_log_level level)
 {
     switch (level) {
     case NSS_LOG_LEVEL_ERROR: return "ERROR";
@@ -83,7 +83,7 @@ static const char *nss_level_str(enum nss_log_level level)
     return "?";
 }
 
-static const char *nss_level_prefix(enum nss_log_level level)
+static const char *nss_debug_level_prefix(enum nss_log_level level)
 {
     switch (level) {
     case NSS_LOG_LEVEL_ERROR: return KERN_ERR;
@@ -98,10 +98,10 @@ static const char *nss_level_prefix(enum nss_log_level level)
  * Core logging
  */
 int nss_log(enum nss_log_level level, const char *module_tag,
-            nss_cat_mask_t categories, const char *fmt, ...)
+            nss_debug_cat_mask_t categories, const char *fmt, ...)
 {
-    enum nss_log_level thr = nss_effective_level(module_tag ?: "?");
-    nss_cat_mask_t mask = nss_effective_mask(module_tag ?: "?");
+    enum nss_log_level thr = nss_debug_effective_level(module_tag ?: "?");
+    nss_debug_cat_mask_t mask = nss_debug_effective_mask(module_tag ?: "?");
     va_list args;
     struct timespec64 ts;
     char msgbuf[512];
@@ -127,9 +127,9 @@ int nss_log(enum nss_log_level level, const char *module_tag,
     /* Emit printk if print is enabled and filters passed */
     if (g_print_enable) {
         printk("%s[%lld.%09ld][%s][%s][cats=0x%08x] %s\n",
-               nss_level_prefix(level),
+               nss_debug_level_prefix(level),
                (long long)ts.tv_sec, ts.tv_nsec,
-               nss_level_str(level), module_tag ?: "?",
+               nss_debug_level_str(level), module_tag ?: "?",
                (unsigned int)categories,
                msgbuf);
     }
@@ -140,7 +140,7 @@ capture_path:
 }
 EXPORT_SYMBOL(nss_log);
 
-int nss_set_level_global(enum nss_log_level level)
+int nss_debug_level_global_set(enum nss_log_level level)
 {
     unsigned long flags;
     if (level < NSS_LOG_LEVEL_ERROR || level > NSS_LOG_LEVEL_TRACE)
@@ -150,25 +150,25 @@ int nss_set_level_global(enum nss_log_level level)
     spin_unlock_irqrestore(&cfg_lock, flags);
     return 0;
 }
-EXPORT_SYMBOL(nss_set_level_global);
+EXPORT_SYMBOL(nss_debug_level_global_set);
 
-enum nss_log_level nss_get_level_global(void)
+enum nss_log_level nss_debug_level_global_get(void)
 {
     return g_level;
 }
-EXPORT_SYMBOL(nss_get_level_global);
+EXPORT_SYMBOL(nss_debug_level_global_get);
 
 /* Expose current global mask for procfs status */
-nss_cat_mask_t nss_get_global_mask(void)
+nss_debug_cat_mask_t nss_debug_global_mask_get(void)
 {
     return g_cat_mask;
 }
-EXPORT_SYMBOL(nss_get_global_mask);
+EXPORT_SYMBOL(nss_debug_global_mask_get);
 
-static struct nss_module_cfg *nss_get_or_create_cfg(const char *module_tag)
+static struct nss_debug_module_cfg *nss_debug_get_or_create_cfg(const char *module_tag)
 {
-    struct nss_module_cfg *cfg;
-    cfg = nss_find_cfg(module_tag);
+    struct nss_debug_module_cfg *cfg;
+    cfg = nss_debug_find_cfg(module_tag);
     if (cfg)
         return cfg;
 
@@ -189,14 +189,14 @@ static struct nss_module_cfg *nss_get_or_create_cfg(const char *module_tag)
     return cfg;
 }
 
-int nss_set_level_module(const char *module_tag, enum nss_log_level level)
+int nss_debug_level_module_set(const char *module_tag, enum nss_log_level level)
 {
     unsigned long flags;
-    struct nss_module_cfg *cfg;
+    struct nss_debug_module_cfg *cfg;
     if (!module_tag || level < NSS_LOG_LEVEL_ERROR || level > NSS_LOG_LEVEL_TRACE)
         return -EINVAL;
     spin_lock_irqsave(&cfg_lock, flags);
-    cfg = nss_get_or_create_cfg(module_tag);
+    cfg = nss_debug_get_or_create_cfg(module_tag);
     if (!cfg) {
         spin_unlock_irqrestore(&cfg_lock, flags);
         return -ENOMEM;
@@ -206,9 +206,9 @@ int nss_set_level_module(const char *module_tag, enum nss_log_level level)
     spin_unlock_irqrestore(&cfg_lock, flags);
     return 0;
 }
-EXPORT_SYMBOL(nss_set_level_module);
+EXPORT_SYMBOL(nss_debug_level_module_set);
 
-int nss_enable_category(nss_cat_mask_t categories)
+int nss_debug_category_enable(nss_debug_cat_mask_t categories)
 {
     unsigned long flags;
     spin_lock_irqsave(&cfg_lock, flags);
@@ -216,9 +216,9 @@ int nss_enable_category(nss_cat_mask_t categories)
     spin_unlock_irqrestore(&cfg_lock, flags);
     return 0;
 }
-EXPORT_SYMBOL(nss_enable_category);
+EXPORT_SYMBOL(nss_debug_category_enable);
 
-int nss_disable_category(nss_cat_mask_t categories)
+int nss_debug_category_disable(nss_debug_cat_mask_t categories)
 {
     unsigned long flags;
     spin_lock_irqsave(&cfg_lock, flags);
@@ -226,16 +226,16 @@ int nss_disable_category(nss_cat_mask_t categories)
     spin_unlock_irqrestore(&cfg_lock, flags);
     return 0;
 }
-EXPORT_SYMBOL(nss_disable_category);
+EXPORT_SYMBOL(nss_debug_category_disable);
 
-int nss_enable_category_module(const char *module_tag, nss_cat_mask_t categories)
+int nss_debug_category_module_enable(const char *module_tag, nss_debug_cat_mask_t categories)
 {
     unsigned long flags;
-    struct nss_module_cfg *cfg;
+    struct nss_debug_module_cfg *cfg;
     if (!module_tag)
         return -EINVAL;
     spin_lock_irqsave(&cfg_lock, flags);
-    cfg = nss_get_or_create_cfg(module_tag);
+    cfg = nss_debug_get_or_create_cfg(module_tag);
     if (!cfg) {
         spin_unlock_irqrestore(&cfg_lock, flags);
         return -ENOMEM;
@@ -245,16 +245,16 @@ int nss_enable_category_module(const char *module_tag, nss_cat_mask_t categories
     spin_unlock_irqrestore(&cfg_lock, flags);
     return 0;
 }
-EXPORT_SYMBOL(nss_enable_category_module);
+EXPORT_SYMBOL(nss_debug_category_module_enable);
 
-int nss_disable_category_module(const char *module_tag, nss_cat_mask_t categories)
+int nss_debug_category_module_disable(const char *module_tag, nss_debug_cat_mask_t categories)
 {
     unsigned long flags;
-    struct nss_module_cfg *cfg;
+    struct nss_debug_module_cfg *cfg;
     if (!module_tag)
         return -EINVAL;
     spin_lock_irqsave(&cfg_lock, flags);
-    cfg = nss_get_or_create_cfg(module_tag);
+    cfg = nss_debug_get_or_create_cfg(module_tag);
     if (!cfg) {
         spin_unlock_irqrestore(&cfg_lock, flags);
         return -ENOMEM;
@@ -264,23 +264,9 @@ int nss_disable_category_module(const char *module_tag, nss_cat_mask_t categorie
     spin_unlock_irqrestore(&cfg_lock, flags);
     return 0;
 }
-EXPORT_SYMBOL(nss_disable_category_module);
+EXPORT_SYMBOL(nss_debug_category_module_disable);
 
-int nss_get_stats(const char *module_tag, struct nss_stats *out)
-{
-    (void)module_tag;
-    if (out) {
-        memset(out, 0, sizeof(*out));
-    }
-    return 0;
-}
-EXPORT_SYMBOL(nss_get_stats);
-
-void nss_dump_state(const char *module_tag)
-{
-    (void)module_tag;
-}
-EXPORT_SYMBOL(nss_dump_state);
+/* Removed stale stats/state implementations */
 
 
 static int __init nss_debug_init(void)
@@ -299,7 +285,7 @@ static int __init nss_debug_init(void)
 
 static void __exit nss_debug_exit(void)
 {
-    struct nss_module_cfg *it, *tmp;
+    struct nss_debug_module_cfg *it, *tmp;
     unsigned long flags;
     spin_lock_irqsave(&cfg_lock, flags);
     list_for_each_entry_safe(it, tmp, &cfg_list, node) {
@@ -321,7 +307,7 @@ MODULE_DESCRIPTION("NSS Debug module (basic logging)");
 MODULE_AUTHOR("QCA");
 
 /* Runtime knob implementations */
-int nss_set_print_enable(bool enable)
+int nss_debug_enable_set(bool enable)
 {
     unsigned long flags;
     spin_lock_irqsave(&cfg_lock, flags);
@@ -329,12 +315,12 @@ int nss_set_print_enable(bool enable)
     spin_unlock_irqrestore(&cfg_lock, flags);
     return 0;
 }
-EXPORT_SYMBOL(nss_set_print_enable);
+EXPORT_SYMBOL(nss_debug_enable_set);
 
-bool nss_get_print_enable(void)
+bool nss_debug_enable_get(void)
 {
     return g_print_enable;
 }
-EXPORT_SYMBOL(nss_get_print_enable);
+EXPORT_SYMBOL(nss_debug_enable_get);
 
 /* Capture knobs removed */

@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #define PPE_DRV_PORT_SRC_PROFILE_MAX	4	/* Source profile for a port can be between 0-3 */
@@ -36,6 +25,12 @@
 #define PPE_DRV_PRI_PROF_DEFAULT 		0	/**< PPE enqueue vp pri profile default */
 #define PPE_DRV_PORT_EVP_PRI_PROF_START	((PPE_DRV_PORT_ENQ_VP_END) - (PPE_DRV_PORT_ENQ_VP_START) + 1)	/**<  PPE enqueue vp pri profile start */
 
+#define PPE_DRV_PORT_ENQ_VP_MAX_NUM	((PPE_DRV_PORT_ENQ_VP_END) - (PPE_DRV_PORT_ENQ_VP_START) +1) /**< Maximum number of enq_vp available */
+#ifdef NSS_PPE_PON_SUPPORT
+#define PPE_DRV_PORT_PON_PQ_PER_ENQ_VP		16	/**< Max pq per enqueue vp */
+#endif
+
+#define PPE_DRV_PORT_ENQ_VP_INVALID	-1		/**< PPE enqueue vp invalid */
 /*
  * Port fields update flags.
  */
@@ -88,6 +83,8 @@ typedef enum ppe_drv_port_flag {
 	PPE_DRV_PORT_FLAG_MPSK = 0x400,
 	PPE_DRV_PORT_FLAG_TUN_ACTIVE = 0x800,
 	PPE_DRV_PORT_FLAG_IPSEC_FULL_INLINE = 0x1000,
+	PPE_DRV_PORT_FLAG_PORT_GEM = 0x2000,
+	PPE_DRV_PORT_FLAG_NETFN_OL=0x4000,
 } ppe_drv_port_flag_t;
 
 /*
@@ -97,6 +94,7 @@ typedef enum ppe_drv_port_flag {
 struct ppe_drv_port_enq_vp {
 	uint8_t pri_profile;	/* Enqueue vport pri profile */
 	uint8_t metadata;	/* Metadata value(node_id) for enqueue vport */
+	enum ppe_drv_enq_vp_type type;		/* Port type */
 };
 
 /*
@@ -119,6 +117,9 @@ struct ppe_drv_port {
 	bool ingress_untag_vlan;		/* Ingress VLAN rule for untag packets configured? */
 	bool active_l3_if_attached;		/* Port L3_IF attached? */
 	bool is_fdb_learn_enabled;		/* Port FDB learning enabled */
+#if defined(NSS_PPE_DRV_HW_GRO)
+	bool hw_gro_en;				/* HW GRO enable flag */
+#endif
 	uint16_t mtu;				/* MTU value of port */
 	uint16_t mru;				/* MRU value of port */
 	uint8_t mac_addr[ETH_ALEN];		/* MAC address of port */
@@ -135,7 +136,7 @@ struct ppe_drv_port {
 	uint8_t next_core;			/* Next core to pick for RFS */
 	uint8_t xmit_port;			/* Physical port attached to virtual port */
 	uint8_t profile_id;			/* Profile id */
-	struct ppe_drv_port_enq_vp evp;	/* PPE enqueue vport information */
+	struct ppe_drv_port_enq_vp evp;		/* PPE enqueue vport information */
 };
 
 void ppe_drv_port_ucast_queue_update(struct ppe_drv_port *pp, uint8_t queue_id);
@@ -144,7 +145,6 @@ bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id);
 bool ppe_drv_port_ucast_queue_profile_set(struct ppe_drv_port *pp, uint8_t src_profile, uint8_t queue_id, uint8_t profile);
 uint8_t ppe_drv_port_is_tunnel_vp(struct ppe_drv_port *pp);
 
-int32_t ppe_drv_port_ucast_queue_profile_get(int port);
 struct net_device *ppe_drv_port_to_dev(struct ppe_drv_port *pp);
 struct ppe_drv_port *ppe_drv_port_from_dev(struct net_device *dev);
 struct ppe_drv_port *ppe_drv_port_from_tl_l3_if(struct ppe_drv_tun_l3_if *tl_l3_if);
@@ -171,6 +171,9 @@ bool ppe_drv_port_l3_if_attach(struct ppe_drv_port *pp, struct ppe_drv_l3_if *l3
 void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi);
 void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi);
 
+void ppe_drv_port_flood_vsi_override_en(uint32_t vsi_id);
+void ppe_drv_port_flood_vsi_override_default(uint32_t vsi_id);
+
 bool ppe_drv_port_deref(struct ppe_drv_port *pp);
 struct ppe_drv_port *ppe_drv_port_ref(struct ppe_drv_port *pp);
 struct ppe_drv_port *ppe_drv_port_alloc(enum ppe_drv_port_type type, struct net_device *dev, uint8_t tunnel_vp_cfg, bool fdb_learn_enabled);
@@ -181,6 +184,7 @@ struct ppe_drv_port *ppe_drv_port_entries_alloc(void);
 uint16_t ppe_drv_port_num_get(struct ppe_drv_port *pp);
 bool ppe_drv_port_is_physical(struct ppe_drv_port *pp);
 struct ppe_drv_port *ppe_drv_port_from_port_num(uint16_t port_num);
+int32_t ppe_drv_port_num_from_ifname(const char *ifname);
 
 void ppe_drv_port_tl_l3_if_detach(struct ppe_drv_port *pp);
 struct ppe_drv_tun_l3_if *ppe_drv_port_tl_l3_if_get_n_ref(struct ppe_drv_port *pp);
@@ -200,8 +204,10 @@ int16_t ppe_drv_port_metadata_to_pri_prof_internal(uint8_t port_metadata);
 int16_t ppe_drv_port_metadata_to_enq_vp_internal(uint8_t port_metadata);
 
 int ppe_drv_port_src_profile_get_byidx(uint8_t port_idx);
-bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc);
+bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint32_t phy_port);
 bool ppe_drv_port_loopback_port_get_info(void);
+bool ppe_drv_port_l2_vp_sc_reset(struct ppe_drv_port *pp);
+bool ppe_drv_port_is_gem(uint16_t port_num);
 
 /*
  * ppe_drv_port_flags_check()

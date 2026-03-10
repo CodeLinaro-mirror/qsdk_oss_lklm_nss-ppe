@@ -1,7 +1,8 @@
 /*
- * NSS Debug Public API (renamed from qca_nss_debug)
- * Sections are grouped for clarity; no ABI changes.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
+
 #ifndef NSS_DEBUG_H
 #define NSS_DEBUG_H
 
@@ -41,7 +42,7 @@ enum nss_log_category_bit {
 };
 
 /* Bitmask values for categories */
-typedef u32 nss_cat_mask_t;
+typedef u32 nss_debug_cat_mask_t;
 
 #define NSS_LOG_CAT_ACCEL_OFFLOAD_FAILURE (1U << NSS_LOG_CAT_ACCEL_OFFLOAD_FAILURE_BIT)
 #define NSS_LOG_CAT_TRAFFIC_STALL        (1U << NSS_LOG_CAT_TRAFFIC_STALL_BIT)
@@ -57,7 +58,7 @@ typedef u32 nss_cat_mask_t;
 #define NSS_LOG_CAT_STC_FAILURE          (1U << NSS_LOG_CAT_STC_FAILURE_BIT)
 #define NSS_LOG_CAT_GENERIC              (1U << NSS_LOG_CAT_GENERIC_BIT)
 
-#define NSS_LOG_CAT_ALL           ((nss_cat_mask_t)~0U)
+#define NSS_LOG_CAT_ALL           ((nss_debug_cat_mask_t)~0U)
 
 #define NSS_LOG_CAT_MAX           (NSS_LOG_CAT_MAX_BIT)
 
@@ -66,7 +67,7 @@ typedef u32 nss_cat_mask_t;
  */
 #define NSS_DBG_TAG_MAX 32
 
-enum nss_dbg_msg_type {
+enum nss_debug_msg_type {
     NSS_DBG_MSG_TYPE_INVALID = 0,
     NSS_DBG_MSG_TYPE_SET_PRINT_ENABLE = 1,
     NSS_DBG_MSG_TYPE_SET_GLOBAL_LEVEL = 4,
@@ -78,37 +79,37 @@ enum nss_dbg_msg_type {
     NSS_DBG_MSG_TYPE_RESET = 11,
 };
 
-struct nss_dbg_req_set_enable {
+struct nss_debug_req_set_enable {
     __u8 enable; /* 0 or 1 */
 };
 
-struct nss_dbg_req_set_level {
+struct nss_debug_req_set_level {
     __u32 level; /* enum nss_log_level */
 };
 
-struct nss_dbg_req_set_mask {
-    __u32 mask; /* nss_cat_mask_t */
+struct nss_debug_req_set_mask {
+    __u32 mask; /* nss_debug_cat_mask_t */
 };
 
 
-struct nss_dbg_req_module_level {
+struct nss_debug_req_module_level {
     char tag[NSS_DBG_TAG_MAX];
     __u32 level; /* enum nss_log_level */
 };
 
-struct nss_dbg_req_module_mask {
+struct nss_debug_req_module_mask {
     char tag[NSS_DBG_TAG_MAX];
-    __u32 mask; /* nss_cat_mask_t */
+    __u32 mask; /* nss_debug_cat_mask_t */
 };
 
-struct nss_dbg_request {
-    __u32 msg_type; /* enum nss_dbg_msg_type */
+struct nss_debug_request {
+    __u32 msg_type; /* enum nss_debug_msg_type */
     union {
-        struct nss_dbg_req_set_enable set_enable;
-        struct nss_dbg_req_set_level set_level;
-        struct nss_dbg_req_set_mask set_mask;
-        struct nss_dbg_req_module_level module_level;
-        struct nss_dbg_req_module_mask module_mask;
+        struct nss_debug_req_set_enable set_enable;
+        struct nss_debug_req_set_level set_level;
+        struct nss_debug_req_set_mask set_mask;
+        struct nss_debug_req_module_level module_level;
+        struct nss_debug_req_module_mask module_mask;
     } u;
 };
 
@@ -117,45 +118,26 @@ struct nss_dbg_request {
  */
 int nss_log(enum nss_log_level level,
             const char *module_tag,
-            nss_cat_mask_t categories,
+            nss_debug_cat_mask_t categories,
             const char *fmt, ...) __attribute__((format(printf, 4, 5)));
 
 /*
  * Level controls (global and per-module)
  */
-int nss_set_level_global(enum nss_log_level level);
-enum nss_log_level nss_get_level_global(void);
-int nss_set_level_module(const char *module_tag, enum nss_log_level level);
+int nss_debug_level_global_set(enum nss_log_level level);
+enum nss_log_level nss_debug_level_global_get(void);
+int nss_debug_level_module_set(const char *module_tag, enum nss_log_level level);
 
 /*
  * Category filters (global and per-module)
  */
-int nss_enable_category(nss_cat_mask_t categories);
-int nss_disable_category(nss_cat_mask_t categories);
+int nss_debug_category_enable(nss_debug_cat_mask_t categories);
+int nss_debug_category_disable(nss_debug_cat_mask_t categories);
 /* Getter for current global category mask */
-nss_cat_mask_t nss_get_global_mask(void);
-int nss_enable_category_module(const char *module_tag, nss_cat_mask_t categories);
-int nss_disable_category_module(const char *module_tag, nss_cat_mask_t categories);
+nss_debug_cat_mask_t nss_debug_global_mask_get(void);
+int nss_debug_category_module_enable(const char *module_tag, nss_debug_cat_mask_t categories);
+int nss_debug_category_module_disable(const char *module_tag, nss_debug_cat_mask_t categories);
 
-/*
- * Stats and state dump (placeholders)
- * Note: retained for future implementation.
- */
-struct nss_stats {
-    u64 error_count;
-    u64 warn_count;
-    u64 info_count;
-    u64 trace_count;
-    u64 category_counts[NSS_LOG_CAT_MAX_BIT];
-};
-
-int nss_get_stats(const char *module_tag, struct nss_stats *out);
-void nss_dump_state(const char *module_tag);
-
-/*
- * UIO interaction (placeholder)
- */
-int nss_uio_write(const void *record, size_t len);
 
 /*
  * Convenience macros (used by kernel logging sites)
@@ -175,12 +157,11 @@ int nss_uio_write(const void *record, size_t len);
 /*
  * Runtime knobs for print path
  */
-int nss_set_print_enable(bool enable);
-bool nss_get_print_enable(void);
+int nss_debug_enable_set(bool enable);
+bool nss_debug_enable_get(void);
 
 /* Procfs hooks (internal to module) */
 int nss_debug_procfs_init(void);
 void nss_debug_procfs_exit(void);
 
 #endif /* NSS_DEBUG_H */
-

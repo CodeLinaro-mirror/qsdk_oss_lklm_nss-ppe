@@ -73,7 +73,18 @@ typedef enum ppe_drv_sc_type {
 
 	PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP = 42,	/* Inline IPsec redirection from PPE TO EIP for encap direction*/
 	PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH = 43,	/* Inline IPsec redirection from PPE TO EIP for decap direction ACL match*/
-
+	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC = 44,		/* Service code for loopback port for pon pass */
+	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT = 45,		/* Service code for loopback port for second pass */
+	PPE_DRV_SC_FDB_BYPASS = 46,		/* Service code for gem port table to bypass destination selection from FDB table */
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC = 47,	/* Service code for loopback port for pon pass */
+	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT = 48,	/* Service code for loopback port for second pass */
+	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC = 49,	/* Service code for loopback port for pon pass */
+	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT = 50,	/* Service code for loopback port for second pass */
+	PPE_DRV_SC_FEATURE_PON_HGU_PPTP = 51,	/* Service code for enabling PPTP flow with HGU enabled */
+#endif
+	PPE_DRV_SC_GEM_LOOKUP = 52,	/* Service code for GEM port lookup */
+	PPE_DRV_SC_NOEDIT_TUN_RPS = 53,		/* Service code to redirect the packets to CPU port with Tunnel RPS configured */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,
@@ -91,6 +102,9 @@ struct ppe_drv_sc_metadata {
 	uint32_t int_pri;		/* Priority from EDMA descriptor*/
 	uint8_t vp_num;			/* Destination VP number */
 	uint8_t service_code;		/* Service code from EDMA descriptor*/
+	uint16_t ts_sec;			/* Timestamp second from EDMA descriptor. */
+	uint32_t ts_nsec;		/* Timestamp nanosecond from EDMA descriptor. */
+
 };
 
 typedef bool (*ppe_drv_sc_callback_t)(void *app_data, struct sk_buff *skb, void *sc_data);
@@ -160,4 +174,3 @@ extern bool ppe_drv_sc_register_vp_cb(ppe_drv_sc_t sc, ppe_drv_sc_callback_t cb,
 /** @} */ /* end_addtogroup ppe_drv_sc_subsystem */
 
 #endif /* _PPE_DRV_SC_H_ */
-

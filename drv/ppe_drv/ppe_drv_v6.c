@@ -357,7 +357,7 @@ void ppe_drv_v6_flow_vlan_set(struct ppe_drv_v6_conn_flow *pcf,
  *	Populate single direction flow object rule.
  */
 ppe_drv_ret_t ppe_drv_v6_rfs_conn_fill(struct ppe_drv_v6_rule_create *create,  struct ppe_drv_top_if_rule *top_if,
-				       struct ppe_drv_v6_conn *cn, enum ppe_drv_conn_type flow_type)
+				       struct ppe_drv_v6_conn *cn, enum ppe_drv_conn_type flow_type, bool ppe_iface_chk_needed)
 {
 	struct ppe_drv_v6_connection_rule *conn = &create->conn_rule;
 	struct ppe_drv_qos_rule *qos_rule = &create->qos_rule;
@@ -365,12 +365,22 @@ ppe_drv_ret_t ppe_drv_v6_rfs_conn_fill(struct ppe_drv_v6_rule_create *create,  s
 	struct ppe_drv_iface *if_rx, *if_tx, *top_rx_iface;
 	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_comm_stats *comm_stats;
-	struct ppe_drv_port *pp_rx, *pp_tx;
+	struct ppe_drv_port *pp_rx = NULL, *pp_tx = NULL;
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_iface *cpu_port_if = p->rfs.cpu_iface;
 	uint32_t rule_flags = create->rule_flags;
 	uint16_t valid_flags = create->valid_flags;
 
 	comm_stats = &p->stats.comm_stats[flow_type];
+
+	/*
+	 * For the flows in which the tx_dev doesn't have a ppe iface representation,
+	 * for those flows, we replace tx_if with cpu_port index.
+	 */
+	if (!ppe_iface_chk_needed) {
+		conn->tx_if = cpu_port_if->index;
+		top_if->tx_if = cpu_port_if->index;
+	}
 
 	/*
 	 * Make sure both Rx and Tx inteface are mapped to PPE ports properly.
@@ -447,17 +457,31 @@ ppe_drv_ret_t ppe_drv_v6_rfs_conn_fill(struct ppe_drv_v6_rule_create *create,  s
 
 	ppe_drv_v6_conn_flow_conn_set(pcf, cn);
 
-	if (flow_type == PPE_DRV_CONN_TYPE_FLOW_WLAN) {
+	/*
+	 * Set coremask and shadow_coremask
+	 */
+	switch (flow_type) {
+	case PPE_DRV_CONN_TYPE_FLOW:
+		pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL];
+		pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL];
+		break;
+	case PPE_DRV_CONN_TYPE_FLOW_WLAN:
 		ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_PASSIVE_WLAN_FLOW);
 		pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_WLAN];
 		pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_WLAN];
-
-	} else if (flow_type == PPE_DRV_CONN_TYPE_FLOW) {
+		break;
+	case PPE_DRV_CONN_TYPE_TUNNEL:
+		pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL];
+		pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL];
+		break;
+	default:
 		/*
-		 * Set coremask and shadow_coremask
+		 * Note: This case is currently not expected to executed, but in future if we will have some flow for which,
+		 * above flow_types are not covered then we can use a default coremask.
 		 */
-		pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL];
-		pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL];
+		pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_DEFAULT];
+		pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_DEFAULT];
+		break;
 	}
 
 	/*
@@ -1381,7 +1405,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 	struct ppe_drv_vp_dl_qdisc_rule *qdisc_rule = &create->qdisc_rule;
 	struct ppe_drv_v6_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v6_conn_flow *pcr = &cn->pcr;
-	uint16_t valid_flags = create->valid_flags;
+	uint32_t valid_flags = create->valid_flags;
 	uint32_t rule_flags = create->rule_flags;
 	uint32_t sawf_tag = 0;
 	bool is_wanif;
@@ -1392,6 +1416,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	ppe_drv_ret_t ret;
 #endif
+	struct ppe_drv_accel_rule_dir *rule_dir = &create->rule_dir;
 
 	comm_stats = &p->stats.comm_stats[flow_type];
 	/*
@@ -1555,6 +1580,15 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 		ppe_drv_v6_conn_flow_xmit_interface_mtu_set(pcf, conn->return_mtu);
 		ppe_drv_v6_conn_flow_xmit_dest_mac_addr_set(pcf, conn->return_mac);
 
+		/*
+		 * In unidirection case, if the flow acceleration is not allowed by ecm
+		 * mark accel disable in ppe also
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_UNIDIR_RULE) && !rule_dir->flow_accel) {
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_ACCEL_DISABLE);
+			pcf->no_stats_update = true;
+		}
+
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
 			ppe_drv_v6_conn_flow_egress_dscp_set(pcf, dscp_rule->flow_dscp);
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
@@ -1682,6 +1716,18 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 					vlan_secondary_rule->ingress_vlan_tag,
 					vlan_secondary_rule->egress_vlan_tag);
 
+			/*
+			 * Check if PCP marking is requested for inner VLAN (index 1) in case of double VLAN.
+			 * PCP marking is only supported for outer VLAN (index 0).
+			 * Reject the connection if inner VLAN PCP marking is requested.
+			 */
+			if ((ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf) > 1) &&
+					(pcf->egress_vlan[1].tci & PPE_DRV_VLAN_PRIORITY_MASK)) {
+				ppe_drv_stats_inc(&comm_stats->v6_create_fail_inner_vlan_pcp);
+				ppe_drv_warn("%p: PCP marking for inner VLAN is not supported, egress_vlan[1].tci: 0x%x",
+						pcf, pcf->egress_vlan[1].tci);
+				return PPE_DRV_RET_FAILURE_VLAN_PCP_MARKING;
+			}
 		}
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_PPPOE_RETURN) {
@@ -1822,6 +1868,15 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 		ppe_drv_v6_conn_flow_xmit_interface_mtu_set(pcr, conn->flow_mtu);
 		ppe_drv_v6_conn_flow_xmit_dest_mac_addr_set(pcr, conn->flow_mac);
 
+		/*
+		 * In unidirection case, if the return acceleration is not allowed by ecm
+		 * mark accel disable in ppe also
+		 */
+		if ((valid_flags & PPE_DRV_V6_VALID_FLAG_UNIDIR_RULE) && !rule_dir->return_accel) {
+			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_ACCEL_DISABLE);
+			pcr->no_stats_update = true;
+		}
+
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
 			ppe_drv_v6_conn_flow_egress_dscp_set(pcr, dscp_rule->return_dscp);
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
@@ -1948,6 +2003,18 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 					vlan_primary_rule->ingress_vlan_tag,
 					vlan_secondary_rule->egress_vlan_tag,
 					vlan_secondary_rule->ingress_vlan_tag);
+			/*
+			 * Check if PCP marking is requested for inner VLAN (index 1) in case of double VLAN.
+			 * PCP marking is only supported for outer VLAN (index 0).
+			 * Reject the connection if inner VLAN PCP marking is requested.
+			 */
+			if ((ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcr) > 1) &&
+					(pcr->egress_vlan[1].tci & PPE_DRV_VLAN_PRIORITY_MASK)) {
+				ppe_drv_stats_inc(&comm_stats->v6_create_fail_inner_vlan_pcp);
+				ppe_drv_warn("%p: PCP marking for inner VLAN is not supported, egress_vlan[1].tci: 0x%x",
+						pcr, pcr->egress_vlan[1].tci);
+				return PPE_DRV_RET_FAILURE_VLAN_PCP_MARKING;
+			}
 		}
 
 		if (valid_flags & PPE_DRV_V6_VALID_FLAG_PPPOE_FLOW) {
@@ -2119,6 +2186,7 @@ bool ppe_drv_v6_if_walk(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_top_if_
 	uint32_t egress_vlan_inner = PPE_DRV_VLAN_NOT_CONFIGURED, egress_vlan_outer = PPE_DRV_VLAN_NOT_CONFIGURED;
 	uint8_t vlan_cnt = ppe_drv_v6_conn_flow_egress_vlan_cnt_get(pcf);
 	bool is_vlan_as_vp;
+	bool is_vlan_as_veip;
 	bool is_dsa_dev = false;
 
 	switch (vlan_cnt) {
@@ -2245,11 +2313,13 @@ bool ppe_drv_v6_if_walk(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_top_if_
 	 * For create request with egress-VLAN, there must be a corresponding egress-VSI / VLAN as VP IF.
 	 */
 	is_vlan_as_vp = is_vlan_dev(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
+
+	is_vlan_as_veip = is_vlan_dev(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VEIP);
 #ifdef NSS_VLAN_BASED_DSA_SUPPORT
 	is_dsa_dev = dsa_slave_dev_check(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 #endif
 
-	if (vlan_cnt && !is_vlan_as_vp && !eg_vsi_if && !is_dsa_dev) {
+	if (vlan_cnt && !is_vlan_as_veip && !is_vlan_as_vp && !eg_vsi_if && !is_dsa_dev) {
 		ppe_drv_warn("%p: not able to find a matching vlan-if", pcf);
 		return false;
 	}
@@ -3334,6 +3404,13 @@ ppe_drv_ret_t ppe_drv_v6_flush(struct ppe_drv_v6_conn *cn)
 	}
 #endif
 
+#if defined(NSS_PPE_DRV_HW_GRO)
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO)) {
+		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
+		atomic_dec(&p->gro_ctx.num_hw_gro_flows);
+	}
+#endif
+
 	/*
 	 * Get flow table entry.
 	 */
@@ -3367,6 +3444,13 @@ ppe_drv_ret_t ppe_drv_v6_flush(struct ppe_drv_v6_conn *cn)
 		ppe_drv_stats_inc(&p->stats.gen_stats.v6_flush_fail);
 		ppe_drv_warn("%p: deletion of prefix entry failed", p);
 		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+#endif
+
+#if defined(NSS_PPE_DRV_HW_GRO)
+	if (ppe_drv_v6_conn_flow_flags_check(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO)) {
+		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
+		atomic_dec(&p->gro_ctx.num_hw_gro_flows);
 	}
 #endif
 
@@ -3953,6 +4037,13 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy)
 	}
 #endif
 
+#if defined(NSS_PPE_DRV_HW_GRO)
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO)) {
+		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
+		atomic_dec(&p->gro_ctx.num_hw_gro_flows);
+	}
+#endif
+
 	if (!ppe_drv_v6_flow_del(pcf)) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_stats_inc(&comm_stats->v6_destroy_fail);
@@ -3982,6 +4073,13 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy)
 		ppe_drv_stats_inc(&comm_stats->v6_destroy_fail);
 		ppe_drv_warn("%p: deletion of prefix entry failed", p);
 		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+#endif
+
+#if defined(NSS_PPE_DRV_HW_GRO)
+	if (ppe_drv_v6_conn_flow_flags_check(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO)) {
+		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
+		atomic_dec(&p->gro_ctx.num_hw_gro_flows);
 	}
 #endif
 
@@ -4081,7 +4179,7 @@ ppe_drv_ret_t ppe_drv_v6_rfs_create(struct ppe_drv_v6_rule_create *create)
 
 	top_if.rx_if = create->top_rule.rx_if;
 	top_if.tx_if = create->top_rule.tx_if;
-	ret = ppe_drv_v6_rfs_conn_fill(create, &top_if, cn, PPE_DRV_CONN_TYPE_FLOW);
+	ret = ppe_drv_v6_rfs_conn_fill(create, &top_if, cn, PPE_DRV_CONN_TYPE_FLOW, true);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_rfs_fail_conn);
 		ppe_drv_warn("%p: failed to fill connection object: %p", p, create);
@@ -4178,26 +4276,36 @@ ppe_drv_ret_t ppe_drv_v6_assist_rule_create(struct ppe_drv_v6_rule_create *creat
 	 */
 	spin_lock_bh(&p->lock);
 
-	if (ppe_drv_assist_feature_type_check(feature, PPE_DRV_ASSIST_FEATURE_RFS_ETH)) {
+	if (ppe_drv_assist_feature_type_is_rfs(feature)) {
+		enum ppe_drv_conn_type conn_type = PPE_DRV_CONN_TYPE_FLOW;
+		bool ppe_iface_chk_needed = true;
+
+		switch(feature) {
+		case PPE_DRV_ASSIST_FEATURE_RFS_ETH:
+			conn_type = PPE_DRV_CONN_TYPE_FLOW;
+			break;
+		case PPE_DRV_ASSIST_FEATURE_RFS_WLAN:
+			conn_type = PPE_DRV_CONN_TYPE_FLOW_WLAN;
+			break;
+		case PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL:
+			conn_type = PPE_DRV_CONN_TYPE_TUNNEL;
+			ppe_iface_chk_needed = false;
+			break;
+		default:
+			ppe_drv_warn("%p: Invalid feature type, feature: %u\n", create, feature);
+			goto fail;
+		}
+
 		ppe_drv_stats_inc(&comm_stats->v6_create_rfs_req);
 		top_if.rx_if = create->top_rule.rx_if;
 		top_if.tx_if = create->top_rule.tx_if;
-		ret = ppe_drv_v6_rfs_conn_fill(create, &top_if, cn, PPE_DRV_CONN_TYPE_FLOW);
+		ret = ppe_drv_v6_rfs_conn_fill(create, &top_if, cn, conn_type, ppe_iface_chk_needed);
 		if (ret != PPE_DRV_RET_SUCCESS) {
 			ppe_drv_stats_inc(&comm_stats->v6_assist_rule_create_rfs_fail_conn);
-			ppe_drv_warn("%p: failed to fill connection object: %p", p, create);
+			ppe_drv_warn("%p: failed to fill connection object: %p for conn_type: %u", p, create, conn_type);
 			goto fail;
 		}
-	} else if (ppe_drv_assist_feature_type_check(feature, PPE_DRV_ASSIST_FEATURE_RFS_WLAN)) {
-		ppe_drv_stats_inc(&comm_stats->v6_create_rfs_req);
-		top_if.rx_if = create->top_rule.rx_if;
-		top_if.tx_if = create->top_rule.tx_if;
-		ret = ppe_drv_v6_rfs_conn_fill(create, &top_if, cn, PPE_DRV_CONN_TYPE_FLOW_WLAN);
-		if (ret != PPE_DRV_RET_SUCCESS) {
-			ppe_drv_stats_inc(&comm_stats->v6_assist_rule_create_rfs_fail_conn);
-			ppe_drv_warn("%p: failed to fill connection object: %p", p, create);
-			goto fail;
-		}
+
 	} else if (ppe_drv_assist_feature_type_check(feature, PPE_DRV_ASSIST_FEATURE_PRIORITY)) {
 		ppe_drv_stats_inc(&comm_stats->v6_create_priority_req);
 		ret = ppe_drv_v6_priority_conn_fill(create, cn, PPE_DRV_CONN_TYPE_FLOW);
@@ -5120,58 +5228,160 @@ EXPORT_SYMBOL(ppe_drv_v6_create);
  * ppe_drv_v6_rule_sawf_mark_update
  * 	Dynamically update SAWF mark value in PPE for IPv6 flows
  */
-ppe_drv_ret_t ppe_drv_v6_rule_sawf_mark_update(struct ppe_drv_v6_sawf_mark_update *update)
+static ppe_drv_ret_t ppe_drv_v6_rule_sawf_mark_update(struct ppe_drv_v6_conn *conn, struct ppe_drv_service_class_rule *sawf_info)
 {
-	struct ppe_drv_flow *flow;
-	struct ppe_drv *p = ppe_drv_gbl;
-	struct ppe_drv_v6_conn_flow *pcf, *pcr;
-	struct ppe_drv_v6_conn *cn;
+	struct ppe_drv_v6_conn_flow *pcf = &conn->pcf;
+	struct ppe_drv_v6_conn_flow *pcr = &conn->pcr;
 
-	spin_lock_bh(&p->lock);
-	flow = ppe_drv_flow_v6_get(&update->tuple);
-	if (!flow) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px : Flow not found for given tuple information", &update->tuple);
-		return PPE_DRV_RET_FAILURE_NO_MATCHING_CONN;
-	}
-
-	pcf = flow->pcf.v6;
-	cn = ppe_drv_v6_conn_flow_conn_get(pcf);
-
-	pcf = &cn->pcf;
-	pcr = &cn->pcr;
-
-	if (update->valid_flags & PPE_DRV_SAWF_MARK_FLOW_UPDATE) {
-		pcf->fl_mdata.wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(update->sawf_rule.flow_mark);
+	if (sawf_info->valid_flags & PPE_DRV_SAWF_MARK_FLOW_UPDATE) {
+		pcf->fl_mdata.wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(sawf_info->flow_mark);
 		pcf->fl_mdata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_SAWF;
-		pcf->fl_mdata.tree_id_data.info.value = PPE_DRV_SAWF_MARK_GET(update->sawf_rule.flow_mark);
+		pcf->fl_mdata.tree_id_data.info.value = PPE_DRV_SAWF_MARK_GET(sawf_info->flow_mark);
 		ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
 
-		if (!ppe_drv_flow_v6_sawf_mark_update(pcf)) {
-			spin_unlock_bh(&p->lock);
+		if (!ppe_drv_flow_v6_wlan_metadata_set(pcf)) {
 			ppe_drv_warn("%px : Failed to update mark in PPE", pcf);
-			return PPE_DRV_RET_SAWF_MARK_UPDATE_FAIL;
+			return PPE_DRV_RET_WLAN_METADATA_UPDATE_FAIL;
 		}
 	}
 
-	if (update->valid_flags & PPE_DRV_SAWF_MARK_RETURN_UPDATE) {
-		pcr->fl_mdata.wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(update->sawf_rule.return_mark);
+	if (sawf_info->valid_flags & PPE_DRV_SAWF_MARK_RETURN_UPDATE) {
+		pcr->fl_mdata.wifi_qos = PPE_DRV_SAWF_MSDUQ_GET(sawf_info->return_mark);
 		pcr->fl_mdata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_SAWF;
-		pcr->fl_mdata.tree_id_data.info.value = PPE_DRV_SAWF_MARK_GET(update->sawf_rule.return_mark);
+		pcr->fl_mdata.tree_id_data.info.value = PPE_DRV_SAWF_MARK_GET(sawf_info->return_mark);
 		ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_METADATA_TYPE_WIFI_INFO);
 
-		if (!ppe_drv_flow_v6_sawf_mark_update(pcr)) {
-			spin_unlock_bh(&p->lock);
+		if (!ppe_drv_flow_v6_wlan_metadata_set(pcr)) {
 			ppe_drv_warn("%px : Failed to update mark in PPE", pcr);
-			return PPE_DRV_RET_SAWF_MARK_UPDATE_FAIL;
+			return PPE_DRV_RET_WLAN_METADATA_UPDATE_FAIL;
 		}
 	}
-
-	spin_unlock_bh(&p->lock);
 
 	return PPE_DRV_RET_SUCCESS;
 }
-EXPORT_SYMBOL(ppe_drv_v6_rule_sawf_mark_update);
+
+/*
+ * ppe_drv_v6_unidir_rule_update()
+ * 	Dynamically update unidirection parameters like Qos tag
+ * and dscp in PPE for IPv6 flows
+ */
+static ppe_drv_ret_t ppe_drv_v6_unidir_rule_update(struct ppe_drv_v6_conn *conn, struct ppe_drv_unidir_update_info *update_info)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_v6_conn_flow *pcf;
+	uint32_t qos_tag;
+	uint8_t dscp, int_pri;
+
+	if (update_info->dir == PPE_DRV_FLOW_RULE_DIR_FLOW) {
+		pcf = &conn->pcf;
+		qos_tag = update_info->qos.flow_qos_tag;
+		int_pri = update_info->qos.flow_int_pri;
+		dscp = update_info->dscp.flow_dscp;
+	} else {
+		pcf = &conn->pcr;
+		qos_tag = update_info->qos.return_qos_tag;
+		int_pri = update_info->qos.return_int_pri;
+		dscp = update_info->dscp.return_dscp;
+	}
+
+	qos_tag = (qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_tag;
+
+	if (update_info->valid_flags & PPE_DRV_V4_VALID_FLAG_QOS) {
+		if (ppe_drv_v6_conn_flow_tree_id_type_get(pcf) == PPE_DRV_TREE_ID_TYPE_WIFI_TID) {
+			pcf->fl_mdata.wifi_qos = qos_tag;
+			ppe_drv_v6_conn_flow_int_pri_set(pcf, int_pri);
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
+		}
+	}
+
+	if (update_info->valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
+		ppe_drv_v6_conn_flow_egress_dscp_set(pcf, dscp);
+		ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
+	}
+
+	/*
+	 * Flow qos information is updated such as,
+	 * tree_id, wifi_qos and flow cookie.
+	 */
+	if (!ppe_drv_flow_v6_wlan_metadata_set(pcf)) {
+		ppe_drv_warn("%p: wlan metadata update failed for flow: %p", pcf, pcf->pf);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_wlan_metadata_update);
+		return PPE_DRV_RET_WLAN_METADATA_UPDATE_FAIL;
+	}
+
+	/*
+	 * qos mapping is updated at the same index
+	 * as that of flow entry, such as int_pri, etc.
+	 */
+	if (!ppe_drv_flow_v6_qos_set(pcf, pcf->pf)) {
+		ppe_drv_warn("%p: qos mapping failed for flow: %p", pcf, pcf->pf);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_qos_mapping_update);
+		return PPE_DRV_RET_QOS_UPDATE_FAIL;
+	}
+
+	/*
+	 * Changing the fwd type to appropriate value.
+	 */
+	if (!ppe_drv_flow_accel_enable(pcf->pf)) {
+		ppe_drv_warn("%p: failed tp update fwd_type for flow: %p", pcf, pcf->pf);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_unidir_rule_entry_update);
+		return PPE_DRV_RET_FLOW_ENTRY_UPDATE_FAIL;
+	}
+
+	/*
+	 * As the flow is added again, set the valid bit.
+	 */
+	if (!ppe_drv_flow_valid_set(pcf->pf, true)) {
+		ppe_drv_warn("%p: flow entry valid set failed for flow: %p", pcf, pcf->pf);
+		return PPE_DRV_RET_FLOW_ENTRY_UPDATE_FAIL;
+	}
+
+	pcf->no_stats_update = false;
+	return PPE_DRV_RET_SUCCESS;
+}
+
+/*
+ * ppe_drv_v6_rule_update()
+ * 	Dynamically update rule in PPE based on the type of rule.
+ */
+ppe_drv_ret_t ppe_drv_v6_rule_update(struct ppe_drv_v6_rule_update_msg *update_msg)
+{
+	struct ppe_drv_v6_conn *conn;
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_flow *flow;
+	struct ppe_drv_v6_5tuple *tuple;
+	ppe_drv_ret_t status;
+
+	spin_lock_bh(&p->lock);
+	tuple = &update_msg->tuple;
+
+	flow = ppe_drv_flow_v6_get(tuple);
+	if (!flow) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px : Flow not found for given tuple information - src ip: %pI6, dest ip: %pI6", &update_msg->tuple, &update_msg->tuple.flow_ip, &update_msg->tuple.return_ip);
+		ppe_drv_stats_inc(&p->stats.gen_stats.fail_unidir_rule_match);
+		return PPE_DRV_RET_UNIDIR_CONN_MATCH_FAIL;
+	}
+
+	conn = ppe_drv_v6_conn_flow_conn_get(flow->pcf.v6);
+
+	if ((update_msg->rule_type & PPE_DRV_UPDATE_RULE_TYPE_QOS) || (
+				update_msg->rule_type & PPE_DRV_UPDATE_RULE_TYPE_DSCP)) {
+		struct ppe_drv_unidir_update_info *update_rule = &update_msg->info.unidir;
+		status = ppe_drv_v6_unidir_rule_update(conn, update_rule);
+	} else if (update_msg->rule_type & PPE_DRV_UPDATE_RULE_TYPE_SAWF) {
+		struct ppe_drv_service_class_rule *sawf_rule = &update_msg->info.sawf;
+		status = ppe_drv_v6_rule_sawf_mark_update(conn, sawf_rule);
+	} else {
+		ppe_drv_warn("%px : Invalid update rule type.\n", &update_msg->tuple);
+		ppe_drv_stats_inc(&p->stats.gen_stats.unidir_update_rule_type_invalid);
+		status = PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+	spin_unlock_bh(&p->lock);
+
+	return status;
+}
+EXPORT_SYMBOL(ppe_drv_v6_rule_update);
 
 /*
  * ppe_drv_v6_nsm_stats_update()

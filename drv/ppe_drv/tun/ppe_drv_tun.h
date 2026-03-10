@@ -26,7 +26,7 @@
 #define PPE_DRV_TUN_MAPT_V6_LEN_ADJUST (sizeof(struct ipv6hdr) - sizeof (struct iphdr)) /* IP6 header length difference to be added for MAPT */
 #define PPE_DRV_TUN_MAPE_ACTIVE_TUN_MAX_BR_CNT 1	/* Maximum Number of active tunnel count for MAP-E */
 
-#ifdef NSS_PPE_IPQ53XX
+#if defined(NSS_PPE_IPQ53XX) || defined(NSS_PPE_IPQ52XX)
 #define PPE_DRV_TUN_GRE_ACL_LIST_ID_CSUM_DIS 254		/* GRE CSUM disable check ACL list ID */
 #define PPE_DRV_TUN_GRE_ACL_LIST_ID_CSUM_EN 255			/* GRE CSUM enable check ACL list ID*/
 #else
@@ -172,11 +172,12 @@ struct ppe_drv_tun {
 	uint8_t mape_br_active_tun_count;			/**< Number of active tunnels >*/
 	uint32_t xmit_port_mtu;					/**< xmit ports MTU >*/
 	enum ppe_drv_tun_state tun_state;			/**< tunnel state >*/
+	bool is_veip_tun;					/**< tunnel is on veip interface >*/
 };
 
 /*
  * ppe_drv_tun_dp_port_ds
- * 	Check if destination port is wifi DS vp port
+ *	Check if destination port is wifi DS vp port
  */
 static inline bool ppe_drv_tun_dp_port_ds(struct ppe_drv_port *pp)
 {
@@ -185,6 +186,15 @@ static inline bool ppe_drv_tun_dp_port_ds(struct ppe_drv_port *pp)
 	}
 
 	return false;
+}
+
+/*
+ * ppe_drv_tun_dp_port_vp
+ *	Check if destination port is vp port
+ */
+static inline bool ppe_drv_tun_dp_port_vp(struct ppe_drv_port *pp)
+{
+        return (pp->type == PPE_DRV_PORT_VIRTUAL) || (pp->type == PPE_DRV_PORT_VIRTUAL_GW) || (pp->type == PPE_DRV_PORT_VIRTUAL_PON);
 }
 
 /*

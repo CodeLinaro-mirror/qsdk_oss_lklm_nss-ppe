@@ -19,11 +19,17 @@
 #include <fal/fal_qm.h>
 #include <fal/fal_servcode.h>
 #include <fal/fal_fdb.h>
+#include <fal/fal_portvlan.h>
+#ifdef NSS_PPE_PON_SUPPORT
+#include <fal/fal_pon.h>
+#endif
+#include <fal/fal_qos.h>
 #ifdef PPE_DRV_PKT_PADDING_STRIP
 #include <fal/fal_pktedit.h>
 #endif
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
+#include <nss_debug.h>
 
 #define PPE_DRV_STATIC_DBG_LEVEL_STR_LEN 8
 #define PPE_DRV_UPSTREAM_DEV_LEVEL_STR_LEN 32
@@ -35,6 +41,12 @@
 
 #define PPE_DRV_RFS_COREMASK_MIN	1
 #define PPE_DRV_RFS_COREMASK_MAX	((1 << NR_CPUS) - 1)
+#define PPE_DRV_FLOOD_VSI_EN_STR_LEN	40
+
+#ifdef NSS_PPE_DRV_HW_GRO
+#define PPE_DRV_GRO_COREMASK_MIN	1
+#define PPE_DRV_GRO_COREMASK_MAX	((1 << NR_CPUS) - 1)
+#endif
 
 /*
  * Module parameter to enable/disable 2-tuple RSS hash for IP fragments.
@@ -62,17 +74,43 @@ MODULE_PARM_DESC(passive_vp_enable, "Passive VP creation enable/disable");
 static unsigned int eth_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
 MODULE_PARM_DESC(eth_coremask, "Coremask for Ethernet to Ethernet Flows");
 
+#ifdef NSS_PPE_DRV_HW_GRO
+/*
+ * Module parameter to set eth coremask.
+ */
+static unsigned int eth_gro_coremask = PPE_DRV_GRO_COREMASK_DEFAULT;
+MODULE_PARM_DESC(eth_gro_coremask, "Coremask for Ethernet GRO Flows");
+#endif
+
 /*
  * Module parameter to set wlan common coremask.
  */
 static unsigned int wlan_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
 MODULE_PARM_DESC(wlan_coremask, "Coremask for Ethernet to WLAN Flows");
 
+/*
+ * Module parameter to set coremask for tunnel, etc.
+ */
+static unsigned int tun_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
+MODULE_PARM_DESC(tun_coremask, "Coremask for Ethernet to Tunnel, etc Flows");
+
 uint32_t if_bm_to_offload;
+#ifdef NSS_PPE_PON_SUPPORT
+uint32_t gem_port_bitmap;
+
+/*
+ * Module parameter to set max number of PQ needed for PON flows.
+ */
+int pon_max_pq = 110;
+module_param(pon_max_pq, int, 0644);
+MODULE_PARM_DESC(pon_max_pq, "Max number of PON PQs needed by OMCI");
+#endif
+
 int disable_port_mtu_check = true;
 uint32_t static_dbg_level = 0;
 static char static_dbg_level_str[PPE_DRV_STATIC_DBG_LEVEL_STR_LEN];
 uint8_t ppe_drv_redir_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7};
+uint8_t ppe_drv_16_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 static int eth2eth_offload_if_bitmap;
 static char upstream_dev_str[PPE_DRV_UPSTREAM_DEV_LEVEL_STR_LEN];
 static char src2uni_map[PPE_DRV_SRC2UNI_LEVEL_STR_LEN];
@@ -82,6 +120,7 @@ static char packet_padding[PPE_DRV_PACKET_PADDING_STR_LEN];
 
 int l4_checksum_exception_enable = false;
 int mac_lrn_exception_en = true;
+static char flood_vsi_override_en[PPE_DRV_FLOOD_VSI_EN_STR_LEN];
 
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
 static uint32_t loopback_port_ft_type;
@@ -109,6 +148,46 @@ int ppe_drv_get_vxlan_gpe_dport(void)
 {
 	return ppe_drv_gbl->vxlan_gpe_dport;
 }
+
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+/*
+ * ppe_drv_get_tpid_index()
+ *      Get PPE VLAN TPID indexes by TPID values.
+ */
+int ppe_drv_get_tpid_index(uint16_t tpid, const char *type)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int index = -1;
+
+	spin_lock_bh(&p->lock);
+
+	if (strcmp(type, "ctpid") == 0) {
+		if (tpid == p->gbl_ctpid)
+			index = PPE_DRV_VLAN_CTPID_IDX;
+		if (tpid == p->gbl_ctpid_ext)
+			index = PPE_DRV_VLAN_CTPID_EXT_IDX;
+	} else if (strcmp(type, "stpid") == 0) {
+		if (tpid == p->gbl_stpid)
+			index = PPE_DRV_VLAN_STPID_IDX;
+		if (tpid == p->gbl_stpid_ext)
+			index = PPE_DRV_VLAN_STPID_EXT_IDX;
+	}
+
+	spin_unlock_bh(&p->lock);
+	return index;
+}
+EXPORT_SYMBOL(ppe_drv_get_tpid_index);
+
+/*
+ * ppe_drv_get_vsi_num()
+ *	Get VSI number.
+ */
+int ppe_drv_get_vsi_num(void)
+{
+	return ppe_drv_gbl->vsi_num;
+}
+EXPORT_SYMBOL(ppe_drv_get_vsi_num);
+#endif
 
 /*
  * ppe_drv_is_mht_dev()
@@ -161,6 +240,9 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 	struct ppe_drv_v6_conn_flow *pcf_hp;
 	struct ppe_drv_v6_conn_flow *pcr_hp;
 #endif
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+        struct ppe_drv_pm_counter_ctx *pm_ctx;
+#endif
 	uint16_t id;
 
 	/*
@@ -172,8 +254,10 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 			pcf_v4 = &cn_v4->pcf;
 			pcr_v4 = &cn_v4->pcr;
 
-			ppe_drv_flow_v4_stats_update(pcf_v4);
-			if (pcr_v4) {
+			if (!pcf_v4->no_stats_update) {
+				ppe_drv_flow_v4_stats_update(pcf_v4);
+			}
+			if (pcr_v4 && !pcr_v4->no_stats_update) {
 				ppe_drv_flow_v4_stats_update(pcr_v4);
 			}
 		}
@@ -187,8 +271,10 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 			pcf_v6 = &cn_v6->pcf;
 			pcr_v6 = &cn_v6->pcr;
 
-			ppe_drv_flow_v6_stats_update(pcf_v6);
-			if (pcr_v6) {
+			if (!pcf_v6->no_stats_update) {
+				ppe_drv_flow_v6_stats_update(pcf_v6);
+			}
+			if (pcr_v6 && !pcr_v6->no_stats_update) {
 				ppe_drv_flow_v6_stats_update(pcr_v6);
 			}
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
@@ -252,10 +338,26 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 	 * Update h/w stats counter if acl-policer is in use.
 	 */
 	for (id = 0; id < PPE_DRV_ACL_POLICER_MAX; id++) {
-		if (p->pol_ctx->acl_pol[id].in_use) {
+		if (p->pol_ctx->acl_pol[id].is_configured) {
 			ppe_drv_acl_policer_stats_update(&p->pol_ctx->acl_pol[id]);
 		}
 	}
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	/*
+	 * Update the PM counter stats.
+	 */
+	for (id = 0; id < PPE_DRV_PM_COUNTER_ID_MAX; id++) {
+		pm_ctx = &p->pm->in_ctx_array[id];
+		if (pm_ctx->state == PPE_DRV_PM_COUNTER_ID_USED) {
+			ppe_drv_pm_counter_stats_update(pm_ctx);
+		}
+
+		pm_ctx = &p->pm->eg_ctx_array[id];
+		if (pm_ctx->state == PPE_DRV_PM_COUNTER_ID_USED) {
+			ppe_drv_pm_counter_stats_update(pm_ctx);
+		}
+	}
+#endif
 
 	spin_unlock_bh(&p->lock);
 
@@ -659,9 +761,14 @@ ppe_drv_ret_t ppe_drv_enq_vp_map_to_queue(uint8_t queue_id, int8_t enq_vp)
 
 	/*
 	 * Configure the allocated enqueue vp number on PORT_VSI_ENQUEUE table.
+	 *
+	 * NOTE: The flow_pri_profile is set directly to pri_profile without adding
+	 * PPE_DRV_PORT_ENQVP_VSI_TBL_START_IDX offset. This change was made as part
+	 * of HW GRO support to align with hardware requirements for both RFS and GRO
+	 * enqueue VP configurations.
 	 */
 	enqueue_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_FLOW;
-	enqueue_cfg.rule_entry.flow_pri_profile = PPE_DRV_PORT_ENQVP_VSI_TBL_START_IDX + pri_profile;
+	enqueue_cfg.rule_entry.flow_pri_profile = pri_profile;
 	enqueue_cfg.index_entry.enqueue_en = (a_bool_t)PPE_DRV_PORT_EVP_ENABLE;
 	enqueue_cfg.index_entry.enqueue_vport = enq_vp;
 	ret = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enqueue_cfg);
@@ -714,7 +821,7 @@ ppe_drv_ret_t ppe_drv_ds_map_free(uint8_t node_id)
 	 * Disable enqueue vp bit on PORT_VSI_ENQUEUE table.
 	 */
 	enqueue_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_FLOW;
-	enqueue_cfg.rule_entry.flow_pri_profile = PPE_DRV_PORT_ENQVP_VSI_TBL_START_IDX + pri_profile;
+	enqueue_cfg.rule_entry.flow_pri_profile = pri_profile;
 	enqueue_cfg.index_entry.enqueue_en = (a_bool_t)PPE_DRV_PORT_EVP_DISABLE;
 	enqueue_cfg.index_entry.enqueue_vport = enq_vp;
 	ret = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enqueue_cfg);
@@ -750,6 +857,8 @@ ppe_drv_ret_t ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id)
 		return PPE_DRV_RET_ENQ_VP_ALLOC_FAIL;
 	}
 
+	p->port[enq_vp].evp.type = PPE_DRV_ENQ_VP_DEFAULT;
+
 	/*
 	 * Map enqueue VP to specific queue
 	 */
@@ -773,6 +882,312 @@ ppe_drv_ret_t ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id)
 	return status;
 }
 EXPORT_SYMBOL(ppe_drv_ds_map_node_to_queue);
+
+#ifdef NSS_PPE_DRV_HW_GRO
+/*
+ * ppe_drv_gro_map_core_to_enqueue_vp()
+ *	Core to queue mapping
+ *
+ * This API will be invoked at dp-init time to map each core to enq_vp
+ */
+static ppe_drv_ret_t ppe_drv_gro_map_core_to_enqueue_vp(uint8_t core, uint8_t queue_id)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	uint8_t enq_vp;
+	ppe_drv_ret_t status;
+
+	/*
+	 * Default coremask for the physical interface is set.
+	 */
+	p->gro_ctx.gro_info.coremask = eth_gro_coremask;
+	p->gro_ctx.gro_info.shadow_coremask = eth_gro_coremask;
+
+	enq_vp = ppe_drv_port_enq_vp_alloc();
+	if (enq_vp == PPE_DRV_PORT_ID_INVALID) {
+		ppe_drv_warn("%p: Unable to get the enqueue vport ", p);
+		return PPE_DRV_RET_ENQ_VP_ALLOC_FAIL;
+	}
+
+	/*
+	 * Maps enqueue with given queue
+	 */
+	status = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp);
+	if (status != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("%p: Unable to map enq_vp:%u to queue:%u ", p, enq_vp, queue_id);
+		ppe_drv_port_enq_vp_free(enq_vp);
+		return status;
+	}
+
+	ppe_drv_trace("%p: GRO core mappped to enqueue VP. qid:%d enq_vp:%d core:%d", p, queue_id, enq_vp, core);
+
+	/*
+	 * Core id will be used as key to find the corresponding enqueue vp during PPE flow addition.
+	 */
+	p->gro_ctx.gro_info.core2enq_vp[core] = enq_vp;
+	return status;
+}
+#endif
+#ifdef NSS_PPE_PON_SUPPORT
+/*
+ * ppe_drv_pon_map_enqueue_vp_to_pq()
+ *	maps Pqs to a enqueue vp
+ *
+ */
+ppe_drv_ret_t ppe_drv_pon_map_enqueue_vp_to_pq(struct ppe_drv_port *port)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_portscheduler_resource_t cfg = {0};
+	ppe_drv_ret_t ppe_ret;
+	int8_t enq_vp;
+	uint8_t cnt_enq_vp;
+	uint8_t queue_id;
+	uint8_t max_enq_vp;
+	int8_t allocated_enq_vps[PPE_DRV_PORT_ENQ_VP_MAX_NUM];
+	uint8_t allocated_count = 0;
+	int32_t pon_port_profile_id;
+
+	pon_port_profile_id = ppe_drv_port_ucast_queue_profile_get(port->port);
+
+	if (!ppe_drv_confgiure_ucast_prio_map_tbl(pon_port_profile_id, ppe_drv_16_prio_map)) {
+		ppe_drv_warn("%p: failed to configure ucast priority class setting\n", p);
+		return PPE_DRV_RET_UCAST_PRIO_TBL_MAP_FAIL;
+	}
+
+	if (fal_port_scheduler_resource_get(0, port->port, &cfg) != 0) {
+		ppe_drv_warn("%px:port resources info failed for port:%u", p, port->port);
+		return PPE_DRV_RET_FAILURE_NO_RESOURCE;
+	}
+
+	p->ppe_drv_pon_port_start_pq = cfg.ucastq_start;
+	p->ppe_drv_pon_port_max_pq = (pon_max_pq <= cfg.ucastq_num) ? pon_max_pq : cfg.ucastq_num;
+
+	max_enq_vp = (p->ppe_drv_pon_port_max_pq + PPE_DRV_PORT_PON_PQ_PER_ENQ_VP - 1) /
+								PPE_DRV_PORT_PON_PQ_PER_ENQ_VP;
+
+	for (cnt_enq_vp = 0; cnt_enq_vp < max_enq_vp; cnt_enq_vp++) {
+		enq_vp = ppe_drv_port_enq_vp_alloc();
+		if (enq_vp == PPE_DRV_PORT_ID_INVALID) {
+			ppe_drv_warn("%p: Unable to get the enqueue vport ", p);
+			ppe_ret = PPE_DRV_RET_ENQ_VP_ALLOC_FAIL;
+			goto cleanup_allocated_enq_vps;
+		}
+		p->port[enq_vp].evp.type = PPE_DRV_ENQ_VP_PON;
+
+		/*
+		 * Set queue_id for a given port on PPE.
+		 */
+		queue_id = p->ppe_drv_pon_port_start_pq + (PPE_DRV_PORT_PON_PQ_PER_ENQ_VP * cnt_enq_vp);
+		if (queue_id >= (p->ppe_drv_pon_port_start_pq + p->ppe_drv_pon_port_max_pq)) {
+			ppe_drv_port_enq_vp_free(enq_vp);
+			ppe_drv_warn("%p: Calculated queue_id %d exceeds available range", p, queue_id);
+			ppe_ret = PPE_DRV_RET_ENQ_VP_QID_SET_FAIL;
+			goto cleanup_allocated_enq_vps;
+		}
+
+		if (!ppe_drv_port_ucast_queue_profile_set(&p->port[enq_vp], PPE_DRV_PORT_SRC_PROFILE,
+						queue_id, pon_port_profile_id)) {
+			ppe_drv_port_enq_vp_free(enq_vp);
+			ppe_drv_warn("%p: Enqueue vp queue init failed for qid:%d", p, queue_id);
+			ppe_ret = PPE_DRV_RET_ENQ_VP_QID_SET_FAIL;
+			goto cleanup_allocated_enq_vps;
+		}
+
+		/*
+		 * Map enqueue VP to specific queue
+		 */
+		ppe_ret = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp);
+		if (ppe_ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_port_enq_vp_free(enq_vp);
+			ppe_drv_warn("%p: Unable to map enq_vp:%u to queue:%u ", p, enq_vp, queue_id);
+			goto cleanup_allocated_enq_vps;
+		}
+		allocated_enq_vps[allocated_count++] = enq_vp;
+		ppe_drv_trace("%p: Enqueue vp node to priority queue map done qid:%d enq_vp:%d",
+					p, queue_id, enq_vp);
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+
+cleanup_allocated_enq_vps:
+	/*
+	 * Cleanup all successfully allocated Enq VPs
+	 */
+	for (uint8_t i = 0; i < allocated_count; i++) {
+		ppe_drv_port_enq_vp_free(allocated_enq_vps[i]);
+	}
+	return ppe_ret;
+}
+
+/*
+ * ppe_drv_pon_get_pq_config()
+ *	map pq to enqueue vp and int_pri.
+ *
+ */
+bool ppe_drv_pon_get_pq_config(uint8_t pq, uint8_t *enq_vp, uint8_t *int_pri)
+{
+	int internal_pq, q_offset;
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+	uint16_t i;
+	fal_ucast_queue_dest_t q_dst = {0};
+	uint32_t queue_id = 0;
+	sw_error_t err;
+	uint8_t profile = 0;
+	int enqueue_vp;
+
+	spin_lock_bh(&p->lock);
+	if (pq >= p->ppe_drv_pon_port_max_pq) {
+		ppe_drv_warn("pq %d is more than the max supported priority queue %d", pq, p->ppe_drv_pon_port_max_pq);
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	internal_pq = p->ppe_drv_pon_port_start_pq + pq;
+	q_offset = pq % PPE_DRV_PORT_PON_PQ_PER_ENQ_VP;
+	*int_pri = q_offset;
+
+	for (i = PPE_DRV_PORT_ENQ_VP_START; i <=PPE_DRV_PORT_ENQ_VP_END; i++) {
+		pp = &p->port[i];
+
+		if (!kref_read(&pp->ref_cnt)) {
+			continue;
+		}
+
+		if (pp->evp.type == PPE_DRV_ENQ_VP_PON) {
+			enqueue_vp = pp->port;
+			q_dst.src_profile = 0;
+			q_dst.dst_port = enqueue_vp;
+
+			err = fal_ucast_queue_base_profile_get(PPE_DRV_SWITCH_ID, &q_dst, &queue_id, &profile);
+			if (err != SW_OK) {
+				spin_unlock_bh(&p->lock);
+				ppe_drv_warn("unable to get base queue id for enq_vp port %d", enqueue_vp);
+				return false;
+			}
+
+			if ((internal_pq >= queue_id) && (internal_pq < (queue_id + PPE_DRV_PORT_PON_PQ_PER_ENQ_VP))) {
+				*enq_vp = enqueue_vp;
+				spin_unlock_bh(&p->lock);
+				ppe_drv_info("enq_vp =%d int_pri =%d\n", *enq_vp, *int_pri);
+				return true;
+			}
+		}
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("No matching enqueue VP found for pq %d", pq);
+	return false;
+}
+EXPORT_SYMBOL(ppe_drv_pon_get_pq_config);
+
+/*
+ * ppe_drv_pon_get_enq_vp_mapped_to_base_pq()
+ * 	get enqueue_vp mapped to the passed base queue
+ */
+static int ppe_drv_pon_get_enq_vp_mapped_to_base_pq(uint8_t internal_pq)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+	uint16_t i;
+	fal_ucast_queue_dest_t q_dst = {0};
+	uint32_t queue_id = 0;
+	sw_error_t err;
+	uint8_t profile = 0;
+	int enqueue_vp = PPE_DRV_PORT_ENQ_VP_INVALID;
+
+	for (i = PPE_DRV_PORT_ENQ_VP_START; i <=PPE_DRV_PORT_ENQ_VP_END; i++) {
+		pp = &p->port[i];
+
+		if (!kref_read(&pp->ref_cnt)) {
+			continue;
+		}
+
+		if ((pp->evp.type == PPE_DRV_ENQ_VP_PON) ||
+				(pp->evp.type == PPE_DRV_BASEQ_ENQ_VP_PON)) {
+			enqueue_vp = pp->port;
+			q_dst.src_profile = 0;
+			q_dst.dst_port = enqueue_vp;
+
+			err = fal_ucast_queue_base_profile_get(PPE_DRV_SWITCH_ID, &q_dst, &queue_id, &profile);
+			if (err != SW_OK) {
+				ppe_drv_warn("unable to get base queue id for enq_vp port %d", enqueue_vp);
+				return PPE_DRV_PORT_ENQ_VP_INVALID;
+			}
+
+			if (internal_pq == queue_id) {
+				ppe_drv_info("enq_vp =%d", enqueue_vp);
+				return enqueue_vp;
+			}
+		}
+	}
+	return PPE_DRV_PORT_ENQ_VP_INVALID;
+}
+
+/*
+ * ppe_drv_pon_map_enq_vp_to_base_pq()
+ *	maps base Pq to a enqueue vp
+ */
+ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp)
+{
+	int internal_pq;
+	struct ppe_drv *p = ppe_drv_gbl;
+	int enqueue_vp;
+	ppe_drv_ret_t status;
+
+	if (base_pq >= p->ppe_drv_pon_port_max_pq) {
+		ppe_drv_warn("pq %d is more than the max supported priority queue %d", base_pq, p->ppe_drv_pon_port_max_pq);
+		return PPE_DRV_RET_ENQ_VP_QID_SET_FAIL;
+	}
+
+	internal_pq = p->ppe_drv_pon_port_start_pq + base_pq;
+	if (internal_pq >= (p->ppe_drv_pon_port_start_pq + p->ppe_drv_pon_port_max_pq)) {
+		ppe_drv_warn("%p: Calculated queue_id %d exceeds available range", p, internal_pq);
+		return PPE_DRV_RET_ENQ_VP_QID_SET_FAIL;
+	}
+
+	spin_lock_bh(&p->lock);
+	enqueue_vp = ppe_drv_pon_get_enq_vp_mapped_to_base_pq(internal_pq);
+	if (enqueue_vp != PPE_DRV_PORT_ENQ_VP_INVALID) {
+		*enq_vp = enqueue_vp;
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_SUCCESS;
+	}
+
+	enqueue_vp = ppe_drv_port_enq_vp_alloc();
+	if (enqueue_vp == PPE_DRV_PORT_ID_INVALID) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Unable to get the enqueue vport", p);
+		return PPE_DRV_RET_ENQ_VP_ALLOC_FAIL;
+	}
+	p->port[enqueue_vp].evp.type = PPE_DRV_BASEQ_ENQ_VP_PON;
+
+	if (!ppe_drv_port_ucast_queue_profile_set(&p->port[enqueue_vp], PPE_DRV_PORT_SRC_PROFILE,
+					internal_pq, PON_PORT_ID)) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_port_enq_vp_free(enqueue_vp);
+		ppe_drv_warn("%p: Enqueue vp queue init failed for qid:%d", p, internal_pq);
+		return PPE_DRV_RET_ENQ_VP_QID_SET_FAIL;
+	}
+
+	/*
+	 * Map enqueue VP to specific queue
+	 */
+	status = ppe_drv_enq_vp_map_to_queue(internal_pq, enqueue_vp);
+	if (status != PPE_DRV_RET_SUCCESS) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_port_enq_vp_free(enqueue_vp);
+		ppe_drv_warn("%p: Unable to map enq_vp:%u to queue:%u ", p, enqueue_vp, internal_pq);
+		return status;
+	}
+
+	spin_unlock_bh(&p->lock);
+	*enq_vp = enqueue_vp;
+	ppe_drv_trace("%p: Enqueue vp node to priority queue map done qid:%d enq_vp:%d", p, internal_pq, *enq_vp);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_pon_map_enq_vp_to_base_pq);
+#endif
 
 /*
  * ppe_drv_rfs_map_core_to_enqueue_vp()
@@ -799,11 +1214,19 @@ static ppe_drv_ret_t ppe_drv_rfs_map_core_to_enqueue_vp(uint8_t core, uint8_t qu
 	p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL] = eth_coremask;
 	p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL] = eth_coremask;
 
+	/*
+	 * Default coremask for the default generic interface is set.
+	 */
+	p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL] = tun_coremask;
+	p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL] = tun_coremask;
+
 	enq_vp = ppe_drv_port_enq_vp_alloc();
 	if (enq_vp == PPE_DRV_PORT_ID_INVALID) {
 		ppe_drv_warn("%p: Unable to get the enqueue vport ", p);
 		return PPE_DRV_RET_ENQ_VP_ALLOC_FAIL;
 	}
+
+	p->port[enq_vp].evp.type = PPE_DRV_ENQ_VP_DEFAULT;
 
 	/*
 	 * Maps enqueue with given queue
@@ -823,6 +1246,44 @@ static ppe_drv_ret_t ppe_drv_rfs_map_core_to_enqueue_vp(uint8_t core, uint8_t qu
 	p->rfs.core2enq_vp[core] = enq_vp;
 	return status;
 }
+
+#ifdef NSS_PPE_DRV_HW_GRO
+/*
+ * ppe_drv_gro_core2queue_mapping()
+ *	Core to queue mapping
+ *
+ * This API will be invoked by DP driver to provide core to queue
+ * mapping. This internally will be used to configure service code
+ * to queue mapping for GRO feature.
+ */
+void ppe_drv_gro_core2queue_mapping(uint8_t core, uint8_t queue_id)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	ppe_drv_ret_t status;
+
+	if (core >= NR_CPUS) {
+		ppe_drv_warn("%p: invalid core-id: %d", p, core);
+		return;
+	}
+
+	/*
+	 * This API is called to map a core to an enqueue_vp.
+	 */
+	spin_lock_bh(&p->lock);
+	status = ppe_drv_gro_map_core_to_enqueue_vp(core, queue_id);
+	if (status != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("%p: Core failed to allocate to an enqueue vp, core %u, fail status: %u", p, core, status);
+	}
+
+	ppe_drv_trace("%d: queue mapping called for core(%d)\n", queue_id, core);
+
+	spin_unlock_bh(&p->lock);
+
+	return;
+
+}
+EXPORT_SYMBOL(ppe_drv_gro_core2queue_mapping);
+#endif
 
 /*
  * ppe_drv_core2queue_mapping()
@@ -1026,8 +1487,9 @@ MODULE_DEVICE_TABLE(of, ppe_drv_dt_ids);
  * ppe_drv_confgiure_ucast_prio_map_tbl
  *	Configure unicast priority map table for RFS/DS flows
  */
-static bool ppe_drv_confgiure_ucast_prio_map_tbl(struct ppe_drv *p, uint8_t profile_id, uint8_t *prio_map)
+bool ppe_drv_confgiure_ucast_prio_map_tbl(uint8_t profile_id, uint8_t *prio_map)
 {
+	struct ppe_drv *p = ppe_drv_gbl;
 	uint8_t pri_class;
 	uint8_t int_pri;
 	sw_error_t ret;
@@ -1053,6 +1515,45 @@ static bool ppe_drv_confgiure_ucast_prio_map_tbl(struct ppe_drv *p, uint8_t prof
 
 	return true;
 }
+EXPORT_SYMBOL(ppe_drv_confgiure_ucast_prio_map_tbl);
+
+/*
+ * ppe_drv_port_mcast_priority_class_set()
+ *	Set multicast priority to queue class mapping for a port.
+ */
+bool ppe_drv_port_mcast_priority_class_set(uint32_t port_id, uint8_t priority, uint8_t queue_class)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	sw_error_t ret;
+
+	if (port_id >= PPE_DRV_PHYSICAL_MAX) {
+		ppe_drv_warn("%p: Invalid port ID: %u\n", p, port_id);
+		return false;
+	}
+
+	if (priority >= PPE_DRV_MAX_PRIORITY) {
+		ppe_drv_warn("%p: Invalid priority: %u\n", p, priority);
+		return false;
+	}
+
+	if (queue_class > PPE_DRV_MCAST_QUEUE_CLASS_MAX) {
+		ppe_drv_warn("%p: Invalid queue class: %u (must be 0-%u)\n",
+			     p, queue_class, PPE_DRV_MCAST_QUEUE_CLASS_MAX);
+		return false;
+	}
+
+	ret = fal_port_mcast_priority_class_set(PPE_DRV_SWITCH_ID, port_id, priority, queue_class);
+	if (ret != SW_OK) {
+		ppe_drv_warn("%p: Failed to set mcast priority class for port %u, priority %u, error: %d\n",
+			     p, port_id, priority, ret);
+		return false;
+	}
+
+	ppe_drv_trace("%p: Successfully set mcast priority class for port %u, priority %u to class %u\n",
+		      p, port_id, priority, queue_class);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_port_mcast_priority_class_set);
 
 /*
  * ppe_drv_wlan_rfs_enable_set()
@@ -1292,7 +1793,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
-	if (!ppe_drv_confgiure_ucast_prio_map_tbl(p, PPE_DRV_REDIR_PROFILE_ID, ppe_drv_redir_prio_map)) {
+	if (!ppe_drv_confgiure_ucast_prio_map_tbl(PPE_DRV_REDIR_PROFILE_ID, ppe_drv_redir_prio_map)) {
 		ppe_drv_warn("%p: failed to configure ucast priority class setting\n", p);
 		goto fail;
 	}
@@ -1320,6 +1821,10 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	p->fse_ops = NULL;
 	p->fse_enable = false;
         p->is_wifi_fse_up = false;
+
+#ifdef NSS_PPE_DRV_HW_GRO
+	atomic_set(&p->gro_ctx.num_hw_gro_flows, 0);
+#endif
 
 	p->tun_gbl.tun_l2tp.l2tp_dport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
 	p->tun_gbl.tun_l2tp.l2tp_sport = PPE_DRV_L2TP_DEFAULT_UDP_PORT;
@@ -1371,9 +1876,61 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
+#ifdef NSS_PPE_FEATURE_DOT1P
+	p->dot1p = ppe_drv_dot1p_entries_alloc();
+	if (!p->dot1p) {
+		ppe_drv_warn("%p: failed to allocate DOT1P entries", p);
+		goto fail;
+	}
+
+	p->dot1p_policer = ppe_drv_dot1p_policer_entries_alloc();
+	if (!p->dot1p_policer) {
+		ppe_drv_warn("%p: failed to allocate DOT1P policer entries", p);
+		goto fail;
+	}
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+	p->gemport = ppe_drv_gem_port_entries_alloc();
+	if (!p->gemport) {
+		ppe_drv_warn("%p: failed to allocate GEMPORT entries", p);
+		goto fail;
+	}
+#endif
+
 	p->pol_ctx = ppe_drv_policer_entries_alloc();
 	if (!p->pol_ctx) {
 		ppe_drv_warn("%p: failed to allocate global policer context", p);
+		goto fail;
+	}
+
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	/* Allocate PM counter management */
+	p->pm = ppe_drv_pm_entries_alloc();
+	if (!p->pm) {
+		ppe_drv_warn("%p: Failed to allocate PM entries", p);
+		goto fail;
+	}
+
+	/* Allocate PM counter gen management */
+	p->pm_gen = ppe_drv_pm_gen_entries_alloc();
+	if (!p->pm_gen) {
+		ppe_drv_warn("%p: Failed to allocate PM gen entries", p);
+		goto fail;
+	}
+#endif
+
+#ifdef NSS_PPE_DRV_PORT_MGMT_SUPPORT
+	p->port_mgmt = ppe_drv_port_mgmt_entries_alloc();
+	if (!p->port_mgmt) {
+		ppe_drv_warn("%p: Failed to allocate Port Mgmt entries", p);
+		goto fail;
+	}
+#endif
+
+	/* Allocate VLAN entries */
+	p->vlan = ppe_drv_vlan_entries_alloc();
+	if (!p->vlan) {
+		ppe_drv_warn("%p: Failed to allocate VLAN entries", p);
 		goto fail;
 	}
 
@@ -1446,6 +2003,10 @@ static int ppe_drv_probe(struct platform_device *pdev)
 
 	nss_ppe_drv_minidump_log(p, sizeof(struct ppe_drv), "ppe_drv");
 
+#ifdef NSS_PPE_FEATURE_DOT1P
+	ppe_drv_dot1p_configure_default_rule();
+#endif
+
 	return of_platform_populate(np, NULL, NULL, &pdev->dev);
 
 fail:
@@ -1487,10 +2048,50 @@ fail:
 		p->pol_ctx = NULL;
 	}
 
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	if (p->pm) {
+		ppe_drv_pm_entries_free(p->pm);
+		p->pm = NULL;
+	}
+
+	if (p->pm_gen) {
+		ppe_drv_pm_entries_free(p->pm_gen);
+		p->pm_gen = NULL;
+	}
+#endif
+#ifdef NSS_PPE_DRV_PORT_MGMT_SUPPORT
+	if (p->port_mgmt) {
+		ppe_drv_port_mgmt_entries_free(p->port_mgmt);
+		p->port_mgmt = NULL;
+	}
+#endif
+	if (p->vlan) {
+		ppe_drv_vlan_entries_free(p->vlan);
+		p->vlan = NULL;
+	}
+
 	if (p->acl) {
 		ppe_drv_acl_entries_free(p->acl);
 		p->acl = NULL;
 	}
+
+#ifdef NSS_PPE_FEATURE_DOT1P
+	if (p->dot1p) {
+		ppe_drv_dot1p_entries_free(p->dot1p);
+		p->dot1p = NULL;
+	}
+
+	if (p->dot1p_policer) {
+		ppe_drv_dot1p_policer_entries_free(p->dot1p_policer);
+		p->dot1p_policer = NULL;
+	}
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+	if (p->gemport) {
+		ppe_drv_gem_port_entries_free(p->gemport);
+		p->gemport = NULL;
+	}
+#endif
 
 	if (p->pub_ip) {
 		ppe_drv_pub_ip_entries_free(p->pub_ip);
@@ -1695,6 +2296,24 @@ static int ppe_drv_remove(struct platform_device *pdev)
 		p->acl = NULL;
 	}
 
+#ifdef NSS_PPE_FEATURE_DOT1P
+	if (p->dot1p) {
+		ppe_drv_dot1p_entries_free(p->dot1p);
+		p->dot1p = NULL;
+	}
+
+	if (p->dot1p_policer) {
+		ppe_drv_dot1p_policer_entries_free(p->dot1p_policer);
+		p->dot1p_policer = NULL;
+	}
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+	if (p->gemport) {
+		ppe_drv_gem_port_entries_free(p->gemport);
+		p->gemport = NULL;
+	}
+#endif
+
 #ifdef PPE_TUNNEL_ENABLE
 	ppe_drv_tun_vxlan_deconfigure(p);
 #endif
@@ -1702,6 +2321,23 @@ static int ppe_drv_remove(struct platform_device *pdev)
 	if (p->pol_ctx) {
 		ppe_drv_policer_entries_free(p->pol_ctx);
 		p->pol_ctx = NULL;
+	}
+
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	if (p->pm) {
+		ppe_drv_pm_entries_free(p->pm);
+		p->pm = NULL;
+	}
+
+	if (p->pm_gen) {
+		ppe_drv_pm_entries_free(p->pm_gen);
+		p->pm_gen = NULL;
+	}
+#endif
+
+	if (p->vlan) {
+		ppe_drv_vlan_entries_free(p->vlan);
+		p->vlan = NULL;
 	}
 
 	if (p->fse_ops) {
@@ -2006,6 +2642,110 @@ int ppe_drv_mac_lrn_exception_en(struct ctl_table *table, int write,
 	return 0;
 }
 
+/*
+ * ppe_drv_flood_vsi_override_en()
+ *      API to enable/disable the flood membership ovveride for UUC, UMC and BC.
+ */
+int ppe_drv_flood_vsi_override_en(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct net_device *net_dev = NULL;
+	struct ppe_drv_iface *iface = NULL;
+	int ret;
+	const char *map_name;
+	const char *action;
+	const char *dev;
+	int action_len;
+	bool flood_vsi_en = false;
+
+	/*
+	 * Populate the sysctl backing buffer (flood_vsi_override_en).
+	 * If not a write or if proc_dostring failed, return immediately.
+	 */
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret || !write) {
+		return ret;
+	}
+
+	/*
+	 * Parse the input; valid forms:
+	 *   "enable <netdev_name>"
+	 *   "default <netdev_name>"
+	 */
+	map_name = flood_vsi_override_en;
+	if (!map_name) {
+		ppe_drv_warn("No input buffer for flood_vsi_override_en\n");
+		return -EINVAL;
+	}
+
+	/* Skip leading whitespace and identify action keyword */
+	action = map_name + strspn(map_name, NSS_PPE_DRV_WHITESPACE);
+
+	if (strncasecmp(action, "enable", 6) == 0) {
+		flood_vsi_en = true;
+		action_len = 6;
+	} else if (strncasecmp(action, "default", 7) == 0) {
+		flood_vsi_en = false;
+		action_len = 7;
+	} else {
+		ppe_drv_warn("Invalid action input, expected: <enable/default>\n");
+		return -EINVAL;
+	}
+
+	/* Move to device token and skip whitespace */
+	dev = action + action_len;
+	dev += strspn(dev, NSS_PPE_DRV_WHITESPACE);
+
+	/* Extract only the device token up to next whitespace (strip trailing spaces/newlines) */
+	{
+		size_t dev_len = strcspn(dev, NSS_PPE_DRV_WHITESPACE);
+		char dev_buf[IFNAMSIZ];
+
+		if (dev_len == 0 || dev_len > IFNAMSIZ - 1) {
+			ppe_drv_warn("Invalid DEV NAME\n");
+			return -EINVAL;
+		}
+
+		memcpy(dev_buf, dev, dev_len);
+		dev_buf[dev_len] = '\0';
+
+		net_dev = dev_get_by_name(&init_net, dev_buf);
+		if (!net_dev) {
+			ppe_drv_warn("No valid netdevice found for dev: %s\n", dev_buf);
+			return -ENODEV;
+		}
+	}
+
+	/* Resolve interface/VSI from the netdevice */
+	iface = ppe_drv_iface_get_by_dev(net_dev);
+	if (!iface || !iface->vsi) {
+		dev_put(net_dev);
+		return -ENODEV;
+	}
+
+	/* Apply change under PPE lock (keep lock hold time minimal) */
+	spin_lock_bh(&p->lock);
+
+	if (iface->vsi->type == PPE_DRV_VSI_TYPE_BRIDGE) {
+		if (flood_vsi_en) {
+			iface->vsi->flood_vsi_en = 1;
+			ppe_drv_port_flood_vsi_override_en(iface->vsi->index);
+		} else {
+			iface->vsi->flood_vsi_en = 0;
+			ppe_drv_port_flood_vsi_override_default(iface->vsi->index);
+		}
+	} else {
+		ppe_drv_warn("VSI type not bridge; override ignored (type=%u)\n",
+				iface->vsi->type);
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	dev_put(net_dev);
+	return 0;
+}
+
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
 /*
  * ppe_drv_loopback_port_feature_write_handler()
@@ -2282,7 +3022,7 @@ static int ppe_drv_upstream_dev_handler(struct ctl_table *table,
 	/*
 	 * Configure L2_VP port table for upstream port with LOOPBACK service code
 	 */
-	if (!ppe_drv_port_l2_vp_sc_config(pp, PPE_DRV_SC_LOOPBACK_RING)) {
+	if (!ppe_drv_port_l2_vp_sc_config(pp, PPE_DRV_SC_LOOPBACK_RING, 0)) {
 		ppe_drv_warn("%p: Error in configuring L2 VP table  %s\n", p, dev->name);
 		dev_put(dev);
 		spin_unlock_bh(&p->lock);
@@ -2313,6 +3053,178 @@ static int ppe_drv_upstream_dev_handler(struct ctl_table *table,
 
 	return ret;
 }
+
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+/*
+ * ppe_drv_lpbk_port_info_ctx_fill()
+ *	Fill Loopback info in global structure.
+ */
+bool ppe_drv_lpbk_port_info_ctx_fill(enum ppe_drv_loopback_port_feature_type ft_type)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	int32_t host_queue = -1;
+#endif
+
+	if (!ppe_drv_port_loopback_port_get_info()) {
+		ppe_drv_warn("%p: loopback port get info failed.", p);
+		return false;
+	}
+	switch(ft_type) {
+		case PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON:
+			/*
+			 * configure the pon pass information.
+			 */
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC;
+
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT;
+
+			p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON;
+			ppe_drv_info("port_id: %d base queue: %d\n", p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
+
+			/*
+			 * configure the service code.
+			 */
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc,
+					p->loopback_port_info.port_id);
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+
+			/*
+			 * configure the queue to service code mapping.
+			 */
+			ppe_drv_sc_ucast_queue_set(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].sc, p->loopback_port_info.ucastq_start,
+					PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+
+			break;
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+		case PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US:
+			/*
+			 * configure the pon pass information.
+			 */
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC;
+
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT;
+
+			p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
+			ppe_drv_info("port_id: %d base queue: %d\n", p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
+
+			/*
+			 * configure the service code.
+			 */
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc,
+					p->loopback_port_info.port_id);
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+
+			break;
+
+		case PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS:
+			/*
+			 * Get the queue base for host queues (CPU port 0).
+			 */
+			host_queue = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_CPU);
+			if (host_queue < 0) {
+				ppe_drv_warn("Failed to get host queue for CPU port\n");
+				return false;
+			}
+
+			/*
+			 * configure the pon pass information.
+			 */
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC;
+
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT;
+
+			p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS;
+			ppe_drv_info("port_id: %d base queue: %d\n", p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
+
+			/*
+			 * configure the service code.
+			 */
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc,
+					p->loopback_port_info.port_id);
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+
+			/*
+			 * configure the queue to service code mapping.
+			 */
+			ppe_drv_sc_ucast_queue_set(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc, host_queue, PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_PORT_SRC_PROFILE);
+			break;
+#endif
+
+		default:
+			ppe_drv_warn("invalid feature type %u\n", ft_type);
+			break;
+	}
+	return true;
+}
+
+/*
+ * ppe_drv_l2vp_sc_add()
+ *	Add the sc configs in L2_VP port tbl.
+ */
+bool ppe_drv_l2vp_sc_add(uint32_t dest_port_id)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+
+	/*
+	 * Configure lpbk_port.
+	 */
+	if (!ppe_drv_lpbk_port_info_ctx_fill(PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON)) {
+		ppe_drv_warn("%p: Error in configuring loopback port info.\n", p);
+		return false;
+	}
+
+	pp = ppe_drv_port_from_port_num(dest_port_id);
+	if (!pp) {
+		ppe_drv_warn("%p: No PPE port for given netdevice %d\n", p, dest_port_id);
+		return false;
+	}
+
+	/*
+	 * Configure L2_VP port table for UNI port with LOOPBACK service code
+	 */
+	if (!ppe_drv_port_l2_vp_sc_config(pp, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC, p->loopback_port_info.port_id)) {
+		ppe_drv_warn("%p: Error in configuring L2 VP table  %d\n", p, dest_port_id);
+		return false;
+	}
+
+	ppe_drv_trace("the L2 service table is configured\n");
+	return true;
+}
+
+/*
+ * ppe_drv_l2vp_sc_rmv()
+ *	Remove the sc configs in L2_VP port tbl.
+ */
+bool ppe_drv_l2vp_sc_rmv(uint32_t dest_port_id)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *pp = NULL;
+
+	pp = ppe_drv_port_from_port_num(dest_port_id);
+	if (!pp) {
+		ppe_drv_warn("%p: No PPE port for given netdevice %d\n", p, dest_port_id);
+		return false;
+	}
+
+	/*
+	 * Reset L2_VP port table for UNI port with LOOPBACK service code
+	 */
+	if (!ppe_drv_port_l2_vp_sc_reset(pp)) {
+		ppe_drv_warn("%p: Error in reset L2 VP table  %d\n", p, dest_port_id);
+		return false;
+	}
+
+	return true;
+}
+#endif
 
 /*
  * ppe_drv_src2uni_handler()
@@ -2657,6 +3569,14 @@ static struct ctl_table ppe_drv_sub[] = {
 	},
 #endif
 
+	{
+		.procname       =       "flood_vsi_override_en",
+		.data           =       &flood_vsi_override_en,
+		.maxlen         =       sizeof(char) * PPE_DRV_FLOOD_VSI_EN_STR_LEN,
+		.mode           =       0644,
+		.proc_handler   =       ppe_drv_flood_vsi_override_en,
+	},
+
 	{}
 };
 
@@ -2723,7 +3643,7 @@ static int ppe_drv_eth_coremask_set_handler(const char *val, const struct kernel
 	int res = param_set_uint(val, kp);
 
 	if ((eth_coremask < PPE_DRV_RFS_COREMASK_MIN) || (eth_coremask > PPE_DRV_RFS_COREMASK_MAX)) {
-		ppe_drv_warn("Invalid coremask value, should be between %u to %u. Hence setting to default value : %u \n",
+		printk("Invalid coremask value, should be between %u to %u. Hence setting to default value : %u \n",
 						PPE_DRV_RFS_COREMASK_MIN, PPE_DRV_RFS_COREMASK_MAX, PPE_DRV_RFS_COREMASK_DEFAULT);
 		eth_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
 		res = 0;
@@ -2746,6 +3666,65 @@ static const struct kernel_param_ops eth_coremask_ops = {
 
 module_param_cb(eth_coremask, &eth_coremask_ops, &eth_coremask, 0644);
 
+#ifdef NSS_PPE_DRV_HW_GRO
+bool ppe_drv_hw_gro_feature_set(struct net_device *dev, bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *port;
+
+	spin_lock_bh(&p->lock);
+	port = ppe_drv_port_from_dev(dev);
+	if (!port) {
+		ppe_drv_warn("PPE port invalid for HW GRO setting for dev:%s", dev->name);
+		spin_unlock_bh(&p->lock);
+		return false;
+	}
+
+	port->hw_gro_en = enable;
+	spin_unlock_bh(&p->lock);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_hw_gro_feature_set);
+
+/*
+ * ppe_drv_eth_gro_coremask_set_handler()
+ *	Handler function to set value of eth_gro_coremask.
+ */
+static int ppe_drv_eth_gro_coremask_set_handler(const char *val, const struct kernel_param *kp)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int res = param_set_uint(val, kp);
+
+	if (!p) {
+		ppe_drv_warn("PPE driver not initialized\n");
+		return -EINVAL;
+	}
+
+	if ((eth_gro_coremask < PPE_DRV_GRO_COREMASK_MIN) || (eth_gro_coremask > PPE_DRV_GRO_COREMASK_MAX)) {
+		ppe_drv_warn("Invalid coremask value, should be between %u to %u. Hence setting to default value : %u \n",
+						PPE_DRV_GRO_COREMASK_MIN, PPE_DRV_GRO_COREMASK_MAX, PPE_DRV_GRO_COREMASK_DEFAULT);
+		eth_gro_coremask = PPE_DRV_GRO_COREMASK_DEFAULT;
+		res = 0;
+	}
+
+	spin_lock_bh(&p->lock);
+	p->gro_ctx.gro_info.coremask = eth_gro_coremask;
+	p->gro_ctx.gro_info.shadow_coremask = eth_gro_coremask;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("Ethernet gro coremask value is set to : %u\n", eth_gro_coremask);
+
+	return res;
+}
+
+static const struct kernel_param_ops eth_gro_coremask_ops = {
+    .set = ppe_drv_eth_gro_coremask_set_handler,
+    .get = param_get_uint,
+};
+
+module_param_cb(eth_gro_coremask, &eth_gro_coremask_ops, &eth_gro_coremask, 0644);
+#endif
+
 /*
  * ppe_drv_wlan_coremask_set_handler()
  *	Handler function to set value of wlan_coremask.
@@ -2756,7 +3735,7 @@ static int ppe_drv_wlan_coremask_set_handler(const char *val, const struct kerne
 	int res = param_set_uint(val, kp);
 
 	if ((wlan_coremask < PPE_DRV_RFS_COREMASK_MIN) || (wlan_coremask > PPE_DRV_RFS_COREMASK_MAX)) {
-		ppe_drv_warn("Invalid coremask value, should be between %u to %u. Hence setting to default value : %u \n",
+		printk("Invalid coremask value, should be between %u to %u. Hence setting to default value : %u \n",
 						PPE_DRV_RFS_COREMASK_MIN, PPE_DRV_RFS_COREMASK_MAX, PPE_DRV_RFS_COREMASK_DEFAULT);
 		wlan_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
 		res = 0;
@@ -2778,6 +3757,39 @@ static const struct kernel_param_ops wlan_coremask_ops = {
 };
 
 module_param_cb(wlan_coremask, &wlan_coremask_ops, &wlan_coremask, 0644);
+
+/*
+ * ppe_drv_tun_coremask_set_handler()
+ *	Handler function to set value of tun_coremask.
+ */
+static int ppe_drv_tun_coremask_set_handler(const char *val, const struct kernel_param *kp)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int res = param_set_uint(val, kp);
+
+	if ((tun_coremask < PPE_DRV_RFS_COREMASK_MIN) || (tun_coremask > PPE_DRV_RFS_COREMASK_MAX)) {
+		printk("Invalid coremask value, should be between %u to %u. Hence setting to default value : %u \n",
+						PPE_DRV_RFS_COREMASK_MIN, PPE_DRV_RFS_COREMASK_MAX, PPE_DRV_RFS_COREMASK_DEFAULT);
+		tun_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
+		res = 0;
+	}
+
+	spin_lock_bh(&p->lock);
+	p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL] = tun_coremask;
+	p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL] = tun_coremask;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("Tunnel coremask value is set to : %u\n", tun_coremask);
+
+	return res;
+}
+
+static const struct kernel_param_ops tun_coremask_ops = {
+    .set = ppe_drv_tun_coremask_set_handler,
+    .get = param_get_uint,
+};
+
+module_param_cb(tun_coremask, &tun_coremask_ops, &tun_coremask, 0644);
 
 /*
  * ppe_drv_module_init()
@@ -2847,6 +3859,5 @@ static void __exit ppe_drv_module_exit(void)
 	kfree(ppe_drv_gbl);
 }
 module_exit(ppe_drv_module_exit);
-
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("NSS PPE driver");

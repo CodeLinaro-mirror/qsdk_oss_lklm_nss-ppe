@@ -71,12 +71,15 @@
 
 #define PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID	0x00800000
 					/* Flow has valid flow idx set*/
-
 #define PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP 0x01000000
 					/* Full inline IPSec ENCAP flow */
 
 #define PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP 0x02000000
 					/* Full Inline IPSec DECAP flow */
+#define PPE_DRV_V6_CONN_FLAG_FLOW_ACCEL_DISABLE		0x04000000
+					/* Disable PPE acceleration of this Flow. */
+#define PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO	0x08000000
+					/* Flow has HW GRO enabled */
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*
@@ -197,6 +200,7 @@ struct ppe_drv_v6_conn_flow {
 	atomic_t rx_bytes;			/* Number of Rx bytes */
 	atomic_t tx_packets;			/* Number of Tx packets */
 	atomic_t tx_bytes;			/* Number of Tx bytes */
+	bool no_stats_update;			/* No stats update for the flow */
 };
 
 /**
@@ -998,6 +1002,15 @@ static inline void ppe_drv_v6_conn_flow_host_qdisc_info_set(struct ppe_drv_v6_co
 	pcf->qdisc_info.flags = flags;
 	pcf->qdisc_info.class_id = class_id;
 	pcf->qdisc_info.qdisc_xmit_dev = dev;
+}
+
+/*
+ * ppe_drv_v6_conn_flow_tree_id_type_get()
+ *	Get flow metadata type.
+ */
+static inline ppe_drv_tree_id_type_t ppe_drv_v6_conn_flow_tree_id_type_get(struct ppe_drv_v6_conn_flow *pcf)
+{
+	return pcf->fl_mdata.tree_id_data.type;
 }
 
 /*

@@ -14,6 +14,7 @@
 #include "ppe_drv_host.h"
 #include "ppe_drv_l3_if.h"
 #include "ppe_drv_iface.h"
+#include <nss_debug.h>
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 #include "ppe_drv_nptv6.h"
 #include "ppe_drv_nptv6_hairpin.h"
@@ -34,14 +35,39 @@
 #include "ppe_drv_dscp.h"
 #endif
 #include <fal/fal_portvlan.h>
-
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+#include <fal/fal_fdb.h>
+#include "ppe_drv_pm.h"
+#endif
+#include "ppe_drv_vlan.h"
+#ifdef NSS_PPE_DRV_PORT_MGMT_SUPPORT
+#include "ppe_drv_port_mgmt.h"
+#endif
 #ifdef CONFIG_QCA_MINIDUMP
 #include <soc/qcom/ctx-save.h>
+#endif
+#ifdef NSS_PPE_FEATURE_DOT1P
+#include "ppe_drv_dot1p.h"
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+#include "ppe_drv_gemport.h"
+#endif
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+#include "ppe_drv_veip.h"
 #endif
 
 extern uint32_t static_dbg_level;
 extern bool flow_deacclr_dis;
 extern int mac_lrn_exception_en;
+
+/* Ensure module tag and default category are available before debug macros */
+#ifndef KMODNAME
+#define KMODNAME KBUILD_MODNAME
+#endif
+
+#ifndef PPE_DRV_DEFAULT_CAT
+#define PPE_DRV_DEFAULT_CAT (NSS_LOG_CAT_GENERIC)
+#endif
 
 /*
  * ppe_drv_static_dbg_level
@@ -65,11 +91,27 @@ enum ppe_drv_static_dbg_level {
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
 /*
- * If dynamic debug is enabled, use pr_debug.
+ * With dynamic debug, guard evaluation and choose path:
+ * - If NSS print is enabled, route to nss_warn/info/trace.
+ * - Otherwise, use pr_debug to leverage dynamic debug controls.
  */
-#define ppe_drv_warn(s, ...) pr_debug("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define ppe_drv_info(s, ...) pr_debug("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define ppe_drv_trace(s, ...) pr_debug("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define ppe_drv_warn(s, ...) \
+    if (nss_debug_enable_get()) \
+        nss_warn(KMODNAME, PPE_DRV_DEFAULT_CAT, "%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+    else \
+        pr_debug("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+
+#define ppe_drv_info(s, ...) \
+    if (nss_debug_enable_get()) \
+        nss_info(KMODNAME, PPE_DRV_DEFAULT_CAT, "%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+    else \
+        pr_debug("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+
+#define ppe_drv_trace(s, ...) \
+    if (nss_debug_enable_get()) \
+        nss_trace(KMODNAME, PPE_DRV_DEFAULT_CAT, "%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+    else \
+        pr_debug("%s[%d]:" s, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 #else
 
 /*
@@ -172,6 +214,13 @@ enum ppe_drv_static_dbg_level {
 #define PPE_DRV_VLAN_PRIORITY_MASK	0xE000
 #define PPE_DRV_VLAN_PRIORITY_SHIFT	13
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+#define PPE_DRV_VLAN_CTPID_IDX		0
+#define PPE_DRV_VLAN_STPID_IDX		1
+#define PPE_DRV_VLAN_CTPID_EXT_IDX	2
+#define PPE_DRV_VLAN_STPID_EXT_IDX	3
+#endif
+
 /*
  * SAWF macros
  */
@@ -255,12 +304,22 @@ enum ppe_drv_static_dbg_level {
 #define PPE_DRV_DS_MLO_LINK_NODE_ID_MAX	3
 
 /*
- * Enqueue vport VSI table start index
- *
  * Note: Ports 32,33 could be used for trunk. Hence MAX enqueue vp is 30[From 34 to 63].
  */
-#define PPE_DRV_PORT_ENQVP_VSI_TBL_START_IDX	512
 #define PPE_DRV_ENQ_VP_QID_NONE			0
+
+/*
+ * Default coremask value. This value means that flows created,
+ * can be mapped to 3 cores i.e. 0, 1 and 2.
+ */
+#define PPE_DRV_RFS_COREMASK_DEFAULT		0x7
+#define PPE_DRV_GRO_COREMASK_DEFAULT		0x7
+
+#ifdef NSS_PPE_DRV_HW_GRO
+#define NSS_PPE_DRV_MAX_GRO_FLOWS 8
+#endif
+
+#define PPE_DRV_INVALID_PORT			-1
 
 /*
  * ppe_drv_rfs_interface_type
@@ -269,15 +328,32 @@ enum ppe_drv_static_dbg_level {
 typedef enum ppe_drv_rfs_interface_type {
 	PPE_DRV_RFS_INTERFACE_TYPE_NONE = 0,	/* Interface type is invalid type. */
 	PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL,	/* Interface type is for physical ports i.e. eth0, eth1, etc. */
-	PPE_DRV_RFS_INTERFACE_TYPE_WLAN,	/* Interface type is for wlan devs. */
-	PPE_DRV_RFS_INTERFACE_TYPE_MAX,		/* Maximun number of interface types. */
+	PPE_DRV_RFS_INTERFACE_TYPE_WLAN,		/* Interface type is for wlan devs. */
+	PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL,		/* Interface type used for Tunnel Devices. */
+	PPE_DRV_RFS_INTERFACE_TYPE_DEFAULT,		/* Used for any generic interface other than the above. */
+	PPE_DRV_RFS_INTERFACE_TYPE_MAX,			/* Maximun number of interface types. */
 } ppe_drv_rfs_interface_t;
 
+#ifdef NSS_PPE_DRV_HW_GRO
 /*
- * Default coremask value. This value means that flows created,
- * can be mapped to 3 cores i.e. 0, 1 and 2.
+ * ppe_drv_gro_info
+ *	PPE GRO specific global context in ppe_drv
  */
-#define PPE_DRV_RFS_COREMASK_DEFAULT		0x7
+struct ppe_drv_gro_info {
+	uint8_t core2enq_vp[NR_CPUS];					/* Storing the enqueue VP number corresponding to each core. */
+	uint8_t coremask;						/* Global access value of the coremasks of different interfaces. */
+	uint8_t shadow_coremask;					/* Global access value of the coremasks of different interfaces. */
+};
+
+/*
+ * ppe_drv_gro_ctx
+ *	GRO information
+ */
+struct ppe_drv_gro_ctx {
+	atomic_t num_hw_gro_flows;			/* Number of HW GRO offloaded */
+	struct ppe_drv_gro_info gro_info;		/* PPE GRO global context */
+};
+#endif
 
 /*
  * ppe_drv_rfs_ctx
@@ -331,6 +407,11 @@ struct ppe_drv_tun_gbl {
  */
 enum ppe_drv_loopback_port_feature_type  {
 	PPE_DRV_LOOPBACK_PORT_FT_TYPE_NONE = 0x00,			/* Loopback port feature is disabled */
+	PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON = 0x01,			/* Loopback port feature is enabled for PON */
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS = 0x02,		/* Loopback port feature is enabled for PON HGU downstream */
+	PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US = 0x03,		/* Loopback port feature is enabled for PON HGU upstream */
+#endif
 };
 
 /*
@@ -342,6 +423,14 @@ enum ppe_drv_loopback_port_ctx_dir {
 	PPE_DRV_LOOPBACK_PORT_CTX_FLOW_SC_NEXT,		/* Context for flow direction next service code */
 	PPE_DRV_LOOPBACK_PORT_CTX_RETURN_SC,		/* Context for return direction first service code */
 	PPE_DRV_LOOPBACK_PORT_CTX_RETURN_SC_NEXT,	/* Context for return direction next service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC,			/* Context for pon direction first service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT,		/* Context for PON direction next service code */
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC,		/* Context for PON HGU US direction first service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT,		/* Context for PON HGU US direction next service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC,		/* Context for PON HGU DS direction first service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT,		/* Context for PON HGU DS direction next service code */
+#endif
 	PPE_DRV_LOOPBACK_PORT_CTX_MAX,
 };
 
@@ -431,6 +520,22 @@ struct ppe_drv {
 	struct ppe_drv_sc *sc;				/* Memory for PPE Service Code table */
 	struct ppe_drv_cc *cc;				/* Memory for PPE CPU Code table */
 	struct ppe_drv_acl *acl;			/* Memory for PPE ACL entries */
+#ifdef NSS_PPE_PM_COUNTER_FEATURE_SUPPORT
+	struct ppe_drv_pm *pm;				/* Memory for PM counter management */
+	struct ppe_drv_pm_gen *pm_gen;			/* Memory for PM counter gen management */
+#endif
+	struct ppe_drv_vlan_tbl *vlan;			/* Memory for PPE VLAN entries */
+#ifdef NSS_PPE_DRV_PORT_MGMT_SUPPORT
+	struct ppe_drv_port_mgmt *port_mgmt;		/* Memory for PORT_MGMT counter management */
+	struct ppe_drv_port_mgmt_gen *port_mgmt_gen;	/* Memory for PORT_MGMT counter gen management */
+#endif
+#ifdef NSS_PPE_FEATURE_DOT1P
+	struct ppe_drv_dot1p *dot1p;			/* Memory for PPE DOT1P entries */
+	struct ppe_drv_dot1p_policer *dot1p_policer;	/* Memory for PPE DOT1P policer entries */
+#endif
+#ifdef NSS_PPE_FEATURE_GEMPORT
+	struct ppe_drv_gem_port *gemport;		/* Memory for PPE GEMPORT entries */
+#endif
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 	struct ppe_drv_nptv6_prefix *pfx;		/* Memory for PPE prefix table */
 	struct ppe_drv_nptv6_iid *iid;			/* Memory for PPE IID table */
@@ -478,6 +583,11 @@ struct ppe_drv {
 	uint16_t gbl_ctpid;			/**< Switch C-TPID. */
 	uint16_t gbl_stpid;			/**< Switch S-TPID. */
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	uint16_t gbl_ctpid_ext;			/**< Switch C-TPID Extra. */
+	uint16_t gbl_stpid_ext;			/**< Switch S-TPID Extra. */
+#endif
+
 	bool toggled_v4;			/* Toggled bit for v4 sync during a particular iteration */
 	bool toggled_v6;			/* Toggled bit for v6 sync during a particular iteration */
 	bool tun_toggled_v4;		        /* Tunnel specific Toggled bit for v4 sync during a particular iteration*/
@@ -492,6 +602,13 @@ struct ppe_drv {
 	struct ppe_drv_rfs_ctx rfs;		/* PPE RFS global context */
 #ifdef NSS_PPE_TUNNEL_TPR_ENABLE
 	struct ppe_drv_tun_tpr *tun_tpr;	/* Tunnel TPR entries list */
+#endif
+#ifdef NSS_PPE_DRV_HW_GRO
+	struct ppe_drv_gro_ctx gro_ctx;		/* HW GRO specific context */
+#endif
+#ifdef NSS_PPE_PON_SUPPORT
+	int ppe_drv_pon_port_start_pq;		/* Start queue number mapped to pon port. */
+	int ppe_drv_pon_port_max_pq;		/* max pq to be used for pon port. */
 #endif
 };
 
@@ -513,6 +630,19 @@ static inline bool ppe_drv_assist_feature_type_check(uint32_t feature, uint32_t 
 	return !!(feature & flag);
 }
 
+/*
+ * ppe_drv_assist_feature_type_is_rfs()
+ *      Checks assist feature is a rfs feature.
+ */
+static inline bool ppe_drv_assist_feature_type_is_rfs(uint32_t feature)
+{
+	bool ret = ((feature & PPE_DRV_ASSIST_FEATURE_RFS_ETH) ||
+				(feature & PPE_DRV_ASSIST_FEATURE_RFS_WLAN) ||
+				(feature & PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL));
+
+	return ret;
+}
+
 #if defined(PPE_LOOPBACK_RING_SUPPORT)
 /*
  * ppe_drv_tun_gretap_to_mapt_loopback_enabled()
@@ -523,6 +653,38 @@ static inline bool ppe_drv_tun_gretap_to_mapt_loopback_enabled(struct ppe_drv *p
 	return !!(p->loopback_ring_info.enabled &&
 		(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT));
 }
+#endif
+
+#if defined(PPE_LOOPBACK_PORT_SUPPORT)
+/*
+ * ppe_drv_loopback_port_ft_pon_enabled()
+ *      Check pon loopback port enabled.
+ */
+static inline bool ppe_drv_loopback_port_ft_pon_enabled(struct ppe_drv *p) {
+	return !!(p->loopback_port_info.enabled &&
+			(p->loopback_port_info.ft_type == PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON));
+}
+#endif
+
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+/*
+ * ppe_drv_loopback_port_ft_pon_hgu_us_enabled()
+ *	Check pon loopback port enabled for HGU US used case.
+ */
+static inline bool ppe_drv_loopback_port_ft_pon_hgu_us_enabled(struct ppe_drv *p) {
+	return !!(p->loopback_port_info.enabled &&
+			(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC].dir_ft_type == PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US));
+}
+
+/*
+ * ppe_drv_loopback_port_ft_pon_hgu_ds_enabled()
+ *	Check pon loopback port enabled for HGU DS used case.
+ */
+static inline bool ppe_drv_loopback_port_ft_pon_hgu_ds_enabled(struct ppe_drv *p) {
+	return !!(p->loopback_port_info.enabled &&
+			(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC].dir_ft_type == PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS));
+}
+
 #endif
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
@@ -543,7 +705,11 @@ static inline bool ppe_drv_nptv6_hairpin_loopback_enabled(struct ppe_drv *p)
  */
 static inline bool ppe_drv_assist_feature_is_valid(uint32_t feature)
 {
-	return !!(feature & (PPE_DRV_ASSIST_FEATURE_RFS_ETH | PPE_DRV_ASSIST_FEATURE_RFS_WLAN | PPE_DRV_ASSIST_FEATURE_PRIORITY));
+	return !!(feature & (
+			 PPE_DRV_ASSIST_FEATURE_RFS_ETH |
+			 PPE_DRV_ASSIST_FEATURE_RFS_WLAN |
+			 PPE_DRV_ASSIST_FEATURE_PRIORITY |
+			 PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL));
 }
 
 /*
@@ -597,8 +763,28 @@ static inline void nss_ppe_drv_minidump_free(void *start_addr, const char *name)
 #endif
 }
 
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+int ppe_drv_get_tpid_index(uint16_t tpid, const char *type);
+#endif
 extern int ppe_drv_get_vxlan_dport(void);
 extern int ppe_drv_get_vxlan_gpe_dport(void);
 void ppe_drv_fse_ops_free(struct kref *kref);
 extern struct ppe_drv *ppe_drv_gbl;
 extern uint32_t if_bm_to_offload;
+#ifdef PPE_LOOPBACK_PORT_SUPPORT
+extern bool ppe_drv_lpbk_port_info_ctx_fill(enum ppe_drv_loopback_port_feature_type ft_type);
+#endif
+#ifdef NSS_PPE_PON_SUPPORT
+extern uint32_t gem_port_bitmap;
+/**
+ * ppe_drv_pon_map_enqueue_vp_to_pq
+ *	Provides mapping of enqueue_vp to queue
+ *	for pon flows.
+ *
+ * @param[in] port	PON port structure.
+ *
+ * @return
+ * Success or error code.
+ */
+ppe_drv_ret_t ppe_drv_pon_map_enqueue_vp_to_pq(struct ppe_drv_port *port);
+#endif

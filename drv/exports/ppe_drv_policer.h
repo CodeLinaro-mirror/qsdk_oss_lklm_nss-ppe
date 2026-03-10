@@ -129,6 +129,28 @@ struct ppe_drv_policer_rule_create_action {
 };
 
 /*
+ * ppe_drv_policer_direction
+ *	Policer direction
+ */
+enum ppe_drv_policer_direction {
+	PPE_DRV_POLICER_DIRECTION_INVALID = 0,	/**< Invalid direction */
+	PPE_DRV_POLICER_DIRECTION_US,	/**< Upstream direction */
+	PPE_DRV_POLICER_DIRECTION_DS,	/**< Downstream direction */
+	PPE_DRV_POLICER_DIRECTION_MAX,	/**< Maximum direction */
+};
+typedef enum ppe_drv_policer_direction ppe_drv_policer_direction_t;
+
+/*
+ * ppe_drv_policer_rule_acl_dir_info
+ *	ACL policer direction information.
+ */
+struct ppe_drv_policer_rule_acl_dir_info {
+	bool acl_index_valid;	/**< ACL index valid. */
+	uint32_t acl_index;	/**< ACL index. */
+	ppe_drv_policer_direction_t dir;	/**< Policer direction. */
+};
+
+/*
  * ppe_drv_policer_rule_create_acl_info
  *	ACL  configuration information
  */
@@ -152,6 +174,7 @@ struct ppe_drv_policer_rule_create_acl_info {
 	uint16_t next_ptr;		/**< Next policer number */
 
 	struct ppe_drv_policer_rule_create_action action; /* Action for traffic */
+	struct ppe_drv_policer_rule_acl_dir_info dir_info; /**< Policer direction */
 };
 
 /*
@@ -162,7 +185,7 @@ struct ppe_drv_policer_rule_create_port_info {
 	struct net_device *dev;		/**< Dev on which policing is needed */
 	bool meter_en;			/**< 1 - Metering enabled, 0 - disabled */
 	bool colour_mode;		/**< 0 - Colour bind, 1- Colour Aware */
-	uint8_t meter_flag;		/**< 0 - unicast, 1 - known unicast, 2 - multicast, 3 - unknown multicast, 4 - broadcast */
+	uint8_t meter_flag;		/**< Bit flags: 0x01 - uc, 0x02 - uuc, 0x04 - mc, 0x08 - umc, 0x10 - bc */
 	bool coupling_flag;		/**< 1- couple C + E bucket; 0 - discouple */
 	bool meter_mode;		/**< 0 - RFC2698, 1 - Rest RFC */
 	bool meter_unit;		/**< 0 - byte based, 1 - packet based */
@@ -295,6 +318,17 @@ uint16_t ppe_drv_policer_get_port_id(struct ppe_drv_policer_port *ctx);
 void ppe_drv_policer_user2hw_id_map(struct ppe_drv_policer_acl *ctx, int user_id);
 
 /**
+ * ppe_drv_policer_user2hw_id
+ *	get hw index from user index
+ *
+ * @param[IN] index	Policer User ID.
+ *
+ * @return
+ * Policer hw Index.
+ */
+int ppe_drv_policer_user2hw_id(int index);
+
+/**
  * ppe_drv_policer_acl_destroy
  *	Destroy ACL policer in PPE HW
  *
@@ -343,12 +377,13 @@ struct ppe_drv_policer_port *ppe_drv_policer_port_create(struct ppe_drv_policer_
  * 	Get hw stats for port policer
  *
  * @param[IN] policer context
+ * @param[IN] acl context
+ * @param[IN] policer direction
  *
  * @return
  * none.
  */
-void ppe_drv_policer_acl_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_acl *ctx);
-
+void ppe_drv_policer_acl_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_acl *ctx, ppe_drv_policer_direction_t dir);
 
 /*
  * ppe_drv_policer_port_get_hw_stats

@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <fal/fal_ip.h>
@@ -556,4 +545,48 @@ struct ppe_drv_vsi *ppe_drv_vsi_entries_alloc()
 	}
 
 	return vsi;
+}
+
+/*
+ * ppe_drv_vsi_remap_entries()
+ *	Remap the vsi entries.
+ */
+bool ppe_drv_vsi_remap_entries(struct ppe_drv_vsi *vsi, struct ppe_drv_vsi *br_vsi)
+{
+	fal_vsi_bridge_vsi_t fal_br_vsi = {0};
+	struct ppe_drv *p = ppe_drv_gbl;
+	sw_error_t err = SW_OK;
+
+	fal_br_vsi.bridge_vsi_enable = A_TRUE;
+	fal_br_vsi.bridge_vsi_id = br_vsi->index;
+
+	err = fal_vsi_bridge_vsi_set(PPE_DRV_SWITCH_ID, vsi->index, &fal_br_vsi);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: VSI Remapping failed for VSI index: %u", p, vsi->index);
+		return false;
+	}
+
+	ppe_drv_trace("VSI Remapping succesful for VSI index: %u\n", vsi->index);
+	return true;
+
+}
+
+/*
+ * ppe_drv_vsi_clear_remap_entries()
+ *	Clear the remapped vsi entries.
+ */
+void ppe_drv_vsi_clear_remap_entries(struct ppe_drv_vsi *vsi, struct ppe_drv_vsi *br_vsi)
+{
+	fal_vsi_bridge_vsi_t fal_br_vsi = {0};
+	struct ppe_drv *p = ppe_drv_gbl;
+	sw_error_t err = SW_OK;
+
+	err = fal_vsi_bridge_vsi_set(PPE_DRV_SWITCH_ID, vsi->index, &fal_br_vsi);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: Unable to clear remapped VSI entry for index:: %u", p, vsi->index);
+		return;
+	}
+
+	ppe_drv_trace("VSI remapped entry is cleared successfully for index: %u\n", vsi->index);
+	return;
 }

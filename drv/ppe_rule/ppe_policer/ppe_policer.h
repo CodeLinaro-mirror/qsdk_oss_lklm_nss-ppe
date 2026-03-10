@@ -75,7 +75,10 @@ struct ppe_policer {
 		struct ppe_drv_policer_acl *acl_ctx;     	  	/* PPE driver context */
 		struct ppe_drv_policer_port *port_ctx;     	  	/* PPE driver context */
 	} drv_ctx;
+
+	uint32_t num_dir;		/* number of directions configured */
 	struct ppe_policer_create_info policer_info;		/* policer create information */
+	struct ppe_policer_create_info other_dir_policer_info;		/* policer create information */
 };
 
 /*

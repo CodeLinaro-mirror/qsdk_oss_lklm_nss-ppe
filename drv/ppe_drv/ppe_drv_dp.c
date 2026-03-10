@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include "ppe_drv.h"
@@ -287,3 +276,46 @@ ppe_drv_ret_t ppe_drv_dp_set_ppe_offload_enable_flag(struct ppe_drv_iface *iface
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_dp_set_ppe_offload_enable_flag);
+
+#ifdef NSS_PPE_PON_SUPPORT
+/*
+ * ppe_drv_dp_gem_enable()
+ *	API to set GEM type enable flag in PPE port
+ *	And do enqueue vp to pq mapping
+ */
+ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
+		bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *port;
+	ppe_drv_ret_t status = PPE_DRV_RET_SUCCESS;
+
+	spin_lock_bh(&p->lock);
+	port = ppe_drv_iface_port_get(iface);
+	if (!port) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: unable to get port from iface\n", iface);
+		return PPE_DRV_RET_PORT_NOT_FOUND;
+	}
+
+	/*
+	 * Set the OFFLOAD enabled flag in the PPE port if the input
+	 * flag indicates so.
+	 */
+	if (enable) {
+		port->flags |= PPE_DRV_PORT_FLAG_PORT_GEM;
+		gem_port_bitmap |= (1 << (port->port));
+		status = ppe_drv_pon_map_enqueue_vp_to_pq(port);
+	}
+
+	spin_unlock_bh(&p->lock);
+	return status;
+}
+EXPORT_SYMBOL(ppe_drv_dp_gem_enable);
+#else
+ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
+                bool enable)
+{
+	return PPE_DRV_RET_SUCCESS;
+}
+#endif

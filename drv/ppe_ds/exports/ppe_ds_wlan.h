@@ -89,98 +89,56 @@ uint32_t ppe_ds_wlan_get_node_id(ppe_ds_wlan_handle_t *wlan_handle);
 ppe_vp_status_t ppe_ds_wlan_vp_free(ppe_ds_wlan_handle_t *wlan_handle, ppe_vp_num_t vp_num);
 
 /**
- * ppe_ds_wlan_inst_register
- *	PPE-DS WLAN instance registration API
- *
- * @datatypes
- * ppe_ds_wlan_handle_t
- * ppe_ds_wlan_reg_info
- *
- * @param[in] wlan_handle   PPE-DS WLAN handle
- * @param[in] ring_info     PPE-DS ring information
- *
- * @return
- * Status of the PPE-DS WLAN instance registration
- */
-bool ppe_ds_wlan_inst_register(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_wlan_reg_info *ring_info);
-
-/**
- * ppe_ds_wlan_inst_register_v2
- *	PPE-DS WLAN instance registration API
+ * ppe_ds_wlan_inst_register_arch_mode_wifi7
+ *	PPE-DS WLAN instance registration API for Wi-Fi 7 architecture
  *
  * @datatypes
  * ppe_ds
- * ppe_ds_wlan_reg_info
+ * ppe_ds_wlan_arch_reg_info
  *
- * @param[in] node   PPE-DS node
- * @param[in] ring_info     PPE-DS ring information
+ * @param[in] node      PPE-DS node
+ * @param[in] ring_info PPE-DS arch ring information
  *
  * @return
  * Status of the PPE-DS WLAN instance registration
  */
-bool ppe_ds_wlan_inst_register_v2(struct ppe_ds *node, struct ppe_ds_wlan_reg_info *ring_info);
+bool ppe_ds_wlan_inst_register_arch_mode_wifi7(struct ppe_ds *node, struct ppe_ds_wlan_arch_reg_info *ring_info);
+
+/**
+ * ppe_ds_wlan_inst_register_arch_mode_wifi8
+ *	PPE-DS WLAN instance registration API for Wi-Fi 8 architecture
+ *
+ * @datatypes
+ * ppe_ds
+ * ppe_ds_wlan_arch_reg_info
+ *
+ * @param[in] node      PPE-DS node
+ * @param[in] ring_info PPE-DS arch ring information
+ *
+ * @return
+ * Status of the PPE-DS WLAN instance registration (always false until Wi-Fi 8 is implemented)
+ */
+bool ppe_ds_wlan_inst_register_arch_mode_wifi8(struct ppe_ds *node, struct ppe_ds_wlan_arch_reg_info *ring_info);
 
 /**
  * ppe_ds_wlan_instance_stop
  *	PPE-DS WLAN instance stop API
  *
  * @datatypes
- * ppe_ds_wlan_handle_t
- * ppe_ds_wlan_ctx_info_handle
- *
- * @param[in] wlan_handle   PPE-DS WLAN handle
- * @param[in] wlan_info_hdl    WLAN ctx information handle
- */
-void ppe_ds_wlan_instance_stop(ppe_ds_wlan_handle_t *wlan_handle,
-		struct ppe_ds_wlan_ctx_info_handle *wlan_info_hdl);
-
-/**
- * ppe_ds_wlan_instance_stop_v2
- *	PPE-DS WLAN instance stop API
- *
- * @datatypes
  * ppe_ds
  * ppe_ds_wlan_ctx_info_handle
  *
  * @param[in] node   PPE-DS node
  * @param[in] wlan_info_hdl    WLAN ctx information handle
  */
-void ppe_ds_wlan_instance_stop_v2(struct ppe_ds *node,
+void ppe_ds_wlan_instance_stop(struct ppe_ds *node,
 		struct ppe_ds_wlan_ctx_info_handle *wlan_info_hdl);
-
-/**
- * ppe_ds_wlan_inst_stop
- *	PPE-DS WLAN instance stop API
- *
- * @datatypes
- * ppe_ds_wlan_handle_t
- *
- * @param[in] wlan_handle   PPE-DS WLAN handle
- */
-void ppe_ds_wlan_inst_stop(ppe_ds_wlan_handle_t *wlan_handle);
 
 /**
  * ppe_ds_wlan_instance_start
  *	PPE-DS WLAN instance start API
  *
  * @datatypes
- * ppe_ds_wlan_handle_t
- * ppe_ds_wlan_ctx_info_handle
- *
- * @param[in] wlan_handle   PPE-DS WLAN handle
- * @param[in] wlan_info_hdl    WLAN ctx information handle
- *
- * @return
- * Status of the PPE-DS WLAN instance start
- */
-int ppe_ds_wlan_instance_start(ppe_ds_wlan_handle_t *wlan_handle,
-		struct ppe_ds_wlan_ctx_info_handle *wlan_info_hdl);
-
-/**
- * ppe_ds_wlan_instance_start_v2
- *	PPE-DS WLAN instance start API
- *
- * @datatypes
  * ppe_ds
  * ppe_ds_wlan_ctx_info_handle
  *
@@ -190,44 +148,19 @@ int ppe_ds_wlan_instance_start(ppe_ds_wlan_handle_t *wlan_handle,
  * @return
  * Status of the PPE-DS WLAN instance start
  */
-int ppe_ds_wlan_instance_start_v2(struct ppe_ds *node,
+int ppe_ds_wlan_instance_start(struct ppe_ds *node,
 		struct ppe_ds_wlan_ctx_info_handle *wlan_info_hdl);
-
-/**
- * ppe_ds_wlan_inst_start
- *	PPE-DS WLAN instance start API
- *
- * @datatypes
- * ppe_ds_wlan_handle_t
- *
- * @param[in] wlan_handle   PPE-DS WLAN handle
- *
- * @return
- * Status of the PPE-DS WLAN instance start
- */
-int ppe_ds_wlan_inst_start(ppe_ds_wlan_handle_t *wlan_handle);
 
 /**
  * ppe_ds_wlan_inst_free
  *	PPE-DS WLAN instance free API
  *
  * @datatypes
- * ppe_ds_wlan_handle_t
- *
- * @param[in] wlan_handle   PPE-DS WLAN handle
- */
-void ppe_ds_wlan_inst_free(ppe_ds_wlan_handle_t *wlan_handle);
-
-/**
- * ppe_ds_wlan_inst_free_v2
- *	PPE-DS WLAN instance free API
- *
- * @datatypes
  * ppe_ds
  *
  * @param[in] node   PPE-DS node
  */
-void ppe_ds_wlan_inst_free_v2(struct ppe_ds *node);
+void ppe_ds_wlan_inst_free(struct ppe_ds *node);
 
 /**
  * ppe_ds_wlan_inst_alloc
@@ -241,25 +174,9 @@ void ppe_ds_wlan_inst_free_v2(struct ppe_ds *node);
  * @param[in] priv_size   Size of PPE-DS WLAN handle's private area
  *
  * @return
- * Status of the PPE-DS WLAN instance allcation
- */
-ppe_ds_wlan_handle_t *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_size);
-
-/**
- * ppe_ds_wlan_inst_alloc_v2
- *	PPE-DS WLAN instance allocation API
- *
- * @datatypes
- * ppe_ds_wlan_handle_t
- * ppe_ds_wlan_ops
- *
- * @param[in] ops         PPE-DS WLAN operation callbacks
- * @param[in] priv_size   Size of PPE-DS WLAN handle's private area
- *
- * @return
  * PPE-DS node
  */
-struct ppe_ds *ppe_ds_wlan_inst_alloc_v2(struct ppe_ds_wlan_ops_v2 *ops, size_t priv_size);
+struct ppe_ds *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_size);
 
 /**
  * ppe_ds_get_node_id
@@ -285,15 +202,6 @@ uint32_t ppe_ds_get_node_id(struct ppe_ds *node);
 int ppe_ds_ppe2tcl_wlan_handle_intr(void *ctxt);
 
 /**
- * ppe_ds_ppe2tcl_wlan_handle_intr_v2
- *	PPE-DS WLAN irq handling for ppe2tcl ring
- *
- * @param[in] ctxt IRQ context
- *
- */
-int ppe_ds_ppe2tcl_wlan_handle_intr_v2(void *ctxt);
-
-/**
  * ppe_ds_reo2ppe_wlan_handle_intr
  *	PPE-DS WLAN irq handling for reo2ppe ring
  *
@@ -303,27 +211,7 @@ int ppe_ds_ppe2tcl_wlan_handle_intr_v2(void *ctxt);
 int ppe_ds_reo2ppe_wlan_handle_intr(void *ctxt);
 
 /**
- * ppe_ds_reo2ppe_wlan_handle_intr_v2
- *	PPE-DS WLAN irq handling for reo2ppe ring
- *
- * @param[in] ctxt IRQ context
- *
- */
-int ppe_ds_reo2ppe_wlan_handle_intr_v2(void *ctxt);
-
-/**
  * ppe_ds_wlan_get_intr_ctxt
- *	PPE-DS get wlan context
- *
- * @datatypes
- * ppeds_wlan_handle_t
- *
- * @param[in] wlan_handle   PPE-DS WLAN handle
- */
-void *ppe_ds_wlan_get_intr_ctxt(ppe_ds_wlan_handle_t *wlan_handle);
-
-/**
- * ppe_ds_wlan_get_intr_ctxt_v2
  *	PPE-DS get wlan context
  *
  * @datatypes
@@ -331,44 +219,32 @@ void *ppe_ds_wlan_get_intr_ctxt(ppe_ds_wlan_handle_t *wlan_handle);
  *
  * @param[in] node   PPE-DS node
  */
-void *ppe_ds_wlan_get_intr_ctxt_v2(struct ppe_ds *node);
+void *ppe_ds_wlan_get_intr_ctxt(struct ppe_ds *node);
 
 /**
  * ppe_ds_wlan_service_status_update
  *	PPE-DS ring service update
  *
  * @datatypes
- * ppeds_wlan_handle_t
- *
- * @param[in] wlan_handle   PPE-DS WLAN handle
- * @param[in] enable        Enable/Disable service
- */
-void ppe_ds_wlan_service_status_update(ppe_ds_wlan_handle_t *wlan_handle, bool enable);
-
-/**
- * ppe_ds_wlan_service_status_update_v2
- *	PPE-DS ring service update
- *
- * @datatypes
  * ppe_ds
  *
  * @param[in] node   PPE-DS node
  * @param[in] enable        Enable/Disable service
  */
-void ppe_ds_wlan_service_status_update_v2(struct ppe_ds *node, bool enable);
+void ppe_ds_wlan_service_status_update(struct ppe_ds *node, bool enable);
 
 /**
  * ppe_ds_wlan_plugins_cb_register
  * 	Callback for ppeds plugin registration
  *
  * @datatypes
- * ppe_ds_wlan_ops_v2
+ * ppe_ds_wlan_ops
  *
  * @return
  * status of registration
  *
  */
-int ppe_ds_wlan_plugins_cb_register(struct ppe_ds_wlan_ops_v2 *wlan_ops);
+int ppe_ds_wlan_plugins_cb_register(struct ppe_ds_wlan_ops *wlan_ops);
 
 /**
  * ppe_ds_wlan_plugins_cb_unregister
