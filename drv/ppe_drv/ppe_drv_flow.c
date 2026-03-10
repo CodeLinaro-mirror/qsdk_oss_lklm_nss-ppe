@@ -912,6 +912,7 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 			return false;
 		}
 		*scp = service_code;
+		return true;
 	} else if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD_FAIL) {
 		ppe_drv_warn("%p: VEIP US v6 flow add failed ret=%d, sc=%u\n", pcf, ret, sc);
 		return false;
