@@ -375,7 +375,8 @@ struct ppe_drv_pppoe *ppe_drv_pppoe_find_session_by_veip(uint16_t session_id, ui
 	for (i = 0; i < p->pppoe_session_max; i++) {
 		pppoe = &p->pppoe[i];
 		if (kref_read(&pppoe->ref) && !memcmp(pppoe->server_mac, smac, sizeof(pppoe->server_mac))
-				&& (pppoe->session_id == session_id) && (pppoe->veip_pppoe != NULL) && (pppoe->veip_pppoe->port_bitmap == fal_port)) {
+				&& (pppoe->session_id == session_id) && (pppoe->veip_pppoe != NULL)
+				&& (pppoe->veip_pppoe->port_bitmap == (uint8_t)fal_port)) {
 			ppe_drv_trace("%p: Found secondary PPPoE idx(%d) for session_id(%d) and server MAC: %pM", pppoe->veip_pppoe, pppoe->veip_pppoe->index, session_id, smac);
 			return pppoe->veip_pppoe;
 		}
