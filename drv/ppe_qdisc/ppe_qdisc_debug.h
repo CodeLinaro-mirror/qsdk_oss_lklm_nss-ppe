@@ -22,7 +22,7 @@
  * PPE Qdisc debug macros
  */
 #if (PPE_QDISC_DEBUG_LEVEL < 1)
-#define ppe_qdisc_assert(fmt, args...)
+#define ppe_qdisc_assert(c, s, ...) do { (void)(c); } while(0)
 #else
 #define ppe_qdisc_assert(c, s, ...) if (!(c)) { printk(KERN_CRIT "%s[%d]:" s, __func__, __LINE__, ##__VA_ARGS__); BUG_ON(!(c)); }
 #endif
