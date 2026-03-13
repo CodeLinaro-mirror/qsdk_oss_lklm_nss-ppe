@@ -455,8 +455,15 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 		return false;
 	}
 
-#ifndef NSS_PPE_PON_SUPPORT
+#ifdef NSS_PPE_PON_SUPPORT
+	if ((!ppe_drv_pon_iface_get()) && (info->dir != PPE_POLICER_DIRECTION_INVALID)) {
+		ppe_policer_stats_inc(&g_policer->stats.acl_policer_direction_not_supported);
+		ppe_policer_warn("%p: No PON iterface present, policer direction not supported: %d", g_policer, info->rule_id);
+		return false;
+	}
+#else
 	if (info->dir != PPE_POLICER_DIRECTION_INVALID) {
+		ppe_policer_stats_inc(&g_policer->stats.acl_policer_direction_not_supported);
 		ppe_policer_warn("%p: Policer direction not supported: %d", g_policer, info->rule_id);
 		return false;
 	}

@@ -1234,6 +1234,18 @@ ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_pon_map_enq_vp_to_base_pq);
+
+/*
+ * ppe_drv_pon_iface_get()
+ *	Returns the PON interface.
+ */
+struct ppe_drv_iface *ppe_drv_pon_iface_get(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	return p->pon_iface;
+}
+EXPORT_SYMBOL(ppe_drv_pon_iface_get);
 #endif
 
 /*

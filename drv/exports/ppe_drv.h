@@ -1003,6 +1003,14 @@ bool ppe_drv_pon_get_pq_config(uint8_t pq, uint8_t *enq_vp, uint8_t *int_pri);
  */
 ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp);
 
+/**
+ * ppe_drv_pon_iface_get
+ *	Returns PON intereface.
+ *
+ * @return
+ * Pointer to PON interface.
+ */
+struct ppe_drv_iface *ppe_drv_pon_iface_get(void);
 #endif
 
 /**
