@@ -62,7 +62,8 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC",		/* Service code for loopback port for pon pass */
 	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT",		/* Service code for loopback port for second pass */
 	"PPE_DRV_SC_FDB_BYPASS",		/* Service code for gem port table to bypass destination selection from FDB table */
-
+	"PPE_DRV_SC_DDRQ_ETH_PT_MODE",		/* Service code for DDRQ ETH passthrough mode */
+	"PPE_DRV_SC_DDRQ_PON_PT_MODE",		/* Service code for DDRQ PON passthrough mode */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 

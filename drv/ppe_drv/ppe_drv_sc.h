@@ -14,6 +14,13 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+
+/*
+ * DDRQ special service code information
+ */
+#define PPE_DRV_SC_DDRQ_FULL_PKT_SPL_BYPASS_SC		5
+#define PPE_DRV_SC_DDRQ_PT_SPL_BYPASS_SC		2
+
 /*
  * ppe_drv_eip_hw_sc
  *	PPE driver EIP HW service.
