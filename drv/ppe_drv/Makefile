@@ -101,16 +101,6 @@ qca-nss-ppe-objs += tun/ppe_drv_tun_tpr.o
 endif
 endif
 
-ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
-ccflags-y += -DNSS_PPE_L2_VP_SC_ENQ_BYPASS
-ccflags-y += -DNSS_PPE_FEATURE_EXCEPTION_EDIT
-ccflags-y += -DPPE_DRV_RPS_HASH_SELECT
-ccflags-y += -DPPE_DRV_PKT_PADDING_STRIP
-ccflags-y += -DPPE_DRV_BRIDGE_NEXT_HOP
-ccflags-y += -DPPE_DRV_SRC_INTERFACE_CHECK
-ccflags-y += -DPPE_DRV_FLOW_TBL_POLICER
-endif
-
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))
 ccflags-y += -DPPE_DRV_NPTV6_HW_SUPPORT
 ccflags-y += -DPPE_DRV_RPS_HASH_SELECT
@@ -127,7 +117,7 @@ ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx))
 ccflags-y += -DNSS_VLAN_BASED_DSA_SUPPORT
 endif
 
-ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq54xx ipq53xx))
+ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq54xx ipq53xx ipq96xx ipq52xx))
 ccflags-y += -DPPE_LOOPBACK_RING_SUPPORT
 endif
 
@@ -140,6 +130,16 @@ ccflags-y += -DPPE_LOOPBACK_PORT_SUPPORT
 ccflags-y += -DPPE_ACL_DEST_BIND_SUPPORT
 ccflags-y += -DNSS_PPE_DRV_PORT_ISOL_SUPPORT
 ccflags-y += -DNSS_PPE_DRV_PORT_MGMT_SUPPORT
+ccflags-y += -DPPE_DRV_NPTV6_HW_SUPPORT
+ccflags-y += -DNSS_PPE_L2_VP_SC_ENQ_BYPASS
+ccflags-y += -DNSS_PPE_FEATURE_EXCEPTION_EDIT
+ccflags-y += -DPPE_DRV_RPS_HASH_SELECT
+ccflags-y += -DPPE_DRV_PKT_PADDING_STRIP
+ccflags-y += -DPPE_DRV_BRIDGE_NEXT_HOP
+ccflags-y += -DPPE_DRV_SRC_INTERFACE_CHECK
+ccflags-y += -DPPE_DRV_FLOW_TBL_POLICER
+qca-nss-ppe-objs += ppe_drv_nptv6.o
+qca-nss-ppe-objs += ppe_drv_nptv6_hairpin.o
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq54xx))
