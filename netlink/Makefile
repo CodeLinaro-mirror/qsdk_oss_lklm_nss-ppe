@@ -18,6 +18,8 @@ ccflags-y += -DNSS_PPE_PM_COUNTER_FEATURE_SUPPORT
 ccflags-y += -DNSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 ccflags-y += -DCONFIG_NSS_PPENL_PORT_MGMT=1
 ccflags-y += -DNSS_PPE_PPENL_PORT_MGMT_SUPPORT
+ccflags-y += -DCONFIG_NSS_PPENL_EDMA_DDRQ=1
+ccflags-y += -DNSS_PPE_EDMA_DDRQ_FEATURE_SUPPORT
 endif
 
 qca-nss-ppe-netlink-objs := nss_ppenl.o
@@ -46,6 +48,7 @@ ccflags-y += -DCONFIG_NSS_PPENL_PON_PORT=1
 ccflags-y += -DNSS_PPE_PON_SUPPORT
 ccflags-y += -DCONFIG_NSS_PPENL_MCAST=1
 ccflags-y += -DNSS_PPE_MCAST_FEATURE_SUPPORT
+qca-nss-ppe-netlink-objs += nss_ppenl_edma_ddrq.o
 endif
 
 obj-m += qca-nss-ppe-netlink.o
