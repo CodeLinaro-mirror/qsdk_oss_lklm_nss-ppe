@@ -446,6 +446,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		}
 		break;
 	case PPE_DRV_SC_FEATURE_PON_HGU_PPTP:
+		sc_cfg.bypass_bitmap[0] = (1 << FLOW_LOOKUP_BYP);
 		sc_cfg.bypass_bitmap[1] = (1 << EG_VLAN_MEMBER_CHECK_BYP);
 		sc_cfg.direction = PPE_DRV_SC_IN_L2_DIR_DST;
 		sc_cfg.dest_port_valid = A_FALSE;
