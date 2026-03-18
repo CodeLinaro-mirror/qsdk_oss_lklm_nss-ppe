@@ -142,7 +142,6 @@ static int ppe_htb_class_params_validate_and_save(struct Qdisc *sch, struct nlat
 	if (qopt->quantum > (PPE_DRV_QOS_DRR_WEIGHT_MAX * PPE_DRV_QOS_DRR_WEIGHT_MAX)) {
 		sch_tree_unlock(sch);
 		ppe_qdisc_warning("%x: ppehtb requires quantum not exceeding 1024*1024", sch->handle);
-		sch_tree_unlock(sch);
 		return -EINVAL;
 	}
 
