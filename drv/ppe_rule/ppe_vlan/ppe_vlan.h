@@ -77,6 +77,7 @@ struct ppe_vlan {
 	struct ppe_drv_vlan_ctx *ctx;		/* PPE driver rule context */
 	uint8_t counter_id;			/* Associated counter ID */
 	bool counter_valid_flag;		/* Valid counter flag */
+	bool hgu_rule_valid;			/* Flag for HGU rule */
 
 	/*
 	 * Rule information extracted from user rule.

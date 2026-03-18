@@ -306,6 +306,7 @@ ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
 		port->flags |= PPE_DRV_PORT_FLAG_PORT_GEM;
 		gem_port_bitmap |= (1 << (port->port));
 		status = ppe_drv_pon_map_enqueue_vp_to_pq(port);
+		p->pon_iface = iface;
 	}
 
 	spin_unlock_bh(&p->lock);

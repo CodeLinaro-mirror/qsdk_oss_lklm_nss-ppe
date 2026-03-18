@@ -37,6 +37,7 @@
 #define PPE_DRV_V4_RULE_ORIG_FLOW_SW_MDATA_VALID	0x00008000	/**< Rule creation for Socket Offload Original flows */
 #define PPE_DRV_V4_RULE_RET_FLOW_SW_MDATA_VALID		0x00010000	/**< Rule creation for Socket Offload Return flows */
 #define PPE_DRV_V4_RULE_FLAG_IPSEC_DECAP_FLOW		0x00020000	/**< Rule creation for IPsec Decap flow */
+#define PPE_DRV_V4_RULE_FLAG_ESP_PASS_THROUGH_SPI	0x00040000	/**< ESP SPI information is valid. */
 
 /*
  * v4 valid flags
@@ -127,6 +128,7 @@ struct ppe_drv_v4_rule_create {
 	struct ppe_drv_wifi_mdata_rule wifi_rule;	/**< Wi-Fi metadata rule ID information. */
 	struct ppe_drv_vp_dl_qdisc_rule qdisc_rule;	/**< Qdisc rule information for VP DL flow. */
 	struct ppe_drv_accel_rule_dir rule_dir;		/**< Information about direction to accelerate. */
+	struct ppe_drv_spi_rule spi_rule;		/**< SPI for ESP flow. */
 
 	/*
 	 * Response.
@@ -376,4 +378,3 @@ extern bool ppe_drv_v4_nsm_stats_update(struct ppe_drv_nsm_stats *nsm_stats, str
 /** @} */ /* end_addtogroup ppe_drv_v4_subsystem */
 
 #endif /* _PPE_DRV_V4_H_ */
-

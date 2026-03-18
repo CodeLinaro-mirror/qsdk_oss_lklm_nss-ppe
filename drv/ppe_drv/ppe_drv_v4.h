@@ -80,6 +80,9 @@
 #define PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO	0x08000000
 					/* Flow has HW GRO enabled */
 
+#define PPE_DRV_V4_CONN_FLAG_ESP_SPI		0x10000000
+					/* ESP SPI information */
+
 /*
  * ppe_drv_v4_addr_equal()
  *	compare ipv4 address
@@ -174,6 +177,12 @@ struct ppe_drv_v4_conn_flow {
 	 */
 	struct ppe_drv_flow_host_qdisc_info qdisc_info;
 
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+	/*
+	 * ESP SPI information
+	 */
+	uint32_t spi;
+#endif
 	/*
 	 * Statistics for this flow entry
 	 */
@@ -288,6 +297,17 @@ static inline struct ppe_drv_flow *ppe_drv_v4_conn_flow_pf_get(struct ppe_drv_v4
 {
         return pcf->pf;
 }
+
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+/*
+ * ppe_drv_v4_conn_flow_esp_spi_get()
+ *	Returns the SPI value.
+ */
+static inline uint32_t ppe_drv_v4_conn_flow_esp_spi_get(struct ppe_drv_v4_conn_flow *pcf)
+{
+	return pcf->spi;
+}
+#endif
 
 /*
  * ppe_drv_v4_conn_flow_xmit_interface_mtu_get()
@@ -550,6 +570,17 @@ static inline void ppe_drv_v4_conn_flow_pf_set(struct ppe_drv_v4_conn_flow *pcf,
 {
         pcf->pf = pf;
 }
+
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+/*
+ * ppe_drv_v4_conn_flow_esp_spi_set()
+ *	Sets the SPI value.
+ */
+static inline void ppe_drv_v4_conn_flow_esp_spi_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t spi)
+{
+	pcf->spi = spi;
+}
+#endif
 
 /*
  * ppe_drv_v4_conn_flow_xmit_interface_mtu_set()

@@ -616,7 +616,9 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	xlt_rule.s_tagged = (info->svid == 0xFFFF) ? 0x1 : 0x4;
 	xlt_rule.c_tagged = (info->cvid == 0xFFFF) ? 0x1 : 0x4;
 	xlt_rule.s_vid = (info->svid == 0xFFFF) ? 0 : info->svid;
+	xlt_rule.s_vid_enable = (info->svid == 0xFFFF) ? A_FALSE : A_TRUE;
 	xlt_rule.c_vid = (info->cvid == 0xFFFF) ? 0 : info->cvid;
+	xlt_rule.c_vid_enable = (info->cvid == 0xFFFF) ? A_FALSE : A_TRUE;
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 	xlt_rule.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
 	xlt_rule.mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
@@ -769,7 +771,9 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	 */
 	xlt_rule_in.s_tagged = (info->svid == 0xFFFF) ? 0x1 : 0x4;
 	xlt_rule_in.c_tagged = (info->cvid == 0xFFFF) ? 0x1 : 0x4;
+	xlt_rule_in.s_vid_enable = (info->svid == 0xFFFF) ? A_FALSE : A_TRUE;
 	xlt_rule_in.s_vid = (info->svid == 0xFFFF) ? 0 : info->svid;
+	xlt_rule_in.c_vid_enable = (info->cvid == 0xFFFF) ? A_FALSE : A_TRUE;
 	xlt_rule_in.c_vid = (info->cvid == 0xFFFF) ? 0 : info->cvid;
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 	xlt_rule_in.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);

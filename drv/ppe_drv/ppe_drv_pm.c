@@ -333,49 +333,6 @@ void ppe_drv_pm_gen_destroy(struct ppe_drv_pm_counter_gen_ctx *gen_ctx)
 EXPORT_SYMBOL(ppe_drv_pm_gen_destroy);
 
 /*
- * ppe_drv_pm_free()
- *	Free PM counter context.
- *
- * This API will release the hardware index back to the free pool and flush the
- * hardware statistics for that index.
- */
-void ppe_drv_pm_free(struct ppe_drv_pm_counter_ctx *ctx)
-{
-	struct ppe_drv *p = ppe_drv_gbl;
-	struct ppe_drv_pm *pm = p->pm;
-	sw_error_t ret = SW_OK;
-	fal_direction_t pm_dir;
-
-	if (!pm) {
-		ppe_drv_warn("PM structure not initialized during release");
-		return;
-	}
-
-	if (!ctx || (ctx->state == PPE_DRV_PM_COUNTER_ID_FREE)) {
-		ppe_drv_warn("Invalid context or context already free");
-		return;
-	}
-
-	/*
-	 * Release hw_id back to the appropriate table and clear pm counter stats
-	 */
-	pm_dir = (ctx->info.rule_dir == PPE_DRV_RULE_INGRESS) ? FAL_DIR_INGRESS : FAL_DIR_EGRESS;
-
-	/*
-	 * Flush PM counter statistics
-	 */
-	ret = fal_pon_pm_counter_flush(PPE_DRV_SWITCH_ID, ctx->info.hw_index, pm_dir);
-	if (ret != SW_OK) {
-		ppe_drv_warn("Failed to clear the %s PM counter stats for hw_index: %d, error: %d\n",
-				(pm_dir == FAL_DIR_INGRESS) ? "Ingress" : "Egress",
-				ctx->info.hw_index, ret);
-	}
-
-	ctx->state = PPE_DRV_PM_COUNTER_ID_FREE;
-}
-EXPORT_SYMBOL(ppe_drv_pm_free);
-
-/*
  * ppe_drv_pm_tbl_idx_get
  *	Get an available table index from the specified direction's pm table.
  */
@@ -408,6 +365,16 @@ static int16_t ppe_drv_pm_tbl_idx_get(ppe_drv_rule_dir_t rule_dir)
 
 	ppe_drv_warn("No free tbl_idx in shadow PM counter table for direction %d", rule_dir);
 	return -1;
+}
+
+/*
+ * ppe_drv_pm_tbl_idx_return()
+ *	Return table index to free pool.
+ */
+static void ppe_drv_pm_tbl_idx_return(struct ppe_drv_pm_counter_ctx *ctx)
+{
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->state = PPE_DRV_PM_COUNTER_ID_FREE;
 }
 
 /*
@@ -484,6 +451,53 @@ struct ppe_drv_pm_counter_ctx *ppe_drv_pm_alloc(ppe_drv_rule_dir_t rule_dir)
 	return ctx;
 }
 EXPORT_SYMBOL(ppe_drv_pm_alloc);
+
+/*
+ * ppe_drv_pm_free()
+ *      Free PM counter context.
+ *
+ * This API will release the hardware index back to the free pool and flush the
+ * hardware statistics for that index.
+ */
+void ppe_drv_pm_free(struct ppe_drv_pm_counter_ctx *ctx)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_pm *pm = p->pm;
+	sw_error_t ret = SW_OK;
+	fal_direction_t pm_dir;
+
+	if (!pm) {
+		ppe_drv_warn("PM structure not initialized during release");
+		return;
+	}
+
+	if (!ctx || (ctx->state == PPE_DRV_PM_COUNTER_ID_FREE)) {
+		ppe_drv_warn("Invalid context or context already free");
+		return;
+	}
+
+	spin_lock_bh(&p->lock);
+
+	/*
+	 * Release hw_id back to the appropriate table and clear pm counter stats
+	 */
+	pm_dir = (ctx->info.rule_dir == PPE_DRV_RULE_INGRESS) ? FAL_DIR_INGRESS : FAL_DIR_EGRESS;
+
+	/*
+	 * Flush PM counter statistics
+	 */
+	ret = fal_pon_pm_counter_flush(PPE_DRV_SWITCH_ID, ctx->info.hw_index, pm_dir);
+	if (ret != SW_OK) {
+		ppe_drv_warn("Failed to clear the %s PM counter stats for hw_index: %d, error: %d\n",
+				(pm_dir == FAL_DIR_INGRESS) ? "Ingress" : "Egress",
+				ctx->info.hw_index, ret);
+	}
+
+	ppe_drv_info("PM counter destroyed for rule_dir: %s at tbl_hw_index: %d\n", (ctx->info.rule_dir == 1) ? "UPSTREAM" : "DOWNSTREAM", ctx->info.hw_index);
+	ppe_drv_pm_tbl_idx_return(ctx);
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_pm_free);
 
 /*
  * ppe_drv_pm_counter_stats_update()

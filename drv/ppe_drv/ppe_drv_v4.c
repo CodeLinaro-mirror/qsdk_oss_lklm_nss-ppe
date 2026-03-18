@@ -887,6 +887,9 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 	struct ppe_drv_service_class_rule *sawf_rule = &create->sawf_rule;
 	struct ppe_drv_qos_rule *qos_rule = &create->qos_rule;
 	struct ppe_drv_vp_dl_qdisc_rule *qdisc_rule = &create->qdisc_rule;
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+	struct ppe_drv_spi_rule *spi_rule = &create->spi_rule;
+#endif
 	struct ppe_drv_v4_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v4_conn_flow *pcr = &cn->pcr;
 	uint32_t valid_flags = create->valid_flags;
@@ -955,6 +958,17 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			return PPE_DRV_RET_INVALID_USER_TYPE;
 		}
 	}
+
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+	/*
+	 * If IPSEC pass-through based on SPI is enabled, then deny the acceleration for non
+	 * passthrough flows.
+	 */
+	if ((tuple->protocol == IPPROTO_ESP) && ppe_drv_ipsec_passth_en && !(rule_flags & PPE_DRV_V4_RULE_FLAG_ESP_PASS_THROUGH_SPI)) {
+		ppe_drv_warn("%p: v4 IPSec pass-through based on SPI is enabled, so deny the non pass-through accel: %p", p, create);
+		return PPE_DRV_RET_FAILURE_NON_PASSTH_ESP_SPI_FLOW;
+	}
+#endif
 
 	/*
 	 * Bridge flow
@@ -1042,6 +1056,16 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_ACCEL_DISABLE);
 			pcf->no_stats_update = true;
 		}
+
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+		/*
+		 * Check if the SPI information is valid in case of passthrough mode.
+		 */
+		if (rule_flags & PPE_DRV_V4_RULE_FLAG_ESP_PASS_THROUGH_SPI) {
+			ppe_drv_v4_conn_flow_esp_spi_set(pcf, spi_rule->l_spi);
+			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_ESP_SPI);
+		}
+#endif
 
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_DSCP_MARKING) {
 			ppe_drv_v4_conn_flow_egress_dscp_set(pcf, dscp_rule->flow_dscp);
@@ -1330,6 +1354,16 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_ACCEL_DISABLE);
 			pcr->no_stats_update = true;
 		}
+
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+		/*
+		 * Check if the SPI information is valid in case of passthrough mode.
+		 */
+		if (rule_flags & PPE_DRV_V4_RULE_FLAG_ESP_PASS_THROUGH_SPI) {
+			ppe_drv_v4_conn_flow_esp_spi_set(pcr, spi_rule->r_spi);
+			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_ESP_SPI);
+		}
+#endif
 
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_DSCP_MARKING) {
 			ppe_drv_v4_conn_flow_egress_dscp_set(pcr, dscp_rule->return_dscp);

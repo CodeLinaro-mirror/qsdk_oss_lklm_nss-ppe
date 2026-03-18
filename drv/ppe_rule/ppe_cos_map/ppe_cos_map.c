@@ -103,16 +103,16 @@ static struct ppe_cos_map_rule *ppe_cos_map_rule_find_by_type(uint32_t group_id,
 			if ((rule->type_flag & PPE_COS_MAP_RULE_TCI) && (rule->pcp_val == pcp) && (rule->dei_val == dei)) {
 				goto rule_found;
 			}
-
-rule_found:
-	ppe_cos_map_info("%p: CoS map rule:%p ID:%d found for group_id:%d type:%d",
-			g_cos_map, rule, rule->rule_id, rule->cfg.group_id, rule->type_flag);
-	return rule;
 		}
 	}
 
 	ppe_cos_map_warn("%p: No valid CoS map rule for cos type:%d", g_cos_map, type);
 	return NULL;
+
+rule_found:
+	ppe_cos_map_info("%p: CoS map rule:%p ID:%d found for group_id:%d type:%d",
+			g_cos_map, rule, rule->rule_id, rule->cfg.group_id, rule->type_flag);
+	return rule;
 }
 
 /*

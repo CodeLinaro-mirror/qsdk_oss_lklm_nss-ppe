@@ -41,6 +41,10 @@ ccflags-y += -DNSS_PPE_PM_COUNTER_FEATURE_SUPPORT
 ccflags-y += -DNSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 endif
 
+ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+ccflags-y += -DPPE_DRV_ESP_SPI_PASSTH_ENABLE
+endif
+
 obj-m += qca-nss-ppe.o
 qca-nss-ppe-objs := ppe_drv.o
 qca-nss-ppe-objs += ppe_drv_acl.o

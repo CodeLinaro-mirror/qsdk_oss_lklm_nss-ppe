@@ -95,6 +95,12 @@
 #define PPE_DRV_QDISC_DIR_INVALID		0x04	/**< Qdisc rules are for direction is invalid. */
 
 /*
+ * SPI value update
+ */
+#define PPE_DRV_ESP_SPI_SHIFT			0x10
+#define PPE_DRV_ESP_SPI_MASK			0xFFFF
+
+/*
  * SAWF mark update flags
  */
 #define PPE_DRV_SAWF_MARK_FLOW_UPDATE		0x0001
@@ -321,6 +327,15 @@ struct ppe_drv_wifi_mdata_rule {
 	uint32_t return_mark;		/**< Wi-Fi metadata information in return direction. */
 	uint32_t flow_ds_node_mdata;	/**< DS metadata in flow direction. */
 	uint32_t return_ds_node_mdata;	/**< DS metadata in return direction. */
+};
+
+/**
+ * ppe_drv_spi_rule
+ *	PPE ESP SPI rule
+ */
+struct ppe_drv_spi_rule {
+	uint32_t l_spi;				/**< Local SPI. */
+	uint32_t r_spi;				/**< Remote SPI. */
 };
 
 /*
@@ -626,6 +641,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_MCAST_GLOBAL_CFG_FAIL,		/**< Multicast global configuration failed */
 	PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL,		/**< RPS Create Rule return failed */
 	PPE_DRV_RET_TUN_RPS_DESTROY_RULE_FAIL,		/**< RPS Destroy Rule return failed */
+	PPE_DRV_RET_FAILURE_NON_PASSTH_ESP_SPI_FLOW,	/**< IPSEC SPI based pass through is enabled. */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 

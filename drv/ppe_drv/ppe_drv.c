@@ -24,6 +24,7 @@
 #include <fal/fal_pon.h>
 #endif
 #include <fal/fal_qos.h>
+#include <fal/fal_flow.h>
 #ifdef PPE_DRV_PKT_PADDING_STRIP
 #include <fal/fal_pktedit.h>
 #endif
@@ -110,6 +111,9 @@ int disable_port_mtu_check = true;
 uint32_t static_dbg_level = 0;
 static char static_dbg_level_str[PPE_DRV_STATIC_DBG_LEVEL_STR_LEN];
 uint8_t ppe_drv_redir_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7};
+#ifdef NSS_PPE_DRV_HW_GRO
+uint8_t ppe_drv_gro_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+#endif
 uint8_t ppe_drv_16_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 static int eth2eth_offload_if_bitmap;
 static char upstream_dev_str[PPE_DRV_UPSTREAM_DEV_LEVEL_STR_LEN];
@@ -121,6 +125,10 @@ static char packet_padding[PPE_DRV_PACKET_PADDING_STR_LEN];
 int l4_checksum_exception_enable = false;
 int mac_lrn_exception_en = true;
 static char flood_vsi_override_en[PPE_DRV_FLOOD_VSI_EN_STR_LEN];
+
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+int ppe_drv_ipsec_passth_en = 0;
+#endif
 
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
 static uint32_t loopback_port_ft_type;
@@ -701,7 +709,7 @@ static bool ppe_drv_enq_vp_queue_reset(struct ppe_drv *p,
  */
 static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
 					int16_t enq_vport,
-					a_uint32_t queue_id)
+					a_uint32_t queue_id, int profile_id)
 {
         sw_error_t err;
 	fal_ucast_queue_dest_t q_dst = {0};
@@ -717,7 +725,7 @@ static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
 	 */
 	for (src_profile = 0; src_profile < PPE_DRV_PORT_SRC_PROFILE_MAX; src_profile++) {
 		q_dst.src_profile = src_profile;
-		err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, PPE_DRV_REDIR_PROFILE_ID);
+		err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, queue_id, profile_id);
 		if (err != SW_OK) {
 			ppe_drv_warn("%p: Unable to map enqueue vp with queue:%d for src_profile:%d", p, queue_id, src_profile);
 			return false;
@@ -738,7 +746,7 @@ static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
  * ppe_drv_enq_vp_map_to_queue()
  *	Enqueue VP to queue mapping.
  */
-ppe_drv_ret_t ppe_drv_enq_vp_map_to_queue(uint8_t queue_id, int8_t enq_vp)
+ppe_drv_ret_t ppe_drv_enq_vp_map_to_queue(uint8_t queue_id, int8_t enq_vp, int profile_id)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 	fal_enqueue_cfg_t enqueue_cfg = {0};
@@ -754,7 +762,7 @@ ppe_drv_ret_t ppe_drv_enq_vp_map_to_queue(uint8_t queue_id, int8_t enq_vp)
 	/*
 	 * Set queue_id for a given port on PPE.
 	 */
-	if (!ppe_drv_enq_vp_queue_set(p, enq_vp, queue_id)) {
+	if (!ppe_drv_enq_vp_queue_set(p, enq_vp, queue_id, profile_id)) {
 		ppe_drv_warn("%p: Enqueue vp queue init failed for qid:%d", p, queue_id);
 		return PPE_DRV_RET_ENQ_VP_QID_SET_FAIL;
 	}
@@ -862,7 +870,7 @@ ppe_drv_ret_t ppe_drv_ds_map_node_to_queue(uint8_t node_id, uint8_t queue_id)
 	/*
 	 * Map enqueue VP to specific queue
 	 */
-	status = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp);
+	status = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp, PPE_DRV_REDIR_PROFILE_ID);
 	if (status != PPE_DRV_RET_SUCCESS) {
 		ppe_drv_port_enq_vp_free(enq_vp);
 		spin_unlock_bh(&p->lock);
@@ -911,7 +919,7 @@ static ppe_drv_ret_t ppe_drv_gro_map_core_to_enqueue_vp(uint8_t core, uint8_t qu
 	/*
 	 * Maps enqueue with given queue
 	 */
-	status = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp);
+	status = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp, PPE_DRV_GRO_PROFILE_ID);
 	if (status != PPE_DRV_RET_SUCCESS) {
 		ppe_drv_warn("%p: Unable to map enq_vp:%u to queue:%u ", p, enq_vp, queue_id);
 		ppe_drv_port_enq_vp_free(enq_vp);
@@ -947,7 +955,6 @@ ppe_drv_ret_t ppe_drv_pon_map_enqueue_vp_to_pq(struct ppe_drv_port *port)
 	int32_t pon_port_profile_id;
 
 	pon_port_profile_id = ppe_drv_port_ucast_queue_profile_get(port->port);
-
 	if (!ppe_drv_confgiure_ucast_prio_map_tbl(pon_port_profile_id, ppe_drv_16_prio_map)) {
 		ppe_drv_warn("%p: failed to configure ucast priority class setting\n", p);
 		return PPE_DRV_RET_UCAST_PRIO_TBL_MAP_FAIL;
@@ -995,7 +1002,7 @@ ppe_drv_ret_t ppe_drv_pon_map_enqueue_vp_to_pq(struct ppe_drv_port *port)
 		/*
 		 * Map enqueue VP to specific queue
 		 */
-		ppe_ret = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp);
+		ppe_ret = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp, pon_port_profile_id);
 		if (ppe_ret != PPE_DRV_RET_SUCCESS) {
 			ppe_drv_port_enq_vp_free(enq_vp);
 			ppe_drv_warn("%p: Unable to map enq_vp:%u to queue:%u ", p, enq_vp, queue_id);
@@ -1133,6 +1140,8 @@ ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp
 	struct ppe_drv *p = ppe_drv_gbl;
 	int enqueue_vp;
 	ppe_drv_ret_t status;
+	struct ppe_drv_port *port;
+	int32_t pon_port_profile_id;
 
 	if (base_pq >= p->ppe_drv_pon_port_max_pq) {
 		ppe_drv_warn("pq %d is more than the max supported priority queue %d", base_pq, p->ppe_drv_pon_port_max_pq);
@@ -1172,7 +1181,9 @@ ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp
 	/*
 	 * Map enqueue VP to specific queue
 	 */
-	status = ppe_drv_enq_vp_map_to_queue(internal_pq, enqueue_vp);
+	port = ppe_drv_iface_port_get(p->pon_iface);
+	pon_port_profile_id = ppe_drv_port_ucast_queue_profile_get(port->port);
+	status = ppe_drv_enq_vp_map_to_queue(internal_pq, enqueue_vp, pon_port_profile_id);
 	if (status != PPE_DRV_RET_SUCCESS) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_port_enq_vp_free(enqueue_vp);
@@ -1231,7 +1242,7 @@ static ppe_drv_ret_t ppe_drv_rfs_map_core_to_enqueue_vp(uint8_t core, uint8_t qu
 	/*
 	 * Maps enqueue with given queue
 	 */
-	status = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp);
+	status = ppe_drv_enq_vp_map_to_queue(queue_id, enq_vp, PPE_DRV_REDIR_PROFILE_ID);
 	if (status != PPE_DRV_RET_SUCCESS) {
 		ppe_drv_warn("%p: Unable to map enq_vp:%u to queue:%u ", p, enq_vp, queue_id);
 		ppe_drv_port_enq_vp_free(enq_vp);
@@ -1797,6 +1808,13 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		ppe_drv_warn("%p: failed to configure ucast priority class setting\n", p);
 		goto fail;
 	}
+
+#ifdef NSS_PPE_DRV_HW_GRO
+	if (!ppe_drv_confgiure_ucast_prio_map_tbl(PPE_DRV_GRO_PROFILE_ID, ppe_drv_gro_prio_map)) {
+		ppe_drv_warn("%p: failed to configure ucast priority class setting\n", p);
+		goto fail;
+	}
+#endif
 
 	/*
 	 *
@@ -2795,6 +2813,98 @@ static int ppe_drv_loopback_port_feature_write_handler(struct ctl_table *table, 
 }
 #endif
 
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+/*
+ * ppe_drv_ipsec_pass_through_en_handler()
+ *	Handler for ppe_drv_ipsec_passth_en sysctl
+ *
+ *	This handler configures IPsec passthrough by managing the flow_key_en_bitmap
+ *	in the PPE hardware. The bitmap controls which protocol fields are used for
+ *	flow key generation.
+ *
+ *	Flow key bitmap bits:
+ *		- BIT(0): FAL_FLOW_KEY_ROUTING
+ *		- BIT(1): FAL_FLOW_KEY_IPSEC_AH  (IPsec Authentication Header)
+ *		- BIT(2): FAL_FLOW_KEY_IPSEC_ESP (IPsec Encapsulating Security Payload)
+ *		- BIT(3): FAL_FLOW_KEY_IPSEC_NATT (IPsec NAT Traversal)
+ *
+ *	When ppe_drv_ipsec_passth_en is set to 1:
+ *		- Reads the current flow_key_en_bitmap configuration
+ *		- Sets BIT(1) and BIT(2) to enable IPsec AH and ESP flow keys
+ *		- Writes the updated configuration back to hardware
+ *
+ *	When ppe_drv_ipsec_passth_en is set to 0:
+ *		- Reads the current flow_key_en_bitmap configuration
+ *		- Clears BIT(1) and BIT(2) to disable IPsec AH and ESP flow keys
+ *		- Writes the updated configuration back to hardware
+ */
+static int ppe_drv_ipsec_pass_through_en_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	fal_flow_global_cfg_t cfg = {0};
+	sw_error_t sw_ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (!write) {
+		return ret;
+	}
+
+	/*
+	 * Validate the input value (should be 0 or 1)
+	 */
+	if (ppe_drv_ipsec_passth_en != 0 && ppe_drv_ipsec_passth_en != 1) {
+		ppe_drv_warn("Invalid value for ppe_drv_ipsec_passth_en. Must be 0 or 1\n");
+		ppe_drv_ipsec_passth_en = 0;
+		return -EINVAL;
+	}
+
+	/*
+	 * Read the existing flow_key_en_bitmap value from hardware.
+	 * This ensures we preserve other bits that may be set.
+	 */
+	sw_ret = fal_flow_global_cfg_get(0, &cfg);
+	if (sw_ret != SW_OK) {
+		ppe_drv_warn("Failed to get flow global config, error: %d\n", sw_ret);
+		return -EIO;
+	}
+
+	if (ppe_drv_ipsec_passth_en == 1) {
+		/*
+		 * Enable IPsec passthrough by setting BIT(1) and BIT(2).
+		 * Use bitwise OR to set the bits while preserving other bits.
+		 * FAL_FLOW_KEY_IPSEC_AH  = BIT(1) - IPsec Authentication Header
+		 * FAL_FLOW_KEY_IPSEC_ESP = BIT(2) - IPsec Encapsulating Security Payload
+		 */
+		cfg.flow_key_en_bitmap |= FAL_FLOW_KEY_IPSEC_AH;
+		cfg.flow_key_en_bitmap |= FAL_FLOW_KEY_IPSEC_ESP;
+		ppe_drv_info("Enabling IPsec passthrough, flow_key_en_bitmap: 0x%x\n", cfg.flow_key_en_bitmap);
+	} else {
+		/*
+		 * Disable IPsec passthrough by clearing BIT(1) and BIT(2).
+		 * Use bitwise AND with complement to clear the bits while preserving other bits.
+		 */
+		cfg.flow_key_en_bitmap &= ~FAL_FLOW_KEY_IPSEC_AH;
+		cfg.flow_key_en_bitmap &= ~FAL_FLOW_KEY_IPSEC_ESP;
+		ppe_drv_info("Disabling IPsec passthrough, flow_key_en_bitmap: 0x%x\n", cfg.flow_key_en_bitmap);
+	}
+
+	/*
+	 * Write the updated configuration back to hardware.
+	 * This applies the IPsec passthrough enable/disable setting.
+	 */
+	sw_ret = fal_flow_global_cfg_set(0, &cfg);
+	if (sw_ret != SW_OK) {
+		ppe_drv_warn("Failed to set flow global config, error: %d\n", sw_ret);
+		return -EIO;
+	}
+
+	ppe_drv_info("PPE IPsec passthrough enable set to %d\n", ppe_drv_ipsec_passth_en);
+
+	return 0;
+}
+#endif
+
 /*
  * ppe_drv_eth2eth_offload_if_bitmap_handler()
  * 	Set eth to eth offload with if bitmap config
@@ -3577,6 +3687,15 @@ static struct ctl_table ppe_drv_sub[] = {
 		.proc_handler   =       ppe_drv_flood_vsi_override_en,
 	},
 
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+	{
+		.procname	=	"ppe_drv_ipsec_passth_en",
+		.data		=	&ppe_drv_ipsec_passth_en,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_ipsec_pass_through_en_handler
+	},
+#endif
 	{}
 };
 

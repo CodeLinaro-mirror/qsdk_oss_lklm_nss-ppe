@@ -69,6 +69,10 @@ extern int mac_lrn_exception_en;
 #define PPE_DRV_DEFAULT_CAT (NSS_LOG_CAT_GENERIC)
 #endif
 
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+extern int ppe_drv_ipsec_passth_en;
+#endif
+
 /*
  * ppe_drv_static_dbg_level
  *	PPE static debug level
@@ -153,6 +157,8 @@ enum ppe_drv_static_dbg_level {
 #define PPE_DRV_COMMON_PROFILE_ID	FAL_QM_PROFILE_COMMON_ID
 #define PPE_DRV_PO_PROFILE_ID		FAL_QM_PROFILE_PO_ID
 #define PPE_DRV_REDIR_PROFILE_ID	9
+#define PPE_DRV_GRO_PROFILE_ID		10
+
 
 /*
  * MAX queue priority
@@ -610,6 +616,7 @@ struct ppe_drv {
 	int ppe_drv_pon_port_start_pq;		/* Start queue number mapped to pon port. */
 	int ppe_drv_pon_port_max_pq;		/* max pq to be used for pon port. */
 #endif
+	struct ppe_drv_iface *pon_iface;	/* Memory for PPE PON interface */
 };
 
 /*

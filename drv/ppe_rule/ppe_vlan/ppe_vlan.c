@@ -76,6 +76,13 @@ static bool ppe_vlan_rule_exist(struct ppe_vlan *vlan)
 			return true;
 		}
 
+		/*
+		 * Rules in different directions (upstream vs downstream) are never duplicates.
+		 */
+		if (vlan_active->info.rule_dir != vlan->info.rule_dir) {
+			continue;
+		}
+
 		rule_active = &vlan_active->info.rule_f;
 		rule_new = &vlan->info.rule_f;
 		action_active = &vlan_active->info.action_f;
@@ -1237,6 +1244,7 @@ ppe_vlan_ret_t ppe_vlan_rule_create(struct ppe_vlan_rule *rule)
 			ret = PPE_VLAN_RET_CREATE_FAIL_RULE;
 			goto fail;
 		}
+		vlan->hgu_rule_valid = A_TRUE;
 	}
 #endif
 
@@ -1289,9 +1297,6 @@ static void ppe_vlan_rule_free(struct kref *kref)
 {
 	struct ppe_vlan *vlan = container_of(kref, struct ppe_vlan, ref_cnt);
 	struct ppe_vlan_base *vlan_g = &ppe_vlan_gbl;
-#ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
-	struct ppe_drv_iface *iface;
-#endif
 
 	/*
 	 * Delete the rule node from active list.
@@ -1300,10 +1305,11 @@ static void ppe_vlan_rule_free(struct kref *kref)
 
 #ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
 	/*
-	 * Check if HGU rule needs to be destroyed first
+	 * Check if HGU rule needs to be destroyed first.
+	 * Use  vlan->hgu_rule_valid which is set after ppe_drv_vlan_hgu_rule_create
+	 * to reliably determine if an HGU ingress rule was programmed for this ctx.
 	 */
-	iface = ppe_drv_vlan_ctx_iface_get(vlan->ctx);
-	if (iface && ppe_drv_veip_is_hgu_rule_valid(iface)) {
+	if (vlan->ctx && vlan->hgu_rule_valid) {
 		if (ppe_drv_vlan_hgu_rule_destroy(vlan->ctx) != PPE_DRV_RET_SUCCESS) {
 			ppe_vlan_warn("%p: Failed to delete ingress translation rule for hgu case\n", vlan_g);
 		}

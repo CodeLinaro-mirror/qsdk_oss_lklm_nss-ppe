@@ -920,6 +920,7 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 			return false;
 		}
 		*scp = service_code;
+		return true;
 	} else if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD_FAIL) {
 		ppe_drv_warn("%p: VEIP US v6 flow add failed ret=%d, sc=%u\n", pcf, ret, sc);
 		return false;
@@ -2819,6 +2820,18 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		break;
 
 	case IPPROTO_ESP:
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+		/*
+		 * In case if it is an IPSEC pass-through flow with SPI match,
+		 * consider this as a 5 tuple flow with custom ESP ID in the port
+		 * numbers.
+		 */
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_ESP_SPI)) {
+			flow_cfg.protocol = FAL_FLOW_IPSEC;
+			ppe_drv_trace("%p: flow_tbl[protocol]: Other-%u", pcf, FAL_FLOW_IPSEC);
+			break;
+		}
+#endif
 		tuple_3 = true;
 		ppe_drv_trace("%p: flow_tbl[protocol]: Other-%u", pcf, FAL_FLOW_PROTOCOL_OTHER);
 		break;
@@ -2852,6 +2865,16 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		flow_cfg.src_port = ppe_drv_v4_conn_flow_match_src_ident_get(pcf);
 		flow_cfg.dst_port = ppe_drv_v4_conn_flow_match_dest_ident_get(pcf);
 
+		/*
+		 * Fill the SPI value in port numbers in case if this is IPSEC SPI passthrough case.
+		 */
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_ESP_SPI)) {
+			uint32_t spi = (uint32_t)ppe_drv_v4_conn_flow_esp_spi_get(pcf);
+			flow_cfg.src_port = (uint16_t)((spi >> PPE_DRV_ESP_SPI_SHIFT) & PPE_DRV_ESP_SPI_MASK);
+			flow_cfg.dst_port = (uint16_t)(spi & PPE_DRV_ESP_SPI_MASK);
+		}
+#endif
 		ppe_drv_trace("%p: flow_tbl[sport]: %u", pcf, flow_cfg.src_port);
 		ppe_drv_trace("%p: flow_tbl[dport]: %u", pcf, flow_cfg.dst_port);
 
