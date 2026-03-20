@@ -506,6 +506,7 @@ static bool ppe_policer_create_acl(struct ppe_policer_create_info *info)
 	acl_info->coupling_flag = cinfo->couple_enable;
 	acl_info->meter_mode = cinfo->mode;
 	acl_info->meter_unit = cinfo->meter_unit;
+	acl_info->length_mode = cinfo->length_mode;	/* Frame length mode used for rate limit calculation: original, decap, or output */
 	acl_info->cbs = cinfo->committed_burst_size;
 	acl_info->cir = cinfo->committed_rate;
 

@@ -1977,6 +1977,14 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 		if (rule_flags & PPE_DRV_V6_RULE_ORIG_FLOW_SW_MDATA_VALID) {
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID);
 		}
+
+		/*
+		 * Setting flag to drop UDP-ST rx flow in flow direction
+		 */
+		if (rule_flags & PPE_DRV_V6_RULE_FLAG_UDP_ST_RX_FLOW) {
+			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_UDP_ST_DROP);
+		}
+
 	}
 
 	/*
@@ -2321,6 +2329,14 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 		if (rule_flags & PPE_DRV_V6_RULE_RET_FLOW_SW_MDATA_VALID) {
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_SW_MDATA_VALID);
 		}
+
+		/*
+		 * Setting flag to drop UDP-ST tx/rx flow in return direction
+		 */
+		if ((rule_flags & PPE_DRV_V6_RULE_FLAG_UDP_ST_TX_FLOW) || (rule_flags & PPE_DRV_V6_RULE_FLAG_UDP_ST_RX_FLOW)) {
+			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_UDP_ST_DROP);
+		}
+
 
 		ppe_drv_v6_conn_flags_set(cn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID);
 	}

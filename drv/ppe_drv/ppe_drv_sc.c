@@ -354,6 +354,37 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
+	case PPE_DRV_SC_UDP_ST:
+#ifdef PPE_DRV_DDRQ_ENABLE
+		/*
+		 * DDRQ WAR: Bypass packet format checks in the first pass for avoiding
+		 * the PPE DATA incomplete exception.
+		 */
+		sc_cfg.bypass_bitmap[0] = ((1 << WRONG_PKT_FMT_L2_BYP)
+						| (1 << WRONG_PKT_FMT_L3_IPV4_BYP)
+						| (1 << WRONG_PKT_FMT_L3_IPV6_BYP)
+						| (1 << WRONG_PKT_FMT_L4_BYP));
+#endif
+		sc_cfg.bypass_bitmap[0] |= (1 << FLOW_SERVICE_CODE_BYP);
+
+		/*
+		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
+		 * packets sent to PPE, with SPF bypass service code.
+		 */
+		sc_cfg.bypass_bitmap[1] = ((1 << EG_VLAN_MEMBER_CHECK_BYP)
+						| (1 << SOURCE_FLTR_BYP)
+						| (1 << BRIDGING_FWD_BYP)
+						| (1 << L2_SOURCE_SEC_BYP));
+
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+
+	case PPE_DRV_SC_UDP_ST_NEXT:
+		sc_cfg.bypass_bitmap[1] = (1 << FLOW_POLICER_BYP);
+		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+
 	case PPE_DRV_SC_NOEDIT_RFS_RULE:
 	case PPE_DRV_SC_NOEDIT_REDIR_CORE0:
 	case PPE_DRV_SC_NOEDIT_REDIR_CORE1:
@@ -1132,5 +1163,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER, PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT, PPE_DRV_SC_BYPASS_ALL, PPE_DRV_PORT_CPU);
 #endif
+	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST, PPE_DRV_SC_UDP_ST_NEXT, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	return sc;
 }

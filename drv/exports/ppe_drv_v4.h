@@ -38,6 +38,8 @@
 #define PPE_DRV_V4_RULE_RET_FLOW_SW_MDATA_VALID		0x00010000	/**< Rule creation for Socket Offload Return flows */
 #define PPE_DRV_V4_RULE_FLAG_IPSEC_DECAP_FLOW		0x00020000	/**< Rule creation for IPsec Decap flow */
 #define PPE_DRV_V4_RULE_FLAG_ESP_PASS_THROUGH_SPI	0x00040000	/**< ESP SPI information is valid. */
+#define PPE_DRV_V4_RULE_FLAG_UDP_ST_TX_FLOW		0x00080000	/**< Rule creation for UDP-ST TX flow */
+#define PPE_DRV_V4_RULE_FLAG_UDP_ST_RX_FLOW		0x00100000	/**< Rule creation for UDP-ST RX flow */
 
 /*
  * v4 valid flags

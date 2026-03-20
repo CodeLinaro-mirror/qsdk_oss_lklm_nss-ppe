@@ -134,6 +134,7 @@ struct ppe_policer_config {
 	enum ppe_policer_supported_mode mode;	/**< RFC supported */
 	enum ppe_policer_meter_unit meter_unit;	/**< meter_unit; 0: Byte based 1 : Packet based */
 	struct ppe_policer_action_info action_info;	/**< Action info */
+	uint8_t length_mode;		/**< Length mode for rate limit calculation */
 };
 
 /*
