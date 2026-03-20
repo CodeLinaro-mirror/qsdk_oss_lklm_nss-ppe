@@ -161,6 +161,7 @@ static void ppe_qos_enable_assigned_queues(uint32_t id, ppe_qos_interface_type_t
 	 */
 	if (type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
 		if (!list_empty(&tm_if->mq_list)) {
+			qid = port->base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
 			list_for_each_entry(queue, &tm_if->mq_list, list) {
 				if (!queue->valid) {
 					continue;
