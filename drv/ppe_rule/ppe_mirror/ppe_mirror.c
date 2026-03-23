@@ -41,6 +41,8 @@ bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 	bool acl_valid = cc_info->acl_index_valid;
 	uint16_t acl_id;
 	ppe_mirror_capture_callback_t cb = NULL;
+	struct net_device *group_dev = NULL;
+	void *app_data = NULL;
 
 	spin_lock_bh(&mirror_g->lock);
 
@@ -70,16 +72,18 @@ bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 			return false;
 		}
 
-		skb->dev = port_group_info->group_dev;
-		spin_unlock_bh(&mirror_g->lock);
+		app_data = port_group_info->app_data;
+		group_dev = port_group_info->group_dev;
+		skb->dev = group_dev;
 
 		/*
 		 * Increment the packet count for this group to which this mirrored packet belongs to.
 		 * Hand over the mirrored packet to user registered callback.
 		 */
 		ppe_mirror_update_stats(&port_group_info->pdev_stats, skb->len);
+		spin_unlock_bh(&mirror_g->lock);
 
-		cb(port_group_info->app_data, skb, port_group_info->group_dev);
+		cb(app_data, skb, group_dev);
 
 		return true;
 	}
@@ -119,10 +123,11 @@ bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 		return false;
 	}
 
-	skb->dev = group_info->group_dev;
+	app_data = group_info->app_data;
+	group_dev = group_info->group_dev;
+	skb->dev = group_dev;
 	acl_stats = &mirror_mapping->acl_stats;
 	acl_group_stats = &group_info->acl_stats;
-	spin_unlock_bh(&mirror_g->lock);
 
 	/*
 	 * Increment the packet count for this ACL ID also for the
@@ -131,8 +136,9 @@ bool ppe_mirror_process_skb(void *appdata, struct sk_buff *skb, void *info)
 	 */
 	ppe_mirror_update_stats(acl_stats, skb->len);
 	ppe_mirror_update_stats(acl_group_stats, skb->len);
+	spin_unlock_bh(&mirror_g->lock);
 
-	cb(group_info->app_data, skb, group_info->group_dev);
+	cb(app_data, skb, group_dev);
 
 	return true;
 }
