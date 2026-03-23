@@ -22,7 +22,6 @@ KERNELVERSION := $(word 1, $(subst ., ,$(KERNELVERSION))).$(word 2, $(subst ., ,
 
 obj-y += drv/
 
-obj-y += clients/
 obj-$(netlink) += netlink/
 obj-$(ppe-mirror-test) += test/
 obj-y += nss_debug/
