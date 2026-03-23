@@ -115,8 +115,9 @@ static enum hrtimer_restart ppe_ds_timer(struct hrtimer *hrtimer)
 	uint32_t cons_idx, prod_idx, move;
 	struct ppe_ds *node = container_of(hrtimer,  struct ppe_ds, timer);
 	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
-	uint32_t ppe2tcl_ring_size = edma_handle->ppe2tcl_num_desc;
-	uint32_t reo2ppe_size = edma_handle->reo2ppe_num_desc;
+	struct nss_dp_ppeds_wifi7_handle *edma_wifi7_handle = &edma_handle->wifi7_cfg;
+	uint32_t ppe2tcl_ring_size = edma_wifi7_handle->ppe2tcl_num_desc;
+	uint32_t reo2ppe_size = edma_wifi7_handle->reo2ppe_num_desc;
 	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
 
 	/*
@@ -319,7 +320,7 @@ int ppe_ds_ppe2tcl_wlan_handle_intr(void *ctxt)
 	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
 	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
 	uint32_t wintr = 0;
-	uint32_t ppe2tcl_ring_size = edma_handle->ppe2tcl_num_desc;
+	uint32_t ppe2tcl_ring_size = edma_handle->wifi7_cfg.ppe2tcl_num_desc;
 
 	if (!node->en_process_irq) {
 		if (node->umac_reset_inprogress) {
@@ -416,7 +417,7 @@ int ppe_ds_reo2ppe_wlan_handle_intr(void *ctxt)
 	uint64_t move = 0, cons_move = 0, prod_move = 0;
 	struct ppe_ds *node = (struct ppe_ds *)ctxt;
 	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
-	uint32_t reo2ppe_size = edma_handle->reo2ppe_num_desc;
+	uint32_t reo2ppe_size = edma_handle->wifi7_cfg.reo2ppe_num_desc;
 	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
 	uint32_t wintr = 0;
 
@@ -493,7 +494,7 @@ static void ppe_ds_enable_wlan_intr(nss_dp_ppeds_handle_t *edma_handle,
 	struct ppe_ds *node = nss_dp_ppeds_priv(edma_handle);
 	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
 	uint32_t prod_idx;
-	uint32_t ppe2tcl_ring_size = edma_handle->ppe2tcl_num_desc;
+	uint32_t ppe2tcl_ring_size = edma_handle->wifi7_cfg.ppe2tcl_num_desc;
 	uint32_t prev_prod_idx, prod_move = 0;
 
 	prod_idx = dp_ops->get_rx_prod_idx(edma_handle);
@@ -545,23 +546,23 @@ void ppe_ds_wlan_service_status_update(struct ppe_ds *node, bool enable)
 EXPORT_SYMBOL(ppe_ds_wlan_service_status_update);
 
 /*
- * ppe_ds_get_cur_prod_cons_ring_idx()
+ * ppe_ds_get_cur_prod_cons_ring_idx_mode_wifi7()
  *	Get the current EDMA producer and consumer ring indices
  */
-static void ppe_ds_get_cur_prod_cons_ring_idx(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_wlan_reg_info *reg_info)
+static void ppe_ds_get_cur_prod_cons_ring_idx_mode_wifi7(ppe_ds_wlan_handle_t *wlan_handle, struct ppe_ds_wlan_arch_reg_info *reg_info)
 {
 	struct ppe_ds *node = container_of(wlan_handle, struct ppe_ds, wlan_handle);
 	nss_dp_ppeds_handle_t *edma_handle = node->edma_handle;
 	struct nss_dp_ppeds_ops *dp_ops = node->dp_ops;
 
-	reg_info->reo2ppe_start_idx = dp_ops->get_tx_cons_idx(edma_handle);
-	dp_ops->set_tx_prod_idx(edma_handle, reg_info->reo2ppe_start_idx);
-	reg_info->ppe2tcl_start_idx = dp_ops->get_rx_prod_idx(edma_handle);
-	dp_ops->set_rx_cons_idx(edma_handle, reg_info->ppe2tcl_start_idx);
+	reg_info->wifi7_cfg.reo2ppe_start_idx = dp_ops->get_tx_cons_idx(edma_handle);
+	dp_ops->set_tx_prod_idx(edma_handle, reg_info->wifi7_cfg.reo2ppe_start_idx);
+	reg_info->wifi7_cfg.ppe2tcl_start_idx = dp_ops->get_rx_prod_idx(edma_handle);
+	dp_ops->set_rx_cons_idx(edma_handle, reg_info->wifi7_cfg.ppe2tcl_start_idx);
 
 	dp_ops->set_rxfill_prod_idx(edma_handle, dp_ops->get_rxfill_cons_idx(edma_handle));
 
-	reg_info->ppe_ds_int_mode_enabled = !polling_for_idx_update;
+	reg_info->wifi7_cfg.ppe_ds_int_mode_enabled = !polling_for_idx_update;
 
 	ppe_ds_info("%px: PPE-DS get current EDMA ring indices API call successful", node);
 	return;
@@ -693,7 +694,7 @@ uint32_t ppe_ds_wlan_get_node_id(ppe_ds_wlan_handle_t *wlan_handle)
 EXPORT_SYMBOL(ppe_ds_wlan_get_node_id);
 
 /*
- * ppe_ds_wlan_inst_register()
+ * ppe_ds_wlan_inst_register_arch_mode_wifi7()
  *	PPE-DS WLAN instance registration API
  *
  * TODO: Currently the undone of works done in ppe_ds_wlan_inst_alloc and
@@ -701,12 +702,13 @@ EXPORT_SYMBOL(ppe_ds_wlan_get_node_id);
  * (ppe_ds_wlan_inst_free). Try out to see if undone can be separately divided
  * properly.
  */
-bool ppe_ds_wlan_inst_register(struct ppe_ds *node, struct ppe_ds_wlan_reg_info *reg_info)
+bool ppe_ds_wlan_inst_register_arch_mode_wifi7(struct ppe_ds *node, struct ppe_ds_wlan_arch_reg_info *reg_info)
 {
 	static unsigned int ppeds_node_iter_cnt;
 	ppe_ds_node_state_t priv_node_state;
 	struct ppe_ds_node_config *node_cfg;
 	nss_dp_ppeds_handle_t *edma_handle;
+	struct nss_dp_ppeds_wifi7_handle *edma_wifi7_handle;
 	struct nss_dp_ppeds_ops *dp_ops;
 	ppe_ds_wlan_handle_t *wlan_handle;
 	unsigned int cpu;
@@ -732,6 +734,7 @@ bool ppe_ds_wlan_inst_register(struct ppe_ds *node, struct ppe_ds_wlan_reg_info 
 	}
 
 	edma_handle = node->edma_handle;
+	edma_wifi7_handle = &edma_handle->wifi7_cfg;
 	node_cfg = &(ppe_ds_node_cfg[node->node_cfg_idx]);
 
 	write_lock_bh(&node_cfg->lock);
@@ -751,7 +754,7 @@ bool ppe_ds_wlan_inst_register(struct ppe_ds *node, struct ppe_ds_wlan_reg_info 
 	 * EDMA producer and consumer indices.
 	 */
 	if (priv_node_state == PPE_DS_NODE_STATE_STOP_DONE) {
-		ppe_ds_get_cur_prod_cons_ring_idx(wlan_handle, reg_info);
+		ppe_ds_get_cur_prod_cons_ring_idx_mode_wifi7(wlan_handle, reg_info);
 
 		write_lock_bh(&node_cfg->lock);
 		node_cfg->node_state = PPE_DS_NODE_STATE_REG_DONE;
@@ -806,65 +809,65 @@ bool ppe_ds_wlan_inst_register(struct ppe_ds *node, struct ppe_ds_wlan_reg_info 
 				ppeds_node_iter_cnt, cpu);
 	}
 
-	edma_handle->ppe2tcl_ba = reg_info->ppe2tcl_ba;
-	edma_handle->reo2ppe_ba = reg_info->reo2ppe_ba;
-	edma_handle->ppe2tcl_num_desc = reg_info->ppe2tcl_num_desc;
-	edma_handle->reo2ppe_num_desc = reg_info->reo2ppe_num_desc;
-	edma_handle->polling_for_idx_update = polling_for_idx_update;
+	edma_wifi7_handle->ppe2tcl_ba = reg_info->wifi7_cfg.ppe2tcl_ba;
+	edma_wifi7_handle->reo2ppe_ba = reg_info->wifi7_cfg.reo2ppe_ba;
+	edma_wifi7_handle->ppe2tcl_num_desc = reg_info->wifi7_cfg.ppe2tcl_num_desc;
+	edma_wifi7_handle->reo2ppe_num_desc = reg_info->wifi7_cfg.reo2ppe_num_desc;
+	edma_wifi7_handle->polling_for_idx_update = polling_for_idx_update;
 
 	if ((ppe2tcl_rxfill_num_desc < PPE_DS_RXFILL_NUM_DESC_MIN) ||
 			(ppe2tcl_rxfill_num_desc > PPE_DS_RXFILL_NUM_DESC_MAX)) {
-		edma_handle->ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
+		edma_wifi7_handle->ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
 	} else {
-		edma_handle->ppe2tcl_rxfill_num_desc = ppe2tcl_rxfill_num_desc;
+		edma_wifi7_handle->ppe2tcl_rxfill_num_desc = ppe2tcl_rxfill_num_desc;
 	}
 
 	if ((rxfill_budget < PPE_DS_RXFILL_BUDGET_MIN) ||
 			(rxfill_budget > PPE_DS_RXFILL_BUDGET_MAX)) {
-		edma_handle->eth_rxfill_budget = PPE_DS_RXFILL_BUDGET_DEF;
+		edma_wifi7_handle->eth_rxfill_budget = PPE_DS_RXFILL_BUDGET_DEF;
 	} else {
-		edma_handle->eth_rxfill_budget = rxfill_budget;
+		edma_wifi7_handle->eth_rxfill_budget = rxfill_budget;
 	}
 
 	if ((reo2ppe_txcmpl_num_desc < PPE_DS_TXCMPL_NUM_DESC_MIN) ||
 			(reo2ppe_txcmpl_num_desc > PPE_DS_TXCMPL_NUM_DESC_MAX)) {
-		edma_handle->reo2ppe_txcmpl_num_desc = PPE_DS_TXCMPL_NUM_DESC_DEF;
+		edma_wifi7_handle->reo2ppe_txcmpl_num_desc = PPE_DS_TXCMPL_NUM_DESC_DEF;
 	} else {
-		edma_handle->reo2ppe_txcmpl_num_desc = reo2ppe_txcmpl_num_desc;
+		edma_wifi7_handle->reo2ppe_txcmpl_num_desc = reo2ppe_txcmpl_num_desc;
 	}
 
-	if (rxfill_low_threshold >= reg_info->ppe2tcl_num_desc) {
-		edma_handle->eth_rxfill_low_thr =
-			reg_info->ppe2tcl_num_desc >> PPE_DS_RXFILL_LOW_THRES_DIVISOR;
+	if (rxfill_low_threshold >= reg_info->wifi7_cfg.ppe2tcl_num_desc) {
+		edma_wifi7_handle->eth_rxfill_low_thr =
+			reg_info->wifi7_cfg.ppe2tcl_num_desc >> PPE_DS_RXFILL_LOW_THRES_DIVISOR;
 	} else {
-		edma_handle->eth_rxfill_low_thr = rxfill_low_threshold;
+		edma_wifi7_handle->eth_rxfill_low_thr = rxfill_low_threshold;
 	}
 
 	if ((txcmpl_budget < PPE_DS_TXCMPL_MIN_BUDGET) ||
-			(txcmpl_budget > edma_handle->reo2ppe_num_desc)) {
-		edma_handle->eth_txcomp_budget = PPE_DS_TXCMPL_DEF_BUDGET;
+			(txcmpl_budget > edma_wifi7_handle->reo2ppe_num_desc)) {
+		edma_wifi7_handle->eth_txcomp_budget = PPE_DS_TXCMPL_DEF_BUDGET;
 	} else {
-		edma_handle->eth_txcomp_budget = txcmpl_budget;
+		edma_wifi7_handle->eth_txcomp_budget = txcmpl_budget;
 	}
 
 	if ((txcmpl_chunk_of_reap < PPE_DS_TXCMPL_MIN_BUDGET) ||
-			(txcmpl_chunk_of_reap > edma_handle->reo2ppe_num_desc)) {
-		edma_handle->eth_txcomp_chnk_of_reap = PPE_DS_TXCMPL_DEF_CHNK_OF_REAP;
+			(txcmpl_chunk_of_reap > edma_wifi7_handle->reo2ppe_num_desc)) {
+		edma_wifi7_handle->eth_txcomp_chnk_of_reap = PPE_DS_TXCMPL_DEF_CHNK_OF_REAP;
 	} else {
-		edma_handle->eth_txcomp_chnk_of_reap = txcmpl_chunk_of_reap;
+		edma_wifi7_handle->eth_txcomp_chnk_of_reap = txcmpl_chunk_of_reap;
 	}
 
 	ppe_ds_info(" ppe2tcl num desc: %d, reo2ppe num desc: %d, txcmpl budget: %d"
 			" rxfill low threshold value: %d txcmp_chnk_of_reap:%d\n",
-			edma_handle->ppe2tcl_num_desc,
-			edma_handle->reo2ppe_num_desc,
-			edma_handle->eth_txcomp_budget,
-			edma_handle->eth_rxfill_low_thr,
-			edma_handle->eth_txcomp_chnk_of_reap);
+			edma_wifi7_handle->ppe2tcl_num_desc,
+			edma_wifi7_handle->reo2ppe_num_desc,
+			edma_wifi7_handle->eth_txcomp_budget,
+			edma_wifi7_handle->eth_rxfill_low_thr,
+			edma_wifi7_handle->eth_txcomp_chnk_of_reap);
 
 	ret = dp_ops->reg(edma_handle);
 
-	ppe_ds_get_cur_prod_cons_ring_idx(wlan_handle, reg_info);
+	ppe_ds_get_cur_prod_cons_ring_idx_mode_wifi7(wlan_handle, reg_info);
 
 	write_lock_bh(&node_cfg->lock);
 	node_cfg->node_state = PPE_DS_NODE_STATE_REG_DONE;
@@ -878,7 +881,17 @@ bool ppe_ds_wlan_inst_register(struct ppe_ds *node, struct ppe_ds_wlan_reg_info 
 	ppe_ds_info("%px: PPE-DS register successful", node);
 	return ret;
 }
-EXPORT_SYMBOL(ppe_ds_wlan_inst_register);
+EXPORT_SYMBOL(ppe_ds_wlan_inst_register_arch_mode_wifi7);
+
+/*
+ * ppe_ds_wlan_inst_register_arch_mode_wifi8()
+ *	PPE-DS WLAN instance registration API for wifi8 mode
+ */
+bool ppe_ds_wlan_inst_register_arch_mode_wifi8(struct ppe_ds *node, struct ppe_ds_wlan_arch_reg_info *reg_info)
+{
+	return false;
+}
+EXPORT_SYMBOL(ppe_ds_wlan_inst_register_arch_mode_wifi8);
 
 /*
  * ppe_ds_wlan_instance_stop()
@@ -966,7 +979,7 @@ int ppe_ds_wlan_instance_start(struct ppe_ds *node,
 	node_cfg->node_state = PPE_DS_NODE_STATE_START_IN_PROG;
 	write_unlock_bh(&node_cfg->lock);
 
-	dp_ops->refill(edma_handle, edma_handle->ppe2tcl_rxfill_num_desc - 1);
+	dp_ops->refill(edma_handle, edma_handle->wifi7_cfg.ppe2tcl_rxfill_num_desc - 1);
 
 	if (polling_for_idx_update) {
 		node->timer_enabled = true;
@@ -1049,10 +1062,10 @@ void ppe_ds_wlan_inst_free(struct ppe_ds *node)
 EXPORT_SYMBOL(ppe_ds_wlan_inst_free);
 
 /*
- * edma_ops
- *	EDMA PPE-DS operation callbacks
+ * edma_ops_wifi7
+ *	EDMA PPE-DS operation callbacks for wifi7
  */
-static const struct nss_dp_ppeds_cb edma_ops =
+static const struct nss_dp_ppeds_cb edma_ops_wifi7 =
 {
 	.rx = ppe_ds_ppe2tcl_rx,
 	.rx_fill = ppe_ds_ppe2tcl_fill,
@@ -1069,13 +1082,14 @@ static const struct nss_dp_ppeds_cb edma_ops =
 struct ppe_ds *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_size)
 {
 	struct ppe_ds *node;
-	nss_dp_ppeds_handle_t *edma_handle;
+	nss_dp_ppeds_handle_t *edma_handle = NULL;
 	int size = priv_size + sizeof(struct ppe_ds);
 	struct nss_dp_ppeds_ops *dp_ops = NULL;
 	uint32_t i;
 	uint32_t ppe_queue_start;
 	uint8_t ds_node_metadata;
 	ppe_drv_ret_t ret;
+	uint8_t wifi_arch_mode = PPE_DS_WIFI_ARCH_MODE_WIFI7;
 
 	dp_ops = nss_dp_ppeds_get_ops();
 	if (!dp_ops || !dp_ops->alloc) {
@@ -1100,13 +1114,26 @@ struct ppe_ds *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_s
 	ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_NOT_AVAIL;
 	write_unlock_bh(&ppe_ds_node_cfg[i].lock);
 
-	edma_handle = dp_ops->alloc(&edma_ops, size);
+	if (ops && ops->get_wlan_arch_mode) {
+		wifi_arch_mode = ops->get_wlan_arch_mode();
+	}
+
+	if (wifi_arch_mode == PPE_DS_WIFI_ARCH_MODE_WIFI7) {
+		edma_handle = dp_ops->alloc(&edma_ops_wifi7, size);
+	} else if (wifi_arch_mode == PPE_DS_WIFI_ARCH_MODE_WIFI8) {
+		/*
+		 * TODO: Implement on Wi-Fi 8 support
+		 */
+		ppe_ds_err("Wi-Fi 8 mode not yet supported\n");
+		goto error_restore_state;
+	} else {
+		ppe_ds_err("Architecture mode %d is not supported\n", wifi_arch_mode);
+		goto error_restore_state;
+	}
+
 	if (!edma_handle) {
-		write_lock_bh(&ppe_ds_node_cfg[i].lock);
-		ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
-		write_unlock_bh(&ppe_ds_node_cfg[i].lock);
-		printk("Failed to get edma handle. alloc size requested: %d\n", size);
-		return NULL;
+		ppe_ds_err("Failed to get edma handle. alloc size requested: %d\n", size);
+		goto error_restore_state;
 	}
 
 	/*
@@ -1132,11 +1159,8 @@ struct ppe_ds *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_s
 	ds_node_metadata = node->node_cfg_idx;
 	ret = ppe_drv_ds_map_node_to_queue(ds_node_metadata, ppe_queue_start);
 	if (ret != PPE_DRV_RET_SUCCESS) {
-		write_lock_bh(&ppe_ds_node_cfg[i].lock);
-		ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
-		write_unlock_bh(&ppe_ds_node_cfg[i].lock);
 		ppe_ds_err("Unable to allocate enqueue vport for node:%d error:%d", node->node_cfg_idx, ret);
-		return NULL;
+		goto error_restore_state;
 	}
 
 	write_lock_bh(&ppe_ds_node_cfg[i].lock);
@@ -1146,6 +1170,16 @@ struct ppe_ds *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_s
 	printk("%px: PPE-DS alloc successful\n", node);
 
 	return node;
+
+error_restore_state:
+	if (edma_handle && dp_ops && dp_ops->free) {
+		dp_ops->free(edma_handle);
+	}
+
+	write_lock_bh(&ppe_ds_node_cfg[i].lock);
+	ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_AVAIL;
+	write_unlock_bh(&ppe_ds_node_cfg[i].lock);
+	return NULL;
 }
 EXPORT_SYMBOL(ppe_ds_wlan_inst_alloc);
 

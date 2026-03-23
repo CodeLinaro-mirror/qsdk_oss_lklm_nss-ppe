@@ -89,20 +89,36 @@ uint32_t ppe_ds_wlan_get_node_id(ppe_ds_wlan_handle_t *wlan_handle);
 ppe_vp_status_t ppe_ds_wlan_vp_free(ppe_ds_wlan_handle_t *wlan_handle, ppe_vp_num_t vp_num);
 
 /**
- * ppe_ds_wlan_inst_register
- *	PPE-DS WLAN instance registration API
+ * ppe_ds_wlan_inst_register_arch_mode_wifi7
+ *	PPE-DS WLAN instance registration API for Wi-Fi 7 architecture
  *
  * @datatypes
  * ppe_ds
- * ppe_ds_wlan_reg_info
+ * ppe_ds_wlan_arch_reg_info
  *
- * @param[in] node   PPE-DS node
- * @param[in] ring_info     PPE-DS ring information
+ * @param[in] node      PPE-DS node
+ * @param[in] ring_info PPE-DS arch ring information
  *
  * @return
  * Status of the PPE-DS WLAN instance registration
  */
-bool ppe_ds_wlan_inst_register(struct ppe_ds *node, struct ppe_ds_wlan_reg_info *ring_info);
+bool ppe_ds_wlan_inst_register_arch_mode_wifi7(struct ppe_ds *node, struct ppe_ds_wlan_arch_reg_info *ring_info);
+
+/**
+ * ppe_ds_wlan_inst_register_arch_mode_wifi8
+ *	PPE-DS WLAN instance registration API for Wi-Fi 8 architecture
+ *
+ * @datatypes
+ * ppe_ds
+ * ppe_ds_wlan_arch_reg_info
+ *
+ * @param[in] node      PPE-DS node
+ * @param[in] ring_info PPE-DS arch ring information
+ *
+ * @return
+ * Status of the PPE-DS WLAN instance registration (always false until Wi-Fi 8 is implemented)
+ */
+bool ppe_ds_wlan_inst_register_arch_mode_wifi8(struct ppe_ds *node, struct ppe_ds_wlan_arch_reg_info *ring_info);
 
 /**
  * ppe_ds_wlan_instance_stop
