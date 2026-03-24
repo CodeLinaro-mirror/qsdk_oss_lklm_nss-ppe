@@ -69,6 +69,8 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_FEATURE_PON_HGU_PPTP",	/* Service code for enabling PPTP flow with HGU enabled */
 	"PPE_DRV_SC_GEM_LOOKUP",	/* Service code for GEM port lookup */
 	"PPE_DRV_SC_NOEDIT_TUN_RPS",		/* Service code for Tunnel RPS configuration */
+	"PPE_DRV_SC_DDRQ_ETH_PT_MODE",		/* Service code for DDRQ ETH passthrough mode */
+	"PPE_DRV_SC_DDRQ_PON_PT_MODE",		/* Service code for DDRQ PON passthrough mode */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 

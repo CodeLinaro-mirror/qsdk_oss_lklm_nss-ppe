@@ -19,6 +19,9 @@
 #include <linux/in.h>
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
+#ifdef PPE_DRV_DDRQ_ENABLE
+#include <fal/fal_qm.h>
+#endif
 #include "ppe_drv.h"
 
 /*
@@ -193,6 +196,32 @@ static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys)
 
 	ppe_drv_v6_conn_free(ppe_drv_v6_conn_flow_conn_get(pcf));
 }
+
+#ifdef PPE_DRV_DDRQ_ENABLE
+/*
+ * ppe_drv_cc_ucast_qbase_profile_set()
+ *	API to configure qbase profile for input CPU code
+ */
+bool ppe_drv_cc_ucast_qbase_profile_set(uint16_t cc, uint32_t qbase)
+{
+	sw_error_t err;
+	fal_ucast_queue_dest_t q_dst = {0};
+
+	q_dst.src_profile = PPE_DRV_PORT_SRC_PROFILE;
+	q_dst.cpu_code_en = A_TRUE;
+	q_dst.cpu_code = cc;
+
+	err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &q_dst, qbase, PPE_DRV_REDIR_PROFILE_ID);
+	if (err != SW_OK) {
+		ppe_drv_warn("Unable to do qbase (%d) config profile set of %d cpu code\n", qbase, cc);
+		return false;
+	}
+
+	ppe_drv_info("port ucast queue base id: %d for cc: %d\n", qbase, cc);
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_cc_ucast_qbase_profile_set);
+#endif
 
 /*
  * ppe_drv_cc_process_skbuff()

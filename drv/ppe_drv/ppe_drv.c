@@ -226,6 +226,44 @@ bool ppe_drv_is_mht_dev(struct net_device *dev)
 }
 EXPORT_SYMBOL(ppe_drv_is_mht_dev);
 
+#ifdef PPE_DRV_DDRQ_ENABLE
+/*
+ * ppe_drv_isram_queue_profile_init()
+ *	API to enable ISRAM queue for all the PPE ports
+ */
+bool ppe_drv_isram_queue_profile_init(uint8_t isram_qbase)
+{
+	int i;
+	sw_error_t err;
+	struct ppe_drv *p = ppe_drv_gbl;
+	 struct ppe_drv_port *pp_local;
+	fal_ucast_queue_dest_t queue_dst = {0};
+
+	queue_dst.sram_queue_type = FAL_ISRAM_QUEUE;
+	queue_dst.src_profile = PPE_DRV_PORT_SRC_PROFILE;
+
+	/*
+	 * Run the loop for PPE ports
+	 * Currently assigning the same ISQ base for all the PPE ports.
+	 */
+	spin_lock_bh(&p->lock);
+	for (i = 1; i < PPE_DRV_PORTS_MAX ; i++) {
+		pp_local = &p->port[i];
+		queue_dst.dst_port = pp_local->port;
+		err = fal_ucast_queue_base_profile_set(PPE_DRV_SWITCH_ID, &queue_dst, isram_qbase, PPE_DRV_REDIR_PROFILE_ID);
+		if (err != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: Unable to set queue base for %d port\n", p, queue_dst.dst_port);
+			return false;
+		}
+	}
+	spin_unlock_bh(&p->lock);
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_isram_queue_profile_init);
+#endif
+
 /*
  * ppe_drv_hw_stats_sync()
  *	Sync PPE HW stats

@@ -807,6 +807,17 @@ bool ppe_drv_is_mht_dev(struct net_device *dev);
 int32_t ppe_drv_mht_port_from_fdb(uint8_t *dmac, uint16_t vid);
 
 /**
+ * ppe_drv_isram_queue_profile_init
+ *	API to set ISRAMQ base for all the PPE ports
+ *
+ * @param[in] isram_qbase	ISRAM queue base
+ *
+ * @return
+ * true or false
+ */
+bool ppe_drv_isram_queue_profile_init(uint8_t isram_qbase);
+
+/**
  * ppe_drv_ds_map_node_to_queue
  *	Provides node to queue mapping.
  *

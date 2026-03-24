@@ -60,6 +60,18 @@ typedef bool (*ppe_drv_cc_callback_t)(void *app_data, struct sk_buff *skb, void 
 extern bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_buff *skb);
 
 /*
+ * ppe_drv_cc_ucast_qbase_profile_set()
+ *	API to configure qbase profile for the particular CPU code
+ *
+ * @param[IN] cc		CPU code
+ * @param[IN] qbase		Queue base for ucast qbase profile configuration
+ *
+ * @return
+ * True if the configuration is successful
+ */
+extern bool ppe_drv_cc_ucast_qbase_profile_set(uint16_t cc, uint32_t qbase);
+
+/*
  * ppe_drv_cc_unregister_cb()
  *	Unregister callback for a specific CPU code
  *

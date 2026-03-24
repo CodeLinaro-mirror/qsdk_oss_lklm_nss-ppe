@@ -123,6 +123,53 @@ static void ppe_drv_sc_config_lpbk_port_pon(ppe_drv_sc_t sc, fal_servcode_config
 }
 #endif
 
+#ifdef PPE_DRV_DDRQ_ENABLE
+/*
+ * ppe_drv_sc_spl_ddrq_config()
+ *	API to configure DDRQ special service codes
+ */
+void ppe_drv_sc_spl_ddrq_config(void)
+{
+	sw_error_t err;
+	fal_servcode_config_t sc_cfg = {0};
+	struct ppe_drv *p = ppe_drv_gbl;
+	uint32_t servcode;
+
+	/*
+	 * Set all the bits in the bypass bitmap 0/1/3
+	 */
+	sc_cfg.bypass_bitmap[0] = ~(sc_cfg.bypass_bitmap[0]);
+	sc_cfg.bypass_bitmap[1] = ~(sc_cfg.bypass_bitmap[1]);
+	sc_cfg.bypass_bitmap[3] = ~(sc_cfg.bypass_bitmap[3]);
+	sc_cfg.bypass_bitmap[2] = ~(1 << TX_VLAN_COUNTER_BYP);
+	servcode = FAL_SERVCODE(FAL_SERVCODE_TYPE_PASSTHROUGH, PPE_DRV_SC_DDRQ_FULL_PKT_SPL_BYPASS_SC);
+
+	err = fal_servcode_config_set(PPE_DRV_SWITCH_ID, servcode, &sc_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: service code configuration failed for sc: %u", p, servcode);
+		return;
+	}
+
+	/*
+	 * Reset all the bits in the bypass bitmap 0/1/3
+	 */
+	sc_cfg.bypass_bitmap[0] = 0;
+	sc_cfg.bypass_bitmap[1] = 0;
+	sc_cfg.bypass_bitmap[3] = 0;
+	sc_cfg.bypass_bitmap[2] = (1 << TX_VLAN_COUNTER_BYP);
+	servcode = FAL_SERVCODE(FAL_SERVCODE_TYPE_PASSTHROUGH, PPE_DRV_SC_DDRQ_PT_SPL_BYPASS_SC);
+
+	err = fal_servcode_config_set(PPE_DRV_SWITCH_ID, servcode, &sc_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: service code configuration failed for sc: %u", p, servcode);
+		return;
+	}
+
+	ppe_drv_warn("%p: DDRQ SPL SC configurations done\n", p);
+	return;
+}
+#endif
+
 /*
  * ppe_drv_sc_config()
  *	Configured service code related tables based on input information.
@@ -584,6 +631,43 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
+#ifdef PPE_DRV_DDRQ_ENABLE
+	case PPE_DRV_SC_DDRQ_ETH_PT_MODE:
+
+		sc_cfg.bypass_bitmap[0] = ~((1 << MY_MAC_CHECK_BYP)
+				| (1 << FAKE_MAC_HEADER_BYP)
+				| (1 << SERVICE_CODE_BYP)
+				| (1 << FAKE_L2_PROTO_BYP));
+
+		sc_cfg.bypass_bitmap[1] = ~((1 << ACL_POST_ROUTING_CHECK_BYP)
+				| (1ULL << QM_QID_MISMATCH_BYPASS)
+				| (1ULL << QM_DDRQ_ID_GEN_BYPASS)
+				| (1ULL << QM_DDRQ_ID_GEN_FORCE)
+				| (1ULL << SAWF_BYP)
+				| (1ULL << QM_PASSTHROUGH_CPU_CODE_1_SEL)
+				| (1ULL << DROP_CPUCODE_CNT_BYP)
+				| (1ULL << (DROP_CPUCODE_CNT_BYP + 1)));
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+
+	case PPE_DRV_SC_DDRQ_PON_PT_MODE:
+
+		sc_cfg.bypass_bitmap[0] = ~((1 << MY_MAC_CHECK_BYP)
+				| (1 << FAKE_MAC_HEADER_BYP)
+				| (1 << SERVICE_CODE_BYP)
+				| (1 << FAKE_L2_PROTO_BYP));
+
+		sc_cfg.bypass_bitmap[1] = ~((1 << ACL_POST_ROUTING_CHECK_BYP)
+				| (1 << DOT1P_MAPPER_BYP)
+				| (1ULL << DOT1P_DST_LOOKUP_BYPASS)
+				| (1ULL << QM_DDRQ_ID_GEN_BYPASS)
+				| (1ULL << QM_PASSTHROUGH_CPU_CODE_0_SEL)
+				| (1ULL << QM_PASSTHROUGH_CPU_CODE_1_SEL)
+				| (1ULL << DROP_CPUCODE_CNT_BYP));
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+#endif
+
 	default:
 		ppe_drv_warn("%p: service code %u not supported", p, sc);
 		return;
@@ -908,6 +992,10 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_FEATURE_PON_HGU_PPTP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 #endif
 	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_TUN_RPS, PPE_DRV_SC_NOEDIT_TUN_RPS, PPE_DRV_PORT_CPU);
-
+#ifdef PPE_DRV_DDRQ_ENABLE
+	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_ETH_PT_MODE, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_PON_PT_MODE, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_spl_ddrq_config();
+#endif
 	return sc;
 }
