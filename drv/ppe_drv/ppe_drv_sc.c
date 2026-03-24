@@ -136,11 +136,11 @@ void ppe_drv_sc_spl_ddrq_config(void)
 	uint32_t servcode;
 
 	/*
-	 * Set all the bits in the bypass bitmap 0/1/3
+	 * Set all the first 32-bits in the bypass bitmap 0/1/3
 	 */
-	sc_cfg.bypass_bitmap[0] = ~(sc_cfg.bypass_bitmap[0]);
-	sc_cfg.bypass_bitmap[1] = ~(sc_cfg.bypass_bitmap[1]);
-	sc_cfg.bypass_bitmap[3] = ~(sc_cfg.bypass_bitmap[3]);
+	sc_cfg.bypass_bitmap[0] = PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL;
+	sc_cfg.bypass_bitmap[1] = PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL;
+	sc_cfg.bypass_bitmap[3] = PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL;
 	sc_cfg.bypass_bitmap[2] = ~(1 << TX_VLAN_COUNTER_BYP);
 	servcode = FAL_SERVCODE(FAL_SERVCODE_TYPE_PASSTHROUGH, PPE_DRV_SC_DDRQ_FULL_PKT_SPL_BYPASS_SC);
 
@@ -156,7 +156,7 @@ void ppe_drv_sc_spl_ddrq_config(void)
 	sc_cfg.bypass_bitmap[0] = 0;
 	sc_cfg.bypass_bitmap[1] = 0;
 	sc_cfg.bypass_bitmap[3] = 0;
-	sc_cfg.bypass_bitmap[2] = (1 << TX_VLAN_COUNTER_BYP);
+	sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
 	servcode = FAL_SERVCODE(FAL_SERVCODE_TYPE_PASSTHROUGH, PPE_DRV_SC_DDRQ_PT_SPL_BYPASS_SC);
 
 	err = fal_servcode_config_set(PPE_DRV_SWITCH_ID, servcode, &sc_cfg);
