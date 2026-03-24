@@ -410,7 +410,8 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 							| (1ULL << EPE_DST_INFO_WITH_PROFILE)
 							| (1ULL << FLD_UPDATE_FLOW_IDX)
 							| (1UL << FLD_UPDATE_DST_INFO_BYPASS);
-			sc_cfg.bypass_bitmap[1] = (1 << L2_VP_SERVICE_CODE_ENQ_BYP);
+			sc_cfg.bypass_bitmap[1] = (1 << L2_VP_SERVICE_CODE_ENQ_BYP)
+						| (1 << L2_SOURCE_SEC_BYP);
 			sc_cfg.dest_port_valid = A_FALSE;
 			ppe_drv_trace("Configured sc here bitmap[1]:%llu bitmap[2]:%llu dir:%u update_bitmap:%llu\n",
 					sc_cfg.bypass_bitmap[0], sc_cfg.bypass_bitmap[1], sc_cfg.direction, sc_cfg.field_update_bitmap[0]);
