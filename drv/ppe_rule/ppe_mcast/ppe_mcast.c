@@ -157,7 +157,7 @@ ppe_mcast_ret_t ppe_mcast_delete_entry(struct ppe_mcast_entry_info *info)
 		return PPE_MCAST_MC_ENTRY_DELETE_FAIL;
 	}
 
-	port_id = ppe_drv_iface_idx_get_by_dev(dev);
+	port_id = ppe_drv_port_num_from_dev(dev);
 	if ((port_id < 0) || (port_id >= PPE_DRV_PHYSICAL_MAX)) {
 		goto update_mc_group;
 	}
@@ -276,7 +276,7 @@ ppe_mcast_ret_t ppe_mcast_create_entry(struct ppe_mcast_entry_info *info)
 		goto update_mc_group;
 	}
 
-	port_id = ppe_drv_iface_idx_get_by_dev(dev);
+	port_id = ppe_drv_port_num_from_dev(dev);
 	if ((port_id < 0) || (port_id >= PPE_DRV_PHYSICAL_MAX)) {
 		goto update_mc_group;
 	}
