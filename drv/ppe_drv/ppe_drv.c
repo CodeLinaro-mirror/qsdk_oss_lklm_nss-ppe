@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <linux/if.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/of_net.h>
@@ -30,6 +31,10 @@
 #endif
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+#include <linux/if_vlan.h>
+#include <linux/if_arp.h>
+#endif
 #include <nss_debug.h>
 
 #define PPE_DRV_STATIC_DBG_LEVEL_STR_LEN 8
@@ -135,6 +140,14 @@ uint8_t ppe_drv_16_prio_map[PPE_DRV_MAX_PRIORITY] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 
 static int eth2eth_offload_if_bitmap;
 static char upstream_dev_str[PPE_DRV_UPSTREAM_DEV_LEVEL_STR_LEN];
 static char src2uni_map[PPE_DRV_SRC2UNI_LEVEL_STR_LEN];
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+static char lpbk_buffer_map_str[PPE_DRV_LPBK_BUFFER_MAP_STR_LEN];
+
+/*
+ * Default 0: automatic DDR buffering disabled
+ */
+static int ddr_buffer_auto_en;
+#endif
 #ifdef PPE_DRV_PKT_PADDING_STRIP
 static char packet_padding[PPE_DRV_PACKET_PADDING_STR_LEN];
 #endif
@@ -895,6 +908,11 @@ void ppe_drv_loopback_base_queue(uint8_t queue_id, uint32_t ft_type)
 	}
 #endif
 
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	if (ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_DDR_BUFFER) {
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER, queue_id, PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+	}
+#endif
 	p->loopback_ring_info.base_queue = queue_id;
 	p->loopback_ring_info.ft_type = ft_type;
 	p->loopback_ring_info.enabled = true;
@@ -2152,6 +2170,10 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&p->conn_tun_v4);
 	INIT_LIST_HEAD(&p->conn_tun_v6);
 	INIT_LIST_HEAD(&p->notifier_list_head);
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	INIT_LIST_HEAD(&p->lpbk_buffer_map);
+	p->lpbk_buffer_map_count = 0;
+#endif
 
 	p->toggled_v4 = false;
 	p->toggled_v6 = false;
@@ -2776,6 +2798,43 @@ static void ppe_drv_notify_change_upper_handler(void *ptr, int event)
 	spin_unlock_bh(&p->notifier_lock);
 }
 
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+/*
+ * ppe_drv_netdev_unregister_handler()
+ * 	API to handle NETDEV_UNREGISTER handler.
+ */
+static void ppe_drv_netdev_unregister_handler(struct net_device *dev)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_lpbk_buffer_map_entry *map_entry, *tmp;
+
+	if (dev->ieee80211_ptr) {
+		ppe_drv_trace("Dev: %s a WLAN dev\n", dev->name);
+		return;
+	}
+
+	spin_lock_bh(&p->lock);
+
+	list_for_each_entry_safe(map_entry, tmp, &p->lpbk_buffer_map, list) {
+		if (strcmp(map_entry->ingress_dev->name, dev->name) == 0 ||
+				strcmp(map_entry->egress_dev->name, dev->name) == 0) {
+			ppe_drv_trace("%p: lpbk_buffer_map removing entry for dev %s : pair %s->%s\n",
+					p, dev->name,
+					map_entry->ingress_dev->name,
+					map_entry->egress_dev->name);
+			list_del(&map_entry->list);
+			dev_put(map_entry->ingress_dev);
+			dev_put(map_entry->egress_dev);
+			kfree(map_entry);
+			p->lpbk_buffer_map_count--;
+		}
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	return;
+}
+#endif
 /*
  * ppe_drv_handle_netdev_event()
  *	Handle events received from network stack
@@ -2783,11 +2842,18 @@ static void ppe_drv_notify_change_upper_handler(void *ptr, int event)
 static int ppe_drv_handle_netdev_event(struct notifier_block *nb,
 		unsigned long event, void *ptr)
 {
+	struct netdev_notifier_info *info = (struct netdev_notifier_info *)ptr;
+	struct net_device *dev = netdev_notifier_info_to_dev(info);
+
 	switch (event) {
 	case NETDEV_CHANGEUPPER:
 		ppe_drv_notify_change_upper_handler(ptr, PPE_DRV_EVENT_CHANGEUPPER);
 		break;
-
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	case NETDEV_UNREGISTER:
+		ppe_drv_netdev_unregister_handler(dev);
+		break;
+#endif
 	default:
 		 ppe_drv_trace("Event not supported through ppe-drv: %ld\n", event);
 	}
@@ -3805,6 +3871,425 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 	return ret;
 }
 
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+/*
+ * ppe_drv_ddr_buffer_resolve_dev()
+ *	Resolve a user-supplied net_device to its underlying physical device,
+ *	Must be called with p->lock held.
+ */
+static int ppe_drv_ddr_buffer_resolve_dev(struct ppe_drv *p,
+		struct net_device **dev,
+		uint16_t *vlan_id,
+		uint8_t *vlan_cnt,
+		struct ppe_drv_lpbk_buffer_map_entry *map_entry,
+		bool is_ingress)
+{
+	struct net_device *cur = *dev;
+	const char *dev_name = cur->name;
+
+	/*
+	 * PPPoE
+	 */
+	if (is_ingress && cur->type == ARPHRD_PPP) {
+		struct ppe_drv_iface *pppoe_iface;
+		struct ppe_drv_iface *base_iface;
+		struct ppe_drv_l3_if *l3_if;
+		struct ppe_drv_pppoe *pppoe;
+
+		pppoe_iface = ppe_drv_iface_get_by_dev_internal(cur);
+		if (!pppoe_iface || pppoe_iface->type != PPE_DRV_IFACE_TYPE_PPPOE) {
+			dev_put(cur);
+			pr_err("%p: lpbk_buffer_map: %s: PPPoE session not registered in PPE\n",
+					p, dev_name);
+			return -ENODEV;
+		}
+
+		base_iface = ppe_drv_iface_base_get(pppoe_iface);
+		if (!base_iface || !base_iface->dev) {
+			dev_put(cur);
+			pr_err("%p: lpbk_buffer_map: %s: no base device for PPPoE interface\n",
+					p, dev_name);
+			return -ENODEV;
+		}
+
+		l3_if = ppe_drv_iface_l3_if_get(pppoe_iface);
+		pppoe = l3_if ? ppe_drv_l3_if_pppoe_get(l3_if) : NULL;
+		if (!pppoe) {
+			dev_put(cur);
+			pr_err("%p: lpbk_buffer_map: %s: cannot read PPPoE session info\n",
+					p, dev_name);
+			return -ENODEV;
+		}
+
+		map_entry->is_pppoe = true;
+		map_entry->pppoe_session_id = pppoe->session_id;
+		memcpy(map_entry->pppoe_server_mac, pppoe->server_mac, ETH_ALEN);
+
+		dev_hold(base_iface->dev);
+		dev_put(cur);
+		cur = base_iface->dev;
+	}
+
+	/*
+	 * VLAN
+	 */
+	if (is_vlan_dev(cur)) {
+		struct net_device *real_dev = vlan_dev_real_dev(cur);
+		uint16_t first_vlan_id = vlan_dev_vlan_id(cur);
+		dev_hold(real_dev);
+		dev_put(cur);
+		cur = real_dev;
+
+		if (is_vlan_dev(cur)) {
+
+			/*
+			 * Q-in-Q
+			 */
+			real_dev = vlan_dev_real_dev(cur);
+			vlan_id[0] = vlan_dev_vlan_id(cur);   /* outer */
+			vlan_id[1] = first_vlan_id;            /* inner */
+			*vlan_cnt = 2;
+			dev_hold(real_dev);
+			dev_put(cur);
+			cur = real_dev;
+		} else {
+			/*
+			 * Single VLAN
+			 */
+			vlan_id[0] = first_vlan_id;
+			*vlan_cnt = 1;
+		}
+	}
+
+	*dev = cur;
+	return 0;
+}
+
+/*
+ * ppe_drv_lpbk_buffer_map_rule_add()
+ * 	Add entry in lpbk_buffer_map.
+ */
+static inline int ppe_drv_lpbk_buffer_map_rule_add(struct net_device *ingress_dev, struct net_device *egress_dev) {
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_lpbk_buffer_map_entry *map_entry;
+	int ret;
+
+	spin_lock_bh(&p->lock);
+
+	if (p->lpbk_buffer_map_count >= PPE_DRV_LPBK_BUFFER_MAP_MAX) {
+		dev_put(ingress_dev);
+		dev_put(egress_dev);
+		spin_unlock_bh(&p->lock);
+		pr_err("%p: lpbk_buffer_map: max entries (%d) reached\n",
+				p, PPE_DRV_LPBK_BUFFER_MAP_MAX);
+		return -ENOSPC;
+	}
+
+	/*
+	 * Reject duplicates.
+	 */
+	list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
+		if (strcmp(map_entry->ingress_dev->name, ingress_dev->name) == 0 &&
+				strcmp(map_entry->egress_dev->name, egress_dev->name) == 0) {
+			dev_put(ingress_dev);
+			dev_put(egress_dev);
+			spin_unlock_bh(&p->lock);
+			pr_err("%p: lpbk_buffer_map: pair %s->%s already exists\n",
+					p, ingress_dev->name, egress_dev->name);
+			return -EEXIST;
+		}
+	}
+
+	map_entry = kzalloc(sizeof(*map_entry), GFP_ATOMIC);
+	if (!map_entry) {
+		dev_put(ingress_dev);
+		dev_put(egress_dev);
+		spin_unlock_bh(&p->lock);
+		return -ENOMEM;
+	}
+
+	INIT_LIST_HEAD(&map_entry->list);
+
+	ret = ppe_drv_ddr_buffer_resolve_dev(p, &ingress_dev,
+			map_entry->ingress_vlan_id, &map_entry->ingress_vlan_cnt,
+			map_entry, true);
+
+	if (ret) {
+		dev_put(egress_dev);
+		kfree(map_entry);
+		spin_unlock_bh(&p->lock);
+		return ret;
+	}
+
+	map_entry->ingress_dev = ingress_dev;
+
+
+	ret = ppe_drv_ddr_buffer_resolve_dev(p, &egress_dev,
+			map_entry->egress_vlan_id, &map_entry->egress_vlan_cnt,
+			map_entry, false);
+
+	if (ret) {
+		dev_put(ingress_dev);
+		kfree(map_entry);
+		spin_unlock_bh(&p->lock);
+		return ret;
+	}
+
+	map_entry->egress_dev = egress_dev;
+
+	list_add_tail(&map_entry->list, &p->lpbk_buffer_map);
+	p->lpbk_buffer_map_count++;
+
+	ppe_drv_info("%p: lpbk_buffer_map: pair added %s->%s (count=%u)\n",
+			p, ingress_dev->name, egress_dev->name, p->lpbk_buffer_map_count);
+
+	spin_unlock_bh(&p->lock);
+
+	return ret;
+}
+
+/*
+ * ppe_drv_lpbk_buffer_map_flush_pair()
+ * 	delete a specific rule from lpbk_buffer_map
+ */
+static inline int ppe_drv_lpbk_buffer_map_flush_pair(struct net_device *ingress_dev, struct net_device *egress_dev) {
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_lpbk_buffer_map_entry *map_entry, *tmp;
+	bool found = false;
+
+	spin_lock_bh(&p->lock);
+
+	list_for_each_entry_safe(map_entry, tmp, &p->lpbk_buffer_map, list) {
+		if (strcmp(map_entry->ingress_dev->name, ingress_dev->name) == 0 &&
+				strcmp(map_entry->egress_dev->name, egress_dev->name) == 0) {
+			list_del(&map_entry->list);
+			dev_put(map_entry->ingress_dev);
+			dev_put(map_entry->egress_dev);
+			kfree(map_entry);
+			p->lpbk_buffer_map_count--;
+			found = true;
+			break;
+		}
+	}
+
+	spin_unlock_bh(&p->lock);
+	if (!found) {
+		dev_put(ingress_dev);
+		dev_put(egress_dev);
+		ppe_drv_warn("%p: lpbk_buffer_map: pair %s->%s not found\n",
+				p, ingress_dev->name, egress_dev->name);
+		return -ENOENT;
+	}
+
+	ppe_drv_info("%p: lpbk_buffer_map: pair %s->%s removed\n",
+			p, ingress_dev->name, egress_dev->name);
+	return 0;
+
+}
+
+/*
+ * ppe_drv_lpbk_buffer_map_delete()
+ * 	delete lpbk_buffer_map
+ */
+static inline void ppe_drv_lpbk_buffer_map_delete(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_lpbk_buffer_map_entry *map_entry, *tmp;
+
+	spin_lock_bh(&p->lock);
+
+	list_for_each_entry_safe(map_entry, tmp, &p->lpbk_buffer_map, list) {
+		list_del(&map_entry->list);
+		dev_put(map_entry->ingress_dev);
+		dev_put(map_entry->egress_dev);
+		kfree(map_entry);
+		p->lpbk_buffer_map_count--;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	return;
+}
+
+/*
+ * ppe_drv_lpbk_buffer_map_handler()
+ * 	sysctl handler for the pairwise DDR-buffer ingress→egress map.
+ * 	echo '<ingress_dev> <egress_dev>' : Add a pair
+ * 	echo 'flush' : Remove all the entries from the map.
+ * 	echo 'flush <ingress_dev> <egress_dev>' : Removes one specific pair
+ */
+static int ppe_drv_lpbk_buffer_map_handler(struct ctl_table *table,
+		int write, void __user *buffer,
+		size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	char *buf;
+	char ingress_name[IFNAMSIZ];
+	char egress_name[IFNAMSIZ];
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct net_device *ingress_dev;
+	struct net_device *egress_dev;
+	size_t len;
+	int cmd_mode = PPE_DRV_LPBK_MAP_CMD_INVALID;
+
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret || !write) {
+		return ret;
+	}
+
+	if (!p->loopback_ring_info.enabled ||
+			!(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_DDR_BUFFER)) {
+		pr_err("DDR buffer loopback ring not enabled (ft_type=0x%x)\n",
+				p->loopback_ring_info.ft_type);
+		return -EINVAL;
+	}
+
+	buf = lpbk_buffer_map_str;
+	size_t slen = strlen(buf);
+	while (slen > 0 && (buf[slen - 1] == '\n' || buf[slen - 1] == ' '
+				|| buf[slen - 1] == '\t'))
+		buf[--slen] = '\0';
+
+	buf += strspn(buf, NSS_PPE_DRV_WHITESPACE);
+
+	/*
+	 * flush
+	 */
+	if (strncmp(buf, "flush", 5) == 0) {
+		char *after_flush = buf + 5;
+		after_flush += strspn(after_flush, NSS_PPE_DRV_WHITESPACE);
+
+		/*
+		 * flush all
+		 */
+		if (*after_flush == '\0') {
+			cmd_mode = PPE_DRV_LPBK_MAP_CMD_FLUSH_ALL;
+			goto action;
+		} else {
+
+			/*
+			 * flush pair
+			 */
+			cmd_mode = PPE_DRV_LPBK_MAP_CMD_FLUSH_PAIR;
+			len = strcspn(after_flush, NSS_PPE_DRV_WHITESPACE);
+			if (len == 0 || len >= IFNAMSIZ) {
+				pr_err("%p: lpbk_buffer_map: invalid ingress device name\n", p);
+				return -EINVAL;
+			}
+
+			memcpy(ingress_name, after_flush, len);
+			ingress_name[len] = '\0';
+			after_flush += len;
+			after_flush += strspn(after_flush, NSS_PPE_DRV_WHITESPACE);
+			len = strcspn(after_flush, NSS_PPE_DRV_WHITESPACE);
+			if (len == 0 || len >= IFNAMSIZ) {
+				pr_err("%p: lpbk_buffer_map: invalid egress device name\n", p);
+				return -EINVAL;
+			}
+
+			memcpy(egress_name, after_flush, len);
+			egress_name[len] = '\0';
+		}
+	} else {
+		len = strcspn(buf, NSS_PPE_DRV_WHITESPACE);
+		if (len == 0 || len >= IFNAMSIZ) {
+			pr_err("%p: lpbk_buffer_map: invalid ingress device name\n", p);
+			return -EINVAL;
+		}
+
+		memcpy(ingress_name, buf, len);
+		ingress_name[len] = '\0';
+		buf += len;
+		buf += strspn(buf, NSS_PPE_DRV_WHITESPACE);
+		len = strcspn(buf, NSS_PPE_DRV_WHITESPACE);
+		if (len == 0 || len >= IFNAMSIZ) {
+			pr_err("%p: lpbk_buffer_map: invalid egress device name\n", p);
+			return -EINVAL;
+		}
+
+		cmd_mode = PPE_DRV_LPBK_MAP_CMD_RULE_ADD;
+		memcpy(egress_name, buf, len);
+		egress_name[len] = '\0';
+	}
+
+	/*
+	 * get the ingress netdev
+	 */
+	ingress_dev = dev_get_by_name(&init_net, ingress_name);
+	if (!ingress_dev) {
+		pr_err("%p: lpbk_buffer_map: no netdevice found for ingress: %s\n",
+				p, ingress_name);
+		return -ENODEV;
+	}
+
+	/*
+	 * get the egress netdev
+	 */
+	egress_dev = dev_get_by_name(&init_net, egress_name);
+	if (!egress_dev) {
+		dev_put(ingress_dev);
+		pr_err("%p: lpbk_buffer_map: no netdevice found for egress: %s\n",
+				p, egress_name);
+		return -ENODEV;
+	}
+
+action:
+	switch (cmd_mode) {
+		case PPE_DRV_LPBK_MAP_CMD_RULE_ADD:
+			return ppe_drv_lpbk_buffer_map_rule_add(ingress_dev, egress_dev);
+
+		case PPE_DRV_LPBK_MAP_CMD_FLUSH_PAIR:
+			return ppe_drv_lpbk_buffer_map_flush_pair(ingress_dev, egress_dev);
+
+		case PPE_DRV_LPBK_MAP_CMD_FLUSH_ALL:
+			ppe_drv_lpbk_buffer_map_delete();
+			break;
+		default:
+			ppe_drv_warn("%p: Invalid command given for lpbk_buffer_map\n", p);
+	}
+
+	return 0;
+}
+
+/*
+ * ppe_drv_ddr_buffer_auto_en_handler()
+ * 	sysctl handler to enable/disable automatic DDR buffering.
+ * 	Automatic DDR buffering is DISABLED by default.
+ * 	Once enabled, PPE will automatically apply DDR buffering service code for flows where the ingress
+ * 	phydev speed exceeds the egress phydev speed.
+ *
+ * 	Usage:
+ * 	echo 1 > /proc/sys/ppe/ppe_drv/ddr_buffer_auto_en (enable)
+ * 	echo 0 > /proc/sys/ppe/ppe_drv/ddr_buffer_auto_en (disable)
+ */
+static int ppe_drv_ddr_buffer_auto_en_handler(struct ctl_table *table,
+		int write, void __user *buffer,
+		size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (ret || !write) {
+		return ret;
+	}
+
+	if (ddr_buffer_auto_en != 0 && ddr_buffer_auto_en != 1) {
+		pr_err("ddr_buffer_auto_en: invalid value %d, must be 0 or 1\n",
+				ddr_buffer_auto_en);
+		ddr_buffer_auto_en = 0;
+		return -EINVAL;
+	}
+
+	spin_lock_bh(&p->lock);
+	p->ddr_buffer_auto_en = !!ddr_buffer_auto_en;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%p: ddr_buffer_auto_en set to %d\n", p, ddr_buffer_auto_en);
+	return ret;
+}
+#endif /* PPE_DRV_DDR_BUFFER_SPEED_MISMATCH */
+
 /*
  * ppe_drv_get_and_hold_qdisc_netdev()
  * 	Get qdisc netdev from flow
@@ -3837,6 +4322,22 @@ EXPORT_SYMBOL(ppe_drv_get_qdisc_rule_flag);
  *	PPE DRV sub directory
  */
 static struct ctl_table ppe_drv_sub[] = {
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	{
+		.procname	=	"lpbk_buffer_map",
+		.data		=	&lpbk_buffer_map_str,
+		.maxlen		=	sizeof(char) * PPE_DRV_LPBK_BUFFER_MAP_STR_LEN,
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_lpbk_buffer_map_handler
+	},
+	{
+		.procname	=	"ddr_buffer_auto_en",
+		.data		=	&ddr_buffer_auto_en,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_ddr_buffer_auto_en_handler
+	},
+#endif
 	{
 		.procname	=	"if_bm_to_offload",
 		.data		=	&if_bm_to_offload,
@@ -4232,6 +4733,20 @@ static void __exit ppe_drv_module_exit(void)
 {
 	unregister_sysctl_table(ppe_drv_gbl->ppe_drv_header);
 	ppe_drv_gbl->ppe_drv_header = NULL;
+
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	struct ppe_drv_lpbk_buffer_map_entry *map_entry, *tmp;
+	spin_lock_bh(&ppe_drv_gbl->lock);
+	list_for_each_entry_safe(map_entry, tmp, &ppe_drv_gbl->lpbk_buffer_map, list) {
+		list_del(&map_entry->list);
+		dev_put(map_entry->ingress_dev);
+		dev_put(map_entry->egress_dev);
+		kfree(map_entry);
+		ppe_drv_gbl->lpbk_buffer_map_count--;
+	}
+	spin_unlock_bh(&ppe_drv_gbl->lock);
+#endif
+
 	unregister_netdevice_notifier(&nss_ppe_netdevice);
 	platform_driver_unregister(&ppe_drv_platform);
 	nss_ppe_drv_minidump_free(ppe_drv_gbl, "ppe_drv");

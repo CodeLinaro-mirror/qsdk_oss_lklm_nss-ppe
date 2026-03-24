@@ -9,6 +9,7 @@
 #include <linux/if_vlan.h>
 #include <fal/fal_flow.h>
 #include <fal/fal_qos.h>
+#include <linux/phy.h>
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
 
@@ -2432,12 +2433,104 @@ bool ppe_drv_flow_v4_pri_profile_get(struct ppe_drv_v4_conn_flow *pcf, struct pp
 	return true;
 }
 
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+/*
+ * ppe_drv_flow_v4_check_hierarchy_speed_mismatch()
+ * 	Check the speed mismatch between interfaces.
+ */
+static inline bool ppe_drv_flow_v4_check_hierarchy_speed_mismatch(struct ppe_drv *p, struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_port *pp)
+{
+	struct ppe_drv_lpbk_buffer_map_entry *map_entry;
+	bool is_speed_mismatch = false;
+
+	if (!list_empty(&p->lpbk_buffer_map) && pcf->rx_port && pcf->rx_port->dev) {
+		list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
+			bool ingress_match;
+			bool egress_match;
+
+			if (map_entry->ingress_dev != pcf->rx_port->dev ||
+					map_entry->egress_dev != pp->dev) {
+				continue;
+			}
+
+			/*
+			 * PPPoE check
+			 */
+			if (map_entry->is_pppoe) {
+				if (!ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_PPPOE_FLOW) ||
+						pcf->pppoe_session_id != map_entry->pppoe_session_id ||
+						memcmp(pcf->pppoe_server_mac, map_entry->pppoe_server_mac, ETH_ALEN)) {
+					continue;
+				}
+			}
+
+			/*
+			 * Ingress VLAN check
+			 */
+			if (map_entry->ingress_vlan_cnt == 0) {
+				ingress_match = true;
+			} else if (map_entry->ingress_vlan_cnt == 1) {
+				ingress_match = (pcf->ingress_vlan_cnt >= 1) &&
+					((pcf->ingress_vlan[0].tci & PPE_DRV_VLAN_ID_MASK) ==
+					 map_entry->ingress_vlan_id[0]);
+			} else {
+				ingress_match = (pcf->ingress_vlan_cnt >= 2) &&
+					((pcf->ingress_vlan[0].tci & PPE_DRV_VLAN_ID_MASK) ==
+					 map_entry->ingress_vlan_id[0]) &&
+					((pcf->ingress_vlan[1].tci & PPE_DRV_VLAN_ID_MASK) ==
+					 map_entry->ingress_vlan_id[1]);
+			}
+
+			/*
+			 * Egress VLAN check
+			 */
+			if (map_entry->egress_vlan_cnt == 0) {
+				egress_match = true;
+			} else if (map_entry->egress_vlan_cnt == 1) {
+				egress_match = (pcf->egress_vlan_cnt >= 1) &&
+					((pcf->egress_vlan[0].tci & PPE_DRV_VLAN_ID_MASK) ==
+					 map_entry->egress_vlan_id[0]);
+			} else {
+				egress_match = (pcf->egress_vlan_cnt >= 2) &&
+					((pcf->egress_vlan[0].tci & PPE_DRV_VLAN_ID_MASK) ==
+					 map_entry->egress_vlan_id[0]) &&
+					((pcf->egress_vlan[1].tci & PPE_DRV_VLAN_ID_MASK) ==
+					 map_entry->egress_vlan_id[1]);
+			}
+
+			if (ingress_match && egress_match) {
+				is_speed_mismatch = true;
+				break;
+			}
+		}
+	}
+
+	return is_speed_mismatch;
+}
+
+/*
+ * ppe_drv_phydev_speed_compare()
+ *	Returns true if rx port's phydev speed exceeds tx port's phydev speed.
+ */
+static inline bool ppe_drv_phydev_speed_compare(struct ppe_drv_port *rx_port, struct ppe_drv_port *tx_port)
+{
+	if (!tx_port || !tx_port->dev|| !tx_port->dev->phydev)
+		return false;
+
+	if (!rx_port || !rx_port->dev || !rx_port->dev->phydev)
+		return false;
+
+	return rx_port->dev->phydev->speed > tx_port->dev->phydev->speed;
+}
+#endif
+
 /*
  * ppe_drv_flow_v4_service_code_get()
  *	Return service code required for this flow.
  */
 bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_port *pp, uint8_t *scp)
 {
+	struct ppe_drv *p __maybe_unused = ppe_drv_gbl;
 	struct ppe_drv_port *port_rx = pcf->rx_port;
 	ppe_drv_sc_t service_code = *scp;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
@@ -2449,6 +2542,7 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		return true;
 	}
 #endif
+
 #ifdef PPE_TUNNEL_ENABLE
 #if defined(PPE_LOOPBACK_RING_SUPPORT)
 	ret = ppe_drv_tun_gretap_to_mapt_sc(ppe_drv_v4_conn_flow_tx_port_get(pcf), ppe_drv_v4_conn_flow_rx_port_get(pcf), &service_code);
@@ -2461,6 +2555,31 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 #endif
 #endif
 
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	if (p->loopback_ring_info.enabled &&
+			(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_DDR_BUFFER) &&
+			pp && pp->dev) {
+		bool is_speed_mismatch = ppe_drv_flow_v4_check_hierarchy_speed_mismatch(p, pcf, pp);
+
+		/*
+		 * check if phydev speed are asymmetric or not.
+		 */
+		if (!is_speed_mismatch && p->ddr_buffer_auto_en)
+			is_speed_mismatch = ppe_drv_phydev_speed_compare(pcf->rx_port, pp);
+
+		/*
+		 * set service code to use loopback ring.
+		 */
+		if (is_speed_mismatch) {
+			if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER)) {
+				return false;
+			}
+
+			*scp = service_code;
+			return true;
+		}
+	}
+#endif
 #ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 	ret = ppe_drv_veip_gw_port_sc(ppe_drv_v4_conn_flow_tx_port_get(pcf), &sc);
 	if (ret == PPE_DRV_RET_VEIP_HGU_US_FLOW_ADD) {

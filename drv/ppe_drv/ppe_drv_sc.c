@@ -543,6 +543,24 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		break;
 #endif
 
+#if defined (PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	case PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER:
+		sc_cfg.dest_port_valid = A_TRUE;
+		sc_cfg.direction = PPE_DRV_SC_IN_L2_DIR_DST;
+		sc_cfg.bypass_bitmap[1] = (1 << L3_PKT_EDIT_BYP) | (1 << L2_PKT_EDIT_BYP);
+		break;
+
+	case PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT:
+		sc_cfg.direction = PPE_DRV_SC_IN_L2_DIR_DST;
+		sc_cfg.dest_port_valid = A_FALSE;
+		sc_cfg.bypass_bitmap[0] = (1 << FLOW_SERVICE_CODE_BYP);
+		sc_cfg.bypass_bitmap[1] = ((1 << EG_VLAN_MEMBER_CHECK_BYP)
+				| (1 << SOURCE_FLTR_BYP)
+				| (1 << L2_SOURCE_SEC_BYP)
+				| (1 << FAKE_MAC_DROP_BYP));
+		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP) | (1 << TX_COUNTER_BYP);
+		break;
+#endif
 	case PPE_DRV_SC_VP_RPS:
 		/*
 		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
@@ -1109,6 +1127,10 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_spl_ddrq_config();
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC, PPE_DRV_SC_DDRQ_LP_SC_NEXT, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+#endif
+#ifdef PPE_DRV_DDR_BUFFER_SPEED_MISMATCH
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER, PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT, PPE_DRV_SC_BYPASS_ALL, PPE_DRV_PORT_CPU);
 #endif
 	return sc;
 }

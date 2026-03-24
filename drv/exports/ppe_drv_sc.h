@@ -92,6 +92,8 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_DDRQ_LP_SC = 56,				/* Service code for DDRQ loopback ring */
 	PPE_DRV_SC_DDRQ_LP_SC_NEXT = 57,			/* Next service code for DDRQ loopback ring */
 	PPE_DRV_SC_HOST_QOS = 58,				/* Service code for redirecting packet to host for qdisc processing */
+	PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER = 59,		/* Loopback ring service code for DDR Buffering on first pass*/
+	PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT = 60,		/* Loopback ring service code for DDR Buffering on second pass */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,

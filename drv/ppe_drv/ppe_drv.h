@@ -492,6 +492,47 @@ struct ppe_drv_loopback_ring_info {
 };
 #endif
 
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+/*
+ * Maximum number of forced ingress→egress pairs in lpbk_buffer_map.
+ */
+#define PPE_DRV_LPBK_BUFFER_MAP_MAX		16
+
+/*
+ * Maximum string length for lpbk_buffer_map sysctl input ("<ingress> <egress>").
+ */
+#define PPE_DRV_LPBK_BUFFER_MAP_STR_LEN		64
+
+/*
+ * ppe_drv_lpbk_buffer_map_entry
+ * 	ingress→egress pair for DDR buffer speed-mismatch feature.
+ *
+ */
+struct ppe_drv_lpbk_buffer_map_entry {
+	struct list_head	list;				/* Linked list node */
+	struct net_device	*ingress_dev;			/* Physical ingress net_device (holds refcount) */
+	struct net_device	*egress_dev;			/* Physical egress net_device (holds refcount) */
+	uint16_t		ingress_vlan_id[PPE_DRV_MAX_VLAN];	/* Outer [0], inner [1] VLAN IDs */
+	uint16_t		egress_vlan_id[PPE_DRV_MAX_VLAN];	/* Outer [0], inner [1] VLAN IDs */
+	uint8_t			ingress_vlan_cnt;		/* Number of ingress VLAN levels (0, 1, or 2) */
+	uint8_t			egress_vlan_cnt;		/* Number of egress VLAN levels (0, 1, or 2) */
+	bool			is_pppoe;			/* Entry was configured via a PPPoE interface */
+	uint16_t		pppoe_session_id;		/* PPPoE session ID; valid only when is_pppoe is true */
+	uint8_t			pppoe_server_mac[ETH_ALEN];	/* PPPoE server MAC; valid only when is_pppoe is true */
+};
+
+/*
+ * ppe_drv_lpbk_map_cmd
+ * 	Types of supported commands for loopback buffer map
+ */
+enum ppe_drv_lpbk_map_cmd {
+	PPE_DRV_LPBK_MAP_CMD_RULE_ADD = 0,		/* Command for rule add. */
+	PPE_DRV_LPBK_MAP_CMD_FLUSH_PAIR,		/* Command for a rule delete */
+	PPE_DRV_LPBK_MAP_CMD_FLUSH_ALL,		/* Command for entire lpbk_buffer_map delete. */
+	PPE_DRV_LPBK_MAP_CMD_INVALID
+};
+#endif
+
 /*
  * ppe_drv
  *	PPE DRV base structure
@@ -582,6 +623,12 @@ struct ppe_drv {
 	struct kref ref;				/* Reference count */
 
 	struct net_device *upstream_dev;		/* Upstream port for fontana usecase */
+
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	struct list_head lpbk_buffer_map;		/* List of forced ingress→egress pairs (Mode C, highest priority) */
+	uint32_t lpbk_buffer_map_count;			/* Number of entries in lpbk_buffer_map */
+	bool ddr_buffer_auto_en;			/* Enable automatic DDR buffering based on phydev speed detection (Mode A) */
+#endif
 
 	/*
 	 * v4 and v6 connection list

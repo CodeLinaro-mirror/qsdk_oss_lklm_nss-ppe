@@ -124,6 +124,7 @@
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_EXT_DDR_UPSTREAM	0x2	/* PON extended DDR upstream loopback feature */
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT	0x4	/* GRETAP to MAPT loopback feature */
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT	0x8	/* Hairpin NAT loopback feature */
+#define PPE_DRV_LOOPBACK_FEATURE_TYPE_DDR_BUFFER	0x10	/* Speed mismatch DDR buffering loopback feature */
 
 #define PPE_DRV_JUMBO_MAX				9216	/* Maximum MRU value */
 

@@ -5,6 +5,7 @@
 
 #include <linux/atomic.h>
 #include <linux/debugfs.h>
+#include <fal/fal_qm.h>
 #include "ppe_drv.h"
 #include "ppe_drv_stats.h"
 
@@ -75,6 +76,8 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 #endif
 	"PPE_DRV_SC_DDRQ_ETH_PT_MODE",		/* Service code for DDRQ ETH passthrough mode */
 	"PPE_DRV_SC_DDRQ_PON_PT_MODE",		/* Service code for DDRQ PON passthrough mode */
+	"PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER",		/* Loopback ring service code for DDR Buffering on first pass */
+	"PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT",	/* Loopback ring service code for DDR Buffering on second pass */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
 };
 
@@ -874,6 +877,66 @@ static const struct file_operations ppe_drv_loopback_port_feature_file_ops = {
 };
 #endif
 
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+/*
+ * ppe_drv_ddr_buffer_stats_show()
+ *	Display DDR buffer loopback ring hardware queue stats.
+ *
+ *	tx_packets/tx_bytes     : packets/bytes forwarded through the loopback
+ *	                          ring — these increment for every DDR-buffered flow.
+ *	drop_packets/drop_bytes : packets/bytes dropped at the loopback ring —
+ *	                          non-zero means the ring itself overflowed.
+ */
+static int ppe_drv_ddr_buffer_stats_show(struct seq_file *m, void __attribute__((unused))*ptr)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_queue_stats_t info = {0};
+	int base_queue;
+
+	spin_lock_bh(&p->lock);
+
+	if (!p->loopback_ring_info.enabled ||
+			!(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_DDR_BUFFER)) {
+		spin_unlock_bh(&p->lock);
+		seq_puts(m, "DDR buffer loopback ring not enabled\n");
+		return 0;
+	}
+
+	base_queue = p->loopback_ring_info.base_queue;
+	fal_queue_counter_get(PPE_DRV_SWITCH_ID, base_queue, &info);
+	spin_unlock_bh(&p->lock);
+
+	seq_printf(m, "DDR buffer loopback ring queue stats (queue_id=%d):\n", base_queue);
+	seq_printf(m, "\ttx_packets            : %u\n", info.tx_packets);
+	seq_printf(m, "\ttx_bytes              : %llu\n", info.tx_bytes);
+	seq_printf(m, "\tdrop_packets          : %u\n",
+			info.drop_packets[PPE_DRV_QOS_QUEUE_COLOR_GREEN + 3]);
+	seq_printf(m, "\tdrop_bytes            : %llu\n",
+			info.drop_bytes[PPE_DRV_QOS_QUEUE_COLOR_GREEN + 3]);
+	return 0;
+}
+
+/*
+ * ppe_drv_ddr_buffer_stats_open()
+ *	DDR buffer stats open callback
+ */
+static int ppe_drv_ddr_buffer_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ppe_drv_ddr_buffer_stats_show, inode->i_private);
+}
+
+/*
+ * ppe_drv_ddr_buffer_stats_file_ops
+ *	File operations for DDR buffer loopback ring stats
+ */
+static const struct file_operations ppe_drv_ddr_buffer_stats_file_ops = {
+	.open = ppe_drv_ddr_buffer_stats_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+#endif /* PPE_DRV_DDR_BUFFER_SPEED_MISMATCH */
+
 /*
  * ppe_drv_stats_debugfs_init()
  *	Create PPE statistics debug entry.
@@ -932,6 +995,14 @@ int ppe_drv_stats_debugfs_init(void)
 	if (!debugfs_create_file("loopback_port_info", S_IRUGO, p->stats_dentry,
 			NULL, &ppe_drv_loopback_port_feature_file_ops)) {
 		ppe_drv_warn("%p: Unable to create loopback_port_info file entry in debugfs\n", p);
+		goto debugfs_dir_failed;
+	}
+#endif
+
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	if (!debugfs_create_file("ddr_buffer_stats", S_IRUGO, p->stats_dentry,
+			NULL, &ppe_drv_ddr_buffer_stats_file_ops)) {
+		ppe_drv_warn("%p: Unable to create ddr_buffer_stats file entry in debugfs\n", p);
 		goto debugfs_dir_failed;
 	}
 #endif

@@ -128,6 +128,7 @@ endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq54xx ipq53xx ipq96xx ipq52xx))
 ccflags-y += -DPPE_LOOPBACK_RING_SUPPORT
+ccflags-y += -DPPE_DRV_DDR_BUFFER_SPEED_MISMATCH
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq52xx))
