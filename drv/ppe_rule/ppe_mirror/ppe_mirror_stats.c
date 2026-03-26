@@ -99,8 +99,8 @@ static int ppe_mirror_group_stats_show(struct seq_file *m, void __attribute__((u
 	for (idx = 0; idx < active_groups; idx++) {
 		struct ppe_mirror_group_info *shadow_group = (struct ppe_mirror_group_info *)(group_info + idx);
 		seq_printf(m, "\t\tGroup Number: %u\n", idx);
-		seq_printf(m, "\t\t\tNetdev if num: %u\n", shadow_group->group_dev->ifindex);
-		seq_printf(m, "\t\t\tNetdev name: %s\n", shadow_group->group_dev->name);
+		seq_printf(m, "\t\t\tNetdev if num: %d\n", shadow_group->group_dev ? shadow_group->group_dev->ifindex : -1);
+		seq_printf(m, "\t\t\tNetdev name: %s\n", shadow_group->group_dev ? shadow_group->group_dev->name : "unknown");
 
 		mirror_stats_shadow = (uint64_t *)(&shadow_group->acl_stats);
 		seq_printf(m, "\n\t\t\t Mirrored packets group stats:\n");
