@@ -27,6 +27,7 @@ struct nss_ppenl_port_mgmt_info {
 	struct ppe_port_mgmt_isol isol;			/**< Port Isolation information */
 	struct ppe_port_mac_lrn_limit mac_lrn_limit;	/**< Port learn limit for FDB */
 	struct ppe_port_mac_filter mac_filter;		/**< MAC Filter for FDB */
+	struct ppe_port_omci_port omci_port;		/**< OMCI-managed port configuration */
 };
 
 /*
@@ -39,6 +40,9 @@ enum nss_ppe_port_mgmt_message_types {
 	NSS_PPE_PORT_MGMT_MAC_LRN_LIMIT_SET_MSG,	/**< Port mac learn limit set */
 	NSS_PPE_PORT_MGMT_MAC_FILTER_SET_MSG,		/**< MAC filtering set */
 	NSS_PPE_PORT_MGMT_MAC_FILTER_CLR_MSG,		/**< Mac filtering clear */
+	NSS_PPE_PORT_MGMT_OMCI_PORT_ADD_MSG,		/**< Add OMCI-managed port */
+	NSS_PPE_PORT_MGMT_OMCI_PORT_DEL_MSG,		/**< Delete OMCI-managed port */
+	NSS_PPE_PORT_MGMT_OMCI_PORT_FLUSH_MSG,		/**< Flush all OMCI-managed ports */
 	NSS_PPE_PORT_MGMT_MAX_MSG_TYPES,		/**< Maximum message type */
 };
 

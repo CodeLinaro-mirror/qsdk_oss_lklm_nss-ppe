@@ -4,6 +4,7 @@
  */
 
 #include <ppe_drv_public.h>
+#include <ppe_drv_port_mgmt.h>
 #include <ppe_mcast.h>
 #include "ppe_mcast_stats.h"
 #include "ppe_mcast_dump.h"
@@ -68,6 +69,7 @@ struct ppe_mcast_hash_key {
  */
 struct ppe_mcast_entry {
 	struct ppe_drv_mcast_entry entry;	/* Multicast entry information */
+	struct ppe_drv_omci_port_node *node;	/* OMCI managed node */
 	struct hlist_node hash_node;         /* Hash table node */
 };
 
@@ -84,6 +86,7 @@ struct ppe_mcast_group {
 	bool is_v4;		/* IPv4 or IPv6 entry. */
 	uint32_t unsupported_dst_cnt;	/* Not supported destination count */
 	uint32_t supported_dst_cnt;	/* supported destination count */
+	uint32_t omci_not_managed;	/* ports not managed by OMCI destination count */
 	struct list_head list;	/* List of multicast group address. */
 };
 

@@ -79,6 +79,46 @@ struct ppe_port_mac_filter {
 };
 
 /**
+ * ppe_port_omci_port
+ *	OMCI-managed port configuration for add/del operations.
+ */
+struct ppe_port_omci_port {
+	char port_name[IFNAMSIZ];		/**< Device name (from CLI dev=) */
+	ppe_port_mgmt_ret_t ret;		/**< PORT_MGMT return type */
+};
+
+/**
+ * ppe_port_mgmt_omci_port_add()
+ *	Add a port to the OMCI-managed port list.
+ *
+ * @param[in] omci_port		OMCI port configuration.
+ *
+ * @return
+ * Status of the operation, indicating success or failure.
+ */
+ppe_port_mgmt_ret_t ppe_port_mgmt_omci_port_add(struct ppe_port_omci_port *omci_port);
+
+/**
+ * ppe_port_mgmt_omci_port_del()
+ *	Remove a port from the OMCI-managed port list.
+ *
+ * @param[in] omci_port		OMCI port configuration.
+ *
+ * @return
+ * Status of the operation, indicating success or failure.
+ */
+ppe_port_mgmt_ret_t ppe_port_mgmt_omci_port_del(struct ppe_port_omci_port *omci_port);
+
+/**
+ * ppe_port_mgmt_omci_port_flush()
+ *	Remove all ports from the OMCI-managed port list.
+ *
+ * @return
+ * Status of the operation, indicating success or failure.
+ */
+ppe_port_mgmt_ret_t ppe_port_mgmt_omci_port_flush(void);
+
+/**
  * ppe_port_mgmt_isol_config()
  *	Set port isolation configuration
  *

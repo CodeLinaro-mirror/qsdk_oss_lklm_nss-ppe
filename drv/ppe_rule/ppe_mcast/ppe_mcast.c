@@ -113,13 +113,13 @@ static struct ppe_mcast_group* ppe_mcast_get_group(union ppe_mcast_ip *ip, bool 
  */
 static void ppe_mcast_delete_group(struct ppe_mcast_group *mc_grp)
 {
-		/*
-		 * If no supported entry, delete multicast group
-		 */
-		if (!mc_grp->supported_dst_cnt) {
-			list_del(&mc_grp->list);
-			kfree(mc_grp);
-		}
+	/*
+	 * If no supported entry, delete multicast group
+	 */
+	if (!mc_grp->unsupported_dst_cnt && !mc_grp->omci_not_managed && !mc_grp->supported_dst_cnt) {
+		list_del(&mc_grp->list);
+		kfree(mc_grp);
+	}
 }
 
 /*
@@ -131,6 +131,7 @@ ppe_mcast_ret_t ppe_mcast_delete_entry(struct ppe_mcast_entry_info *info)
 	struct ppe_mcast *g_mcast = &gbl_ppe_mcast;
 	struct ppe_mcast_group *mc_grp = NULL;
 	struct ppe_mcast_entry *mc_entry = NULL;
+	struct ppe_drv_omci_port_node *node = NULL;
 	struct net_device *dev = NULL;
 	int port_id;
 
@@ -159,8 +160,21 @@ ppe_mcast_ret_t ppe_mcast_delete_entry(struct ppe_mcast_entry_info *info)
 
 	port_id = ppe_drv_port_num_from_dev(dev);
 	if ((port_id < 0) || (port_id >= PPE_DRV_PHYSICAL_MAX)) {
+		mc_grp->unsupported_dst_cnt--;
 		goto update_mc_group;
 	}
+
+	/*
+	 * Check if destinaton info L2 managed by OMCI
+	 */
+	node = ppe_drv_port_mgmt_omci_port_find_and_ref(dev->name);
+	if (!node) {
+		mc_grp->omci_not_managed--;
+		ppe_mcast_trace("Port:%d not managed by OMCI", port_id);
+		goto update_mc_group;
+	}
+
+	ppe_drv_port_mgmt_omci_port_deref(node);
 
 	/*
 	 * Find entry using hash table
@@ -193,9 +207,17 @@ ppe_mcast_ret_t ppe_mcast_delete_entry(struct ppe_mcast_entry_info *info)
 		return PPE_MCAST_MC_ENTRY_CREATE_FAIL;
 	}
 
-	 mc_grp->supported_dst_cnt--;
-	 ppe_mcast_hash_del(mc_entry);
-	 kfree(mc_entry);
+	/*
+	 * Deref the OMCI node, refernce taken during addition
+	 */
+	if (mc_entry->node) {
+		ppe_drv_port_mgmt_omci_port_deref(mc_entry->node);
+		mc_entry->node = NULL;
+	}
+
+	mc_grp->supported_dst_cnt--;
+	ppe_mcast_hash_del(mc_entry);
+	kfree(mc_entry);
 
 	ppe_mcast_delete_group(mc_grp);
 
@@ -210,8 +232,7 @@ update_mc_group:
 	 * check if multicast group already exists, if unsupported interface count is 0,
 	 * then add all other entries in that group to forward
 	 */
-	mc_grp->unsupported_dst_cnt--;
-	if (!mc_grp->unsupported_dst_cnt) {
+	if (!mc_grp->unsupported_dst_cnt && !mc_grp->omci_not_managed) {
 		/*
 		 * Re-add all entries for this group from hash table
 		 */
@@ -222,7 +243,7 @@ update_mc_group:
 			if (entry->entry.is_v4 == mc_grp->is_v4) {
 				if ((entry->entry.is_v4 && entry->entry.gip.v4 == mc_grp->gip.v4) ||
 					(!entry->entry.is_v4 && ppe_drv_mcast_v6_addr_equal(entry->entry.gip.v6, mc_grp->gip.v6))) {
-					ppe_drv_mcast_entry_add(&entry->entry);
+						ppe_drv_mcast_entry_add(&entry->entry);
 				}
 			}
 		}
@@ -243,8 +264,10 @@ ppe_mcast_ret_t ppe_mcast_create_entry(struct ppe_mcast_entry_info *info)
 	struct ppe_mcast *g_mcast = &gbl_ppe_mcast;
 	struct ppe_mcast_group *mc_grp = NULL;
 	struct ppe_mcast_entry *mc_entry = NULL;
+	struct ppe_drv_omci_port_node *node = NULL;
 	struct net_device *dev = NULL;
 	int port_id;
+	bool is_added = false;
 
 	/*
 	 * Check if multicast group already exists, add entry to that group
@@ -273,11 +296,25 @@ ppe_mcast_ret_t ppe_mcast_create_entry(struct ppe_mcast_entry_info *info)
 	 */
 	dev = dev_get_by_name(&init_net, info->dev);
 	if (!dev) {
+		ppe_mcast_stats_inc(&g_mcast->stats.mcast_create_entry_fail);
+		spin_unlock_bh(&g_mcast->lock);
+		ppe_mcast_warn("multicast group deletion failed for dev %s, invalid device", info->dev);
+		return PPE_MCAST_MC_ENTRY_CREATE_FAIL;
+	}
+
+	port_id = ppe_drv_iface_idx_get_by_dev(dev);
+	if ((port_id < 0) || (port_id >= PPE_DRV_PHYSICAL_MAX)) {
+		mc_grp->unsupported_dst_cnt++;
 		goto update_mc_group;
 	}
 
-	port_id = ppe_drv_port_num_from_dev(dev);
-	if ((port_id < 0) || (port_id >= PPE_DRV_PHYSICAL_MAX)) {
+	/*
+	 * Check if destinaton info L2 managed by OMCI
+	 */
+	node = ppe_drv_port_mgmt_omci_port_find_and_ref(dev->name);
+	if (!node) {
+		mc_grp->omci_not_managed++;
+		ppe_mcast_trace("Port:%d not managed by OMCI", port_id);
 		goto update_mc_group;
 	}
 
@@ -329,6 +366,7 @@ ppe_mcast_ret_t ppe_mcast_create_entry(struct ppe_mcast_entry_info *info)
 		return PPE_MCAST_MC_ENTRY_CREATE_FAIL;
 	}
 
+	mc_entry->node = node;
 	mc_entry->entry.is_v4 = info->is_v4;
 	mc_entry->entry.sip_valid = info->sip_enabled;
 	if (info->is_v4) {
@@ -347,35 +385,44 @@ ppe_mcast_ret_t ppe_mcast_create_entry(struct ppe_mcast_entry_info *info)
 	/*
 	 * Configure multicast entry in PPE
 	 */
-	if (ppe_drv_mcast_entry_add(&mc_entry->entry) != PPE_DRV_RET_SUCCESS) {
-		dev_put(dev);
-		ppe_mcast_delete_group(mc_grp);
-		ppe_mcast_stats_inc(&g_mcast->stats.mcast_create_entry_fail);
-		spin_unlock_bh(&g_mcast->lock);
-		ppe_mcast_warn("multicast entry creation failed in ppe for dev %s", info->dev);
-		return PPE_MCAST_MC_ENTRY_CREATE_FAIL;
+	if (!mc_grp->unsupported_dst_cnt && !mc_grp->omci_not_managed) {
+		if (ppe_drv_mcast_entry_add(&mc_entry->entry) != PPE_DRV_RET_SUCCESS) {
+			dev_put(dev);
+			ppe_mcast_delete_group(mc_grp);
+			ppe_mcast_stats_inc(&g_mcast->stats.mcast_create_entry_fail);
+			spin_unlock_bh(&g_mcast->lock);
+			ppe_mcast_warn("multicast entry creation failed in ppe for dev %s", info->dev);
+			return PPE_MCAST_MC_ENTRY_CREATE_FAIL;
+		}
+		is_added = true;
 	}
 
 	mc_grp->supported_dst_cnt++;
 
 	/*
-	 * Add to hash table
+	 * Add to hash table for supported/unsupported port
 	 */
 	ppe_mcast_hash_add(mc_entry);
-
 	dev_put(dev);
-	ppe_mcast_stats_inc(&g_mcast->stats.mcast_create_entry_success);
-	spin_unlock_bh(&g_mcast->lock);
 
-	return PPE_MCAST_SUCCESS;
+	if (is_added) {
+		ppe_mcast_stats_inc(&g_mcast->stats.mcast_create_entry_success);
+		spin_unlock_bh(&g_mcast->lock);
+
+		ppe_mcast_info("multicast entry creation success for dev %s", info->dev);
+		return PPE_MCAST_SUCCESS;
+	} else {
+		ppe_mcast_stats_inc(&g_mcast->stats.mcast_create_entry_fail);
+		spin_unlock_bh(&g_mcast->lock);
+		ppe_mcast_warn("multicast entry creation failed for dev %s, unsupported interface present in group", info->dev);
+		return PPE_MCAST_MC_ENTRY_CREATE_FAIL;
+	}
 
 update_mc_group:
 	/*
-	 * TODO: If destination entry is an unsupported port (virtual: wlan or DSA interface),
-	 * check if multicast group has supported ports, then set fwd_cmd for all supported entries
-	 * in that group to redirect to CPU
+	 * If destination entry is an unsupported port (virtual: wlan or DSA interface),
+	 * delete the entries for supported ports from PPE
 	 */
-	mc_grp->unsupported_dst_cnt++;
 	dev_put(dev);
 
 	/*
@@ -388,7 +435,9 @@ update_mc_group:
 		if (entry->entry.is_v4 == mc_grp->is_v4) {
 			if ((entry->entry.is_v4 && entry->entry.gip.v4 == mc_grp->gip.v4) ||
 				(!entry->entry.is_v4 && ppe_drv_mcast_v6_addr_equal(entry->entry.gip.v6, mc_grp->gip.v6))) {
-				ppe_drv_mcast_entry_delete(&entry->entry);
+				if (entry->node) {
+					ppe_drv_mcast_entry_delete(&entry->entry);
+				}
 			}
 		}
 	}
@@ -396,7 +445,7 @@ update_mc_group:
 	ppe_mcast_delete_group(mc_grp);
 	ppe_mcast_stats_inc(&g_mcast->stats.mcast_create_entry_fail);
 	spin_unlock_bh(&g_mcast->lock);
-	ppe_mcast_warn("multicast entry creation failed for dev %s, unsupported interface", info->dev);
+	ppe_mcast_warn("multicast entry creation failed for dev %s, unsupported interface or port not managed by OMCI", info->dev);
 	return PPE_MCAST_MC_ENTRY_CREATE_FAIL;
 }
 EXPORT_SYMBOL(ppe_mcast_create_entry);

@@ -57,6 +57,8 @@
 struct ppe_port_mgmt_base {
 	spinlock_t lock;			 /**< Spinlock for port‑management operations */
 	struct list_head active_rules;		 /**< List of active port‑management rules */
+	struct ppe_port_mgmt_stats stats;	 /**< OMCI port management statistics */
+	struct dentry *dentry;			 /**< Debugfs dentry for stats */
 
 #ifdef NSS_PPE_PORT_ISOL_SUPPORT
 	uint64_t port_phy_isol_bitmap[PPE_PORT_MGMT_OMCI_ID_MAX];				/**< PHY‑port isolation bitmap per OMCI ID */
