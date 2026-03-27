@@ -287,8 +287,15 @@ static bool ppe_pm_rule_fill(struct ppe_pm_gen *pm_gen, struct ppe_pm_counter_ge
 					dev_put(dev);
 					return false;
 				}
+#ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
+				if (ppe_drv_veip_is_enabled(dev)) {
+					port_num = ppe_drv_veip_get_port(iface, PPE_DRV_PORT_VIRTUAL_PON);
+				} else
+#endif
+				{
+					port_num = ppe_drv_iface_port_idx_get(iface);
+				}
 
-				port_num = ppe_drv_iface_port_idx_get(iface);
 				if (port_num < 0) {
 					ppe_pm_warn("failed to find PPE port for iface: %p\n", iface);
 					dev_put(dev);

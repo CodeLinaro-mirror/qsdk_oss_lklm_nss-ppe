@@ -89,4 +89,23 @@ extern int32_t ppe_drv_veip_get_port(struct ppe_drv_iface *iface, enum ppe_drv_p
  *                    false - HGU rule configuration is not valid.
  */
 bool ppe_drv_veip_is_hgu_rule_valid(struct ppe_drv_iface *iface);
+
+/**
+ * ppe_drv_veip_is_enabled - Check if VEIP interface is enabled.
+ *
+ * This API verifies whether the given VEIP network device is enabled
+ * and operational. It checks the device state to determine if VEIP
+ * functionality is active before proceeding with any VEIP-specific
+ * configuration or rule installation.
+ *
+ * @datatypes
+ *  net_device
+ *
+ * @param[in] dev     Network device corresponding to the VEIP interface.
+ *
+ * @return
+ *  bool              true  - VEIP interface is enabled and active.
+ *                    false - VEIP interface is disabled or not available.
+ */
+bool ppe_drv_veip_is_enabled(struct net_device *dev);
 #endif /* _PPE_DRV_VEIP_H_ */
