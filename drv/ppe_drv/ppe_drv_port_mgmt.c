@@ -488,6 +488,12 @@ static inline ppe_drv_ret_t ppe_drv_port_mgmt_isol_apply_all(struct ppe_drv_port
 	if (gem_port_bitmap) {
 		for (vp_port = PPE_DRV_VIRTUAL_START; vp_port < PPE_DRV_PORTS_MAX; vp_port++) {
 			if (omci_idx == port_mgmt->port_omci_index_map[vp_port]) {
+				struct net_device *dev = ppe_drv_port_num_to_dev(vp_port);
+				if (!dev) {
+					port_mgmt->port_omci_index_map[vp_port] = PPE_DRV_OMCI_INDEX_MAX;
+					continue;
+				}
+
 				ret = ppe_drv_port_mgmt_isol_fal_set(port_mgmt, vp_port,
 						&us_port_bitmap, port_mgmt->port_vp_isol_action[omci_idx],
 						PPE_DRV_PORT_VIRTUAL);
@@ -510,6 +516,13 @@ static inline ppe_drv_ret_t ppe_drv_port_mgmt_isol_apply_all(struct ppe_drv_port
 	for (vp_port = PPE_DRV_VIRTUAL_START; vp_port < PPE_DRV_PORTS_MAX; vp_port++) {
 		for (phy_port = PPE_DRV_PHYSICAL_START; phy_port < PPE_DRV_PHYSICAL_MAX; phy_port++) {
 			if (omci_idx == port_mgmt->port_omci_index_map[phy_port]) {
+				struct net_device *dev = ppe_drv_port_num_to_dev(vp_port);
+				if (!dev)
+				{
+					port_mgmt->port_omci_index_map[vp_port] = PPE_DRV_OMCI_INDEX_MAX;
+					continue;
+				}
+
 				ret = ppe_drv_port_mgmt_isol_fal_set(port_mgmt, vp_port,
 						&port_mgmt->port_vp_isol_bitmap[omci_idx],
 						port_mgmt->port_vp_isol_action[omci_idx],
@@ -660,16 +673,22 @@ ppe_drv_ret_t ppe_drv_port_mgmt_default_isol_set(void)
 	}
 
 	for (vp_port = PPE_DRV_VIRTUAL_START; vp_port < PPE_DRV_PORTS_MAX; vp_port++) {
-		for (phy_port = PPE_DRV_PHYSICAL_START; phy_port < PPE_DRV_PHYSICAL_MAX; phy_port++) {
-			ret = ppe_drv_port_isol_ctrl_set(port_mgmt, phy_port,
-					vp_port, A_FALSE);
-			if (ret != PPE_DRV_RET_SUCCESS)
-				return PPE_DRV_RET_PORT_MGMT_ISOL_DEFAULT_FAIL;
+		if (port_mgmt->port_omci_index_map[vp_port] != PPE_DRV_OMCI_INDEX_MAX) {
+			struct net_device *dev = ppe_drv_port_num_to_dev(vp_port);
+			if (!dev)
+				continue;
 
-			ret = ppe_drv_port_isol_ctrl_set(port_mgmt, vp_port,
-					phy_port, A_FALSE);
-			if (ret != PPE_DRV_RET_SUCCESS)
-				return PPE_DRV_RET_PORT_MGMT_ISOL_DEFAULT_FAIL;
+			for (phy_port = PPE_DRV_PHYSICAL_START; phy_port < PPE_DRV_PHYSICAL_MAX; phy_port++) {
+				ret = ppe_drv_port_isol_ctrl_set(port_mgmt, phy_port,
+						vp_port, A_FALSE);
+				if (ret != PPE_DRV_RET_SUCCESS)
+					return PPE_DRV_RET_PORT_MGMT_ISOL_DEFAULT_FAIL;
+
+				ret = ppe_drv_port_isol_ctrl_set(port_mgmt, vp_port,
+						phy_port, A_FALSE);
+				if (ret != PPE_DRV_RET_SUCCESS)
+					return PPE_DRV_RET_PORT_MGMT_ISOL_DEFAULT_FAIL;
+			}
 		}
 	}
 

@@ -1289,7 +1289,6 @@ ppe_drv_ret_t ppe_drv_acl_configure(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 {
 	sw_error_t error;
 	fal_acl_bind_obj_t bind_obj;
-	fal_acl_direc_t dir = FAL_ACL_DIREC_IN;
 	struct ppe_drv *p = ppe_drv_gbl;
 
 	spin_lock_bh(&p->lock);
@@ -1314,12 +1313,9 @@ ppe_drv_ret_t ppe_drv_acl_configure(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_
 	ppe_drv_acl_dev_get(info, &bind_obj);
 
 	/*
-	 * ACL direction: ingress at Pre-IPO, else egress
+	 * ACL direction: ingress at Pre-IPO and IPO
 	 */
-#ifdef PPE_ACL_DEST_BIND_SUPPORT
-	dir = (ctx->type == PPE_DRV_ACL_PREIPO) ? FAL_ACL_DIREC_IN : FAL_ACL_DIREC_EG;
-#endif
-	error = fal_acl_list_bind(PPE_DRV_SWITCH_ID, ctx->list_id, dir, bind_obj, info->dev);
+	error = fal_acl_list_bind(PPE_DRV_SWITCH_ID, ctx->list_id, FAL_ACL_DIREC_IN, bind_obj, info->dev);
 	if (error != SW_OK) {
 		ppe_drv_stats_inc(&p->stats.acl_stats.rule_bind_fail);
 		ppe_drv_warn("%p: Could not bind ACL list, error = %d, list_id: %d\n", ctx, error, ctx->list_id);
