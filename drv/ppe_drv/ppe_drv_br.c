@@ -565,6 +565,56 @@ ppe_drv_ret_t ppe_drv_br_join(struct ppe_drv_iface *br_iface, struct net_device 
 EXPORT_SYMBOL(ppe_drv_br_join);
 
 /**
+ * ppe_drv_br_flood_en()
+ *      Enable flooding on a bridge interface in PPE.
+ */
+ppe_drv_ret_t ppe_drv_br_flood_en(struct ppe_drv_iface *br_iface)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_vsi *vsi;
+
+	spin_lock_bh(&p->lock);
+	vsi = ppe_drv_iface_vsi_get(br_iface);
+	if (!vsi) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: VSI not assigned to bridge\n", br_iface);
+		return PPE_DRV_RET_VSI_NOT_FOUND;
+	}
+
+	vsi->br_flood_en = 1;
+	ppe_drv_port_flood_vsi_override_en(vsi->index);
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_br_flood_en);
+
+/**
+ * ppe_drv_br_flood_def()
+ *      Restore default flooding behavior on a bridge interface in PPE.
+ */
+ppe_drv_ret_t ppe_drv_br_flood_def(struct ppe_drv_iface *br_iface)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_vsi *vsi;
+
+	spin_lock_bh(&p->lock);
+	vsi = ppe_drv_iface_vsi_get(br_iface);
+	if (!vsi) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: VSI not assigned to bridge\n", br_iface);
+		return PPE_DRV_RET_VSI_NOT_FOUND;
+	}
+
+	vsi->br_flood_en = 0;
+	ppe_drv_port_flood_vsi_override_default(vsi->index);
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_br_flood_def);
+
+/**
  * ppe_drv_br_deinit
  *	Uninitialize bridge interface in PPE.
  */

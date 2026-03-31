@@ -765,7 +765,7 @@ void ppe_drv_port_vsi_attach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		goto fail;
 	}
 
-	if (active_vsi->flood_vsi_en) {
+	if (active_vsi->br_flood_en) {
 		ppe_drv_port_flood_vsi_override_en(active_vsi->index);
 	}
 	ppe_drv_trace("%p: attaching vsi %u to port %u", pp, active_vsi->index, fal_port);
@@ -889,6 +889,10 @@ void ppe_drv_port_vsi_detach(struct ppe_drv_port *pp, struct ppe_drv_vsi *vsi)
 		ppe_drv_warn("%p port vsi configuration failed: %p port_num: %u vsi_num: %u",
 				pp, vsi, fal_port, vsi->index);
 	}
+
+        if (vsi->br_flood_en) {
+                ppe_drv_port_flood_vsi_override_en(vsi->index);
+        }
 
 	ppe_drv_port_dump(pp);
 }

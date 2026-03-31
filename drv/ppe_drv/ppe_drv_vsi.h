@@ -51,7 +51,7 @@ struct ppe_drv_vsi {
 	bool is_fdb_learn_enabled;	/* FDB learning enabled */
 	uint8_t index;			/* vsi number */
 	uint8_t type;			/* vsi type */
-	uint8_t flood_vsi_en;		/* Set UUC/UMC/BC flood enable */
+	uint8_t br_flood_en;		/* Set UUC/UMC/BC flood enable */
 };
 
 bool ppe_drv_vlan_del_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_drv_l3_if *src_l3_if);

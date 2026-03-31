@@ -184,6 +184,7 @@ struct nss_ppe_bridge_mgr_pvt {
 						   bridge device */
 	bool wan_if_enabled;			/* Is WAN interface enabled? */
 	bool fdb_lrn_enabled;			/* Keep track of FDB Learning status */
+	bool br_flood_en;			/* Flood to other ports in bridge */
 	struct net_device *wan_netdev;		/* WAN interface netdevice */
 	uint32_t mtu;				/* MTU for bridge */
 	uint8_t dev_addr[ETH_ALEN];		/* MAC address for bridge */

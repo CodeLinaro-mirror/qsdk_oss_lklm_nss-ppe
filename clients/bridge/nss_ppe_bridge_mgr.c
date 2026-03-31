@@ -40,6 +40,9 @@ static int fdb_disabled = true;
 #else
 static int fdb_disabled = false;
 #endif
+#define NSS_PPE_BRIDGE_WHITESPACE " \t\v\f\n,"
+#define NSS_PPE_BRIDGE_FLOOD_EN_STR_LEN 40
+static char br_flood_en[NSS_PPE_BRIDGE_FLOOD_EN_STR_LEN];
 
 /*
  * Enable FDB delete notify registration.
@@ -1226,6 +1229,96 @@ static int nss_ppe_bridge_mgr_fdb_del_notify_handler(struct ctl_table *table,
 	return ret;
 }
 
+/*
+ * nss_ppe_bridge_mgr_br_flood_en()
+ *      API to enable/disable the flood membership ovveride for UUC, UMC and BC.
+ */
+int nss_ppe_bridge_mgr_br_flood_en(struct ctl_table *table, int write,
+                void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+        struct net_device *net_dev = NULL;
+        struct ppe_drv_iface *iface = NULL;
+        int ret;
+        const char *map_name;
+        const char *action;
+        const char *dev;
+        int action_len;
+	bool is_br_flood = false;
+
+	/*
+	 * Populate the sysctl backing buffer (br_flood_en).
+	 * If not a write or if proc_dostring failed, return immediately.
+	 */
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret || !write) {
+		return ret;
+	}
+
+	/*
+	 * Parse the input; valid forms:
+	 *   "enable <netdev_name>"
+	 *   "default <netdev_name>"
+	 */
+	map_name = br_flood_en;
+	if (!map_name) {
+		nss_ppe_bridge_mgr_warn("No input buffer for br_flood_en\n");
+		return -EINVAL;
+	}
+
+	/* Skip leading whitespace and identify action keyword */
+	action = map_name + strspn(map_name, NSS_PPE_BRIDGE_WHITESPACE);
+
+	if (strncasecmp(action, "enable", 6) == 0) {
+		is_br_flood = true;
+		action_len = 6;
+	} else if (strncasecmp(action, "default", 7) == 0) {
+		is_br_flood = false;
+		action_len = 7;
+	} else {
+		nss_ppe_bridge_mgr_warn("Invalid action input, expected: <enable/default>\n");
+		return -EINVAL;
+	}
+
+	/* Move to device token and skip whitespace */
+	dev = action + action_len;
+	dev += strspn(dev, NSS_PPE_BRIDGE_WHITESPACE);
+
+	/* Extract only the device token up to next whitespace (strip trailing spaces/newlines) */
+	{
+		size_t dev_len = strcspn(dev, NSS_PPE_BRIDGE_WHITESPACE);
+		char dev_buf[IFNAMSIZ];
+
+		if (dev_len == 0 || dev_len > IFNAMSIZ - 1) {
+			nss_ppe_bridge_mgr_warn("Invalid DEV NAME\n");
+			return -EINVAL;
+		}
+
+		memcpy(dev_buf, dev, dev_len);
+		dev_buf[dev_len] = '\0';
+
+		net_dev = dev_get_by_name(&init_net, dev_buf);
+		if (!net_dev) {
+			nss_ppe_bridge_mgr_warn("No valid netdevice found for dev: %s\n", dev_buf);
+			return -ENODEV;
+		}
+	}
+
+	/* Resolve interface/VSI from the netdevice */
+	iface = ppe_drv_iface_get_by_dev(net_dev);
+	if (!iface) {
+		dev_put(net_dev);
+		return -ENODEV;
+	}
+
+	if (is_br_flood)
+		ppe_drv_br_flood_en(iface);
+	else
+		ppe_drv_br_flood_def(iface);
+
+	dev_put(net_dev);
+	return 0;
+}
+
 static struct ctl_table nss_ppe_bridge_mgr_table[] = {
 	{
 		.procname	= "add_wanif",
@@ -1255,6 +1348,13 @@ static struct ctl_table nss_ppe_bridge_mgr_table[] = {
 		.mode           = 0644,
 		.proc_handler   = &nss_ppe_bridge_mgr_fdb_del_notify_handler,
 	},
+	{
+                .procname       = "br_flood_en",
+                .data           = &br_flood_en,
+                .maxlen         = sizeof(char) * NSS_PPE_BRIDGE_FLOOD_EN_STR_LEN ,
+                .mode           = 0644,
+                .proc_handler   = &nss_ppe_bridge_mgr_br_flood_en,
+        },
 	{ }
 };
 

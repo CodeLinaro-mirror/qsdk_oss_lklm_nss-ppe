@@ -205,6 +205,10 @@ static bool nss_ppe_bridge_mgr_dump_one(struct nss_ppe_bridge_mgr_dump_instance 
 		goto error;
 	}
 
+	if ((status = nss_ppe_bridge_mgr_dump_write(bdi, "br_flood_en", "%d", b_pvt->br_flood_en))) {
+                goto error;
+        }
+
 	/*
 	 * Remove the 'bridge' prefix for next interation
 	 */
