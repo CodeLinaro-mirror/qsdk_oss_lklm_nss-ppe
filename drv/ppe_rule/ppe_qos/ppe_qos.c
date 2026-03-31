@@ -40,7 +40,7 @@ static int ppe_qos_get_interface_id(struct ppe_qos_interface *data)
 		return -1;
 	}
 
-	port_id = ppe_drv_iface_idx_get_by_dev(dev);
+	port_id = ppe_drv_port_num_from_dev(dev);
 	if ((port_id < 0) || (port_id >= PPE_DRV_PHYSICAL_MAX)) {
 		ppe_qos_warn("%p invalid port_num", data);
 		dev_put(dev);

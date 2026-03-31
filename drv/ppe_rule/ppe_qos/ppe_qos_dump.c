@@ -373,7 +373,7 @@ static bool ppe_qos_dump_all_interfaces(struct ppe_qos_dump_instance *pqdi)
 				goto error;
 			}
 
-			dev = ppe_drv_dev_get_by_iface_idx(tm_if->id);
+			dev = ppe_drv_port_num_to_dev(tm_if->id);
 			if ((result = ppe_qos_dump_write(pqdi, "dev", "%s", dev->name))) {
 				goto error;
 			}

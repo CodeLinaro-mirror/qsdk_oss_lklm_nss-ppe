@@ -12,7 +12,6 @@
 ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *info)
 {
 	struct net_device *dev;
-	struct ppe_drv_iface *iface;
 	uint32_t port_id;
 	uint32_t profile_id;
 	int i;
@@ -54,26 +53,11 @@ ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *inf
 		return PPE_QOS_INVALID_DEV;
 	}
 
-	spin_lock_bh(&gbl_ppe_qos.lock);
-
 	/*
-	 * Get the PPE interface for this device
+	 * Get the port ID from the device
 	 */
-	iface = ppe_drv_iface_get_by_dev(dev);
-	if (!iface) {
-		spin_unlock_bh(&gbl_ppe_qos.lock);
-		dev_put(dev);
-		ppe_qos_warn("PPE interface not found for device %s", dev->name);
-		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_ucast_prio_map_fail);
-		return PPE_QOS_INVALID_DEV;
-	}
-
-	/*
-	 * Get the port ID from the interface
-	 */
-	port_id = ppe_drv_iface_port_idx_get(iface);
-	if (port_id >= PPE_DRV_PHYSICAL_MAX) {
-		spin_unlock_bh(&gbl_ppe_qos.lock);
+	port_id = ppe_drv_port_num_from_dev(dev);
+	if ((port_id < 0) || (port_id >= PPE_DRV_PHYSICAL_MAX)) {
 		dev_put(dev);
 		ppe_qos_warn("Invalid port ID %u for device %s", port_id, dev->name);
 		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_ucast_prio_map_fail);
@@ -81,13 +65,10 @@ ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *inf
 	}
 
 	/*
-	 * Get the profile ID for this port
+	 * Get the profile ID for this port and Configure the unicast priority map
 	 */
+	spin_lock_bh(&gbl_ppe_qos.lock);
 	profile_id = ppe_drv_port_ucast_queue_profile_get(port_id);
-
-	/*
-	 * Configure the unicast priority map
-	 */
 	if (!ppe_drv_confgiure_ucast_prio_map_tbl(profile_id, info->prio_map)) {
 		spin_unlock_bh(&gbl_ppe_qos.lock);
 		dev_put(dev);
@@ -105,7 +86,7 @@ ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *inf
 	spin_unlock_bh(&gbl_ppe_qos.lock);
 	dev_put(dev);
 
-	ppe_qos_info("Successfully configured unicast priority map for device %s", dev->name);
+	ppe_qos_info("Successfully configured unicast priority map for device %s port:%d", dev->name, port_id);
 	ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_ucast_prio_map_success);
 	return PPE_QOS_SUCCESS;
 }
@@ -119,7 +100,6 @@ EXPORT_SYMBOL(ppe_qos_set_ucast_prio_map);
 ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *info)
 {
 	struct net_device *dev;
-	struct ppe_drv_iface *iface;
 	uint32_t port_id;
 	int i;
 
@@ -160,26 +140,11 @@ ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *inf
 		return PPE_QOS_INVALID_DEV;
 	}
 
-	spin_lock_bh(&gbl_ppe_qos.lock);
-
 	/*
-	 * Get the PPE interface for this device
+	 * Get the port ID from the device
 	 */
-	iface = ppe_drv_iface_get_by_dev(dev);
-	if (!iface) {
-		spin_unlock_bh(&gbl_ppe_qos.lock);
-		dev_put(dev);
-		ppe_qos_warn("PPE interface not found for device %s", dev->name);
-		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_mcast_prio_map_fail);
-		return PPE_QOS_INVALID_DEV;
-	}
-
-	/*
-	 * Get the port ID from the interface
-	 */
-	port_id = ppe_drv_iface_port_idx_get(iface);
-	if (port_id >= PPE_DRV_PHYSICAL_MAX) {
-		spin_unlock_bh(&gbl_ppe_qos.lock);
+	port_id = ppe_drv_port_num_from_dev(dev);
+	if ((port_id < 0) || (port_id >= PPE_DRV_PHYSICAL_MAX)) {
 		dev_put(dev);
 		ppe_qos_warn("Invalid port ID %u for device %s", port_id, dev->name);
 		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_mcast_prio_map_fail);
@@ -189,6 +154,7 @@ ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *inf
 	/*
 	 * Call the PPE driver function to configure multicast priority map for each priority
 	 */
+	spin_lock_bh(&gbl_ppe_qos.lock);
 	for (i = 0; i < PPE_DRV_MAX_PRIORITY; i++) {
 		if (!ppe_drv_port_mcast_priority_class_set(port_id, i, info->prio_map[i])) {
 			spin_unlock_bh(&gbl_ppe_qos.lock);
@@ -208,7 +174,7 @@ ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *inf
 	spin_unlock_bh(&gbl_ppe_qos.lock);
 	dev_put(dev);
 
-	ppe_qos_info("Successfully set multicast priority map for port %u", port_id);
+	ppe_qos_info("Successfully set multicast priority map for device:%s port %u", dev->name, port_id);
 	ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_mcast_prio_map_success);
 	return PPE_QOS_SUCCESS;
 }
