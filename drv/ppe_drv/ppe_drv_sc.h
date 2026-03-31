@@ -21,6 +21,8 @@
 #define PPE_DRV_SC_DDRQ_FULL_PKT_SPL_BYPASS_SC		5
 #define PPE_DRV_SC_DDRQ_PT_SPL_BYPASS_SC		2
 
+#define PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL	0xffffffff
+
 /*
  * ppe_drv_eip_hw_sc
  *	PPE driver EIP HW service.
