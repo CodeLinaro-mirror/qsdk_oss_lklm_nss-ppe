@@ -74,8 +74,8 @@ static int nss_ppenl_tun_rps_map_to_ipv4_create(struct nss_ppe_nl_tun_rps *nl_ru
 	/*
 	 * Map ports (convert to network byte order)
 	 */
-	ppe_msg->flow_ident = htons(nl_rule->sport);
-	ppe_msg->return_ident = htons(nl_rule->dport);
+	ppe_msg->flow_ident = nl_rule->sport;
+	ppe_msg->return_ident = nl_rule->dport;
 
 	/*
 	 * Direct mappings
@@ -179,8 +179,8 @@ static int nss_ppenl_tun_rps_map_to_ipv6_create(struct nss_ppe_nl_tun_rps *nl_ru
 	/*
 	 * Map ports (convert to network byte order)
 	 */
-	ppe_msg->flow_ident = htons(nl_rule->sport);
-	ppe_msg->return_ident = htons(nl_rule->dport);
+	ppe_msg->flow_ident = nl_rule->sport;
+	ppe_msg->return_ident = nl_rule->dport;
 
 	/*
 	 * Direct mappings
@@ -280,8 +280,8 @@ static int nss_ppenl_tun_rps_map_to_ipv4_destroy(struct nss_ppe_nl_tun_rps *nl_r
 	/*
 	 * Map ports (convert to network byte order)
 	 */
-	ppe_msg->flow_ident = htons(nl_rule->sport);
-	ppe_msg->return_ident = htons(nl_rule->dport);
+	ppe_msg->flow_ident = nl_rule->sport;
+	ppe_msg->return_ident = nl_rule->dport;
 
 	/*
 	 * Direct mappings
@@ -336,8 +336,8 @@ static int nss_ppenl_tun_rps_map_to_ipv6_destroy(struct nss_ppe_nl_tun_rps *nl_r
 	/*
 	 * Map ports (convert to network byte order)
 	 */
-	ppe_msg->flow_ident = htons(nl_rule->sport);
-	ppe_msg->return_ident = htons(nl_rule->dport);
+	ppe_msg->flow_ident = nl_rule->sport;
+	ppe_msg->return_ident = nl_rule->dport;
 
 	/*
 	 * Direct mappings

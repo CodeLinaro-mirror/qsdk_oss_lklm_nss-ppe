@@ -6,7 +6,6 @@
 #include <ppe_drv/ppe_drv.h>
 #include <fal_tunnel.h>
 #include "ppe_drv_tun_tpr.h"
-#include "linux/if_ether.h"
 #include "ppe_drv.h"
 #include "ppe_drv_port.h"
 #include <ppe_drv_tun_rps.h>
@@ -18,28 +17,18 @@
  * ppe_drv_tun_tpr_pppoe_l3_if_configure
  *	configure pppoe l3 if for tunnel TPR
  */
-static struct ppe_drv_tun_l3_if *ppe_drv_tun_tpr_pppoe_l3_if_configure(const char *wan_if, uint16_t session_id, uint8_t *smac)
+static struct ppe_drv_tun_l3_if *ppe_drv_tun_tpr_pppoe_l3_if_configure(int16_t xmit_port, uint16_t session_id, uint8_t *smac)
 {
 	fal_tunnel_port_intf_t port_tnl_cfg = {0};
 	struct ppe_drv_tun_l3_if *tl_l3_if;
 	struct ppe_drv_pppoe *pppoe = NULL;
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *pp = NULL;
-	int16_t xmit_port;
 	sw_error_t err;
-
-	/*
-	 * Get xmit port from interface name
-	 */
-	xmit_port = ppe_drv_port_num_from_ifname(wan_if);
-	if (xmit_port == PPE_DRV_PORT_ID_INVALID) {
-		ppe_drv_warn("Failed to get xmit port for dev %s", wan_if);
-		return NULL;
-	}
 
 	pp = ppe_drv_port_from_port_num(xmit_port);
 	if (!pp) {
-		ppe_drv_warn("Couldn't get destination port for dev %s", wan_if);
+		ppe_drv_warn("Couldn't get destination port for port %d", xmit_port);
 		return NULL;
 	}
 
@@ -75,7 +64,7 @@ configure_port:
 	 */
 	err = fal_tunnel_port_intf_get(PPE_DRV_SWITCH_ID, xmit_port, &port_tnl_cfg);
 	if (err != SW_OK) {
-		ppe_drv_warn("Unable to get xmit port config for dev %s", wan_if);
+		ppe_drv_warn("Unable to get xmit port config for port %d", xmit_port);
 		if (tl_l3_if) {
 			ppe_drv_tun_l3_if_deref(tl_l3_if);
 			ppe_drv_pppoe_deref(pppoe);
@@ -86,7 +75,7 @@ configure_port:
 	port_tnl_cfg.pppoe_en = A_TRUE;
 	err = fal_tunnel_port_intf_set(PPE_DRV_SWITCH_ID, xmit_port, &port_tnl_cfg);
 	if (err != SW_OK) {
-		ppe_drv_warn("Unable to set xmit port config for dev %s", wan_if);
+		ppe_drv_warn("Unable to set xmit port config for port %d", xmit_port);
 		if (tl_l3_if) {
 			ppe_drv_tun_l3_if_deref(tl_l3_if);
 			ppe_drv_pppoe_deref(pppoe);
@@ -101,30 +90,20 @@ configure_port:
  * ppe_drv_tun_tpr_l3_if_configure
  *	Allocate and configure TL_L3_IF for RPS tunnel
  */
-static struct ppe_drv_tun_l3_if *ppe_drv_tun_tpr_l3_if_configure(const char *wan_if)
+static struct ppe_drv_tun_l3_if *ppe_drv_tun_tpr_l3_if_configure(int16_t xmit_port)
 {
 	struct ppe_drv_tun_l3_if *tun_l3_if;
 	fal_tunnel_port_intf_t port_tnl_cfg = {0};
 	struct ppe_drv_port *pp = NULL;
 	struct ppe_drv *p = ppe_drv_gbl;
-	int16_t xmit_port;
 	sw_error_t err;
-
-	/*
-	 * Get xmit port from interface name
-	 */
-	xmit_port = ppe_drv_port_num_from_ifname(wan_if);
-	if (xmit_port == PPE_DRV_PORT_ID_INVALID) {
-		ppe_drv_warn("Failed to get xmit port for dev %s", wan_if);
-		return NULL;
-	}
 
 	/*
 	 * Get port structure
 	 */
 	pp = ppe_drv_port_from_port_num(xmit_port);
 	if (!pp) {
-		ppe_drv_warn("Couldn't get destination port for dev %s", wan_if);
+		ppe_drv_warn("Couldn't get destination port for port number %d", xmit_port);
 		return NULL;
 	}
 
@@ -133,7 +112,7 @@ static struct ppe_drv_tun_l3_if *ppe_drv_tun_tpr_l3_if_configure(const char *wan
 	 */
 	tun_l3_if = ppe_drv_port_tl_l3_if_get_n_ref(pp);
 	if (tun_l3_if) {
-		ppe_drv_trace("Reuse TL-L3 IF at index %u for dev %s\n", tun_l3_if->index, wan_if);
+		ppe_drv_trace("Reuse TL-L3 IF at index %u for port %d\n", tun_l3_if->index, xmit_port);
 		goto configure_port;
 	}
 
@@ -142,7 +121,7 @@ static struct ppe_drv_tun_l3_if *ppe_drv_tun_tpr_l3_if_configure(const char *wan
 	 */
 	tun_l3_if = ppe_drv_tun_l3_if_alloc(p);
 	if (!tun_l3_if) {
-		ppe_drv_warn("Failed to allocate tl_l3_if for dev %s", wan_if);
+		ppe_drv_warn("Failed to allocate tl l3 if for port %d", xmit_port);
 		return NULL;
 	}
 
@@ -150,7 +129,7 @@ static struct ppe_drv_tun_l3_if *ppe_drv_tun_tpr_l3_if_configure(const char *wan
 	 * Configure tl_l3_if
 	 */
 	if (!ppe_drv_tun_l3_if_configure(tun_l3_if)) {
-		ppe_drv_warn("Tun l3 if configure failed for dev %s", wan_if);
+		ppe_drv_warn("Tun l3 if configure failed for port %d", xmit_port);
 		ppe_drv_tun_l3_if_deref(tun_l3_if);
 		return NULL;
 	}
@@ -159,7 +138,7 @@ static struct ppe_drv_tun_l3_if *ppe_drv_tun_tpr_l3_if_configure(const char *wan
 	 * Attach tl_l3_if to port
 	 */
 	ppe_drv_port_tl_l3_if_attach(pp, tun_l3_if);
-	ppe_drv_trace("TL_L3_IF successfully attached/configured for dev %s", wan_if);
+	ppe_drv_trace("TL_L3_IF successfully attached/configured for port %d", xmit_port);
 
 configure_port:
 	/*
@@ -167,7 +146,7 @@ configure_port:
 	 */
 	err = fal_tunnel_port_intf_get(PPE_DRV_SWITCH_ID, xmit_port, &port_tnl_cfg);
 	if (err != SW_OK) {
-		ppe_drv_warn("Unable to get xmit port config for dev %s", wan_if);
+		ppe_drv_warn("Unable to get xmit port config for port %d", xmit_port);
 		ppe_drv_tun_l3_if_deref(tun_l3_if);
 		return NULL;
 	}
@@ -180,7 +159,7 @@ configure_port:
 
 	err = fal_tunnel_port_intf_set(PPE_DRV_SWITCH_ID, xmit_port, &port_tnl_cfg);
 	if (err != SW_OK) {
-		ppe_drv_warn("Unable to set xmit port config for dev %s", wan_if);
+		ppe_drv_warn("Unable to set xmit port config for port %d", xmit_port);
 		ppe_drv_tun_l3_if_deref(tun_l3_if);
 		return NULL;
 	}
@@ -822,6 +801,7 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_destroy(struct ppe_drv_tun_rps_rule_destroy *
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_tun_tpr_prsr_udf tpr_udf = {0};
 	struct ppe_drv_pppoe *pppoe = NULL;
+	struct ppe_drv_tun_l3_if *tun_l3_if = NULL;
 	uint8_t i;
 
 	ppe_drv_tun_rps_dump_rule(rule_destroy, false);
@@ -902,9 +882,7 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_destroy(struct ppe_drv_tun_rps_rule_destroy *
 			}
 		}
 
-		if (!ppe_drv_tun_rps_l3_if_deconfigure(pgm->ctx.data.rps.tun_l3_if, pppoe)) {
-			ppe_drv_warn("TL_L3_IF deref failed\n");
-		}
+		tun_l3_if = pgm->ctx.data.rps.tun_l3_if;
 		pgm->ctx.data.rps.tun_l3_if = NULL;
 	}
 
@@ -929,6 +907,16 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_destroy(struct ppe_drv_tun_rps_rule_destroy *
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	/*
+	 * Deconfigure TL_L3_IF outside the lock to avoid deadlock
+	 */
+	if (tun_l3_if) {
+		if (!ppe_drv_tun_rps_l3_if_deconfigure(tun_l3_if, pppoe)) {
+			ppe_drv_warn("TL_L3_IF deref failed\n");
+		}
+	}
+
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_tun_rps_rule_destroy);
@@ -945,20 +933,71 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_create(struct ppe_drv_tun_rps_rule_create *ru
 	struct ppe_drv_tun_prgm_prsr *pgm;
 	struct ppe_drv_tun_prgm_prsr_prgm_udf *eth_udf = NULL, *ipv4_udf = NULL, *ipv6_udf = NULL;
 	uint8_t i;
-	struct ppe_drv_tun_l3_if *tun_l3_if;
+	struct ppe_drv_tun_l3_if *tun_l3_if = NULL;
 	bool ip_inner_proto_en = false;
+	int16_t xmit_port;
 
 	ppe_drv_tun_rps_dump_rule(rule_create, true);
+
+	/*
+	 * Get xmit port from interface name outside the lock to avoid deadlock
+	 */
+	xmit_port = ppe_drv_port_num_from_ifname(rule_create->wan_if);
+	if (xmit_port == PPE_DRV_PORT_ID_INVALID) {
+		ppe_drv_warn("Failed to get xmit port for dev %s", rule_create->wan_if);
+		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
+	}
+
+	/*
+	* Validate and adjust offsets if base is Ethernet header.
+	* The hardware starts its offset counter from the EtherType field (byte 12).
+	*/
+	if (rule_create->offset_type == PPE_DRV_TUN_RPS_OFFSET_TYPE_ETH) {
+		if (rule_create->header_len < ETH_HLEN) {
+			ppe_drv_warn("%p: Invalid header_len %d for ETH offset type (min %d)",
+					rule_create, rule_create->header_len, ETH_HLEN);
+			return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
+		}
+
+		/* Adjust header length */
+		rule_create->header_len -= (2 * ETH_ALEN);
+
+		/* Adjust UDF offsets */
+		if (rule_create->cmn.udf0_en) rule_create->cmn.udf0_offset -= (2 * ETH_ALEN);
+		if (rule_create->cmn.udf1_en) rule_create->cmn.udf1_offset -= (2 * ETH_ALEN);
+		if (rule_create->cmn.udf2_en) rule_create->cmn.udf2_offset -= (2 * ETH_ALEN);
+
+		/* Adjust Inner IP protocol offset */
+		if (rule_create->inner_type == PPE_DRV_TUN_RPS_INNER_PKT_TYPE_IP) {
+			rule_create->inner_ip_proto.ip_proto_offset -= (2 * ETH_ALEN);
+		}
+	}
 
 	/*
 	 * Lock to protect TPR entry operations from concurrent access
 	 */
 	spin_lock_bh(&p->lock);
 
+	/*
+	 * Allocate and ref TL_L3_IF for the tunnel port.
+	 */
+	if (rule_create->pppoe_en) {
+		tun_l3_if = ppe_drv_tun_tpr_pppoe_l3_if_configure(xmit_port, rule_create->pppoe_session_id, rule_create->pppoe_server_mac);
+	} else {
+		tun_l3_if = ppe_drv_tun_tpr_l3_if_configure(xmit_port);
+	}
+
+	if (!tun_l3_if) {
+		ppe_drv_warn("%p: Failed to get tl_l3_if for port %d", rule_create, xmit_port);
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
+	}
+
 	tpr = ppe_drv_tun_tpr_entry_alloc(p);
 	if (!tpr) {
 		ppe_drv_warn("%p: failed to allocate TPR entry", rule_create);
 		spin_unlock_bh(&p->lock);
+		ppe_drv_tun_rps_l3_if_deconfigure(tun_l3_if, NULL);
 		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
 	}
 
@@ -970,6 +1009,7 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_create(struct ppe_drv_tun_rps_rule_create *ru
 		ppe_drv_warn("%p: failed to allocate program parser for RPS rule creation", rule_create);
 		ppe_drv_tun_tpr_entry_deref(tpr);
 		spin_unlock_bh(&p->lock);
+		ppe_drv_tun_rps_l3_if_deconfigure(tun_l3_if, NULL);
 		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
 	}
 
@@ -1007,6 +1047,7 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_create(struct ppe_drv_tun_rps_rule_create *ru
 		ppe_drv_tun_tpr_entry_deref(tpr);
 		ppe_drv_tun_prgm_prsr_deref(pgm);
 		spin_unlock_bh(&p->lock);
+		ppe_drv_tun_rps_l3_if_deconfigure(tun_l3_if, NULL);
 		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
 	}
 
@@ -1059,6 +1100,7 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_create(struct ppe_drv_tun_rps_rule_create *ru
 		ppe_drv_tun_tpr_entry_deref(tpr);
 		ppe_drv_tun_prgm_prsr_deref(pgm);
 		spin_unlock_bh(&p->lock);
+		ppe_drv_tun_rps_l3_if_deconfigure(tun_l3_if, NULL);
 		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
 	}
 
@@ -1097,6 +1139,7 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_create(struct ppe_drv_tun_rps_rule_create *ru
 		ppe_drv_tun_tpr_entry_deref(tpr);
 		ppe_drv_tun_prgm_prsr_deref(pgm);
 		spin_unlock_bh(&p->lock);
+		ppe_drv_tun_rps_l3_if_deconfigure(tun_l3_if, NULL);
 		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
 	}
 
@@ -1199,6 +1242,7 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_create(struct ppe_drv_tun_rps_rule_create *ru
 		ppe_drv_tun_tpr_entry_deref(tpr);
 		ppe_drv_tun_prgm_prsr_deref(pgm);
 		spin_unlock_bh(&p->lock);
+		ppe_drv_tun_rps_l3_if_deconfigure(tun_l3_if, NULL);
 		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
 	}
 
@@ -1212,27 +1256,14 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_create(struct ppe_drv_tun_rps_rule_create *ru
 		ppe_drv_tun_tpr_entry_deref(tpr);
 		ppe_drv_tun_prgm_prsr_deref(pgm);
 		spin_unlock_bh(&p->lock);
+		ppe_drv_tun_rps_l3_if_deconfigure(tun_l3_if, NULL);
 		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
 	}
 
-	/*
-	 * Allocate and ref TL_L3_IF for the tunnel port
-	 */
 	if (rule_create->pppoe_en) {
-		tun_l3_if = ppe_drv_tun_tpr_pppoe_l3_if_configure(rule_create->wan_if, rule_create->pppoe_session_id, rule_create->pppoe_server_mac);
 		pgm->ctx.data.rps.pppoe_en = true;
 		memcpy(pgm->ctx.data.rps.pppoe_server_mac, rule_create->pppoe_server_mac, ETH_ALEN);
 		pgm->ctx.data.rps.pppoe_session_id = rule_create->pppoe_session_id;
-	} else {
-		tun_l3_if = ppe_drv_tun_tpr_l3_if_configure(rule_create->wan_if);
-	}
-
-	if (!tun_l3_if) {
-		ppe_drv_warn("%p: Failed to get tl_l3_if for dev %s", rule_create, rule_create->wan_if);
-		ppe_drv_tun_tpr_entry_deref(tpr);
-		ppe_drv_tun_prgm_prsr_deref(pgm);
-		spin_unlock_bh(&p->lock);
-		return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
 	}
 
 	pgm->ctx.data.rps.tun_l3_if = tun_l3_if;

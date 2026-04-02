@@ -1840,6 +1840,17 @@ static int ppe_drv_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+	/*
+	 * Map PPE_DRV_SC_NOEDIT_TUN_RPS service code to the CPU port's base
+	 * ucast queue.
+	 */
+	if (!ppe_drv_sc_noedit_tun_rps_queue_init()) {
+		ppe_drv_warn("%p: failed to initialize CPU port queues to TUN RPS service code\n", p);
+		goto fail;
+	}
+#endif
+
 	if (!ppe_drv_confgiure_ucast_prio_map_tbl(PPE_DRV_REDIR_PROFILE_ID, ppe_drv_redir_prio_map)) {
 		ppe_drv_warn("%p: failed to configure ucast priority class setting\n", p);
 		goto fail;

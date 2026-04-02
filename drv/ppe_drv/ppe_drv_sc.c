@@ -99,6 +99,31 @@ void ppe_drv_sc_ucast_queue_set(ppe_drv_sc_t sc, uint8_t queue_id, uint8_t src_p
 	ppe_drv_trace("set port ucast queue base id: %d for sc: %d", queue_id, sc);
 }
 
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+/*
+ * ppe_drv_sc_noedit_tun_rps_queue_init()
+ *	Map PPE_DRV_SC_NOEDIT_TUN_RPS service code to the CPU port's base ucast queue.
+ */
+bool ppe_drv_sc_noedit_tun_rps_queue_init(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int cpu_ucast_queue;
+
+	cpu_ucast_queue = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_CPU);
+	if (cpu_ucast_queue < 0) {
+		ppe_drv_warn("%p: Failed to get CPU port ucast queue for TUN RPS SC mapping", p);
+		return false;
+	}
+
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_NOEDIT_TUN_RPS, (uint8_t)cpu_ucast_queue,
+				   PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_PORT_SRC_PROFILE);
+	ppe_drv_trace("%p: Mapped PPE_DRV_SC_NOEDIT_TUN_RPS to CPU ucast queue base: %d",
+		      p, cpu_ucast_queue);
+
+	return true;
+}
+#endif
+
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
 static void ppe_drv_sc_config_lpbk_port_pon(ppe_drv_sc_t sc, fal_servcode_config_t *sc_cfg)
 {
@@ -603,9 +628,8 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 			);
 		break;
 
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
 	case PPE_DRV_SC_NOEDIT_TUN_RPS:
-		sc_cfg.dest_port_valid = A_FALSE;
-
 		/*
 		 * Don't update destination information and service code in EDMA.
 		 * Also disable decap as the packets would be decapsulated in host
@@ -623,6 +647,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		 */
 		sc_cfg.bypass_bitmap[1] |= (1 << FAKE_MAC_DROP_BYP);
 		break;
+#endif
 
 	case PPE_DRV_SC_FLOW_ACL_FIRST ... PPE_DRV_SC_FLOW_ACL_LAST:
 		/*
@@ -993,7 +1018,9 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_FEATURE_PON_HGU_PPTP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 #endif
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
 	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_TUN_RPS, PPE_DRV_SC_NOEDIT_TUN_RPS, PPE_DRV_PORT_CPU);
+#endif
 #ifdef PPE_DRV_DDRQ_ENABLE
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_ETH_PT_MODE, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_PON_PT_MODE, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
