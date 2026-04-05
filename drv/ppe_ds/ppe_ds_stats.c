@@ -85,8 +85,8 @@ static int ppe_ds_node_info_show(struct seq_file *m,
 
 	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
 		seq_printf(m, "Node: %d\n", i);
-		seq_printf(m, "Node Enqueue VP: %d\n", ppe_drv_port_metadata_to_enq_vp(i));
-		seq_printf(m, "Node pri profile: %d\n\n", ppe_drv_port_metadata_to_pri_prof(i));
+		seq_printf(m, "Node_Enqueue_VP: %d\n", ppe_drv_port_metadata_to_enq_vp(i));
+		seq_printf(m, "Node_pri_profile: %d\n\n", ppe_drv_port_metadata_to_pri_prof(i));
 	}
 	return 0;
 }
@@ -159,15 +159,15 @@ static int ppe_ds_node_stats_show(struct seq_file *m,
 	int i = 0;
 
 	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
-		seq_printf(m, "Node %d\n", i);
-		seq_printf(m, "Tx pkts %llu\n", atomic64_read(&ppe_ds_node_stats[i].tx_pkts));
-		seq_printf(m, "Rx pkts %llu\n\n", atomic64_read(&ppe_ds_node_stats[i].rx_pkts));
-		seq_printf(m, "still prod:%llu\n\n", atomic64_read(&ppe_ds_node_stats[i].ppe2tcl_still_prod));
-		seq_printf(m, "still cons:%llu\n\n", atomic64_read(&ppe_ds_node_stats[i].ppe2tcl_still_cons));
-		seq_printf(m, "wifi_intr_count:%llu\n\n", atomic64_read(&ppe_ds_node_stats[i].wlan_ppe2tcl_intr_cnt));
-		seq_printf(m, "prod_n_con_same:%llu\n\n", atomic64_read(&ppe_ds_node_stats[i].prod_n_con_same));
-		seq_printf(m, "reo still cons:%llu\n\n", atomic64_read(&ppe_ds_node_stats[i].reo2ppe_still_cons));
-		seq_printf(m, "reo wifi_intr_count:%llu\n\n", atomic64_read(&ppe_ds_node_stats[i].wlan_reo2ppe_intr_cnt));
+		seq_printf(m, "\nNode_%d:\n", i);
+		seq_printf(m, "Tx_pkts: %llu\n", atomic64_read(&ppe_ds_node_stats[i].tx_pkts));
+		seq_printf(m, "Rx_pkts: %llu\n", atomic64_read(&ppe_ds_node_stats[i].rx_pkts));
+		seq_printf(m, "still_prod: %llu\n", atomic64_read(&ppe_ds_node_stats[i].ppe2tcl_still_prod));
+		seq_printf(m, "still_cons: %llu\n", atomic64_read(&ppe_ds_node_stats[i].ppe2tcl_still_cons));
+		seq_printf(m, "wifi_intr_count: %llu\n", atomic64_read(&ppe_ds_node_stats[i].wlan_ppe2tcl_intr_cnt));
+		seq_printf(m, "prod_n_con_same: %llu\n", atomic64_read(&ppe_ds_node_stats[i].prod_n_con_same));
+		seq_printf(m, "reo_still_cons: %llu\n", atomic64_read(&ppe_ds_node_stats[i].reo2ppe_still_cons));
+		seq_printf(m, "reo_wifi_intr_count: %llu\n", atomic64_read(&ppe_ds_node_stats[i].wlan_reo2ppe_intr_cnt));
 
 	}
 

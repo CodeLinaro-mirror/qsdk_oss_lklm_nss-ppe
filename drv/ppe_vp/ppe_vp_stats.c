@@ -26,35 +26,35 @@
 extern struct ppe_vp_base vp_base;
 
 static const char *ppe_vp_stats_base_str[] = {
-	"VP Allocation fails",			/* Total VP allocation failures */
-	"VP Table full errors",			/* VP allocation fails due to table full */
-	"MTU assign fails",			/* MTU assign fails */
-	"MAC assign fails",			/* MAC assign fails */
-	"Rx Destination VP Inactive",		/* Packet received from PPE with inactive destinaton VP */
-	"Rx Source VP Inactive",		/* Packet received from PPE with inactive Source VP */
-	"Rx Destination VP Invalid",		/* Packet received from PPE without valid SVP */
-	"Rx Source VP Invalid",			/* Packet received from PPE without valid DVP */
-	"Tx VP Inactive",			/* VP of Packet forwarded by VP user is inactive */
-	"Rx Fast tramist failed",		/* Rx packet fast transmit failed */
-	"Rx Qdisc Fast tramist failed",		/* Rx packet Qdisc fast transmit failed */
-	"Rx Destination VP no listcb"		/* Packet received from PPE with inactive destinaton VP */
+	"VP_Allocation_fails",			/* Total VP allocation failures */
+	"VP_Table_full_errors",			/* VP allocation fails due to table full */
+	"MTU_assign_fails",			/* MTU assign fails */
+	"MAC_assign_fails",			/* MAC assign fails */
+	"Rx_Destination_VP_Inactive",		/* Packet received from PPE with inactive destinaton VP */
+	"Rx_Source_VP_Inactive",		/* Packet received from PPE with inactive Source VP */
+	"Rx_Destination_VP_Invalid",		/* Packet received from PPE without valid SVP */
+	"Rx_Source_VP_Invalid",			/* Packet received from PPE without valid DVP */
+	"Tx_VP_Inactive",			/* VP of Packet forwarded by VP user is inactive */
+	"Rx_Fast_tramist_failed",		/* Rx packet fast transmit failed */
+	"Rx_Qdisc_Fast_tramist_failed",		/* Rx packet Qdisc fast transmit failed */
+	"Rx_Destination_VP_no_listcb"		/* Packet received from PPE with inactive destinaton VP */
 };
 
 static const char *ppe_vp_stats_rx_str[] = {
-	"Rx packets",				/* Total rx packets */
-	"Rx bytes",				/* Total rx bytes */
-	"Rx exceptioned packets",		/* Total exceptioned VP packets */
-	"Rx exceptioned bytes",			/* Total exceptioned VP bytes */
-	"Rx errors",				/* Total rx errors */
-	"Rx drops",				/* Total rx drops */
-	"Rx dev not up"				/* Received packets before dev IFF_UP */
+	"Rx_packets",				/* Total rx packets */
+	"Rx_bytes",				/* Total rx bytes */
+	"Rx_exceptioned packets",		/* Total exceptioned VP packets */
+	"Rx_exceptioned bytes",			/* Total exceptioned VP bytes */
+	"Rx_errors",				/* Total rx errors */
+	"Rx_drops",				/* Total rx drops */
+	"Rx_dev_not_up"				/* Received packets before dev IFF_UP */
 };
 
 static const char *ppe_vp_stats_tx_str[] = {
-	"Tx packets",				/* Total tx packets */
-	"Tx bytes",				/* Total tx bytes */
-	"Tx errors",				/* Total tx errors */
-	"Tx drops"				/* Total tx drops */
+	"Tx_packets",				/* Total tx packets */
+	"Tx_bytes",				/* Total tx bytes */
+	"Tx_errors",				/* Total tx errors */
+	"Tx_drops"				/* Total tx drops */
 };
 
 static const char *vp_user_mode[] = {
@@ -212,18 +212,18 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 	 * Start displaying the Base VP stats
 	 */
 	seq_printf(m, "\n################ Virtual Port Statistics Start ################\n");
-	seq_printf(m, "\nBase VP Statistics:\n");
+	seq_printf(m, "\nBase_VP_Statistics:\n");
 	stats_shadow = (uint64_t *)pvb_stats;
-	seq_printf(m, "\tActive VPs: %u\n", pvb->vp_table.active_vp);
+	seq_printf(m, "\tActive_VPs: %u\n", pvb->vp_table.active_vp);
 	for (i = 0; i < (sizeof(struct ppe_vp_base_stats) / sizeof(uint64_t)); i++) {
-		seq_printf(m, "\t[%s]:  %llu\n", ppe_vp_stats_base_str[i], stats_shadow[i]);
+		seq_printf(m, "\t%s:  %llu\n", ppe_vp_stats_base_str[i], stats_shadow[i]);
 	}
 
 	/*
 	 * Start displaying all the active VP stats.
 	 */
 	active_vp_counter = ppe_vp_base_get_active_vp_count(pvb);
-	seq_printf(m, "\nVP Statistics (Active Count = %u)\n", active_vp_counter);
+	seq_printf(m, "\nVP_Statistics:\n\tActive_Count: %u\n", active_vp_counter);
 
 	for (idx = 0; idx < PPE_DRV_VIRTUAL_MAX; idx++) {
 
@@ -235,16 +235,16 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 		if (vp) {
 			vp_stats = &vp->vp_stats;
 
-			seq_printf(m, "\tVP Port: %u\n", vp_stats->misc_info.ppe_port_num);
-			seq_printf(m, "\t\tNetdev if num: %u\n", vp_stats->misc_info.netdev_if_num);
-			seq_printf(m, "\t\tNetdev name: %s\n", vp->netdev->name);
+			seq_printf(m, "\tVP_Port: %u\n", vp_stats->misc_info.ppe_port_num);
+			seq_printf(m, "\t\tNetdev_if_num: %u\n", vp_stats->misc_info.netdev_if_num);
+			seq_printf(m, "\t\tNetdev_name: %s\n", vp->netdev->name);
 			mode = vp->vp_user_mode;
 
 			/*
 			 * Print only for wifi type.
 			 */
 			if (mode) {
-				seq_printf(m, "\t\tVP user mode: %s\n", vp_user_mode[mode]);
+				seq_printf(m, "\t\tVP_user_mode: %s\n", vp_user_mode[mode]);
 			}
 
 			/*
@@ -281,19 +281,19 @@ static int ppe_vp_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 				tx_aggr[3] += tx_stats.tx_drops;
 			}
 
-			seq_printf(m, "\n\t\tVP Rx Stats:\n");
+			seq_printf(m, "\n\t\tVP_Rx_Stats:\n");
 			stats_shadow = (uint64_t *)rx_aggr;
 			for (i = 0; i < RX_STATS_COUNT; i++) {
-				seq_printf(m, "\t\t\t[%s]:  %llu\n", ppe_vp_stats_rx_str[i], stats_shadow[i]);
+				seq_printf(m, "\t\t\t%s:  %llu\n", ppe_vp_stats_rx_str[i], stats_shadow[i]);
 			}
 
-			seq_printf(m, "\n\t\tVP Tx Stats:\n");
+			seq_printf(m, "\n\t\tVP_Tx_Stats:\n");
 			stats_shadow = (uint64_t *)tx_aggr;
 			for (i = 0; i < TX_STATS_COUNT; i++) {
-				seq_printf(m, "\t\t\t[%s]:  %llu\n", ppe_vp_stats_tx_str[i], stats_shadow[i]);
+				seq_printf(m, "\t\t\t%s:  %llu\n", ppe_vp_stats_tx_str[i], stats_shadow[i]);
 			}
 
-			seq_printf(m, "\n\t\tHW port counters\n");
+			seq_printf(m, "\n\t\tHW_port_counters:\n");
 			seq_printf(m, "\t\t\trx_pkts: %u\n", vp_stats->vp_hw_stats.rx_pkt_cnt);
 			seq_printf(m, "\t\t\trx_bytes: %llu\n", vp_stats->vp_hw_stats.rx_byte_cnt);
 			seq_printf(m, "\t\t\ttx_pkts: %u\n", vp_stats->vp_hw_stats.tx_pkt_cnt);
