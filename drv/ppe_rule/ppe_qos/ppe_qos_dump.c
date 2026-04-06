@@ -349,26 +349,26 @@ static bool ppe_qos_dump_all_interfaces(struct ppe_qos_dump_instance *pqdi)
 	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_qos_interface_queue *queue;
 	struct net_device *dev;
-	int queue_num, i, j, result;
+	int queue_num, j, result;
 
 	/*
 	 * Dump all interfaces
 	 */
-	for (i = 1; i < PPE_DRV_PHYSICAL_MAX - 1; i++) {
-		if (!g_qos->port_res[i].valid) {
-			continue;
-		}
+	if (!list_empty(&g_qos->port_list)) {
+		list_for_each_entry(tm_if, &g_qos->port_list, list) {
 
-		tm_if = &g_qos->port_res[i];
-		if ((result = ppe_qos_dump_prefix_add(pqdi, "interface"))) {
-			goto error;
-		}
+			if (!tm_if->valid) {
+				continue;
+			}
 
-		if ((result = ppe_qos_dump_prefix_index_add(pqdi, i))) {
-			goto error;
-		}
+			if ((result = ppe_qos_dump_prefix_add(pqdi, "interface"))) {
+				goto error;
+			}
 
-		if (tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+			if ((result = ppe_qos_dump_prefix_index_add(pqdi, tm_if->id))) {
+				goto error;
+			}
+
 			if ((result = ppe_qos_dump_write(pqdi, "type", "%s", "UNI" ))) {
 				goto error;
 			}
@@ -378,117 +378,134 @@ static bool ppe_qos_dump_all_interfaces(struct ppe_qos_dump_instance *pqdi)
 				goto error;
 			}
 
+			/* Display multicast priority map if configured */
+			if (tm_if->mcast_prio_map_valid) {
+				char mcast_prio_map_str[256];
+				int offset = 0;
 
-		/* Display multicast priority map if configured */
-		if (tm_if->mcast_prio_map_valid) {
-			char mcast_prio_map_str[256];
-			int offset = 0;
+				/* Format the map as comma-separated values */
+				for (j = 0; j < PPE_DRV_MAX_PRIORITY; j++) {
+					if (j == 0) {
+						offset += snprintf(mcast_prio_map_str + offset, sizeof(mcast_prio_map_str) - offset,
+								  "%u", tm_if->mcast_prio_map[j]);
+					} else {
+						offset += snprintf(mcast_prio_map_str + offset, sizeof(mcast_prio_map_str) - offset,
+								  ",%u", tm_if->mcast_prio_map[j]);
+					}
+				}
 
-			/* Format the map as comma-separated values */
-			for (j = 0; j < PPE_DRV_MAX_PRIORITY; j++) {
-				if (j == 0) {
-					offset += snprintf(mcast_prio_map_str + offset, sizeof(mcast_prio_map_str) - offset,
-							  "%u", tm_if->mcast_prio_map[j]);
-				} else {
-					offset += snprintf(mcast_prio_map_str + offset, sizeof(mcast_prio_map_str) - offset,
-							  ",%u", tm_if->mcast_prio_map[j]);
+				if ((result = ppe_qos_dump_write(pqdi, "mcast_prio_map", "%s", mcast_prio_map_str))) {
+					goto error;
 				}
 			}
 
-			if ((result = ppe_qos_dump_write(pqdi, "mcast_prio_map", "%s", mcast_prio_map_str))) {
-				goto error;
-			}
-		}
+			/* Display unicast priority map if configured */
+			if (tm_if->ucast_prio_map_valid) {
+				char ucast_prio_map_str[256];
+				int offset = 0;
+					/* Format the map as comma-separated values */
+				for (j = 0; j < PPE_DRV_MAX_PRIORITY; j++) {
+					if (j == 0) {
+						offset += snprintf(ucast_prio_map_str + offset, sizeof(ucast_prio_map_str) - offset,
+								  "%u", tm_if->ucast_prio_map[j]);
+					} else {
+						offset += snprintf(ucast_prio_map_str + offset, sizeof(ucast_prio_map_str) - offset,
+								  ",%u", tm_if->ucast_prio_map[j]);
+					}
+				}
 
-		/* Display unicast priority map if configured */
-		if (tm_if->ucast_prio_map_valid) {
-			char ucast_prio_map_str[256];
-			int offset = 0;
-
-			/* Format the map as comma-separated values */
-			for (j = 0; j < PPE_DRV_MAX_PRIORITY; j++) {
-				if (j == 0) {
-					offset += snprintf(ucast_prio_map_str + offset, sizeof(ucast_prio_map_str) - offset,
-							  "%u", tm_if->ucast_prio_map[j]);
-				} else {
-					offset += snprintf(ucast_prio_map_str + offset, sizeof(ucast_prio_map_str) - offset,
-							  ",%u", tm_if->ucast_prio_map[j]);
+				if ((result = ppe_qos_dump_write(pqdi, "ucast_prio_map", "%s", ucast_prio_map_str))) {
+					goto error;
 				}
 			}
 
-			if ((result = ppe_qos_dump_write(pqdi, "ucast_prio_map", "%s", ucast_prio_map_str))) {
+			if ((result = ppe_qos_dump_write(pqdi, "shaper_name", "%s", strlen(tm_if->shaper_name) ? tm_if->shaper_name : "None"))) {
+				goto error;
+			}
+
+			if ((result = ppe_qos_dump_write(pqdi, "num_queues", "%d", tm_if->num_queues))) {
+				goto error;
+			}
+
+			if ((result = ppe_qos_dump_write(pqdi, "num_mcast_queues", "%d", tm_if->num_mcast_queues))) {
+				goto error;
+			}
+
+			/*
+			 * Dump all unicast queues of the interface
+			 */
+			queue_num = 0;
+			if (!list_empty(&tm_if->q_list)) {
+				list_for_each_entry(queue, &tm_if->q_list, list) {
+					if (!queue->valid) {
+						continue;
+					}
+
+					queue_num++;
+					result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num, PPE_QOS_QUEUE_TYPE_UCAST);
+					if (result < 0) {
+						ppe_qos_warn("%p: failed to collect dump for queue: %p", g_qos, queue);
+						return result;
+					}
+				}
+			}
+
+			/*
+			 * Dump all multicast queues of the interface
+			 */
+			queue_num = 0;
+			if (!list_empty(&tm_if->mq_list)) {
+				list_for_each_entry(queue, &tm_if->mq_list, list) {
+					if (!queue->valid) {
+						continue;
+					}
+
+					queue_num++;
+					result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num, PPE_QOS_QUEUE_TYPE_MCAST);
+					if (result < 0) {
+						ppe_qos_warn("%p: failed to collect dump for mcast queue: %p", g_qos, queue);
+						return result;
+					}
+				}
+			}
+
+			/*
+			 * Remove the 'index' prefix for next interation
+			 */
+			if ((result = ppe_qos_dump_prefix_remove(pqdi))) {
+				goto error;
+			}
+
+			/*
+			 * Remove the interface prefix for next interation
+			 */
+			if ((result = ppe_qos_dump_prefix_remove(pqdi))) {
 				goto error;
 			}
 		}
-		} else {
+	}
+
 #ifdef NSS_PPE_PON_SUPPORT
-			if ((result = ppe_qos_dump_write(pqdi, "type", "%s", "ANI" ))) {
-				goto error;
-			}
-
-			result = ppe_qos_dump_all_tconts(pqdi);
-			if (result < 0) {
-				ppe_qos_warn("%p: failed to collect dump for tconts: %p", g_qos, tm_if);
-				return result;
-			}
-			goto prefix_remove;
-#endif
-		}
-
-		if ((result = ppe_qos_dump_write(pqdi, "shaper_name", "%s", strlen(tm_if->shaper_name) ? tm_if->shaper_name : "None"))) {
+	if (g_qos->pon_port) {
+		if ((result = ppe_qos_dump_prefix_add(pqdi, "interface"))) {
 			goto error;
 		}
 
-		if ((result = ppe_qos_dump_write(pqdi, "num_queues", "%d", tm_if->num_queues))) {
+		if ((result = ppe_qos_dump_prefix_index_add(pqdi, g_qos->pon_port))) {
 			goto error;
 		}
 
-		if ((result = ppe_qos_dump_write(pqdi, "num_mcast_queues", "%d", tm_if->num_mcast_queues))) {
+		if ((result = ppe_qos_dump_write(pqdi, "type", "%s", "ANI" ))) {
 			goto error;
+		}
+
+		result = ppe_qos_dump_all_tconts(pqdi);
+		if (result < 0) {
+			ppe_qos_warn("%p: failed to collect dump for tconts", g_qos);
+			return result;
 		}
 
 		/*
-		 * Dump all unicast queues of the interface
-		 */
-		queue_num = 0;
-		if (!list_empty(&tm_if->q_list)) {
-			list_for_each_entry(queue, &tm_if->q_list, list) {
-				if (!queue->valid) {
-					continue;
-				}
-
-				queue_num++;
-				result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num, PPE_QOS_QUEUE_TYPE_UCAST);
-				if (result < 0) {
-					ppe_qos_warn("%p: failed to collect dump for queue: %p", g_qos, queue);
-					return result;
-				}
-			}
-		}
-
-		/*
-		 * Dump all multicast queues of the interface
-		 */
-		queue_num = 0;
-		if (!list_empty(&tm_if->mq_list)) {
-			list_for_each_entry(queue, &tm_if->mq_list, list) {
-				if (!queue->valid) {
-					continue;
-				}
-
-				queue_num++;
-				result = ppe_qos_dump_one_queue(pqdi, tm_if, queue, queue_num, PPE_QOS_QUEUE_TYPE_MCAST);
-				if (result < 0) {
-					ppe_qos_warn("%p: failed to collect dump for mcast queue: %p", g_qos, queue);
-					return result;
-				}
-			}
-		}
-
-#ifdef NSS_PPE_PON_SUPPORT
-prefix_remove:
-#endif
-/*
 		 * Remove the 'index' prefix for next interation
 		 */
 		if ((result = ppe_qos_dump_prefix_remove(pqdi))) {
@@ -502,6 +519,7 @@ prefix_remove:
 			goto error;
 		}
 	}
+#endif
 
 	return 0;
 
