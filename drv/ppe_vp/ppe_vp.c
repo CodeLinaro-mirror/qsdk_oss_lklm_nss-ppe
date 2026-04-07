@@ -250,6 +250,8 @@ static ppe_vp_status_t __ppe_vp_free(ppe_vp_num_t port_num)
 	vp->mtu = 0;
 	vp->flags &= ~PPE_VP_FLAG_VP_ACTIVE;
 	vp->dst_cb = NULL;
+	vp->dst_list_cb = NULL;
+	vp->dst_xdp_cb = NULL;
 	vp->src_cb = NULL;
 	stats_cb = vp->stats_cb;
 	vp->stats_cb = NULL;
@@ -583,6 +585,11 @@ static struct ppe_vp *__ppe_vp_alloc(struct net_device *netdev, struct ppe_vp_ai
 		vp->dst_cb_data = vpai->dst_cb_data;
 	}
 
+	if (vpai->dst_xdp_cb) {
+		vp->dst_xdp_cb = vpai->dst_xdp_cb;
+		vp->dst_cb_data = vpai->dst_cb_data;
+	}
+
 	/*
 	 * Store VP user mode for vp stats.
 	 */
@@ -795,6 +802,11 @@ int ppe_vp_veip_alloc_vps(struct ppe_drv_iface *ppe_iface, uint8_t gw_port_num, 
 		gw_vp->dst_cb_data = vpai->dst_cb_data;
 	}
 
+	if (vpai->dst_xdp_cb) {
+		gw_vp->dst_xdp_cb = vpai->dst_xdp_cb;
+		gw_vp->dst_cb_data = vpai->dst_cb_data;
+	}
+
 	/*
 	 * Store VP user mode for vp stats
 	 */
@@ -842,6 +854,11 @@ int ppe_vp_veip_alloc_vps(struct ppe_drv_iface *ppe_iface, uint8_t gw_port_num, 
 
 	if (vpai->dst_list_cb) {
 		pon_vp->dst_list_cb = vpai->dst_list_cb;
+		pon_vp->dst_cb_data = vpai->dst_cb_data;
+	}
+
+	if (vpai->dst_xdp_cb) {
+		pon_vp->dst_xdp_cb = vpai->dst_xdp_cb;
 		pon_vp->dst_cb_data = vpai->dst_cb_data;
 	}
 
@@ -915,6 +932,7 @@ void ppe_vp_veip_free_vps(struct ppe_drv_iface *ppe_iface)
 		vp->flags &= ~PPE_VP_FLAG_VP_ACTIVE;
 		vp->dst_cb = NULL;
 		vp->dst_list_cb = NULL;
+		vp->dst_xdp_cb = NULL;
 		vp->src_cb = NULL;
 		vp->stats_cb = NULL;
 		vp->netdev_if_num = 0;
