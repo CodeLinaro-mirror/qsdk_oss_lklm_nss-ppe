@@ -2547,6 +2547,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	uint8_t service_class;
 	struct ppe_drv_iface *port_if = ppe_drv_v4_conn_flow_eg_port_if_get(pcf);
 	struct ppe_drv_port *pp = NULL;
+	struct ppe_drv_port *pp_in = NULL;
 #ifdef NSS_PPE_DRV_HW_GRO
 	struct ppe_drv_port *tx_port = NULL;
 	struct ppe_drv_port *rx_port = NULL;
@@ -2557,6 +2558,8 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	uint16_t xmit_mtu;
 	fal_flow_entry_t *unidir_flow_cfg = NULL;
 	sw_error_t err;
+	struct net_device *dev_eg;
+	struct net_device *dev_in;
 
 	/*
 	 * PPE port reference is not taken for priority assist / portless RFS in PPE as PPE is
@@ -2573,6 +2576,13 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 			ppe_drv_warn("%p: Invalid egress port", pcf);
 			return NULL;
 		}
+	}
+
+	dev_eg = ppe_drv_port_to_dev(pp);
+
+	pp_in = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+	if (pp_in) {
+		dev_in = ppe_drv_port_to_dev(pp_in);
 	}
 
 	/*
@@ -2732,7 +2742,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		 */
 		flow_cfg.fwd_type = FAL_FLOW_FORWARD;
 		ppe_drv_trace("%p: flow_tbl[fwd_type]: L2-Multicast: %u", pcf, FAL_FLOW_FORWARD);
-	} else if (match_src_ip != xlate_src_ip) {
+	} else if ((match_src_ip != xlate_src_ip) || (dev_eg && (dev_eg->priv_flags_ext & IFF_EXT_MAPT))) {
 		/*
 		 * Case SNAT
 		 */
@@ -2740,7 +2750,7 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 		flow_cfg.snat_nexthop = nh->index;
 		flow_cfg.snat_srcport = ppe_drv_v4_conn_flow_xlate_src_ident_get(pcf);
 		ppe_drv_trace("%p: flow_tbl[nat_type]: SNAT: %u snat_port: %u", pcf, FAL_FLOW_SNAT, flow_cfg.snat_srcport);
-	} else if (match_dest_ip != xlate_dest_ip) {
+	} else if ((match_dest_ip != xlate_dest_ip) || (dev_in && (dev_in->priv_flags_ext & IFF_EXT_MAPT))) {
 		/*
 		 * Case DNAT
 		 */
