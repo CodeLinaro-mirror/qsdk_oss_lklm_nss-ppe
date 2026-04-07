@@ -118,6 +118,19 @@
 #define PPE_DRV_ACL_ACTION_FLAG_STAG_DEI_CMD	0x00000008	/**< ACL stag DEI command. */
 #define PPE_DRV_ACL_ACTION_FLAG_CTAG_PCP_CMD	0x00000010	/**< ACL ctag PCP command. */
 #define PPE_DRV_ACL_ACTION_FLAG_STAG_PCP_CMD	0x00000020	/**< ACL stag PCP command. */
+
+/*
+ * ppe_drv_udf_entry
+ *	ACL UDF offsets.
+ */
+enum ppe_drv_udf_entry {
+	PPE_DRV_ACL_UDF_0_OFFSET = 0,	/**< ACL UDF0 offset */
+	PPE_DRV_ACL_UDF_1_OFFSET,	/**< ACL UDF1 offset */
+	PPE_DRV_ACL_UDF_2_OFFSET,	/**< ACL UDF2 offset */
+	PPE_DRV_ACL_UDF_3_OFFSET,	/**< ACL UDF3 offset */
+	PPE_DRV_ACL_UDF_OFFSET_MAX,	/**< ACL UDF MAX offset */
+};
+
 struct ppe_drv_acl_ctx;
 
 /*
@@ -138,8 +151,7 @@ enum ppe_drv_acl_slice_type {
 	PPE_DRV_ACL_SLICE_TYPE_SRC_IPV6_1,	/**< ACL source IPv6 1 slice type. */
 	PPE_DRV_ACL_SLICE_TYPE_SRC_IPV6_2,	/**< ACL source IPv6 2 slice type. */
 	PPE_DRV_ACL_SLICE_TYPE_IP_MISC,		/**< ACL IP miscellaneous slice type. */
-	PPE_DRV_ACL_SLICE_TYPE_UDF_012,		/**< ACL UDF 012 slice type. */
-	PPE_DRV_ACL_SLICE_TYPE_UDF_123,		/**< ACL UDF 123 slice type. */
+	PPE_DRV_ACL_SLICE_TYPE_UDF,	/**< ACL UDF with offset slice type */
 	PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN,	/**< ACL Extended VLAN slice type. */
 	PPE_DRV_ACL_SLICE_TYPE_MAX,		/**< ACL slice type max. */
 };
@@ -574,35 +586,99 @@ struct ppe_drv_acl_ip_misc {
 	uint16_t l3_length_mask_max;		/**< L3 length mask or max for range. */
 };
 
+/**
+ * ppe_drv_acl_rule_udf_op
+ *	ACL rule UDF match operation.
+ * NOTE: Duplicate of ppe_acl_rule_udf_op in ppe_acl.h; ensure any changes are mirrored in both files.
+ */
+enum ppe_drv_acl_rule_udf_op {
+        PPE_DRV_ACL_UDF_OP_INVAL = 0,	/**< Invalid UDF operation */
+        PPE_DRV_ACL_UDF_OP_MASK,		/**< Perform MASK-based matching */
+        PPE_DRV_ACL_UDF_OP_RANGE,		/**< Perform RANGE-based matching */
+        PPE_DRV_ACL_RULE_OP_LE,		/**< Perform Less-Than-Or-Equal comparison */
+        PPE_DRV_ACL_RULE_OP_GE,		/**< Perform Greater-Than-Or-Equal comparison */
+        PPE_DRV_ACL_UDF_OP_NE,		/**< Perform NOT-EQUAL matching */
+};
+
+/**
+ * ppe_drv_acl_udf_rule_base_type
+ *	The base layer from which the UDF offset is calculated in an ACL rule.
+ *	The offset can be relative to Layer 2, Layer 3, or Layer 4.
+ * NOTE: Duplicate of ppe_acl_rule_udf_base_type in ppe_acl.h; ensure any changes are mirrored in both files.
+ */
+enum ppe_drv_acl_udf_rule_base_type {
+	PPE_DRV_ACL_UDF_OFFSET_BASE_L2,	/**< Offset is calculated from the start of Layer 2 */
+	PPE_DRV_ACL_UDF_OFFSET_BASE_L3,	/**< Offset is calculated from the start of Layer 3 */
+	PPE_DRV_ACL_UDF_OFFSET_BASE_L4,	/**< Offset is calculated from the start of Layer 4 */
+};
+
+/**
+ * ppe_drv_acl_udf_rule_offset_ref
+ *	ACL rule offset protocol type.
+ * NOTE: Duplicate of ppe_acl_rule_udf_proto in ppe_acl.h; ensure any changes are mirrored in both files.
+ */
+enum ppe_drv_acl_udf_proto {
+	PPE_DRV_ACL_UDF_NON_IP,	/**< UDF offset for non-ip protocol type */
+	PPE_DRV_ACL_UDF_IPV4,	/**< UDF offset for IPv4 protocol type */
+	PPE_DRV_ACL_UDF_IPV6,	/**< UDF offset for IPv6 protocol type */
+};
+
+/*
+ * ppe_drv_acl_udf_offset
+ *	UDF base information shared between rule offset and data structures
+ */
+struct ppe_drv_acl_udf_offset {
+	enum ppe_drv_acl_udf_rule_base_type offset_base;	/**< Base layer (L2, L3, or L4) from which the offset is calculated */
+	enum ppe_drv_acl_udf_proto proto;			/**< UDF offset Protocol type (non-IP, IPv4, or IPv6) */
+	uint16_t offset;					/**< UDF offset for the UDF in bytes */
+};
+
+/*
+ * ppe_drv_acl_rule_udf_offset
+ * 	PPE ACL rule UDF offsets
+ */
+struct ppe_drv_acl_rule_udf_offset {
+	struct ppe_drv_acl_udf_offset base_info;	/**< UDF base information */
+	uint32_t udf_index;				/**< UDF offset index */
+	bool in_use;					/**< Indicates whether this offset entry is currently in use */
+	struct kref ref_cnt;				/**< Reference count of the UDF offset */
+};
+
+/*
+ * ppe_drv_acl_rule_udf_offset_list
+ * 	ACL UDF offset global list.
+ */
+struct ppe_drv_acl_rule_udf_offset_list {
+	struct ppe_drv_acl_rule_udf_offset non_ip[PPE_DRV_ACL_UDF_OFFSET_MAX];	/**< UDF offset list for NON-IPV. */
+	struct ppe_drv_acl_rule_udf_offset ipv4[PPE_DRV_ACL_UDF_OFFSET_MAX];	/**< UDF offset list for IPv4 */
+	struct ppe_drv_acl_rule_udf_offset ipv6[PPE_DRV_ACL_UDF_OFFSET_MAX];	/**< UDF offset list for IPv4 */
+	spinlock_t lock;	/**< lock */
+};
+
+/*
+ * ppe_drv_acl_udf_data
+ * 	ACL UDF offset data.
+ */
+struct ppe_drv_acl_udf_data {
+	struct ppe_drv_acl_rule_udf_offset *udf_offset_entry; /**< Offset entry for the UDF */
+	struct ppe_drv_acl_udf_offset base_info;	/**< UDF base information */
+	enum ppe_drv_acl_rule_udf_op udf_op;		/**< UDF operation */
+	uint16_t udf_min;				/**< UDF value for match. */
+	uint16_t udf_mask;				/**< UDF mask. */
+	bool udf_valid;					/**< UDF valid for match. */
+};
+
 /*
  * ppe_drv_acl_udf
- *
+ *	UDF offset data for all udfs
  */
 struct ppe_drv_acl_udf {
-	uint8_t udf_a_valid;			/**< First UDF valid for match. */
-	uint8_t udf_b_valid;			/**< Second UDF valid for match. */
-	uint8_t udf_c_valid;			/**< Third UDF valid for match. */
-	uint16_t udf_a_min;			/**< First UDF value for match. */
-	uint16_t udf_b;				/**< Second UDF value for match. */
-	uint16_t udf_c;				/**< Third UDF value for match. */
-
-	uint8_t inverse_en;			/**< UDF match with inverse logic. */
-	uint8_t range_en;			/**< First UDF range match. */
-	uint8_t ip_ver;				/**< IP version based match. */
-	uint8_t ip_nonip;			/**< IP no-IP flag match. */
-
-	/*
-	 * Mask
-	 */
-	uint8_t ip_ver_mask;			/**< IP version mask. */
-	uint8_t ip_nonip_mask;			/**< IP no-IP flag mask. */
-	uint8_t udf_a_valid_mask;		/**< First UDF valid mask. */
-	uint8_t udf_b_valid_mask;		/**< Second UDF valid mask. */
-	uint8_t udf_c_valid_mask;		/**< Third UDF valid mask. */
-	uint16_t udf_a_mask_max;		/**< First UDF value mask. */
-	uint16_t udf_b_mask;			/**< Second UDF value mask. */
-	uint16_t udf_c_mask;			/**< Third UDF value mask. */
+	struct ppe_drv_acl_udf_data udf0;	/**< First UDF data */
+	struct ppe_drv_acl_udf_data udf1;	/**< Second UDF data */
+	struct ppe_drv_acl_udf_data udf2;	/**< Third UDF data */
+	struct ppe_drv_acl_udf_data udf3;	/**< Forth UDF data */
 };
+
 
 /*
  * ppe_drv_acl_rule_match_one
@@ -627,8 +703,7 @@ struct ppe_drv_acl_rule_match_one {
 		struct ppe_drv_acl_ipv6 sip_v6_1;	/**< Source IPv6 rule slice 1. */
 		struct ppe_drv_acl_ipv6 sip_v6_2;	/**< Source IPv6 rule slice 2. */
 		struct ppe_drv_acl_ip_misc ip;		/**< L3 field slice. */
-		struct ppe_drv_acl_udf udf_012;		/**< UDF slice 0. */
-		struct ppe_drv_acl_udf udf_123;		/**< UDF slice 1. */
+		struct ppe_drv_acl_udf udf;		/**< UDF with offset */
 		struct ppe_drv_acl_ext_vlan ext_vlan;	/**< Extended VLAN rule slice. */
 	} rule;
 };
@@ -817,6 +892,65 @@ void ppe_drv_acl_get_hw_stats(struct ppe_drv_acl_ctx *ctx, uint64_t *pkts, uint6
  * void
  */
 void ppe_drv_acl_hw_info_get(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_acl_hw_info *hw_info);
+
+/*
+ * int ppe_drv_acl_udf_offset_init()
+ *	Allocate and initialization acl global offset lists.
+ *
+ * @datatype
+ *
+ *
+ * @return
+ * 0 for success and error code for failure.
+ */
+int ppe_drv_acl_udf_offset_init(void);
+
+/*
+ * ppe_drv_acl_udf_offset_deinit()
+ *	Deinitialization ans deallocate acl global offset lists.
+ *
+ * @datatype
+ *
+ *
+ * @return
+ * void.
+ */
+void ppe_drv_acl_udf_offset_deinit(void);
+
+/*
+ * ppe_drv_acl_offset_entry_put()
+ *	Put ACL UDF offset entry.
+ *
+ * @datatype
+ * struct ppe_drv_acl_rule_udf
+ *
+ * @param[IN] udf_offset		ACL UDF offset information
+ *
+ * @return
+ * void
+ */
+void ppe_drv_acl_offset_entry_put(struct ppe_drv_acl_rule_udf_offset *offset);
+
+/*
+ * ppe_drv_acl_offset_entry_get()
+ *	Set PPE udf offset profile.
+ *
+ * @datatype
+ * enum ppe_drv_acl_udf_offset_proto_type
+ * enum ppe_drv_acl_udf_rule_offset_base
+ * enum ppe_drv_acl_rule_udf_op
+ * uint32_t
+ *
+ * @param[IN] type		ACL UDF offset type.
+ * @param[IN] offset_from	Offset from.
+ * @param[IN] udf_offset	UDF offset.
+ * @param[IN] udf_op		UDF match operation
+ *
+ * @return
+ * struct ppe_drv_acl_rule_udf_offset pointer on success, NULL in failuer case.
+ */
+struct ppe_drv_acl_rule_udf_offset *ppe_drv_acl_offset_entry_get(enum ppe_drv_acl_udf_proto proto,
+		enum ppe_drv_acl_udf_rule_base_type offset_base, uint32_t offset, enum ppe_drv_acl_rule_udf_op udf_op);
 
 /**
  * ppe_drv_acl_rule_unregister_cb

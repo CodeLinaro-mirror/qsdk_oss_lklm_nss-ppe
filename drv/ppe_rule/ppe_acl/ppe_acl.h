@@ -64,6 +64,12 @@
 #endif
 #endif
 
+#define PPE_ACL_TO_DRV_OFST_FROM(ofst_frm) ((enum ppe_drv_acl_udf_rule_base_type)ofst_frm)
+
+#define PPE_ACL_TO_DRV_OFST_PROTO(ofst_proto) ((enum ppe_drv_acl_udf_proto)ofst_proto)
+
+#define PPE_ACL_TO_DRV_UDF_OP(udf_op) ((enum ppe_drv_acl_rule_udf_op)udf_op)
+
 /*
  * ppe_acl
  *	Structure for acl rule.
