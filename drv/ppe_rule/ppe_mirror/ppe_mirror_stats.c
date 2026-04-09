@@ -148,8 +148,8 @@ static int ppe_mirror_acl_stats_show(struct seq_file *m, void __attribute__((unu
 		if (shadow_mapping->is_valid) {
 			seq_printf(m, "\t\tACL id : %u\n", shadow_mapping->acl_rule_id);
 			seq_printf(m, "\t\t\tIs mapping valid : %d\n", shadow_mapping->is_valid);
-			seq_printf(m, "\t\t\tGroup Dev : %s\n", shadow_mapping->group_info->group_dev->name);
-			seq_printf(m, "\t\t\tGroup Dev ifindex : %d\n", shadow_mapping->group_info->group_dev->ifindex);
+			seq_printf(m, "\t\t\tGroup Dev : %s\n", (shadow_mapping->group_info && shadow_mapping->group_info->group_dev) ? shadow_mapping->group_info->group_dev->name : "unknown");
+			seq_printf(m, "\t\t\tGroup Dev ifindex : %d\n", (shadow_mapping->group_info && shadow_mapping->group_info->group_dev) ? shadow_mapping->group_info->group_dev->ifindex : -1);
 
 			mirror_stats_shadow = (uint64_t *)(&shadow_mapping->acl_stats);
 			seq_printf(m, "\n\t\t\t Mirrored packets ACL stats:\n");
