@@ -670,35 +670,40 @@ bool ppe_mirror_test_destroy_dev(char *buffer)
 	if (!group_dev)
 		return false;
 
-	dev_put(group_dev);
-
 	/*
 	 * Check if this dev has mappings valid on it.
 	 * if yes, do not allow to delete them.
 	 */
 	group_id = ppe_mirror_test_group_get_group_id(group_dev);
 
-	if (group_id == PPE_MIRROR_TEST_INVALID_GROUP_ID)
-		return false;
+	if (group_id == PPE_MIRROR_TEST_INVALID_GROUP_ID) {
+		goto out;
+	}
 
 	for (i = 0; i < PPE_MIRROR_TEST_ACL_MAX; i++) {
 		if (ppe_mirror_test_acl_arr[i] == group_id) {
 			printk("Mapping is there for the dev - please delete the mappings before group.\n");
-			return false;
+			goto out;
 		}
 	}
 
 	/*
 	 * Delete the group from the global array.
 	 */
-	if (!ppe_mirror_test_group_delete(group_dev))
-                return false;
+	if (!ppe_mirror_test_group_delete(group_dev)) {
+		goto out;
+	}
 
+	dev_put(group_dev);
 	unregister_netdev(group_dev);
 	free_netdev(group_dev);
 
 	printk("Sucessfully deleted the group dev %s\n", value);
 	return true;
+
+out:
+	dev_put(group_dev);
+	return false;
 }
 
 /*
