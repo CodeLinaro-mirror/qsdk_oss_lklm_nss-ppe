@@ -662,7 +662,30 @@ ppe_drv_ret_t ppe_drv_iface_eip_set(struct ppe_drv_iface *iface, ppe_drv_eip_ser
 		break;
 
 	case PPE_DRV_EIP_SERVICE_FULL_INLINE:
+		queue_id = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_EIP197);
 		ppe_drv_port_flags_set(vp, PPE_DRV_PORT_FLAG_IPSEC_FULL_INLINE);
+
+		/*
+		 * Map VP queues to EIP port.
+		 */
+		if ((queue_id < 0) || !ppe_drv_port_ucast_queue_set(vp, queue_id)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: failed to set queue for the port: %u", iface, vp->port);
+			return PPE_DRV_RET_QUEUE_CFG_FAIL;
+		}
+
+		/*
+		 * Map service code to queue mapping for exception path.
+		 */
+		queue_id = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_CPU);
+		if ((queue_id < 0)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: failed to get queue for CPU port with err %d", iface, queue_id);
+			return PPE_DRV_RET_QUEUE_CFG_FAIL;
+		}
+		ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH, queue_id,
+				PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+
 		break;
 
 	default:
