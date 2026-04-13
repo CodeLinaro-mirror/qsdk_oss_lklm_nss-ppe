@@ -84,3 +84,6 @@ void ppe_drv_sc_ucast_queue_set(ppe_drv_sc_t sc, uint8_t queue_id, uint8_t src_p
 void ppe_drv_sc_entries_free(struct ppe_drv_sc *sc);
 struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void);
 void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port);
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+bool ppe_drv_sc_noedit_tun_rps_queue_init(void);
+#endif

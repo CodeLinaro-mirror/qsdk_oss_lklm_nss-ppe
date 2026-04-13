@@ -62,13 +62,17 @@ static const char *ppe_drv_stats_sc_name_str[] = {
 	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC",		/* Service code for loopback port for pon pass */
 	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT",		/* Service code for loopback port for second pass */
 	"PPE_DRV_SC_FDB_BYPASS",		/* Service code for gem port table to bypass destination selection from FDB table */
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC",	/* Service code for loopback port for pon pass */
 	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT",	/* Service code for loopback port for second pass */
 	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC",	/* Service code for loopback port for pon pass */
 	"PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT",	/* Service code for loopback port for second pass */
 	"PPE_DRV_SC_FEATURE_PON_HGU_PPTP",	/* Service code for enabling PPTP flow with HGU enabled */
+#endif
 	"PPE_DRV_SC_GEM_LOOKUP",	/* Service code for GEM port lookup */
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
 	"PPE_DRV_SC_NOEDIT_TUN_RPS",		/* Service code for Tunnel RPS configuration */
+#endif
 	"PPE_DRV_SC_DDRQ_ETH_PT_MODE",		/* Service code for DDRQ ETH passthrough mode */
 	"PPE_DRV_SC_DDRQ_PON_PT_MODE",		/* Service code for DDRQ PON passthrough mode */
 	"PPE_DRV_SC_MAX",                 /* Max service code */
@@ -640,7 +644,7 @@ static int ppe_drv_conn_stats_sc_show(struct seq_file *m, void __attribute__((un
 
 	seq_puts(m, "\nPPE_sc_stats:\n\n");
 	stats_shadow = (uint64_t *)sc_stats;
-	for (i = 0; i <= PPE_DRV_SC_NOEDIT_TUN_RPS; i++) {
+	for (i = 0; i < (sizeof(ppe_drv_stats_sc_name_str) / sizeof(ppe_drv_stats_sc_name_str[0])); i++) {
 		uint64_t stats1 = *stats_shadow++;
 		uint64_t stats2 = *stats_shadow++;
 		uint64_t stats3 = *stats_shadow++;
