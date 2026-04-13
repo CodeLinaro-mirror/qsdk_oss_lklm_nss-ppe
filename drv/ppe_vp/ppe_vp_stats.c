@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024, 2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -37,7 +37,8 @@ static const char *ppe_vp_stats_base_str[] = {
 	"Tx_VP_Inactive",			/* VP of Packet forwarded by VP user is inactive */
 	"Rx_Fast_tramist_failed",		/* Rx packet fast transmit failed */
 	"Rx_Qdisc_Fast_tramist_failed",		/* Rx packet Qdisc fast transmit failed */
-	"Rx_Destination_VP_no_listcb"		/* Packet received from PPE with inactive destinaton VP */
+	"Rx_Destination_VP_no_listcb",		/* Packet received from PPE with inactive destinaton VP */
+	"Rx_Destination_VP_no_xdpcb"		/* XDP handler not registered for XDP destination VP */
 };
 
 static const char *ppe_vp_stats_rx_str[] = {

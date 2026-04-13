@@ -35,6 +35,7 @@ struct ppe_vp_base_stats {
 	atomic64_t rx_fastxmit_fails;		/* Rx packet fast transmit failed */
 	atomic64_t rx_qdisc_fastxmit_fails;	/* Rx packet Qdisc fast transmit failed */
 	atomic64_t rx_dvp_no_listcb;		/* list handler not registered for list destination VP */
+	atomic64_t rx_dvp_no_xdpcb;		/* XDP handler not registered for XDP destination VP */
 };
 
 /*
