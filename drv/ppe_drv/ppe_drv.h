@@ -669,7 +669,7 @@ static inline bool ppe_drv_tun_gretap_to_mapt_loopback_enabled(struct ppe_drv *p
  */
 static inline bool ppe_drv_loopback_port_ft_pon_enabled(struct ppe_drv *p) {
 	return !!(p->loopback_port_info.enabled &&
-			(p->loopback_port_info.ft_type == PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON));
+			(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_ACL_PON));
 }
 #endif
 
