@@ -362,8 +362,13 @@ static netdev_tx_t nss_dtlsmgr_ctx_dev_tx(struct sk_buff *skb, struct net_device
 	/*
 	 * Check if skb is shared; unshare in case it is shared
 	 */
-	if (skb_shared(skb))
+	if (skb_shared(skb)) {
 		skb = skb_unshare(skb, in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
+		if (!skb) {
+			stats->fail_host_tx++;
+			return NETDEV_TX_OK;
+		}
+	}
 
 	nss_dtlsmgr_trace("%px: TX packet for DTLS encapsulation, ifnum(%d)", dev, encap->ifnum);
 
@@ -374,9 +379,10 @@ static netdev_tx_t nss_dtlsmgr_ctx_dev_tx(struct sk_buff *skb, struct net_device
 		 * Check if metadata is initialized
 		 */
 		mdata_init = ndm->flags & NSS_DTLSMGR_METADATA_FLAG_ENC;
-		if (unlikely(!mdata_init))
+		if (unlikely(!mdata_init)) {
+			nss_dtlsmgr_warn("%px: metadata not initialized", ctx);
 			goto free;
-
+		}
 	}
 
 	/*
@@ -401,8 +407,17 @@ static netdev_tx_t nss_dtlsmgr_ctx_dev_tx(struct sk_buff *skb, struct net_device
 			goto free;
 		}
 
+		/*
+		 * Try sending the expanded skb
+		 */
+		if (nss_dtls_cmn_tx_buf(skb2, encap->ifnum, encap->nss_ctx) != NSS_TX_SUCCESS) {
+			nss_dtlsmgr_trace("%px: unable to tx buffer for (%u)", ctx, encap->ifnum);
+			dev_kfree_skb_any(skb2);
+			return NETDEV_TX_BUSY;
+		}
+
 		dev_kfree_skb_any(skb);
-		skb = skb2;
+		return NETDEV_TX_OK;
 	}
 
 	if (nss_dtls_cmn_tx_buf(skb, encap->ifnum, encap->nss_ctx) != NSS_TX_SUCCESS) {

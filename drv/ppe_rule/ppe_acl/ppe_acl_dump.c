@@ -45,9 +45,41 @@ static const char *ppe_acl_dump_slice_type_str[] = {
         "SLICE_SRC_IPV6_1",      /* ACL source IPv6 1 slice type. */
         "SLICE_SRC_IPV6_2",      /* ACL source IPv6 2 slice type. */
         "SLICE_IP_MISC",         /* ACL IP miscellaneous slice type. */
-        "SLICE_UDF_012",         /* ACL UDF 012 slice type. */
-        "SLICE_UDF_123",         /* ACL UDF 123 slice type. */
+	"PPE_DRV_ACL_SLICE_TYPE_UDF_OFFSET",	/* ACL UDF with offset */
 	"SLICE_EXT_VLAN",	 /* ACL ext VLAN slice type. */
+};
+
+/*
+ * ppe_acl_dump_udf_type_str
+ * 	UDF proto type string array
+ */
+static const char *ppe_acl_dump_udf_type_str[] = {
+	"UDF_PROTO_NON_IP",	/* ACL UDF proto type non-ip */
+	"UDF_PROTO_IPv4",	/* ACL UDF proto type ipv4 */
+	"UDF_PROTO_IPv6",	/* ACL UDF proto type ip6 */
+};
+
+/*
+ * ppe_acl_dump_udf_offset_from_str
+ * 	UDF offset base string array
+ */
+static const char *ppe_acl_dump_udf_offset_from_str[] = {
+	"UDF_OFFSET_BASE_L2",	/* ACL UDF offset base L2 */
+	"UDF_OFFSET_BASE_L3",	/* ACL UDF offset base L3 */
+	"UDF_OFFSET_BASE_L4",	/* ACL UDF offset base L4 */
+};
+
+/*
+ * ppe_acl_dump_udf_op_from_str
+ *	ACL UDF operation string arry.
+ */
+static const char *ppe_acl_dump_udf_op_from_str[] = {
+	"UDF_OP_INVALID",        /* ACL UDF match operation is invalid */
+	"UDF_OP_MATCH_MASK",     /* ACL UDF mask match operation */
+	"UDF_OP_MATCH_RANGE",    /* ACL UDF range match operation */
+	"UDF_OP_MATCH_LE",       /* ACL UDF 'less than' match operation */
+	"UDF_OP_MATCH_GE",       /* ACL UDF 'greater than' match operation */
+	"UDF_OP_MATCH_NE",       /* ACL UDF 'not equal to' match operation */
 };
 
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
@@ -1036,84 +1068,137 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 			break;
 
 		case PPE_ACL_RULE_MATCH_TYPE_UDF:
-			if ((result = ppe_acl_dump_prefix_add(adi, "udf"))) {
+			if ((result = ppe_acl_dump_prefix_add(adi, "UDF_with_offset"))) {
 				goto error;
 			}
 
-			if (r->rule.udf.udf_a_valid) {
-				if ((result = ppe_acl_dump_write(adi, "udf_a", "%d",
-								r->rule.udf.udf_a_min))) {
+			if (r->rule.udf.udf_a.valid_op) {
+				if ((result = ppe_acl_dump_write(adi, "udf_0_op", "%s",
+								ppe_acl_dump_udf_op_from_str[r->rule.udf.udf_a.valid_op]))) {
 					goto error;
 				}
 
-				if (r->rule_flags & (PPE_ACL_RULE_FLAG_UDFA_MASK | PPE_ACL_RULE_FLAG_UDFA_RANGE)) {
-					if ((result = ppe_acl_dump_write(adi, "udf_a_mask_max", "%d",
-									r->rule.udf.udf_a_mask_max))) {
-						goto error;
-					}
-				}
-
-				if ((result = ppe_acl_dump_write(adi, "range_en", "%s",
-								(r->rule_flags & PPE_ACL_RULE_FLAG_UDFA_RANGE)
-								? "true": "false"))) {
-					goto error;
-				}
-			}
-
-			if (r->rule.udf.udf_b_valid) {
-				if ((result = ppe_acl_dump_write(adi, "udf_b", "%d",
-								r->rule.udf.udf_b_min))) {
+				if ((result = ppe_acl_dump_write(adi, "udf_0", "0x%x",
+								r->rule.udf.udf_a.min))) {
 					goto error;
 				}
 
-				if (r->rule_flags & (PPE_ACL_RULE_FLAG_UDFB_MASK | PPE_ACL_RULE_FLAG_UDFB_RANGE)) {
-					if ((result = ppe_acl_dump_write(adi, "udf_b_mask_max", "%d",
-									r->rule.udf.udf_b_mask_max))) {
-						goto error;
-					}
+				if ((result = ppe_acl_dump_write(adi, "udf_0_mask_max", "0x%x",
+								r->rule.udf.udf_a.mask_max))) {
+					goto error;
 				}
 
-				if ((result = ppe_acl_dump_write(adi, "range_en", "%s",
-								(r->rule_flags & PPE_ACL_RULE_FLAG_UDFB_RANGE)
-								? "true": "false"))) {
+				if ((result = ppe_acl_dump_write(adi, "udf_0_offset", "%d",
+								r->rule.udf.udf_a.offset))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_0_proto", "%s",
+								ppe_acl_dump_udf_type_str[r->rule.udf.udf_a.proto]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_0_offset_base", "%s",
+								ppe_acl_dump_udf_offset_from_str[r->rule.udf.udf_a.offset_base]))) {
 					goto error;
 				}
 			}
 
-			if (r->rule.udf.udf_c_valid) {
-				if ((result = ppe_acl_dump_write(adi, "udf_c", "%d",
-								r->rule.udf.udf_c))) {
+			if (r->rule.udf.udf_b.valid_op) {
+				if ((result = ppe_acl_dump_write(adi, "udf_1_op", "%s",
+								ppe_acl_dump_udf_op_from_str[r->rule.udf.udf_b.valid_op]))) {
 					goto error;
 				}
 
-				if (r->rule_flags & PPE_ACL_RULE_FLAG_UDFC_MASK) {
-					if ((result = ppe_acl_dump_write(adi, "udf_c_mask", "%d",
-									r->rule.udf.udf_c_mask))) {
-						goto error;
-					}
-				}
-			}
-
-			if (r->rule.udf.udf_d_valid) {
-				if ((result = ppe_acl_dump_write(adi, "udf_d", "%d",
-								r->rule.udf.udf_d))) {
+				if ((result = ppe_acl_dump_write(adi, "udf_1", "0x%x",
+								r->rule.udf.udf_b.min))) {
 					goto error;
 				}
 
-				if (r->rule_flags & PPE_ACL_RULE_FLAG_UDFD_MASK) {
-					if ((result = ppe_acl_dump_write(adi, "udf_d_mask", "%d",
-									r->rule.udf.udf_d_mask))) {
-						goto error;
-					}
+				if ((result = ppe_acl_dump_write(adi, "udf_1_mask_max", "0x%x",
+								r->rule.udf.udf_b.mask_max))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_1_offset", "%d",
+								r->rule.udf.udf_b.offset))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_1_proto", "%s",
+								ppe_acl_dump_udf_type_str[r->rule.udf.udf_b.proto]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_1_offset_base", "%s",
+								ppe_acl_dump_udf_offset_from_str[r->rule.udf.udf_b.offset_base]))) {
+					goto error;
 				}
 			}
 
-			if ((result = ppe_acl_dump_write(adi, "inverse_en", "%s",
-							(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN)
-							? "true": "false"))) {
-				goto error;
+			if (r->rule.udf.udf_c.valid_op) {
+				if ((result = ppe_acl_dump_write(adi, "udf_2_op", "%s",
+								ppe_acl_dump_udf_op_from_str[r->rule.udf.udf_c.valid_op]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2", "0x%x",
+								r->rule.udf.udf_c.min))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2_mask_max", "0x%x",
+								r->rule.udf.udf_c.mask_max))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2_offset", "%d",
+								r->rule.udf.udf_c.offset))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2_proto", "%s",
+								ppe_acl_dump_udf_type_str[r->rule.udf.udf_c.proto]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2_offset_base", "%s",
+								ppe_acl_dump_udf_offset_from_str[r->rule.udf.udf_c.offset_base]))) {
+					goto error;
+				}
 			}
 
+			if (r->rule.udf.udf_d.valid_op) {
+				if ((result = ppe_acl_dump_write(adi, "udf_3_op", "%s",
+								ppe_acl_dump_udf_op_from_str[r->rule.udf.udf_d.valid_op]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3", "0x%x",
+								r->rule.udf.udf_d.min))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3_mask_max", "0x%x",
+								r->rule.udf.udf_d.mask_max))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3_offset", "%d",
+								r->rule.udf.udf_d.offset))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3_proto", "%s",
+								ppe_acl_dump_udf_type_str[r->rule.udf.udf_d.proto]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3_offset_base", "%s",
+								ppe_acl_dump_udf_offset_from_str[r->rule.udf.udf_d.offset_base]))) {
+					goto error;
+				}
+			}
 
 			if ((result = ppe_acl_dump_prefix_remove(adi))) {
 				goto error;

@@ -209,6 +209,34 @@ ppe_drv_ret_t ppe_drv_br_leave(struct ppe_drv_iface *br_iface, struct net_device
 ppe_drv_ret_t ppe_drv_br_join(struct ppe_drv_iface *br_iface, struct net_device *member);
 
 /**
+ * ppe_drv_br_flood_en
+ *      Enable flooding on a bridge interface in PPE.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ *
+ * @param[in] br_iface    Pointer to the PPE interface for bridge.
+ *
+ * @return
+ * Status of the flood enable operation.
+ */
+ppe_drv_ret_t ppe_drv_br_flood_en(struct ppe_drv_iface *br_iface);
+
+/**
+ * ppe_drv_br_flood_def
+ *      Restore default flooding behavior on a bridge interface in PPE.
+ *
+ * @datatypes
+ * ppe_drv_iface
+ *
+ * @param[in] br_iface    Pointer to the PPE interface for bridge.
+ *
+ * @return
+ * Status of the flood default operation.
+ */
+ppe_drv_ret_t ppe_drv_br_flood_def(struct ppe_drv_iface *br_iface);
+
+/**
  * ppe_drv_br_deinit
  *	Uninitialize bridge interface in PPE.
  *

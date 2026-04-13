@@ -42,7 +42,6 @@
 
 #define PPE_DRV_RFS_COREMASK_MIN	1
 #define PPE_DRV_RFS_COREMASK_MAX	((1 << NR_CPUS) - 1)
-#define PPE_DRV_FLOOD_VSI_EN_STR_LEN	40
 
 #ifdef NSS_PPE_DRV_HW_GRO
 #define PPE_DRV_GRO_COREMASK_MIN	1
@@ -124,7 +123,6 @@ static char packet_padding[PPE_DRV_PACKET_PADDING_STR_LEN];
 
 int l4_checksum_exception_enable = false;
 int mac_lrn_exception_en = true;
-static char flood_vsi_override_en[PPE_DRV_FLOOD_VSI_EN_STR_LEN];
 
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 int ppe_drv_ipsec_passth_en = 0;
@@ -2698,110 +2696,6 @@ int ppe_drv_mac_lrn_exception_en(struct ctl_table *table, int write,
 	return 0;
 }
 
-/*
- * ppe_drv_flood_vsi_override_en()
- *      API to enable/disable the flood membership ovveride for UUC, UMC and BC.
- */
-int ppe_drv_flood_vsi_override_en(struct ctl_table *table, int write,
-		void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	struct ppe_drv *p = ppe_drv_gbl;
-	struct net_device *net_dev = NULL;
-	struct ppe_drv_iface *iface = NULL;
-	int ret;
-	const char *map_name;
-	const char *action;
-	const char *dev;
-	int action_len;
-	bool flood_vsi_en = false;
-
-	/*
-	 * Populate the sysctl backing buffer (flood_vsi_override_en).
-	 * If not a write or if proc_dostring failed, return immediately.
-	 */
-	ret = proc_dostring(table, write, buffer, lenp, ppos);
-	if (ret || !write) {
-		return ret;
-	}
-
-	/*
-	 * Parse the input; valid forms:
-	 *   "enable <netdev_name>"
-	 *   "default <netdev_name>"
-	 */
-	map_name = flood_vsi_override_en;
-	if (!map_name) {
-		ppe_drv_warn("No input buffer for flood_vsi_override_en\n");
-		return -EINVAL;
-	}
-
-	/* Skip leading whitespace and identify action keyword */
-	action = map_name + strspn(map_name, NSS_PPE_DRV_WHITESPACE);
-
-	if (strncasecmp(action, "enable", 6) == 0) {
-		flood_vsi_en = true;
-		action_len = 6;
-	} else if (strncasecmp(action, "default", 7) == 0) {
-		flood_vsi_en = false;
-		action_len = 7;
-	} else {
-		ppe_drv_warn("Invalid action input, expected: <enable/default>\n");
-		return -EINVAL;
-	}
-
-	/* Move to device token and skip whitespace */
-	dev = action + action_len;
-	dev += strspn(dev, NSS_PPE_DRV_WHITESPACE);
-
-	/* Extract only the device token up to next whitespace (strip trailing spaces/newlines) */
-	{
-		size_t dev_len = strcspn(dev, NSS_PPE_DRV_WHITESPACE);
-		char dev_buf[IFNAMSIZ];
-
-		if (dev_len == 0 || dev_len > IFNAMSIZ - 1) {
-			ppe_drv_warn("Invalid DEV NAME\n");
-			return -EINVAL;
-		}
-
-		memcpy(dev_buf, dev, dev_len);
-		dev_buf[dev_len] = '\0';
-
-		net_dev = dev_get_by_name(&init_net, dev_buf);
-		if (!net_dev) {
-			ppe_drv_warn("No valid netdevice found for dev: %s\n", dev_buf);
-			return -ENODEV;
-		}
-	}
-
-	/* Resolve interface/VSI from the netdevice */
-	iface = ppe_drv_iface_get_by_dev(net_dev);
-	if (!iface || !iface->vsi) {
-		dev_put(net_dev);
-		return -ENODEV;
-	}
-
-	/* Apply change under PPE lock (keep lock hold time minimal) */
-	spin_lock_bh(&p->lock);
-
-	if (iface->vsi->type == PPE_DRV_VSI_TYPE_BRIDGE) {
-		if (flood_vsi_en) {
-			iface->vsi->flood_vsi_en = 1;
-			ppe_drv_port_flood_vsi_override_en(iface->vsi->index);
-		} else {
-			iface->vsi->flood_vsi_en = 0;
-			ppe_drv_port_flood_vsi_override_default(iface->vsi->index);
-		}
-	} else {
-		ppe_drv_warn("VSI type not bridge; override ignored (type=%u)\n",
-				iface->vsi->type);
-	}
-
-	spin_unlock_bh(&p->lock);
-
-	dev_put(net_dev);
-	return 0;
-}
-
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
 /*
  * ppe_drv_loopback_port_feature_write_handler()
@@ -3716,14 +3610,6 @@ static struct ctl_table ppe_drv_sub[] = {
 		.proc_handler   =	ppe_drv_loopback_port_feature_write_handler,
 	},
 #endif
-
-	{
-		.procname       =       "flood_vsi_override_en",
-		.data           =       &flood_vsi_override_en,
-		.maxlen         =       sizeof(char) * PPE_DRV_FLOOD_VSI_EN_STR_LEN,
-		.mode           =       0644,
-		.proc_handler   =       ppe_drv_flood_vsi_override_en,
-	},
 
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 	{

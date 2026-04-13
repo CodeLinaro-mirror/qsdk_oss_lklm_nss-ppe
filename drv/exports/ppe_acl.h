@@ -206,16 +206,6 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_FLAG_DPORT_RANGE		(PPE_ACL_RULE_GEN_FLAG_LAST << 4)	/**< Rule match with destination port range. */
 
 /*
- * UDF rule flag.
- */
-#define PPE_ACL_RULE_FLAG_UDFA_MASK 		(PPE_ACL_RULE_GEN_FLAG_LAST << 1)	/**< Rule match with user defined field - a mask. */
-#define PPE_ACL_RULE_FLAG_UDFA_RANGE		(PPE_ACL_RULE_GEN_FLAG_LAST << 2)	/**< Rule match with user defined field - a range. */
-#define PPE_ACL_RULE_FLAG_UDFB_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 3)	/**< Rule match with user defined field - b mask. */
-#define PPE_ACL_RULE_FLAG_UDFB_RANGE		(PPE_ACL_RULE_GEN_FLAG_LAST << 4)	/**< Rule match with user defined field - b range. */
-#define PPE_ACL_RULE_FLAG_UDFC_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 5)	/**< Rule match with user defined field - c mask. */
-#define PPE_ACL_RULE_FLAG_UDFD_MASK		(PPE_ACL_RULE_GEN_FLAG_LAST << 6)	/**< Rule match with user defined field - d mask. */
-
-/*
  * ACL action flags.
  */
 #define PPE_ACL_RULE_ACTION_FLAG_SERVICE_CODE_EN		0x00000001	/**< Rule action to change service code. */
@@ -435,6 +425,43 @@ typedef enum ppe_acl_flush_type {
 } ppe_acl_flush_type_t;
 
 /**
+ * ppe_acl_rule_udf_base_type
+ *	The base layer from which the UDF offset is calculated in an ACL rule.
+ *	The offset can be relative to Layer 2, Layer 3, or Layer 4.
+ * NOTE: Duplicate of ppe_drv_acl_udf_rule_base_type in ppe_drv_acl.h; ensure any changes are mirrored in both files.
+ */
+enum ppe_acl_rule_udf_base_type {
+	PPE_ACL_UDF_OFFSET_BASE_L2,	/**< Offset is calculated from the start of Layer 2 */
+	PPE_ACL_UDF_OFFSET_BASE_L3,	/**< Offset is calculated from the start of Layer 3 */
+	PPE_ACL_UDF_OFFSET_BASE_L4,	/**< Offset is calculated from the start of Layer 4 */
+};
+
+/**
+ * ppe_acl_rule_udf_proto
+ *	ACL rule offset protocol type.
+ * NOTE: Duplicate of ppe_drv_acl_udf_proto in ppe_drv_acl.h; ensure any changes are mirrored in both files.
+ */
+enum ppe_acl_rule_udf_proto {
+	PPE_ACL_UDF_NON_IP,	/**< UDF offset for non-ip protocol type */
+	PPE_ACL_UDF_IPV4,	/**< UDF offset for IPv4 protocol type */
+	PPE_ACL_UDF_IPV6,	/**< UDF offset for IPv6 protocol type */
+};
+
+/**
+ * ppe_acl_rule_udf_op
+ *	ACL rule UDF match operation.
+ * NOTE: Duplicate of ppe_drv_acl_rule_udf_op in ppe_drv_acl.h; ensure any changes are mirrored in both files.
+ */
+enum ppe_acl_rule_udf_op {
+        PPE_ACL_UDF_OP_INVAL = 0,	/**< Invalid UDF operation */
+        PPE_ACL_UDF_OP_MASK,		/**< Perform MASK-based matching */
+        PPE_ACL_UDF_OP_RANGE,		/**< Perform RANGE-based matching */
+        PPE_ACL_RULE_OP_LE,		/**< Perform Less-Than-Or-Equal comparison */
+        PPE_ACL_RULE_OP_GE,		/**< Perform Greater-Than-Or-Equal comparison */
+        PPE_ACL_UDF_OP_NE,		/**< Perform NOT-EQUAL matching */
+};
+
+/**
  * ppe_acl_rule_match_mac
  *	MAC based ACL rule.
  */
@@ -595,22 +622,28 @@ struct ppe_acl_rule_match_ttl_hop {
 };
 
 /**
+ * ppe_acl_rule_udf
+ *	Single UDF configuration for ACL rule
+ */
+struct ppe_acl_rule_udf {
+	enum ppe_acl_rule_udf_op valid_op;		/**< UDF valid operation for ACL match. */
+	enum ppe_acl_rule_udf_proto proto;		/**< UDF offset prototype (IPv4, IPv6 or NON-IP). */
+	enum ppe_acl_rule_udf_base_type offset_base;	/**< UDF offset reference (L2, L3 or L4). */
+	uint32_t offset;				/**< UDF offset. */
+	uint16_t min;					/**< UDF min/value for ACL match. */
+	uint16_t mask_max;				/**< UDF max/mask for ACL match. */
+};
+
+/**
  * ppe_acl_rule_match_udf
  *	UDF based ACL rule
+ *	NOTE: UDF-D is supporting only mask match operation.
  */
 struct ppe_acl_rule_match_udf {
-	uint16_t udf_a_min;			/**< UDF-A value for ACL match. */
-	uint16_t udf_b_min;			/**< UDF-B value for ACL match. */
-	uint16_t udf_c;				/**< UDF-C value for ACL match. */
-	uint16_t udf_d;				/**< UDF-D value for ACL match. */
-	uint16_t udf_a_mask_max;		/**< UDF-A mask for ACL match. */
-	uint16_t udf_b_mask_max;		/**< UDF-B mask for ACL match. */
-	uint16_t udf_c_mask;			/**< UDF-C mask for ACL match. */
-	uint16_t udf_d_mask;			/**< UDF-D mask for ACL match. */
-	uint8_t udf_a_valid;			/**< UDF-A valid for ACL match. */
-	uint8_t udf_b_valid;			/**< UDF-B valid for ACL match. */
-	uint8_t udf_c_valid;			/**< UDF-C valid for ACL match. */
-	uint8_t udf_d_valid;			/**< UDF-D valid for ACL match. */
+	struct ppe_acl_rule_udf udf_a;		/**< UDF-A configuration. */
+	struct ppe_acl_rule_udf udf_b;		/**< UDF-B configuration. */
+	struct ppe_acl_rule_udf udf_c;		/**< UDF-C configuration. */
+	struct ppe_acl_rule_udf udf_d;		/**< UDF-D configuration. */
 };
 
 /**
