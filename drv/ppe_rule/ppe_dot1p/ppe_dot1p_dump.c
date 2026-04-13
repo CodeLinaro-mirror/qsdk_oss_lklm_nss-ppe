@@ -189,7 +189,7 @@ int ppe_dot1p_dump_def(struct ppe_dot1p_dump_instance *ddi, struct ppe_dot1p_def
 	}
 
 	if (r_def->def_rule_flags & PPE_DOT1P_RULE_FLAG_GEN_MISS_CMD) {
-		if ((result = ppe_dot1p_dump_write(ddi, "gen_miss_cmd", "%d", ppe_dot1p_dump_cmd_str[r_def->gen_miss_cmd]))) {
+		if ((result = ppe_dot1p_dump_write(ddi, "gen_miss_cmd", "%s", ppe_dot1p_dump_cmd_str[r_def->gen_miss_cmd]))) {
 			goto error;
 		}
 	}
