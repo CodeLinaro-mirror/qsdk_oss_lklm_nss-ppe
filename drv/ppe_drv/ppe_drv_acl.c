@@ -376,22 +376,16 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 		case PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN:
 			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
 			if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_CTPID) {
-				int index = ppe_drv_get_tpid_index(slice->rule.ext_vlan.ctpid_val, "ctpid");
-				if (index > 0) {
-					fal_rule->ctag_tpid_index_val = index;
-					fal_rule->ctag_tpid_index_mask = slice->rule.ext_vlan.ctpid_mask;
-					FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_CTAG_TPID_INDEX);
-					ppe_drv_trace("%p: slice ext vlan ctpid_val: %d ctpid_index: %d", ctx, slice->rule.ext_vlan.ctpid_val, index);
-				}
+				fal_rule->ctag_tpid_index_val = slice->rule.ext_vlan.ctpid_val;
+				fal_rule->ctag_tpid_index_mask = slice->rule.ext_vlan.ctpid_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_CTAG_TPID_INDEX);
+				ppe_drv_trace("%p: slice ext vlan ctpid_index: %d", ctx, slice->rule.ext_vlan.ctpid_val);
 			}
 			if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_STPID) {
-				int index = ppe_drv_get_tpid_index(slice->rule.ext_vlan.stpid_val, "stpid");
-				if (index > 0) {
-					fal_rule->stag_tpid_index_val = index;
-					fal_rule->stag_tpid_index_mask = slice->rule.ext_vlan.stpid_mask;
-					FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_STAG_TPID_INDEX);
-					ppe_drv_trace("%p: slice ext vlan stpid_val: %d stpid_index: %d", ctx, slice->rule.ext_vlan.stpid_val, index);
-				}
+				fal_rule->stag_tpid_index_val = slice->rule.ext_vlan.stpid_val;
+				fal_rule->stag_tpid_index_mask = slice->rule.ext_vlan.stpid_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_STAG_TPID_INDEX);
+				ppe_drv_trace("%p: slice ext vlan stpid_index: %d", ctx, slice->rule.ext_vlan.stpid_val);
 			}
 			if (slice->flags & PPE_DRV_ACL_EXT_VLAN_FLAG_DHCP) {
 				fal_rule->dhcp_type = slice->rule.ext_vlan.dhcp_type;

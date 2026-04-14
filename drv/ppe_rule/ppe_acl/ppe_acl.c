@@ -583,6 +583,7 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 	struct ppe_drv_acl_udf *udf_123;
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 	struct ppe_drv_acl_ext_vlan *ext_vlan;
+	int index;
 #endif
 	uint32_t sip[4], sip_mask[4];
 	uint32_t dip[4], dip_mask[4];
@@ -1418,11 +1419,16 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 	case PPE_ACL_RULE_MATCH_TYPE_CTPID:
 		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
 		ext_vlan = &slice->rule.ext_vlan;
+		index = ppe_drv_get_tpid_index(r->rule.ctpid.tpid_val, "ctpid");
+		if (index < 0) {
+			ppe_acl_warn("%p: invalid stpid index information: ctpid: %d\n", r, r->rule.ctpid.tpid_val);
+			return false;
+		}
 
-		slice->rule.ext_vlan.ctpid_val = r->rule.ctpid.tpid_val;
+		slice->rule.ext_vlan.ctpid_val = index;
 		memset(&ext_vlan->ctpid_mask, 0xff, sizeof(ext_vlan->ctpid_mask));
 		if (r->rule_flags & PPE_ACL_RULE_FLAG_CTPID_EN) {
-			ext_vlan->ctpid_mask = r->rule.ctpid.tpid_val;
+			slice->rule.ext_vlan.ctpid_mask = r->rule.ctpid.tpid_mask;
 		}
 
 		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
@@ -1444,8 +1450,13 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 	case PPE_ACL_RULE_MATCH_TYPE_STPID:
 		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN];
 		ext_vlan = &slice->rule.ext_vlan;
+		index = ppe_drv_get_tpid_index(r->rule.stpid.tpid_val, "stpid");
+		if (index < 0) {
+			ppe_acl_warn("%p: invalid stpid index information: stpid:%d\n", r, r->rule.stpid.tpid_val);
+			return false;
+		}
 
-		slice->rule.ext_vlan.stpid_val = r->rule.stpid.tpid_val;
+		slice->rule.ext_vlan.stpid_val = index;
 		memset(&ext_vlan->stpid_mask, 0xff, sizeof(ext_vlan->stpid_mask));
 		if (r->rule_flags & PPE_ACL_RULE_FLAG_STPID_EN) {
 			ext_vlan->stpid_mask = r->rule.stpid.tpid_mask;
@@ -1454,8 +1465,8 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		flag_en = !!(r->rule_flags & PPE_ACL_RULE_GEN_FLAG_INVERSE_EN);
 		if (slice->sub_rule_cnt && (ext_vlan->inverse_en != flag_en)) {
 			ppe_acl_warn("%p: invalid rule flags, expect all ext vlan rules to have "
-				       "same inverse logic type:%d flags: 0x%x",
-				       r, type, r->rule_flags);
+					"same inverse logic type:%d flags: 0x%x",
+					r, type, r->rule_flags);
 			return false;
 		}
 
