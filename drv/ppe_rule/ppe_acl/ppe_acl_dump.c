@@ -1413,6 +1413,10 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 		if ((result = ppe_acl_dump_write(adi, "exception_edit_en", "%s", "true"))) {
 			goto error;
 		}
+
+		if ((result = ppe_acl_dump_write(adi, "service_code", "%d", PPE_DRV_SC_PKT_EXCEPTION_EDIT_EN))) {
+			goto error;
+		}
 	}
 #endif
 

@@ -1790,6 +1790,7 @@ static bool ppe_acl_action_fill(struct ppe_acl *acl, struct ppe_acl_rule_action 
 #ifdef NSS_PPE_FEATURE_EXCEPTION_EDIT
 	if (r_action->flags & PPE_ACL_RULE_ACTION_FLAG_EXCEPTION_EDIT_EN) {
 		acl_action->service_code = PPE_DRV_SC_PKT_EXCEPTION_EDIT_EN;
+		acl_action->flags |= PPE_DRV_ACL_ACTION_FLAG_SC;
 	}
 #endif
 
