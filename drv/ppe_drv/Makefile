@@ -165,5 +165,9 @@ qca-nss-ppe-objs += ppe_drv_veip.o
 qca-nss-ppe-objs += ppe_drv_mcast.o
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DPPE_DRV_FLOW_COOKIE_48B_SUPPORT
+endif
+
 ccflags-y += -Wall -Werror
 ccflags-y += -DPPE_DRV_DEBUG_LEVEL=3

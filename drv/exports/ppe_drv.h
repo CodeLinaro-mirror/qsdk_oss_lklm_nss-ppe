@@ -94,6 +94,10 @@
 #define PPE_DRV_QDISC_DIR_RETURN_VALID		0x02	/**< Qdisc rules are for return direction. */
 #define PPE_DRV_QDISC_DIR_INVALID		0x04	/**< Qdisc rules are for direction is invalid. */
 
+#define PPE_DRV_WIFI_INVALID_AST_INFO		0xFFFF
+#define PPE_DRV_WIFI_INVALID_PEER_ID		0xFFFF
+#define PPE_DRV_WIFI_INVALID_STREAM_ID		0xFF
+
 /*
  * SPI value update
  */
@@ -109,6 +113,9 @@
 #define PPE_DRV_SAWF_GET_TAG(x)			(x >> PPE_DRV_SAWF_SHIFT_TAG)
 #define PPE_DRV_SAWF_VALID_TAG			0xAA
 #define PPE_DRV_SAWF_VALID_BIT(x)		((x >> 20) & 0x4)
+
+#define PPE_DRV_FLOW_COOKIE_STREAM_ID_VALID_SHIFT	14
+#define PPE_DRV_FLOW_COOKIE_STREAM_ID_VALID_SET(x)	((x) |= (1U << PPE_DRV_FLOW_COOKIE_STREAM_ID_VALID_SHIFT))
 
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_DISABLED		0x0	/* loopback feature is disabled */
 #define PPE_DRV_LOOPBACK_FEATURE_TYPE_DEFAULT		0x1	/* Read dts file to enable loopback feature */
@@ -157,6 +164,7 @@ typedef enum ppe_drv_tree_id_type {
 	PPE_DRV_TREE_ID_TYPE_WIFI_TID,	/**< HLOS TID usecase */
 	PPE_DRV_TREE_ID_TYPE_SCS,	/**< SCS usecase */
 	PPE_DRV_TREE_ID_TYPE_MLO_ASSIST,	/**< MLO usecase */
+	PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS,	/**< Wifi8 PPEDS usecase */
 	PPE_DRV_TREE_ID_TYPE_MAX = 16,	/**< Maximum number of supported types */
 } ppe_drv_tree_id_type_t;
 
@@ -327,6 +335,12 @@ struct ppe_drv_wifi_mdata_rule {
 	uint32_t return_mark;		/**< Wi-Fi metadata information in return direction. */
 	uint32_t flow_ds_node_mdata;	/**< DS metadata in flow direction. */
 	uint32_t return_ds_node_mdata;	/**< DS metadata in return direction. */
+	uint16_t flow_ast_info;		/**< Flow direction WLAN peer AST info (cache_id + idx merged) */
+	uint16_t return_ast_info;		/**< Return direction WLAN peer AST info (cache_id + idx merged) */
+	uint8_t flow_stream_id;		/**< Flow direction WLAN stream ID for telemetry */
+	uint8_t return_stream_id;		/**< return direction WLAN stream ID for telemetry */
+	uint16_t flow_peer_id;		/**< Flow direction WLAN peer ID */
+	uint16_t return_peer_id;		/**< return direction WLAN peer ID */
 };
 
 /**

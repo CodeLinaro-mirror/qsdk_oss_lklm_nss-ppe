@@ -1273,6 +1273,31 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 						fc_metadata.type.mark = sawf_rule->flow_mark;
 					ppe_drv_v4_conn_flow_metadata_set(pcf, &fc_metadata, PPE_DRV_TREE_ID_TYPE_MLO_ASSIST);
 			}
+
+			if (valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_WIFI_DS) {
+				if (create->wifi_rule.flow_ast_info != PPE_DRV_WIFI_INVALID_AST_INFO) {
+					pcf->fl_mdata.tree_id_data.wifi_metadata.ast_info = create->wifi_rule.flow_ast_info;
+					ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_WIFI_AST_VALID);
+				}
+
+				if (create->wifi_rule.flow_stream_id != PPE_DRV_WIFI_INVALID_STREAM_ID) {
+					pcf->fl_mdata.tree_id_data.wifi_metadata.stream_id = create->wifi_rule.flow_stream_id;
+					ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_WIFI_STREAM_ID_VALID);
+				}
+
+				if (create->wifi_rule.flow_peer_id != PPE_DRV_WIFI_INVALID_PEER_ID) {
+					pcf->fl_mdata.tree_id_data.wifi_metadata.peer_id = create->wifi_rule.flow_peer_id;
+					ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_WIFI_PEER_ID_VALID);
+				}
+
+				/*
+				 * Set tree_id type only once if AST info or stream ID is valid
+				 */
+				if (create->wifi_rule.flow_ast_info != PPE_DRV_WIFI_INVALID_AST_INFO ||
+				    create->wifi_rule.flow_stream_id != PPE_DRV_WIFI_INVALID_STREAM_ID) {
+					pcf->fl_mdata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS;
+				}
+			}
 		}
 
 		if (valid_flags & PPE_DRV_V4_VALID_FLAG_VLAN) {
@@ -1578,6 +1603,31 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 					if ((sawf_tag == PPE_DRV_SAWF_VALID_TAG) || (valid_flags & PPE_DRV_V4_VALID_FLAG_SCS))
 						fc_metadata.type.mark = sawf_rule->return_mark;
 					ppe_drv_v4_conn_flow_metadata_set(pcr, &fc_metadata, PPE_DRV_TREE_ID_TYPE_MLO_ASSIST);
+			}
+
+			if (valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_WIFI_DS) {
+				if (create->wifi_rule.return_ast_info != PPE_DRV_WIFI_INVALID_AST_INFO) {
+					pcr->fl_mdata.tree_id_data.wifi_metadata.ast_info = create->wifi_rule.return_ast_info;
+					ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_WIFI_AST_VALID);
+				}
+
+				if (create->wifi_rule.return_stream_id != PPE_DRV_WIFI_INVALID_STREAM_ID) {
+					pcr->fl_mdata.tree_id_data.wifi_metadata.stream_id = create->wifi_rule.return_stream_id;
+					ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_WIFI_STREAM_ID_VALID);
+				}
+
+				if (create->wifi_rule.return_peer_id != PPE_DRV_WIFI_INVALID_PEER_ID) {
+					pcr->fl_mdata.tree_id_data.wifi_metadata.peer_id = create->wifi_rule.return_peer_id;
+					ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLAG_WIFI_PEER_ID_VALID);
+				}
+
+				/*
+				 * Set tree_id type only once if AST info or stream ID is valid
+				 */
+				if (create->wifi_rule.return_ast_info != PPE_DRV_WIFI_INVALID_AST_INFO ||
+				    create->wifi_rule.return_stream_id != PPE_DRV_WIFI_INVALID_STREAM_ID) {
+					pcr->fl_mdata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS;
+				}
 			}
 		}
 
