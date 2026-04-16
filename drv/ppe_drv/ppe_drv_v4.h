@@ -82,6 +82,10 @@
 
 #define PPE_DRV_V4_CONN_FLAG_ESP_SPI		0x10000000
 					/* ESP SPI information */
+#ifdef PPE_DRV_DDRQ_ENABLE
+#define PPE_DRV_V4_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS		0x20000000
+					/* Flow has the mapped DDRQ disabled */
+#endif
 
 /*
  * ppe_drv_v4_addr_equal()

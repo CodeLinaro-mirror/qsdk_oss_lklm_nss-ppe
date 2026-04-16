@@ -909,6 +909,13 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	struct ppe_drv_port *port_rx = pcf->rx_port;
 	ppe_drv_sc_t service_code = *scp;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
+#ifdef PPE_DRV_DDRQ_ENABLE
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS)) {
+		*scp = PPE_DRV_SC_DDRQ_LP_SC;
+		ppe_drv_warn("Flow has the DDRQ PT disable flag set, setting SC:%d for it\n", *scp);
+		return true;
+	}
+#endif
 #ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 	ppe_drv_ret_t ret;
 
@@ -2138,7 +2145,13 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	ppe_drv_sc_t service_code = *scp;
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
 	ppe_drv_ret_t ret __maybe_unused;
-
+#ifdef PPE_DRV_DDRQ_ENABLE
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS)) {
+		*scp = PPE_DRV_SC_DDRQ_LP_SC;
+		ppe_drv_warn("Flow has the DDRQ PT disable flag set, setting SC:%d for it\n", *scp);
+		return true;
+	}
+#endif
 #ifdef PPE_TUNNEL_ENABLE
 #if defined(PPE_LOOPBACK_RING_SUPPORT)
 	ret = ppe_drv_tun_gretap_to_mapt_sc(ppe_drv_v4_conn_flow_tx_port_get(pcf), ppe_drv_v4_conn_flow_rx_port_get(pcf), &service_code);

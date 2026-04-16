@@ -924,6 +924,19 @@ int ppe_drv_get_tpid_index(uint16_t tpid, const char *type);
 int ppe_drv_get_vsi_num(void);
 #endif
 
+/**
+ * ppe_drv_set_ddrq_en_bitmask
+ *	Set the PPE global DDRQ enable bitmask.
+ *
+ * @param[in] q_base Queue base
+ * @param[in] q_cnt Queue count
+ * @param[in] state DDRQ state
+ *
+ * @return
+ * Success or error code.
+ */
+int ppe_drv_set_ddrq_en_bitmask(uint32_t q_base, uint32_t q_cnt, bool state);
+
 /*
  * ppe_drv_l2vp_sc_add
  * 	Add the sc configs in L2_VP port tbl.

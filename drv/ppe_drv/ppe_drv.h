@@ -60,6 +60,10 @@ extern uint32_t static_dbg_level;
 extern bool flow_deacclr_dis;
 extern int mac_lrn_exception_en;
 
+#ifdef PPE_DRV_DDRQ_ENABLE
+extern bool ddrq_lp_sc_set_en;
+#endif
+
 /* Ensure module tag and default category are available before debug macros */
 #ifndef KMODNAME
 #define KMODNAME KBUILD_MODNAME
@@ -326,6 +330,10 @@ enum ppe_drv_static_dbg_level {
 #endif
 
 #define PPE_DRV_INVALID_PORT			-1
+
+#define PPE_DRV_DDRQ_MAX_CNT			160
+#define PPE_DRV_BITS_IN_WORD			32
+#define PPE_DRV_DDRQ_MAX_CNT_WORD		(PPE_DRV_DDRQ_MAX_CNT/PPE_DRV_BITS_IN_WORD)
 
 /*
  * ppe_drv_rfs_interface_type
@@ -794,4 +802,8 @@ extern uint32_t gem_port_bitmap;
  * Success or error code.
  */
 ppe_drv_ret_t ppe_drv_pon_map_enqueue_vp_to_pq(struct ppe_drv_port *port);
+#endif
+
+#ifdef PPE_DRV_DDRQ_ENABLE
+extern uint32_t ppe_drv_ddrq_en_bitmask[PPE_DRV_DDRQ_MAX_CNT_WORD];
 #endif

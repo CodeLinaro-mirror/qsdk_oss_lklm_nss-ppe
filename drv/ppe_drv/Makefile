@@ -145,6 +145,7 @@ ccflags-y += -DPPE_DRV_SRC_INTERFACE_CHECK
 ccflags-y += -DPPE_DRV_FLOW_TBL_POLICER
 qca-nss-ppe-objs += ppe_drv_nptv6.o
 qca-nss-ppe-objs += ppe_drv_nptv6_hairpin.o
+ccflags-y += -DPPE_DRV_DDRQ_ENABLE
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq54xx))

@@ -80,6 +80,10 @@
 					/* Disable PPE acceleration of this Flow. */
 #define PPE_DRV_V6_CONN_FLAG_FLOW_HW_GRO	0x08000000
 					/* Flow has HW GRO enabled */
+#ifdef PPE_DRV_DDRQ_ENABLE
+#define PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS		0x10000000
+					/* Flow has the mapped DDRQ disabled */
+#endif
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*
