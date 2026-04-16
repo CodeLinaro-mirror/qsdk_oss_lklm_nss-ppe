@@ -44,6 +44,7 @@ bool ppe_rfs_rule_eligible_get(int src_interface_num, int dst_interface_num, boo
 	bool dst_rfs_enabled = false;
 	bool status = false;
 	bool tun_flow = valid_flags & PPE_RFS_ELIG_VALID_FLAG_TUNNEL_FLOW;
+	struct ppe_drv_iface *src_iface;
 
 	if (valid_flags & PPE_RFS_ELIG_VALID_FLAG_TUNNEL_OUTER_FLOW) {
 		status = false;
@@ -75,7 +76,8 @@ bool ppe_rfs_rule_eligible_get(int src_interface_num, int dst_interface_num, boo
 	 * If the source net device is a tunnel or wlan device,
 	 * then flow is not eligible for RFS support.
 	 */
-	if (src_dev->phydev == NULL) {
+	src_iface = ppe_drv_iface_get_by_dev(src_dev);
+	if (!(src_iface && ppe_drv_iface_is_physical(src_iface))) {
 		status = false;
 		goto ret_status;
 	} else if (tun_flow || dst_rfs_enabled) {
@@ -139,6 +141,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 	struct net_device *tx_dev = NULL;
 	struct net_device *top_rule_rx_dev, *top_rule_tx_dev;
 	uint32_t feature = PPE_DRV_ASSIST_FEATURE_RFS_DEFAULT;
+	struct ppe_drv_iface *rx_iface, *tx_iface;
 	ppe_drv_iface_t top_rx_if, rx_if;
 	ppe_drv_iface_t top_tx_if, tx_if;
 	ppe_drv_ret_t ret;
@@ -162,14 +165,16 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	if (!rx_dev->phydev) {
+	rx_iface = ppe_drv_iface_get_by_dev(rx_dev);
+	if (!(rx_iface && ppe_drv_iface_is_physical(rx_iface))) {
 		dev_put(tx_dev);
 		dev_put(rx_dev);
 		ppe_rfs_warn("%p: Rule cannot be pushed in this direction\n", create_ipv6);
 		return PPE_RFS_RET_FAILURE;
 	}
 
-	if (tx_dev->phydev) {
+	tx_iface = ppe_drv_iface_get_by_dev(tx_dev);
+	if (tx_iface && ppe_drv_iface_is_physical(tx_iface)) {
 		feature = PPE_DRV_ASSIST_FEATURE_RFS_ETH;
 	} else if (tx_dev->ieee80211_ptr) {
 		feature = PPE_DRV_ASSIST_FEATURE_RFS_WLAN;
@@ -291,6 +296,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 	struct net_device *tx_dev = NULL;
 	struct net_device *top_rule_rx_dev, *top_rule_tx_dev;
 	uint32_t feature = PPE_DRV_ASSIST_FEATURE_RFS_DEFAULT;
+	struct ppe_drv_iface *rx_iface, *tx_iface;
 	ppe_drv_iface_t top_rx_if, rx_if;
 	ppe_drv_iface_t top_tx_if, tx_if;
 	ppe_drv_ret_t ret;
@@ -314,14 +320,16 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		return PPE_RFS_RET_FAILURE;
 	};
 
-	if (!rx_dev->phydev) {
+	rx_iface = ppe_drv_iface_get_by_dev(rx_dev);
+	if (!(rx_iface && ppe_drv_iface_is_physical(rx_iface))) {
 		dev_put(tx_dev);
 		dev_put(rx_dev);
 		ppe_rfs_warn("%p: Rule cannot be pushed in this direction\n", create_ipv4);
 		return PPE_RFS_RET_FAILURE;
 	}
 
-	if (tx_dev->phydev) {
+	tx_iface = ppe_drv_iface_get_by_dev(tx_dev);
+	if (tx_iface && ppe_drv_iface_is_physical(tx_iface)) {
 		feature = PPE_DRV_ASSIST_FEATURE_RFS_ETH;
 	} else if (tx_dev->ieee80211_ptr) {
 		feature = PPE_DRV_ASSIST_FEATURE_RFS_WLAN;
