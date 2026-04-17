@@ -40,6 +40,7 @@ struct ppe_policer_stats {
 	atomic64_t create_port_policer_failed;		/* Port Policer create rule fail */
 	atomic64_t create_acl_policer_success;		/* acl Policer create rule success */
 	atomic64_t create_acl_policer_failed;		/* acl Policer create rule fail */
+	atomic64_t acl_policer_direction_not_supported;	/* acl Policer direction not supported */
 	atomic64_t destroy_port_policer_success;	/* Port Policer destroy rule success */
 	atomic64_t destroy_port_policer_failed;		/* Port Policer destroy rule fail */
 	atomic64_t destroy_acl_policer_success;		/* acl Policer destroy rule success */
