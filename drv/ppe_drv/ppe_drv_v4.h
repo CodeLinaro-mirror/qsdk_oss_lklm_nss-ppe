@@ -87,6 +87,13 @@
 					/* Flow has the mapped DDRQ disabled */
 #endif
 
+#define PPE_DRV_V4_CONN_FLAG_WIFI_STREAM_ID_VALID	0x40000000
+					/* Flow has valid wifi stream ID */
+#define PPE_DRV_V4_CONN_FLAG_WIFI_AST_VALID	0x80000000
+					/* Flow has valid wifi AST info */
+#define PPE_DRV_V4_CONN_FLAG_WIFI_PEER_ID_VALID	0x100000000ULL
+					/* Flow has valid wifi peer ID */
+
 /*
  * ppe_drv_v4_addr_equal()
  *	compare ipv4 address
@@ -145,7 +152,7 @@ struct ppe_drv_v4_conn_flow {
 	 */
 	uint32_t int_pri;			/* For QoS */
 	uint8_t egress_dscp;			/* Egress DSCP value */
-	uint32_t flags;				/* Flags */
+	uint64_t flags;				/* Flags */
 
 	/*
 	 * Egress information
@@ -853,7 +860,7 @@ static inline void ppe_drv_v4_conn_flow_flags_clear(struct ppe_drv_v4_conn_flow 
  * ppe_drv_v4_conn_flow_flags_set()
  *	Set a specific bit flags.
  */
-static inline void ppe_drv_v4_conn_flow_flags_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t flags)
+static inline void ppe_drv_v4_conn_flow_flags_set(struct ppe_drv_v4_conn_flow *pcf, uint64_t flags)
 {
         pcf->flags |= flags;
 }

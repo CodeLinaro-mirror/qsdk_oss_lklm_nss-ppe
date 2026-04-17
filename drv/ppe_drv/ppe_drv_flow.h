@@ -57,6 +57,16 @@ struct ppe_drv_flow_sawf_metadata {
 };
 
 /*
+ * ppe_drv_flow_wifi_metadata
+ *	Structure for flow wifi metadata.
+ */
+struct ppe_drv_flow_wifi_metadata {
+	uint16_t ast_info;		/* WLAN peer AST cache set ID and AST index*/
+	uint16_t peer_id;		/* WLAN HW peer ID */
+	uint8_t stream_id;		/* WLAN stream ID for telemetry */
+};
+
+/*
  * ppe_drv_flow_tree_id_data
  *	Structure for tree_id field.
  */
@@ -66,6 +76,7 @@ struct ppe_drv_flow_tree_id_data {
 		uint32_t value;						/* Plain Tree ID information */
 		struct ppe_drv_flow_sawf_metadata sawf_metadata;	/* Tree ID configured for SAWF. */
 	} info;
+	struct ppe_drv_flow_wifi_metadata wifi_metadata;	/* wifi rule related metadata */
 };
 
 /*

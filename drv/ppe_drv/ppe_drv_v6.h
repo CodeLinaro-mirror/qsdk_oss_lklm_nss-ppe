@@ -85,6 +85,13 @@
 					/* Flow has the mapped DDRQ disabled */
 #endif
 
+#define PPE_DRV_V6_CONN_FLAG_WIFI_STREAM_ID_VALID	0x20000000
+					/* Flow has valid wifi stream ID */
+#define PPE_DRV_V6_CONN_FLAG_WIFI_AST_VALID	0x40000000
+					/* Flow has valid wifi AST info */
+#define PPE_DRV_V6_CONN_FLAG_WIFI_PEER_ID_VALID	0x80000000
+					/* Flow has valid wifi peer ID */
+
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*
  * ppe_drv_v6_conn_npt6

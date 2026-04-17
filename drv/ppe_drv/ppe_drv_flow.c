@@ -14,6 +14,9 @@
 
 static struct ppe_drv_flow_table_info *flow_table_info;
 
+static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8_t *wifi_qos, bool *wifi_qos_en);
+static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8_t *wifi_qos, bool *wifi_qos_en);
+
 #if (PPE_DRV_DEBUG_LEVEL == 3)
 /*
  * ppe_drv_flow_dump()
@@ -385,7 +388,57 @@ static bool ppe_drv_hw_gro_is_enabled(struct ppe_drv *p, struct ppe_drv_port *tx
 }
 #endif
 
-#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+#ifdef PPE_DRV_FLOW_COOKIE_48B_SUPPORT
+/*
+ * ppe_drv_flow_v6_flow_cookie48b_get()
+ *	fill the flow cookie information
+ */
+static bool ppe_drv_flow_v6_flow_cookie48b_get(struct ppe_drv_v6_conn_flow *pcf, fal_flow_qos_t *flow_qos)
+{
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->fl_mdata.tree_id_data);
+	bool wifi_qos_en = false;
+	uint8_t wifi_qos = 0;
+	uint16_t stream_id;
+	a_uint64_t tmp = 0;
+	uint16_t ast_info;
+	bool ret = true;
+
+	switch (tree_id_data->type) {
+		case PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS:
+			if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_WIFI_AST_VALID)) {
+				ast_info = pcf->fl_mdata.tree_id_data.wifi_metadata.ast_info;
+				tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, ast_info);
+			}
+
+			if (!ppe_drv_flow_v6_wifi_qos_get(pcf, &wifi_qos, &wifi_qos_en)) {
+				ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
+				memset(&flow_qos->cookie_48b, 0, sizeof(flow_qos->cookie_48b));
+				return false;
+			}
+
+			flow_qos->qos_valid = wifi_qos_en;
+			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_MIDDLE, wifi_qos);
+
+			if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_WIFI_STREAM_ID_VALID)) {
+				stream_id = pcf->fl_mdata.tree_id_data.wifi_metadata.stream_id;
+				PPE_DRV_FLOW_COOKIE_STREAM_ID_VALID_SET(stream_id);
+				tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_LOW, stream_id);
+			}
+
+			memcpy(&flow_qos->cookie_48b, &tmp, sizeof(flow_qos->cookie_48b));
+			ppe_drv_trace("cookie_48b %llx\n", tmp);
+
+			flow_qos->type = FAL_FLOW_QOS_TYPE_COOKIE_48B;
+			break;
+
+		default:
+			ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
+			break;
+	}
+
+	return ret;
+}
+#elif defined(PPE_DRV_FLOW_COOKIE_40B_SUPPORT)
 /*
  * ppe_drv_flow_v6_flow_cookie40b_get()
  *      Find the tree ID associated with a flow
@@ -1230,7 +1283,15 @@ bool ppe_drv_flow_v6_wlan_metadata_set(struct ppe_drv_v6_conn_flow *pcf)
                 return false;
         }
 
-#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+#ifdef PPE_DRV_FLOW_COOKIE_48B_SUPPORT
+        /*
+         * Get the flow cookie corresponding to flow.
+         */
+        if (!ppe_drv_flow_v6_flow_cookie48b_get(pcf, &flow_qos)) {
+                ppe_drv_warn("%p: failed to obtain a valid flow cookie", pcf);
+                return false;
+        }
+#elif defined(PPE_DRV_FLOW_COOKIE_40B_SUPPORT)
 	/*
 	 * Get the flow cookie corresponding to flow.
 	 */
@@ -1292,7 +1353,9 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 #endif
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
+#ifndef PPE_DRV_FLOW_COOKIE_48B_SUPPORT
 	bool wifi_qos_en = false;
+#endif
 	uint16_t xmit_mtu;
 	fal_flow_entry_t *unidir_flow_cfg = NULL;
 	sw_error_t err;
@@ -1361,7 +1424,15 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 
 	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index, flow_cfg.sevice_code);
 
-#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+#ifdef PPE_DRV_FLOW_COOKIE_48B_SUPPORT
+        /*
+         * Get the flow cookie corresponding to flow.
+         */
+        if (!ppe_drv_flow_v6_flow_cookie48b_get(pcf, &flow_cfg.flow_qos)) {
+                ppe_drv_warn("%p: failed to obtain a valid flow cookie", pcf);
+                return NULL;
+        }
+#elif defined(PPE_DRV_FLOW_COOKIE_40B_SUPPORT)
         /*
          * Get the flow cookie corresponding to flow.
          */
@@ -1373,23 +1444,21 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
         flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_COOKIE_40B;
 
         /*
-         * TODO: 48bit flow cookie
+         * Get the WIFI QOS corresponding to flow.
          */
+	if (!ppe_drv_flow_v6_wifi_qos_get(pcf, &flow_cfg.flow_qos.qos, &wifi_qos_en)) {
+		ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
+		return NULL;
+	}
+
+	flow_cfg.flow_qos.qos_valid = wifi_qos_en;
+
 #else
 	/*
 	 * Get the tree ID corresponding to flow.
 	 */
 	if (!ppe_drv_flow_v6_tree_id_get(pcf, flow_cfg.flow_qos.tree_id)) {
 		ppe_drv_warn("%p: failed to obtain a valid tree ID", pcf);
-		return NULL;
-	}
-#endif
-
-	/*
-	 * Get the VPN ID corresponding to flow.
-	 */
-	if (!ppe_drv_flow_v6_vpn_id_get(pcf, &flow_cfg.vpn_id)) {
-		ppe_drv_warn("%p: failed to obtain a valid vpn_id", pcf);
 		return NULL;
 	}
 
@@ -1406,6 +1475,15 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 #ifdef NSS_PPE_IPQ53XX
 	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_TREE_ID;
 #endif
+#endif
+
+	/*
+	 * Get the VPN ID corresponding to flow.
+	 */
+	if (!ppe_drv_flow_v6_vpn_id_get(pcf, &flow_cfg.vpn_id)) {
+		ppe_drv_warn("%p: failed to obtain a valid vpn_id", pcf);
+		return NULL;
+	}
 
 #ifdef PPE_DRV_FLOW_TBL_POLICER
 	if (!ppe_drv_flow_v6_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
@@ -1762,7 +1840,58 @@ bool ppe_drv_flow_v4_qos_clear(struct ppe_drv_flow *pf)
 	return true;
 }
 
-#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+#ifdef PPE_DRV_FLOW_COOKIE_48B_SUPPORT
+/*
+ * ppe_drv_flow_v4_flow_cookie48b_get()
+ *	fill the flow cookie information
+ */
+static bool ppe_drv_flow_v4_flow_cookie48b_get(struct ppe_drv_v4_conn_flow *pcf, fal_flow_qos_t *flow_qos)
+{
+	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->fl_mdata.tree_id_data);
+	bool wifi_qos_en = false;
+	uint8_t wifi_qos = 0;
+	uint16_t stream_id;
+	a_uint64_t tmp = 0;
+	uint16_t ast_info;
+	bool ret = true;
+
+	switch (tree_id_data->type) {
+		case PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS:
+			if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_WIFI_AST_VALID)) {
+				ast_info = pcf->fl_mdata.tree_id_data.wifi_metadata.ast_info;;
+				tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, ast_info);
+			}
+
+			if (!ppe_drv_flow_v4_wifi_qos_get(pcf, &wifi_qos, &wifi_qos_en)) {
+				memset(&flow_qos->cookie_48b, 0, sizeof(flow_qos->cookie_48b));
+				ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
+				return false;
+			}
+
+			flow_qos->qos_valid = wifi_qos_en;
+			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_MIDDLE, wifi_qos);
+
+			if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_WIFI_STREAM_ID_VALID)) {
+				stream_id = pcf->fl_mdata.tree_id_data.wifi_metadata.stream_id;
+				PPE_DRV_FLOW_COOKIE_STREAM_ID_VALID_SET(stream_id);
+				tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_LOW, stream_id);
+			}
+
+			memcpy(&flow_qos->cookie_48b, &tmp, sizeof(flow_qos->cookie_48b));
+			ppe_drv_trace("cookie_48b %llx\n", tmp);
+
+			flow_qos->type = FAL_FLOW_QOS_TYPE_COOKIE_48B;
+			break;
+
+		default:
+			ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
+			break;
+	}
+
+	return ret;
+}
+
+#elif defined(PPE_DRV_FLOW_COOKIE_40B_SUPPORT)
 /*
  * ppe_drv_flow_v4_flow_cookie40b_get()
  *      Find the tree ID associated with a flow
@@ -2502,7 +2631,15 @@ bool ppe_drv_flow_v4_wlan_metadata_set(struct ppe_drv_v4_conn_flow *pcf)
                 return false;
         }
 
-#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
+#ifdef PPE_DRV_FLOW_COOKIE_48B_SUPPORT
+        /*
+         * Get the flow cookie corresponding to flow.
+         */
+        if (!ppe_drv_flow_v4_flow_cookie48b_get(pcf, &flow_qos)) {
+            ppe_drv_warn("%p: failed to obtain a valid flow cookie", pcf);
+			return false;
+        }
+#elif defined(PPE_DRV_FLOW_COOKIE_40B_SUPPORT)
 	/*
 	 * Get the flow cookie corresponding to flow.
 	 */
@@ -2567,7 +2704,9 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 #endif
 	struct ppe_drv_flow *flow;
 	bool tuple_3 = false;
+#ifndef PPE_DRV_FLOW_COOKIE_48B_SUPPORT
 	bool wifi_qos_en = false;
+#endif
 	uint16_t xmit_mtu;
 	fal_flow_entry_t *unidir_flow_cfg = NULL;
 	sw_error_t err;
@@ -2645,10 +2784,15 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 
 	ppe_drv_trace("pcf %p: flow_tbl[host_idx]: %u sevice_code %d\n", pcf, host->index, flow_cfg.sevice_code);
 
-#ifdef PPE_DRV_FLOW_COOKIE_SUPPORT
 	/*
 	 * Get the flow cookie corresponding to flow.
 	 */
+#ifdef PPE_DRV_FLOW_COOKIE_48B_SUPPORT
+	if (!ppe_drv_flow_v4_flow_cookie48b_get(pcf, &flow_cfg.flow_qos)) {
+		ppe_drv_warn("%p: failed to obtain a valid flow cookie", pcf);
+		return NULL;
+	}
+#elif defined(PPE_DRV_FLOW_COOKIE_40B_SUPPORT)
 	if (!ppe_drv_flow_v4_flow_cookie40b_get(pcf, flow_cfg.flow_qos.cookie_40b)) {
 		ppe_drv_warn("%p: failed to obtain a valid flow cookie", pcf);
 		return NULL;
@@ -2657,22 +2801,21 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_COOKIE_40B;
 
 	/*
-	 * TODO: 48bit flow cookie
+	 * Get the WIFI QOS corresponding to flow.
 	 */
+	if (!ppe_drv_flow_v4_wifi_qos_get(pcf, &flow_cfg.flow_qos.qos, &wifi_qos_en)) {
+		ppe_drv_warn("%p: failed to obtain wifi qos", pcf);
+		return NULL;
+	}
+
+	flow_cfg.flow_qos.qos_valid = wifi_qos_en;
+
 #else
 	/*
 	 * Get the tree ID corresponding to flow.
 	 */
 	if (!ppe_drv_flow_v4_tree_id_get(pcf, flow_cfg.flow_qos.tree_id)) {
 		ppe_drv_warn("%p: failed to obtain a valid tree ID", pcf);
-		return NULL;
-	}
-#endif
-	/*
-	 * Get the VPN ID corresponding to flow.
-	 */
-	if (!ppe_drv_flow_v4_vpn_id_get(pcf, &flow_cfg.vpn_id)) {
-		ppe_drv_warn("%p: failed to obtain a valid vpn_id", pcf);
 		return NULL;
 	}
 
@@ -2689,6 +2832,14 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 #ifdef NSS_PPE_IPQ53XX
 	flow_cfg.flow_qos.type = FAL_FLOW_QOS_TYPE_TREE_ID;
 #endif
+#endif
+	/*
+	 * Get the VPN ID corresponding to flow.
+	 */
+	if (!ppe_drv_flow_v4_vpn_id_get(pcf, &flow_cfg.vpn_id)) {
+		ppe_drv_warn("%p: failed to obtain a valid vpn_id", pcf);
+		return NULL;
+	}
 
 #ifdef PPE_DRV_FLOW_TBL_POLICER
 	if (!ppe_drv_flow_v4_policer_get(pcf, &flow_cfg.policer_index, &flow_cfg.policer_valid)) {
