@@ -125,9 +125,6 @@ static int nss_ppenl_edma_ddrq_ops_cfg_rule(struct sk_buff *skb, struct genl_inf
 		 */
 		ret = nss_dp_ddrq_cfg_get(&ddrq_cfg->ddrq_obj, &ddrq_ac_queue_cfg, NSS_PPENL_EDMA_DDRQ_CFG_GET_CNT_SINGLE);
 		if (ret == DDRQ_RET_SUCCESS) {
-			/*
-			 * DDRQ_TODO : Extend this for the port based DDRQ configuration
-			 */
 			nss_ppenl_trace("Configuration dump for DDRQ[%d]:\n", ddrq_cfg->ddrq_obj.cfg_id);
 			nss_ppenl_trace("ac_cfg_gap_grn_grn_min: %d\n", ddrq_ac_queue_cfg.ac_cfg_gap_grn_grn_min);
 			nss_ppenl_trace("ac_cfg_gap_grn_red_max: %d\n", ddrq_ac_queue_cfg.ac_cfg_gap_grn_red_max);
@@ -241,7 +238,7 @@ static int nss_ppenl_edma_ddrq_ops_grp_cfg_rule(struct sk_buff *skb, struct genl
 		/*
 		 * Get DDRQ group configuration from the NSS DP module
 		 */
-		ret = nss_dp_ddrq_grp_cfg_get(ddrq_grp_cfg->get_cmd, &ddrq_ac_grp_cfg);
+		ret = nss_dp_ddrq_grp_cfg_get(ddrq_grp_cfg->grp_id, &ddrq_ac_grp_cfg);
 		if (ret == DDRQ_RET_SUCCESS) {
 			nss_ppenl_trace("DDRQ group Configuration dump for DDRQ group[%d]:\n", ddrq_grp_cfg->grp_id);
 			nss_ppenl_trace("ac_grp_dp_thrd: %d\n", ddrq_ac_grp_cfg.ac_grp_dp_thrd);
@@ -278,7 +275,7 @@ static int nss_ppenl_edma_ddrq_ops_grp_cfg_rule(struct sk_buff *skb, struct genl
 	/*
 	 * Set the DDRQ group configuration from the NSS DP module
 	 */
-	ret = nss_dp_ddrq_grp_cfg_set(nl_edma_rule->msg.ddrq_grp_cfg.grp_id, &ddrq_grp_cfg->ddrq_ac_grp_cfg);
+	ret = nss_dp_ddrq_grp_cfg_set(ddrq_grp_cfg->grp_id, &ddrq_grp_cfg->ddrq_ac_grp_cfg);
 	if (ret != DDRQ_RET_SUCCESS) {
 		nss_ppenl_warn("%d:Error in setting the DDRQ group configuration operation\n", pid);
 	} else {
