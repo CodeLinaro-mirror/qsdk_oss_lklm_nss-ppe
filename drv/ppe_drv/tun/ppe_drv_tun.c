@@ -926,14 +926,19 @@ static bool ppe_drv_tun_mapt_translate_v6_to_v4(bool is_flow_dir, struct net_dev
 	tuple.flow_ident = sport;
 	tuple.return_ident = dport;
 	tuple.protocol = pcf_v6->match_protocol;
+	tuple.flow_rule_id = 0;
 
-	flow = ppe_drv_flow_v4_get(&tuple);
+	/*
+	 * This flow is supposed to be only one same 5tuple existing
+	 */
+	flow = ppe_drv_v4_flow_get_ignore_rule_id(&tuple);
 	if (!flow) {
 		ppe_drv_trace("%p: flow not found for translated v4 address\n", pcf_v6);
 		return false;
 	}
 
 	pcf_v4 = flow->pcf.v4;
+
 	conn_v4 = ppe_drv_v4_conn_flow_conn_get(pcf_v4);
 	pcr_v4 = (pcf_v4 == &conn_v4->pcf) ? &conn_v4->pcr : &conn_v4->pcf;
 

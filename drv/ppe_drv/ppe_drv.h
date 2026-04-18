@@ -4,6 +4,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/jhash.h>
 #include <ppe_drv_public.h>
 #include <ppe_drv_tun_cmn_ctx.h>
 #include <ppe_drv_tun_public.h>
@@ -59,6 +60,7 @@
 extern uint32_t static_dbg_level;
 extern bool flow_deacclr_dis;
 extern int mac_lrn_exception_en;
+extern uint32_t ppe_drv_jhash_rnd __read_mostly;
 
 #ifdef PPE_DRV_DDRQ_ENABLE
 extern bool ddrq_lp_sc_set_en;
@@ -335,6 +337,9 @@ enum ppe_drv_static_dbg_level {
 #define PPE_DRV_BITS_IN_WORD			32
 #define PPE_DRV_DDRQ_MAX_CNT_WORD		(PPE_DRV_DDRQ_MAX_CNT/PPE_DRV_BITS_IN_WORD)
 
+#define PPE_DRV_CONN_HASH_SHIFT 10
+#define PPE_DRV_CONN_HASH_SIZE (1 << PPE_DRV_CONN_HASH_SHIFT)
+
 /*
  * ppe_drv_rfs_interface_type
  *	PPE interfaces for which RFS coremask is stored
@@ -572,8 +577,11 @@ struct ppe_drv {
 	/*
 	 * v4 and v6 connection list
 	 */
-	struct list_head conn_v4;			/* List of v4 connection in PPE */
-	struct list_head conn_v6;			/* List of v6 connection in PPE */
+	struct list_head conn_v4; /* All list head of v4 connection in PPE */
+	struct list_head conn_v6; /* All list head of v6 connection in PPE */
+	struct hlist_head hash_conn_v4[PPE_DRV_CONN_HASH_SIZE]; /* Hash list head of v4 connection in PPE */
+	struct hlist_head hash_conn_v6[PPE_DRV_CONN_HASH_SIZE]; /* Hash list head of v6 connection in PPE */
+
 	struct list_head conn_tun_v4;		/* List of v4 tunnel connection in PPE */
 	struct list_head conn_tun_v6;		/* List of v6 tunnel connection in PPE */
 	struct ppe_drv_fse_ops *fse_ops;        /* Wi-Fi FSE block operations */

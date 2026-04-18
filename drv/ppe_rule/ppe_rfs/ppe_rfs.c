@@ -118,6 +118,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_destroy(struct ppe_rfs_ipv6_rule_destroy_msg 
 	pd6rd.tuple.return_ip[3] = destroy_ipv6->tuple.return_ip[0];
 	pd6rd.tuple.return_ident = destroy_ipv6->tuple.return_ident;
 	pd6rd.tuple.protocol = destroy_ipv6->tuple.protocol;
+	pd6rd.tuple.flow_rule_id = destroy_ipv6->tuple.flow_rule_id;
 
 	if (ppe_drv_v6_assist_rule_destroy(&pd6rd) != PPE_DRV_RET_SUCCESS) {
 		ppe_rfs_warn("%p: error in pushing Passive PPE RFS rules\n", destroy_ipv6);
@@ -231,6 +232,7 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 	pd6rc.tuple.return_ip[3] = create_ipv6->tuple.return_ip[0];
 	pd6rc.tuple.return_ident = create_ipv6->tuple.return_ident;
 	pd6rc.tuple.protocol = create_ipv6->tuple.protocol;
+	pd6rc.tuple.flow_rule_id = create_ipv6->tuple.flow_rule_id;
 	pd6rc.conn_rule.flow_mtu = create_ipv6->conn_rule.return_mtu;
 
 	/*
@@ -274,6 +276,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_destroy(struct ppe_rfs_ipv4_rule_destroy_msg 
 	pd4rd.tuple.return_ip = destroy_ipv4->tuple.return_ip;
 	pd4rd.tuple.return_ident = destroy_ipv4->tuple.return_ident;
 	pd4rd.tuple.protocol = destroy_ipv4->tuple.protocol;
+	pd4rd.tuple.flow_rule_id = destroy_ipv4->tuple.flow_rule_id;
 
 	if (ppe_drv_v4_assist_rule_destroy(&pd4rd) != PPE_DRV_RET_SUCCESS) {
 		ppe_rfs_stats_inc(&p->stats.v4_destroy_ppe_rule_fail);
@@ -376,6 +379,7 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 	pd4rc.tuple.return_ip = create_ipv4->tuple.return_ip;
 	pd4rc.tuple.return_ident = create_ipv4->tuple.return_ident;
 	pd4rc.tuple.protocol = create_ipv4->tuple.protocol;
+	pd4rc.tuple.flow_rule_id = create_ipv4->tuple.flow_rule_id;
 	pd4rc.conn_rule.flow_mtu = create_ipv4->conn_rule.return_mtu;
 
 	/*

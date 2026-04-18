@@ -132,6 +132,7 @@ static char packet_padding[PPE_DRV_PACKET_PADDING_STR_LEN];
 
 int l4_checksum_exception_enable = false;
 int mac_lrn_exception_en = true;
+uint32_t ppe_drv_jhash_rnd __read_mostly;
 
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 int ppe_drv_ipsec_passth_en = 0;
@@ -3927,12 +3928,15 @@ module_param_cb(tun_coremask, &tun_coremask_ops, &tun_coremask, 0644);
  */
 static int __init ppe_drv_module_init(void)
 {
-	int ret;
+	int ret, i;
+	struct hlist_head *hash_list;
 
 	if (!of_find_compatible_node(NULL, NULL, "qcom,nss-ppe")) {
 		ppe_drv_info("PPE device tree node not found\n");
 		return -EINVAL;
 	}
+
+	get_random_bytes(&ppe_drv_jhash_rnd, sizeof(ppe_drv_jhash_rnd));
 
 	/*
 	* Allocate ppe_drv_gbl
@@ -3942,6 +3946,26 @@ static int __init ppe_drv_module_init(void)
 		ppe_drv_warn("Failed to allocate global ppe_drv structure\n");
 		return -EINVAL;
 	}
+
+	/*
+	 * Serial-Number Hash Table
+	 * the connections are organzied in a global list, it is
+	 * expensive to locate a given connection, it avoid to lookup by
+	 * querying from hardware which is also expensive,
+	 * the primary use-case is fast lookup in
+	 * acceleration/deceleration/sync.
+	 */
+	hash_list = ppe_drv_gbl->hash_conn_v4;
+	for(i = 0; i < ARRAY_SIZE(ppe_drv_gbl->hash_conn_v4); i++) {
+		INIT_HLIST_HEAD(&hash_list[i]);
+	}
+
+	hash_list = ppe_drv_gbl->hash_conn_v6;
+	for(i = 0; i < ARRAY_SIZE(ppe_drv_gbl->hash_conn_v6); i++) {
+		INIT_HLIST_HEAD(&hash_list[i]);
+	}
+
+	smp_wmb();
 
 	if (platform_driver_register(&ppe_drv_platform)) {
 		ppe_drv_warn("unable to register the driver\n");
