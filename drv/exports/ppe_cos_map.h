@@ -82,7 +82,7 @@ struct ppe_cos_map_create_info {
  *	User CoS port group information
  */
 struct ppe_cos_map_port_group_info {
-	uint16_t port_id;			/**< Port ID */
+	char dev[IFNAMSIZ];			/**< Device name */
 	uint16_t tci_grp_id;		/**< TCI Group ID */
 	uint16_t tos_grp_id;		/**< TOS Group ID */
 	enum ppe_cos_map_ret ret;	/**< Return status */

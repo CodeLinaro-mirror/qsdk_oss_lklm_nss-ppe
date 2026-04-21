@@ -272,7 +272,7 @@ static int ppe_cos_map_dump_all_rules(struct ppe_cos_map_dump_instance *pqmdi)
 	int result;
 
 	/*
-	 * Dump all shaper profiles.
+	 * Dump all rules.
 	 */
 	if (!list_empty(&g_cos_map->active_rules)) {
 		pqmdi->rule_cnt = 0;
@@ -297,7 +297,8 @@ static int ppe_cos_map_dump_all_rules(struct ppe_cos_map_dump_instance *pqmdi)
 static int ppe_cos_map_dump_all_port_groups(struct ppe_cos_map_dump_instance *pqmdi)
 {
 	struct ppe_cos_map_base *g_cos_map = &gbl_ppe_cos_map;
-	int i, result = 0;
+	struct ppe_cos_map_port_group *port_grp = NULL;
+	int result = 0;
 
 	/*
 	 * Dump all configured port groups.
@@ -306,28 +307,33 @@ static int ppe_cos_map_dump_all_port_groups(struct ppe_cos_map_dump_instance *pq
 		goto done;
 	}
 
-	for (i = 1; i < PPE_DRV_QOS_PORT_MAX; i++) {
-		if (!g_cos_map->port_grp_cfg[i].is_configured) {
-			continue;
-		};
+	/*
+	 * Dump all port group configs.
+	 */
+	if (!list_empty(&g_cos_map->port_list)) {
+		list_for_each_entry(port_grp,  &g_cos_map->port_list, list) {
+			if ((result = ppe_cos_map_dump_prefix_index_add(pqmdi,  port_grp->port_id))) {
+				goto done;
+			}
 
-		if ((result = ppe_cos_map_dump_prefix_index_add(pqmdi, i))) {
-			goto done;
-		}
+			if ((result = ppe_cos_map_dump_write(pqmdi, "dev", "%s", port_grp->dev))) {
+				goto done;
+			}
 
-		if ((result = ppe_cos_map_dump_write(pqmdi, "tci_group_id", "%d", g_cos_map->port_grp_cfg[i].cfg.tci_grp_id))) {
-			goto done;
-		}
+			if ((result = ppe_cos_map_dump_write(pqmdi, "tci_group_id", "%d", port_grp->cfg.tci_grp_id))) {
+				goto done;
+			}
 
-		if ((result = ppe_cos_map_dump_write(pqmdi, "tos_group_id", "%d", g_cos_map->port_grp_cfg[i].cfg.tos_grp_id))) {
-			goto done;
-		}
+			if ((result = ppe_cos_map_dump_write(pqmdi, "tos_group_id", "%d", port_grp->cfg.tos_grp_id))) {
+				goto done;
+			}
 
-		/*
-		 * Remove the 'index' prefix for next interation
-		 */
-		if ((result = ppe_cos_map_dump_prefix_remove(pqmdi))) {
-			goto done;
+			/*
+			 * Remove the 'index' prefix for next interation
+			 */
+			if ((result = ppe_cos_map_dump_prefix_remove(pqmdi))) {
+				goto done;
+			}
 		}
 	}
 
