@@ -225,7 +225,7 @@ int ppe_mcast_dump_one_group(struct ppe_mcast_dump_instance *pmdi, struct ppe_mc
 		goto error;
 	}
 
-	if (group->unsupported_dst_cnt) {
+	if (group->unsupported_dst_cnt || group->omci_not_managed) {
 		goto prefix_remove;
 	}
 

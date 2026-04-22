@@ -277,6 +277,80 @@ ppe_port_mgmt_ret_t ppe_port_mgmt_mac_filter_set(struct ppe_port_mac_filter *mac
 EXPORT_SYMBOL(ppe_port_mgmt_mac_filter_set);
 
 /*
+ * ppe_port_mgmt_omci_port_add()
+ *	Wrapper to add a port to the OMCI-managed port list.
+ */
+ppe_port_mgmt_ret_t ppe_port_mgmt_omci_port_add(struct ppe_port_omci_port *omci_port)
+{
+	struct ppe_port_mgmt_base *g = &ppe_port_mgmt_gbl;
+	ppe_drv_ret_t ret;
+
+	ppe_port_mgmt_stats_inc(&g->stats.omci_port_add_req);
+
+	ret = ppe_drv_port_mgmt_omci_port_add(omci_port->port_name);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_port_mgmt_warn("Failed to add OMCI port '%s' (err=%d)\n",
+				   omci_port->port_name, ret);
+		ppe_port_mgmt_stats_inc(&g->stats.omci_port_add_fail);
+		omci_port->ret = PPE_PORT_MGMT_RET_FAILURE;
+		return PPE_PORT_MGMT_RET_FAILURE;
+	}
+
+	ppe_port_mgmt_stats_inc(&g->stats.omci_port_add_success);
+	omci_port->ret = PPE_PORT_MGMT_RET_SUCCESS;
+	return PPE_PORT_MGMT_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_port_mgmt_omci_port_add);
+
+/*
+ * ppe_port_mgmt_omci_port_del()
+ *	Wrapper to remove a port from the OMCI-managed port list.
+ */
+ppe_port_mgmt_ret_t ppe_port_mgmt_omci_port_del(struct ppe_port_omci_port *omci_port)
+{
+	struct ppe_port_mgmt_base *g = &ppe_port_mgmt_gbl;
+	ppe_drv_ret_t ret;
+
+	ppe_port_mgmt_stats_inc(&g->stats.omci_port_del_req);
+
+	ret = ppe_drv_port_mgmt_omci_port_del(omci_port->port_name);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_port_mgmt_warn("Failed to delete OMCI port '%s' (err=%d)\n",
+				   omci_port->port_name, ret);
+		ppe_port_mgmt_stats_inc(&g->stats.omci_port_del_fail);
+		omci_port->ret = PPE_PORT_MGMT_RET_FAILURE;
+		return PPE_PORT_MGMT_RET_FAILURE;
+	}
+
+	ppe_port_mgmt_stats_inc(&g->stats.omci_port_del_success);
+	omci_port->ret = PPE_PORT_MGMT_RET_SUCCESS;
+	return PPE_PORT_MGMT_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_port_mgmt_omci_port_del);
+
+/*
+ * ppe_port_mgmt_omci_port_flush()
+ *	Wrapper to flush all ports from the OMCI-managed port list.
+ */
+ppe_port_mgmt_ret_t ppe_port_mgmt_omci_port_flush(void)
+{
+	struct ppe_port_mgmt_base *g = &ppe_port_mgmt_gbl;
+	ppe_drv_ret_t ret;
+
+	ppe_port_mgmt_stats_inc(&g->stats.omci_port_flush_req);
+
+	ret = ppe_drv_port_mgmt_omci_port_flush();
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_port_mgmt_warn("Failed to flush OMCI port list (err=%d)\n", ret);
+		return PPE_PORT_MGMT_RET_FAILURE;
+	}
+
+	ppe_port_mgmt_stats_inc(&g->stats.omci_port_flush_success);
+	return PPE_PORT_MGMT_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_port_mgmt_omci_port_flush);
+
+/*
  * ppe_port_mgmt_init()
  *      PORT_MGMT init API.
  */

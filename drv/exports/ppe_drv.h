@@ -627,6 +627,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_PORT_MGMT_FID_GET_FAIL,		/**< Failed to get the vsi for the port. */
 	PPE_DRV_RET_PORT_MGMT_MAC_FILTER_CLR_FAIL,	/**< Failed to clear the mac filter table. */
 	PPE_DRV_RET_PORT_MGMT_MAC_FILTER_SET_FAIL,	/**< Failed to config the mac filter. */
+	PPE_DRV_RET_PORT_MGMT_PORT_IN_USE,		/**< Failed to delete port from OMCI list. */
 	PPE_DRV_RET_UCAST_PRIO_TBL_MAP_FAIL,		/**< Failed to set profile id for a port. */
 	PPE_DRV_RET_DOT1P_RULE_INVALID,			/**< DOT1P rule invalid */
 	PPE_DRV_RET_DOT1P_RULE_ADD_FAIL,		/**< Failed to add DOT1P rule */

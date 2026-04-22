@@ -79,6 +79,17 @@ struct ppe_drv_port_mgmt_isol {
 	ppe_drv_port_mgmt_ret_t ret;	  /**< Port‑management return type */
 };
 
+/**
+ * ppe_drv_omci_port_node
+ *	Node representing a single OMCI-managed port tracked in ppe_drv_port_mgmt.
+ */
+struct ppe_drv_omci_port_node {
+	struct list_head list;		/**< List linkage */
+	char dev_name[IFNAMSIZ];	/**< Device name */
+	uint32_t port_id;		/**< Resolved PPE port ID */
+	atomic_t refcount;		/**< Reference count; freed by del/flush when it reaches 0 */
+};
+
 /*
  * ppe_drv_port_mgmt
  *	Structure for global port‑management context.
@@ -86,6 +97,7 @@ struct ppe_drv_port_mgmt_isol {
 struct ppe_drv_port_mgmt {
 	spinlock_t lock;							   	/**< Spinlock for port‑management operations */
 	struct list_head active_rules;						  	/**< List of active port‑management rules */
+	struct list_head omci_port_list;					  	/**< List of OMCI-managed ports */
 
 	uint64_t port_phy_isol_bitmap[PPE_DRV_OMCI_INDEX_MAX];			  	/**< PHY‑port isolation bitmap for each OMCI index */
 	uint64_t port_vp_isol_bitmap[PPE_DRV_OMCI_INDEX_MAX];			  	/**< VP‑port isolation bitmap for each OMCI index */
@@ -202,6 +214,66 @@ ppe_drv_ret_t ppe_drv_port_mgmt_mac_filter_set(struct ppe_drv_port_mac_filter *m
  * ppe_drv_ret_t	       Status of MAC filter clear operation.
  */
 ppe_drv_ret_t ppe_drv_port_mgmt_mac_filter_clear(struct ppe_drv_port_mac_filter *mac_filter);
+
+/**
+ * ppe_drv_port_mgmt_omci_port_add()
+ *	Add a port to the OMCI-managed port list in ppe_drv_port_mgmt.
+ *
+ * @param[in] dev_name		Device name to add.
+ *
+ * @return
+ * PPE_DRV_RET_SUCCESS or failure code.
+ */
+ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_add(const char *dev_name);
+
+/**
+ * ppe_drv_port_mgmt_omci_port_del()
+ *	Remove a port from the OMCI-managed port list.
+ *
+ * @param[in] dev_name		Device name to remove.
+ *
+ * @return
+ * PPE_DRV_RET_SUCCESS or failure code.
+ */
+ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_del(const char *dev_name);
+
+/**
+ * ppe_drv_port_mgmt_omci_port_flush()
+ *	Remove all ports from the OMCI-managed port list.
+ *
+ * @return
+ * PPE_DRV_RET_SUCCESS or failure code.
+ */
+ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_flush(void);
+
+/**
+ * ppe_drv_port_mgmt_omci_port_list_show()
+ *	Print the OMCI-managed port list to a seq_file (for debugfs).
+ *
+ * @param[in] m		seq_file to write output to.
+ */
+void ppe_drv_port_mgmt_omci_port_list_show(struct seq_file *m);
+
+/**
+ * ppe_drv_port_mgmt_omci_port_find_and_ref()
+ *	Find a device in the OMCI-managed port list and increment its refcount.
+ *	Caller must call ppe_drv_port_mgmt_omci_port_deref() when done with the node.
+ *
+ * @param[in] dev_name		Device name to look up.
+ *
+ * @return
+ * Pointer to the node with refcount incremented, or NULL if not found.
+ */
+struct ppe_drv_omci_port_node *ppe_drv_port_mgmt_omci_port_find_and_ref(const char *dev_name);
+
+/**
+ * ppe_drv_port_mgmt_omci_port_deref()
+ *	Decrement the refcount of an OMCI port node.
+ *	The node is NOT freed by this function; memory is managed by del/flush.
+ *
+ * @param[in] node		Node previously returned by find_and_ref().
+ */
+void ppe_drv_port_mgmt_omci_port_deref(struct ppe_drv_omci_port_node *node);
 
 /**
  * ppe_drv_port_mgmt_fid_get()

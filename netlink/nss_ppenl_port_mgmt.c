@@ -23,6 +23,9 @@ static int nss_ppenl_port_mgmt_ops_isol_def_set(struct sk_buff *skb, struct genl
 static int nss_ppenl_port_mgmt_ops_mac_lrn_limit_set(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_port_mgmt_ops_mac_filter_set(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_port_mgmt_ops_mac_filter_clear(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_port_mgmt_ops_omci_port_add(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_port_mgmt_ops_omci_port_del(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_port_mgmt_ops_omci_port_flush(struct sk_buff *skb, struct genl_info *info);
 
 /*
  * operation table called by the generic netlink layer based on the command
@@ -34,6 +37,9 @@ static struct genl_ops nss_ppenl_port_mgmt_ops[] = {
 	{.cmd = NSS_PPE_PORT_MGMT_MAC_LRN_LIMIT_SET_MSG, .doit = nss_ppenl_port_mgmt_ops_mac_lrn_limit_set,},	/* PORT_MGMT mac learn limit set */
 	{.cmd = NSS_PPE_PORT_MGMT_MAC_FILTER_SET_MSG, .doit = nss_ppenl_port_mgmt_ops_mac_filter_set,},   /* PORT_MGMT mac filter set */
 	{.cmd = NSS_PPE_PORT_MGMT_MAC_FILTER_CLR_MSG, .doit = nss_ppenl_port_mgmt_ops_mac_filter_clear,},   /* PORT_MGMT mac filter clear */
+	{.cmd = NSS_PPE_PORT_MGMT_OMCI_PORT_ADD_MSG, .doit = nss_ppenl_port_mgmt_ops_omci_port_add,},	/* PORT_MGMT OMCI port add */
+	{.cmd = NSS_PPE_PORT_MGMT_OMCI_PORT_DEL_MSG, .doit = nss_ppenl_port_mgmt_ops_omci_port_del,},	/* PORT_MGMT OMCI port del */
+	{.cmd = NSS_PPE_PORT_MGMT_OMCI_PORT_FLUSH_MSG, .doit = nss_ppenl_port_mgmt_ops_omci_port_flush,},	/* PORT_MGMT OMCI port flush */
 };
 
 /*
@@ -390,6 +396,141 @@ static int nss_ppenl_port_mgmt_ops_mac_filter_clear(struct sk_buff *skb, struct 
 	nl_port_mgmt_rule->mac_filter.ret = ret;
 
 	nss_ppenl_trace("Sending response to userspace: ret %d\n",  nl_port_mgmt_rule->mac_filter.ret);
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
+ * nss_ppenl_port_mgmt_ops_omci_port_add()
+ *	Handle Netlink request to add an OMCI-managed port.
+ */
+static int nss_ppenl_port_mgmt_ops_omci_port_add(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_port_mgmt_info *nl_port_mgmt_rule;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	int error;
+	int ret;
+
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_port_mgmt_family, info, NSS_PPE_PORT_MGMT_OMCI_PORT_ADD_MSG);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract PORT_MGMT OMCI port add info\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	nl_port_mgmt_rule = container_of(nl_cm, struct nss_ppenl_port_mgmt_info, cm);
+	pid = nl_cm->pid;
+	nss_ppenl_info("%s: pid: %d\n", __func__, pid);
+
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
+		return error;
+	}
+
+	ret = ppe_port_mgmt_omci_port_add(&nl_port_mgmt_rule->omci_port);
+	if (ret) {
+		nss_ppenl_info("PPE OMCI port add failed = %d\n", ret);
+	}
+
+	nl_port_mgmt_rule = nss_ppenl_get_data(resp);
+	nl_port_mgmt_rule->omci_port.ret = ret;
+
+	nss_ppenl_trace("Sending response to userspace: ret %d\n", nl_port_mgmt_rule->omci_port.ret);
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
+ * nss_ppenl_port_mgmt_ops_omci_port_del()
+ *	Handle Netlink request to delete an OMCI-managed port.
+ */
+static int nss_ppenl_port_mgmt_ops_omci_port_del(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_port_mgmt_info *nl_port_mgmt_rule;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	int error;
+	int ret;
+
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_port_mgmt_family, info, NSS_PPE_PORT_MGMT_OMCI_PORT_DEL_MSG);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract PORT_MGMT OMCI port del info\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	nl_port_mgmt_rule = container_of(nl_cm, struct nss_ppenl_port_mgmt_info, cm);
+	pid = nl_cm->pid;
+	nss_ppenl_info("%s: pid: %d\n", __func__, pid);
+
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
+		return error;
+	}
+
+	ret = ppe_port_mgmt_omci_port_del(&nl_port_mgmt_rule->omci_port);
+	if (ret) {
+		nss_ppenl_info("PPE OMCI port del failed = %d\n", ret);
+	}
+
+	nl_port_mgmt_rule = nss_ppenl_get_data(resp);
+	nl_port_mgmt_rule->omci_port.ret = ret;
+
+	nss_ppenl_trace("Sending response to userspace: ret %d\n", nl_port_mgmt_rule->omci_port.ret);
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
+ * nss_ppenl_port_mgmt_ops_omci_port_flush()
+ *	Handle Netlink request to flush all OMCI-managed ports.
+ */
+static int nss_ppenl_port_mgmt_ops_omci_port_flush(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_port_mgmt_info *nl_port_mgmt_rule;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	int error;
+	int ret;
+
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_port_mgmt_family, info, NSS_PPE_PORT_MGMT_OMCI_PORT_FLUSH_MSG);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract PORT_MGMT OMCI port flush info\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	nl_port_mgmt_rule = container_of(nl_cm, struct nss_ppenl_port_mgmt_info, cm);
+	pid = nl_cm->pid;
+	nss_ppenl_info("%s: pid: %d\n", __func__, pid);
+
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		error = -ENOMEM;
+		nss_ppenl_ucast_resp(skb);
+		return error;
+	}
+
+	ret = ppe_port_mgmt_omci_port_flush();
+	if (ret) {
+		nss_ppenl_info("PPE OMCI port flush failed = %d\n", ret);
+	}
+
+	nl_port_mgmt_rule = nss_ppenl_get_data(resp);
+	nl_port_mgmt_rule->omci_port.ret = ret;
+
+	nss_ppenl_trace("Sending response to userspace: ret %d\n", nl_port_mgmt_rule->omci_port.ret);
 	nss_ppenl_ucast_resp(resp);
 	return 0;
 }

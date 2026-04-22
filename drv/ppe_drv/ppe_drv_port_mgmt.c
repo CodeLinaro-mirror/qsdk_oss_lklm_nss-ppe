@@ -4,6 +4,7 @@
  */
 #include "ppe_drv.h"
 #include <fal/fal_fdb.h>
+#include <linux/seq_file.h>
 
 /*
  * ppe_drv_port_mgmt_entries_init()
@@ -68,6 +69,7 @@ struct ppe_drv_port_mgmt *ppe_drv_port_mgmt_entries_alloc(void)
 
 	spin_lock_init(&port_mgmt->lock);
 	INIT_LIST_HEAD(&port_mgmt->active_rules);
+	INIT_LIST_HEAD(&port_mgmt->omci_port_list);
 	ppe_drv_port_mgmt_entries_init(port_mgmt);
 	return port_mgmt;
 }
@@ -82,9 +84,242 @@ void ppe_drv_port_mgmt_entries_free(struct ppe_drv_port_mgmt *port_mgmt)
 	if (!port_mgmt)
 		return;
 
+	ppe_drv_port_mgmt_omci_port_flush();
 	kfree(port_mgmt);
 }
 EXPORT_SYMBOL(ppe_drv_port_mgmt_entries_free);
+
+/*
+ * ppe_drv_port_mgmt_omci_port_add()
+ *	Add a port to the OMCI-managed port list.
+ */
+ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_add(const char *dev_name)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt = p->port_mgmt;
+	struct ppe_drv_omci_port_node *node;
+	struct net_device *dev;
+	int32_t port_id;
+
+	if (!dev_name) {
+		ppe_drv_warn("Invalid argument: dev_name is NULL\n");
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (!port_mgmt) {
+		ppe_drv_warn("port_mgmt context not initialized\n");
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	dev = dev_get_by_name(&init_net, dev_name);
+	if (!dev) {
+		ppe_drv_warn("Device '%s' not found\n", dev_name);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	port_id = ppe_drv_port_num_from_dev(dev);
+	dev_put(dev);
+	if (port_id < 0) {
+		ppe_drv_warn("Failed to get PPE port number for dev '%s'\n", dev_name);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	/*
+	 * Duplicate check
+	 */
+	spin_lock_bh(&port_mgmt->lock);
+	list_for_each_entry(node, &port_mgmt->omci_port_list, list) {
+		if (strncmp(node->dev_name, dev_name, IFNAMSIZ) == 0) {
+			spin_unlock_bh(&port_mgmt->lock);
+			ppe_drv_warn("Device '%s' already in OMCI port list\n", dev_name);
+			return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+		}
+	}
+	spin_unlock_bh(&port_mgmt->lock);
+
+	node = kzalloc(sizeof(*node), GFP_KERNEL);
+	if (!node) {
+		ppe_drv_warn("Failed to allocate OMCI port node for '%s'\n", dev_name);
+		return PPE_DRV_RET_FAILURE_NO_RESOURCE;
+	}
+
+	strlcpy(node->dev_name, dev_name, IFNAMSIZ);
+	node->port_id = (uint32_t)port_id;
+
+	spin_lock_bh(&port_mgmt->lock);
+	list_add_tail(&node->list, &port_mgmt->omci_port_list);
+	spin_unlock_bh(&port_mgmt->lock);
+
+	ppe_drv_info("Added OMCI port: dev='%s' port_id=%u\n", node->dev_name, node->port_id);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_omci_port_add);
+
+/*
+ * ppe_drv_port_mgmt_omci_port_del()
+ *	Remove a port from the OMCI-managed port list.
+ */
+ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_del(const char *dev_name)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt = p->port_mgmt;
+	struct ppe_drv_omci_port_node *node, *tmp;
+	bool found = false;
+
+	if (!dev_name) {
+		ppe_drv_warn("Invalid argument: dev_name is NULL\n");
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (!port_mgmt) {
+		ppe_drv_warn("port_mgmt context not initialized\n");
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	spin_lock_bh(&port_mgmt->lock);
+	list_for_each_entry_safe(node, tmp, &port_mgmt->omci_port_list, list) {
+		if (strncmp(node->dev_name, dev_name, IFNAMSIZ) == 0) {
+			found = true;
+			if (atomic_read(&node->refcount) == 0) {
+				ppe_drv_info("Removed OMCI port: dev='%s' port_id=%u\n",
+				     node->dev_name, node->port_id);
+				list_del(&node->list);
+				kfree(node);
+				break;
+			} else {
+				spin_unlock_bh(&port_mgmt->lock);
+				ppe_drv_warn("Device '%s' is use\n", node->dev_name);
+				return PPE_DRV_RET_PORT_MGMT_PORT_IN_USE;
+			}
+		}
+	}
+	spin_unlock_bh(&port_mgmt->lock);
+
+	if (!found) {
+		ppe_drv_warn("Device '%s' not found in OMCI port list\n", dev_name);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_omci_port_del);
+
+/*
+ * ppe_drv_port_mgmt_omci_port_flush()
+ *	Remove all ports from the OMCI-managed port list.
+ */
+ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_flush(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt = p->port_mgmt;
+	struct ppe_drv_omci_port_node *node, *tmp;
+	bool in_use = false;
+
+	if (!port_mgmt) {
+		ppe_drv_warn("port_mgmt context not initialized\n");
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	spin_lock_bh(&port_mgmt->lock);
+	list_for_each_entry_safe(node, tmp, &port_mgmt->omci_port_list, list) {
+		if (atomic_read(&node->refcount) == 0) {
+			list_del(&node->list);
+			ppe_drv_info("Flushed OMCI port: dev='%s' port_id=%u\n",
+			     node->dev_name, node->port_id);
+			kfree(node);
+		} else {
+			ppe_drv_warn("Device '%s' in use\n", node->dev_name);
+			in_use = true;
+		}
+	}
+
+	spin_unlock_bh(&port_mgmt->lock);
+
+	if (in_use) {
+		return PPE_DRV_RET_PORT_MGMT_PORT_IN_USE;
+	}
+
+	ppe_drv_info("OMCI port list flushed\n");
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_omci_port_flush);
+
+/*
+ * ppe_drv_port_mgmt_omci_port_list_show()
+ *	Print the OMCI-managed port list to a seq_file (for debugfs).
+ */
+void ppe_drv_port_mgmt_omci_port_list_show(struct seq_file *m)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt;
+	struct ppe_drv_omci_port_node *node;
+
+	if (!p || !p->port_mgmt) {
+		seq_puts(m, "PPE driver not initialized\n");
+		return;
+	}
+
+	port_mgmt = p->port_mgmt;
+
+	seq_puts(m, "OMCI-managed ports:\n");
+	seq_puts(m, "-------------------\n");
+	seq_printf(m, "%-16s  %-10s\n", "dev_name", "port_id");
+
+	spin_lock_bh(&port_mgmt->lock);
+	if (list_empty(&port_mgmt->omci_port_list)) {
+		seq_puts(m, "(empty)\n");
+	} else {
+		list_for_each_entry(node, &port_mgmt->omci_port_list, list) {
+			seq_printf(m, "%-16s  %-10u\n", node->dev_name, node->port_id);
+		}
+	}
+	spin_unlock_bh(&port_mgmt->lock);
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_omci_port_list_show);
+
+/*
+ * ppe_drv_port_mgmt_omci_port_find_and_ref()
+ *	Find a device in the OMCI-managed port list and increment its refcount.
+ */
+struct ppe_drv_omci_port_node *ppe_drv_port_mgmt_omci_port_find_and_ref(const char *dev_name)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt = p->port_mgmt;
+	struct ppe_drv_omci_port_node *node;
+
+	if (!dev_name || !port_mgmt)
+		return NULL;
+
+	spin_lock_bh(&port_mgmt->lock);
+	list_for_each_entry(node, &port_mgmt->omci_port_list, list) {
+		if (strncmp(node->dev_name, dev_name, IFNAMSIZ) == 0) {
+			atomic_inc(&node->refcount);
+			spin_unlock_bh(&port_mgmt->lock);
+			ppe_drv_info("OMCI port %s referenced\n", node->dev_name);
+			return node;
+		}
+	}
+	spin_unlock_bh(&port_mgmt->lock);
+
+	return NULL;
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_omci_port_find_and_ref);
+
+/*
+ * ppe_drv_port_mgmt_omci_port_deref()
+ *	Decrement the refcount of an OMCI port node.
+ *	The node is NOT freed here; memory is managed by del/flush.
+ */
+void ppe_drv_port_mgmt_omci_port_deref(struct ppe_drv_omci_port_node *node)
+{
+	if (!node)
+		return;
+
+	WARN_ON(atomic_read(&node->refcount) == 0);
+	atomic_dec(&node->refcount);
+	ppe_drv_info("OMCI port %s dereferenced\n", node->dev_name);
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_omci_port_deref);
 
 #ifdef NSS_PPE_DRV_PORT_ISOL_SUPPORT
 /*
