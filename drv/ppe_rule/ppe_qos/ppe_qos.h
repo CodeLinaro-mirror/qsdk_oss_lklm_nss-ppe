@@ -141,7 +141,6 @@ struct ppe_qos_shaper_profile {
 	struct list_head list;	/* List of shaper profile. */
 };
 
-
 /*
  * ppe_qos_base
  *	Global ppe QoS global instance
@@ -156,6 +155,7 @@ struct ppe_qos_base {
 	uint32_t pq_to_tcont_map[PPE_DRV_QOS_TCONT_L0_RES_MAX];	/* List to keep track of PQ to Tcont mapping. */
 	bool l0drr_in_use[PPE_DRV_QOS_TCONT_L0_RES_MAX];	/* List to keep track of used L0 DRR. */
 	uint32_t pon_port;			/* PON port ID */
+	uint32_t pon_port_num_pq;	/* Number of PQs configured for PON port */
 	int qos_dump_major_id;		/* Dev ID for QoS dump */
 };
 

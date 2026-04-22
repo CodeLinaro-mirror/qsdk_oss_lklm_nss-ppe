@@ -98,7 +98,7 @@ struct ppe_drv_qos_q_stat {
  *	Information for QoS Tcont statistics.
  */
 struct ppe_drv_qos_tcont_stat {
-	uint64_t bytes;	/**< Number of bytes pending per Tcont. */
+	uint64_t pend_bytes;	/**< Number of bytes pending per Tcont. */
 	uint32_t credit;	/**< Number of credits available for the Tcont. */
 };
 

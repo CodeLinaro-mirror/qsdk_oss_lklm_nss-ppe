@@ -103,6 +103,7 @@ struct ppe_qos_shaper_info {
 	uint32_t eir;	/** Exceed Information Rate. */
 	uint32_t cbs;	/** Committed burst size. */
 	uint32_t ebs;	/** Exceed Burst size. */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 /*
@@ -124,6 +125,7 @@ struct ppe_qos_queue_limit_info {
 	uint32_t yellow_resume_off;	/** Yellow resume offset */
 	uint32_t red_resume_off;	/** Red resume offset */
 	ppe_qos_queue_type_t queue_type;	/** Queue type (unicast/multicast) */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 /*
@@ -136,6 +138,7 @@ struct ppe_qos_queue_tm_info {
 	uint32_t priority;	/** Priority of the queue. */
 	uint32_t weight;	/** Weight assigned to the queue. */
 	ppe_qos_queue_type_t queue_type;	/** Queue type (unicast/multicast) */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 #ifdef NSS_PPE_PON_SUPPORT
@@ -146,7 +149,8 @@ struct ppe_qos_queue_tm_info {
 struct ppe_qos_tcont_stats_info {
 	uint32_t tcont_id;	/** T-cont ID. */
 	uint32_t credit;	/** T-cont credit. */
-	uint64_t bytes;	/** T-cont pending bytes. */
+	uint64_t pend_bytes;	/** T-cont pending bytes. */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 /*
@@ -156,6 +160,7 @@ struct ppe_qos_tcont_stats_info {
 struct ppe_qos_pq_to_tcont_info {
 	uint32_t queue_id;	/** Queue ID. */
 	uint32_t tcont_id;	/** T-cont ID. */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 #endif
 
@@ -167,6 +172,7 @@ struct ppe_qos_interface_queues_info {
 	struct ppe_qos_interface if_data;		/** interface data */
 	uint32_t num_queues;	/** Number of queues. */
 	ppe_qos_queue_type_t queue_type;	/** Queue type (unicast/multicast) */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 /*
@@ -176,6 +182,7 @@ struct ppe_qos_interface_queues_info {
 struct ppe_qos_interface_shaper_info {
 	struct ppe_qos_interface if_data;		/** interface data */
 	char shaper_name[PPE_QOS_MAX_NAME_LENGTH];	/** Shaper name. */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 /*
@@ -196,6 +203,7 @@ struct ppe_qos_interface_queue_ctrl_info {
 	struct ppe_qos_interface if_data;		/** interface data */
 	ppe_qos_queue_ctrl_mode_t mode;			/** enqueue or dequeue */
 	ppe_qos_queue_ctrl_state_t state;		/** enable, disable, or drop */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 /*
@@ -210,6 +218,7 @@ struct ppe_qos_interface_queue_ctrl_info {
 struct ppe_qos_ucast_prio_map_info {
 	struct ppe_qos_interface if_data;    /** Interface data */
 	uint8_t prio_map[PPE_DRV_MAX_PRIORITY]; /** Priority map values */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 /*
@@ -219,6 +228,7 @@ struct ppe_qos_ucast_prio_map_info {
 struct ppe_qos_mcast_prio_map_info {
 	struct ppe_qos_interface if_data;    /** Interface data */
 	uint8_t prio_map[PPE_DRV_MAX_PRIORITY]; /** Priority map values (0-3) */
+	enum ppe_qos_ret ret;		/** Return status */
 };
 
 /**

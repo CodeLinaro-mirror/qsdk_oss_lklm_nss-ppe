@@ -102,7 +102,7 @@ static struct genl_family nss_ppenl_qos_family = {
 
 /*
  * nss_ppenl_qos_ops_get_int_pri()
- * req create handler
+ *	req create handler
  */
 static int nss_ppenl_qos_ops_get_int_pri(struct sk_buff *skb, struct genl_info *info)
 {
@@ -110,7 +110,6 @@ static int nss_ppenl_qos_ops_get_int_pri(struct sk_buff *skb, struct genl_info *
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
 	struct ppe_qos_req req = {0};
 
@@ -135,9 +134,8 @@ static int nss_ppenl_qos_ops_get_int_pri(struct sk_buff *skb, struct genl_info *
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
 	pt = ppe_qos_get_int_pri_func(&req);
@@ -163,7 +161,7 @@ static int nss_ppenl_qos_ops_get_int_pri(struct sk_buff *skb, struct genl_info *
 
 /*
  * nss_ppenl_qos_ops_set_queue_limit()
- * Set Queue limit and threshold
+ *	Set Queue limit and threshold
  */
 static int nss_ppenl_qos_ops_set_queue_limit(struct sk_buff *skb, struct genl_info *info)
 {
@@ -171,9 +169,7 @@ static int nss_ppenl_qos_ops_set_queue_limit(struct sk_buff *skb, struct genl_in
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_queue_limit_info limit_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -190,25 +186,6 @@ static int nss_ppenl_qos_ops_set_queue_limit(struct sk_buff *skb, struct genl_in
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	limit_info.if_data.type = nl_qos_req->msg.limit_info.if_data.type;
-	if (limit_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&limit_info.if_data.interface.dev, nl_qos_req->msg.limit_info.if_data.interface.dev, sizeof(nl_qos_req->msg.limit_info.if_data.interface.dev));
-	} else {
-		limit_info.if_data.interface.tcont_id = nl_qos_req->msg.limit_info.if_data.interface.tcont_id;
-	}
-	limit_info.queue_id = nl_qos_req->msg.limit_info.queue_id;
-	limit_info.ceiling = nl_qos_req->msg.limit_info.ceiling;
-	limit_info.color_en = nl_qos_req->msg.limit_info.color_en;
-	limit_info.wred_en = nl_qos_req->msg.limit_info.wred_en;
-	limit_info.green_min_off = nl_qos_req->msg.limit_info.green_min_off;
-	limit_info.yellow_max_off = nl_qos_req->msg.limit_info.yellow_max_off;
-	limit_info.yellow_min_off = nl_qos_req->msg.limit_info.yellow_min_off;
-	limit_info.red_max_off = nl_qos_req->msg.limit_info.red_max_off;
-	limit_info.red_min_off = nl_qos_req->msg.limit_info.red_min_off;
-	limit_info.green_resume_off = nl_qos_req->msg.limit_info.green_resume_off;
-	limit_info.yellow_resume_off = nl_qos_req->msg.limit_info.yellow_resume_off;
-	limit_info.red_resume_off = nl_qos_req->msg.limit_info.red_resume_off;
-	limit_info.queue_type = (ppe_qos_queue_type_t)nl_qos_req->msg.limit_info.queue_type;
 
 	/*
 	 * copy the NL message for response
@@ -216,12 +193,11 @@ static int nss_ppenl_qos_ops_set_queue_limit(struct sk_buff *skb, struct genl_in
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_set_queue_limit(&limit_info);
+	pt = ppe_qos_set_queue_limit(&nl_qos_req->msg.limit_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("PPE queue TM info reset success");
 	} else {
@@ -236,7 +212,7 @@ static int nss_ppenl_qos_ops_set_queue_limit(struct sk_buff *skb, struct genl_in
 
 /*
  * nss_ppenl_qos_ops_set_queue_tm()
- * Set Queue traffic management handler
+ *	Set Queue traffic management handler
  */
 static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info *info)
 {
@@ -244,9 +220,7 @@ static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info 
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_queue_tm_info tm_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -263,16 +237,6 @@ static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info 
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	tm_info.if_data.type = nl_qos_req->msg.tm_info.if_data.type;
-	if (tm_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&tm_info.if_data.interface.dev, nl_qos_req->msg.tm_info.if_data.interface.dev, sizeof(nl_qos_req->msg.tm_info.if_data.interface.dev));
-	} else {
-		tm_info.if_data.interface.tcont_id = nl_qos_req->msg.tm_info.if_data.interface.tcont_id;
-	}
-	tm_info.queue_id = nl_qos_req->msg.tm_info.queue_id;
-	tm_info.priority = nl_qos_req->msg.tm_info.priority;
-	tm_info.weight = nl_qos_req->msg.tm_info.weight;
-	tm_info.queue_type = (ppe_qos_queue_type_t)nl_qos_req->msg.tm_info.queue_type;
 
 	/*
 	 * copy the NL message for response
@@ -280,12 +244,11 @@ static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info 
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_set_queue_tm(&tm_info);
+	pt = ppe_qos_set_queue_tm(&nl_qos_req->msg.tm_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("PPE queue TM info set success");
 	} else {
@@ -301,7 +264,7 @@ static int nss_ppenl_qos_ops_set_queue_tm(struct sk_buff *skb, struct genl_info 
 #if defined(CONFIG_NSS_PPENL_PON_PORT)
 /*
  * nss_ppenl_qos_ops_get_tcont_stats()
- * Get Tcont stats request
+ *	Get Tcont stats request
  */
 static int nss_ppenl_qos_ops_get_tcont_stats(struct sk_buff *skb, struct genl_info *info)
 {
@@ -309,7 +272,6 @@ static int nss_ppenl_qos_ops_get_tcont_stats(struct sk_buff *skb, struct genl_in
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
 	struct ppe_qos_tcont_stats_info stats = {0};
 
@@ -334,25 +296,24 @@ static int nss_ppenl_qos_ops_get_tcont_stats(struct sk_buff *skb, struct genl_in
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
 	pt = ppe_qos_get_tcont_stats(&stats);
 	if (pt == PPE_QOS_SUCCESS) {
-		nss_ppenl_info("PPE qos stats req success");
+		nss_ppenl_info("PPE qos stats req success for Tcont ID:%d", stats.tcont_id);
 	} else {
-		nss_ppenl_info("Input data is invalid, error = %d", pt);
+		nss_ppenl_info("Input data is invalid for Tcont:%d, error = %d", stats.tcont_id, pt);
 	}
 
 	nl_qos_req = nss_ppenl_get_data(resp);
 	nl_qos_req->msg.stats_info.ret = pt;
-	nl_qos_req->msg.stats_info.bytes = stats.bytes;
+	nl_qos_req->msg.stats_info.pend_bytes = stats.pend_bytes;
 	nl_qos_req->msg.stats_info.credit = stats.credit;
 
 	nss_ppenl_info("Tcont ID:%d pending bytes:%llu credit:%d:\n",
-			stats.tcont_id, stats.bytes, stats.credit);
+			stats.tcont_id, stats.pend_bytes, stats.credit);
 
 	nss_ppenl_ucast_resp(resp);
 	return 0;
@@ -360,7 +321,7 @@ static int nss_ppenl_qos_ops_get_tcont_stats(struct sk_buff *skb, struct genl_in
 
 /*
  * nss_ppenl_qos_ops_reset_tcont_credit()
- * Reset given Tcont credit to 0.
+ *	Reset given Tcont credit to 0.
  */
 static int nss_ppenl_qos_ops_reset_tcont_credit(struct sk_buff *skb, struct genl_info *info)
 {
@@ -368,9 +329,7 @@ static int nss_ppenl_qos_ops_reset_tcont_credit(struct sk_buff *skb, struct genl
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_tcont_stats_info tcont_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -387,7 +346,6 @@ static int nss_ppenl_qos_ops_reset_tcont_credit(struct sk_buff *skb, struct genl
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	tcont_info.tcont_id = nl_qos_req->msg.stats_info.tcont_id;
 
 	/*
 	 * copy the NL message for response
@@ -395,16 +353,15 @@ static int nss_ppenl_qos_ops_reset_tcont_credit(struct sk_buff *skb, struct genl
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_reset_tcont_credit(&tcont_info);
+	pt = ppe_qos_reset_tcont_credit(&nl_qos_req->msg.stats_info);
 	if (pt == PPE_QOS_SUCCESS) {
-		nss_ppenl_info("PPE reset Tcont credit success");
+		nss_ppenl_info("PPE reset Tcont credit success for Tcont ID:%d", nl_qos_req->msg.stats_info.tcont_id);
 	} else {
-		nss_ppenl_info("Reset Tcont credit in ppe driver failed, error = %d", pt);
+		nss_ppenl_info("Reset Tcont:%d credit in ppe driver failed, error = %d", nl_qos_req->msg.stats_info.tcont_id, pt);
 	}
 
 	nl_qos_req = nss_ppenl_get_data(resp);
@@ -415,7 +372,7 @@ static int nss_ppenl_qos_ops_reset_tcont_credit(struct sk_buff *skb, struct genl
 
 /*
  * nss_ppenl_qos_ops_map_pq_to_tcont()
- * Map priority queue to Tcont handler
+ * 	Map priority queue to Tcont handler
  */
 static int nss_ppenl_qos_ops_map_pq_to_tcont(struct sk_buff *skb, struct genl_info *info)
 {
@@ -423,9 +380,7 @@ static int nss_ppenl_qos_ops_map_pq_to_tcont(struct sk_buff *skb, struct genl_in
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_pq_to_tcont_info pq_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -442,8 +397,6 @@ static int nss_ppenl_qos_ops_map_pq_to_tcont(struct sk_buff *skb, struct genl_in
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	pq_info.queue_id = nl_qos_req->msg.pq_info.queue_id;
-	pq_info.tcont_id = nl_qos_req->msg.pq_info.tcont_id;
 
 	/*
 	 * copy the NL message for response
@@ -451,12 +404,11 @@ static int nss_ppenl_qos_ops_map_pq_to_tcont(struct sk_buff *skb, struct genl_in
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_map_pq_to_tcont(&pq_info);
+	pt = ppe_qos_map_pq_to_tcont(&nl_qos_req->msg.pq_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("PPE priority queue mapping success");
 	} else {
@@ -472,7 +424,7 @@ static int nss_ppenl_qos_ops_map_pq_to_tcont(struct sk_buff *skb, struct genl_in
 
 /*
  * nss_ppenl_qos_ops_set_interface_shaper()
- * Create port queues handler
+ *	Create port queues handler
  */
 static int nss_ppenl_qos_ops_set_interface_shaper(struct sk_buff *skb, struct genl_info *info)
 {
@@ -480,9 +432,7 @@ static int nss_ppenl_qos_ops_set_interface_shaper(struct sk_buff *skb, struct ge
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_interface_shaper_info shaper_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -499,13 +449,6 @@ static int nss_ppenl_qos_ops_set_interface_shaper(struct sk_buff *skb, struct ge
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	shaper_info.if_data.type = nl_qos_req->msg.if_shaper_info.if_data.type;
-	if (shaper_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&shaper_info.if_data.interface.dev, nl_qos_req->msg.if_shaper_info.if_data.interface.dev, sizeof(nl_qos_req->msg.if_shaper_info.if_data.interface.dev));
-	} else {
-		shaper_info.if_data.interface.tcont_id = nl_qos_req->msg.if_shaper_info.if_data.interface.tcont_id;
-	}
-	memcpy(&shaper_info.shaper_name, nl_qos_req->msg.if_shaper_info.shaper_name, sizeof(nl_qos_req->msg.if_shaper_info.shaper_name));
 
 	/*
 	 * copy the NL message for response
@@ -513,12 +456,11 @@ static int nss_ppenl_qos_ops_set_interface_shaper(struct sk_buff *skb, struct ge
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_set_interface_shaper(&shaper_info);
+	pt = ppe_qos_set_interface_shaper(&nl_qos_req->msg.if_shaper_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("interface shaper set success");
 	} else {
@@ -533,7 +475,7 @@ static int nss_ppenl_qos_ops_set_interface_shaper(struct sk_buff *skb, struct ge
 
 /*
  * nss_ppenl_qos_ops_delete_shaper()
- * Delete shaper profile
+ *	Delete shaper profile
  */
 static int nss_ppenl_qos_ops_delete_shaper(struct sk_buff *skb, struct genl_info *info)
 {
@@ -541,9 +483,7 @@ static int nss_ppenl_qos_ops_delete_shaper(struct sk_buff *skb, struct genl_info
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_shaper_info shaper_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -560,7 +500,6 @@ static int nss_ppenl_qos_ops_delete_shaper(struct sk_buff *skb, struct genl_info
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	memcpy(&shaper_info.name, nl_qos_req->msg.shaper_info.name, sizeof(nl_qos_req->msg.shaper_info.name));
 
 	/*
 	 * copy the NL message for response
@@ -568,12 +507,11 @@ static int nss_ppenl_qos_ops_delete_shaper(struct sk_buff *skb, struct genl_info
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_delete_shaper(&shaper_info);
+	pt = ppe_qos_delete_shaper(&nl_qos_req->msg.shaper_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("PPE shaper info reset success");
 	} else {
@@ -588,7 +526,7 @@ static int nss_ppenl_qos_ops_delete_shaper(struct sk_buff *skb, struct genl_info
 
 /*
  * nss_ppenl_qos_ops_create_shaper()
- * Create shaper profile
+ *	Create shaper profile
  */
 static int nss_ppenl_qos_ops_create_shaper(struct sk_buff *skb, struct genl_info *info)
 {
@@ -596,9 +534,7 @@ static int nss_ppenl_qos_ops_create_shaper(struct sk_buff *skb, struct genl_info
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_shaper_info shaper_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -615,11 +551,6 @@ static int nss_ppenl_qos_ops_create_shaper(struct sk_buff *skb, struct genl_info
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	strlcpy(shaper_info.name, nl_qos_req->msg.shaper_info.name, NSS_PPE_NL_SHAPER_MAX_NAME_LENGTH);
-	shaper_info.cir = nl_qos_req->msg.shaper_info.cir;
-	shaper_info.eir = nl_qos_req->msg.shaper_info.eir;
-	shaper_info.cbs = nl_qos_req->msg.shaper_info.cbs;
-	shaper_info.ebs = nl_qos_req->msg.shaper_info.ebs;
 
 	/*
 	 * copy the NL message for response
@@ -627,12 +558,11 @@ static int nss_ppenl_qos_ops_create_shaper(struct sk_buff *skb, struct genl_info
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_create_shaper(&shaper_info);
+	pt = ppe_qos_create_shaper(&nl_qos_req->msg.shaper_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("PPE shaper info set success");
 	} else {
@@ -647,7 +577,7 @@ static int nss_ppenl_qos_ops_create_shaper(struct sk_buff *skb, struct genl_info
 
 /*
  * nss_ppenl_qos_ops_flush_interface_queues()
- * Delete port queues handler
+ *	Delete port queues handler
  */
 static int nss_ppenl_qos_ops_flush_interface_queues(struct sk_buff *skb, struct genl_info *info)
 {
@@ -655,9 +585,7 @@ static int nss_ppenl_qos_ops_flush_interface_queues(struct sk_buff *skb, struct 
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_interface_queues_info if_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -674,13 +602,6 @@ static int nss_ppenl_qos_ops_flush_interface_queues(struct sk_buff *skb, struct 
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	if_info.if_data.type = nl_qos_req->msg.if_info.if_data.type;
-	if (if_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&if_info.if_data.interface.dev, nl_qos_req->msg.if_info.if_data.interface.dev, sizeof(nl_qos_req->msg.if_info.if_data.interface.dev));
-	} else {
-		if_info.if_data.interface.tcont_id = nl_qos_req->msg.if_info.if_data.interface.tcont_id;
-	}
-	if_info.queue_type = (ppe_qos_queue_type_t)nl_qos_req->msg.if_info.queue_type;
 
 	/*
 	 * copy the NL message for response
@@ -688,12 +609,11 @@ static int nss_ppenl_qos_ops_flush_interface_queues(struct sk_buff *skb, struct 
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_flush_interface_queues(&if_info);
+	pt = ppe_qos_flush_interface_queues(&nl_qos_req->msg.if_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("PPE port queues flush success");
 	} else {
@@ -702,14 +622,13 @@ static int nss_ppenl_qos_ops_flush_interface_queues(struct sk_buff *skb, struct 
 
 	nl_qos_req = nss_ppenl_get_data(resp);
 	nl_qos_req->msg.if_info.ret = pt;
-	nl_qos_req->msg.if_info.num_queues = if_info.num_queues;
 	nss_ppenl_ucast_resp(resp);
 	return 0;
 }
 
 /*
  * nss_ppenl_qos_ops_create_interface_queues()
- * Create port queues handler
+ *	Create port queues handler
  */
 static int nss_ppenl_qos_ops_create_interface_queues(struct sk_buff *skb, struct genl_info *info)
 {
@@ -717,9 +636,7 @@ static int nss_ppenl_qos_ops_create_interface_queues(struct sk_buff *skb, struct
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_interface_queues_info if_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -736,14 +653,6 @@ static int nss_ppenl_qos_ops_create_interface_queues(struct sk_buff *skb, struct
 	 */
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
-	if_info.if_data.type = nl_qos_req->msg.if_info.if_data.type;
-	if (if_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&if_info.if_data.interface.dev, nl_qos_req->msg.if_info.if_data.interface.dev, sizeof(nl_qos_req->msg.if_info.if_data.interface.dev));
-	} else {
-		if_info.if_data.interface.tcont_id = nl_qos_req->msg.if_info.if_data.interface.tcont_id;
-	}
-	if_info.num_queues = nl_qos_req->msg.if_info.num_queues;
-	if_info.queue_type = nl_qos_req->msg.if_info.queue_type;
 
 	/*
 	 * copy the NL message for response
@@ -751,12 +660,11 @@ static int nss_ppenl_qos_ops_create_interface_queues(struct sk_buff *skb, struct
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_create_interface_queues(&if_info);
+	pt = ppe_qos_create_interface_queues(&nl_qos_req->msg.if_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("PPE port queues creation success");
 	} else {
@@ -771,7 +679,7 @@ static int nss_ppenl_qos_ops_create_interface_queues(struct sk_buff *skb, struct
 
 /*
  * nss_ppenl_qos_ops_set_interface_queue_ctrl()
- * Set interface queue control (enqueue/dequeue enable/disable)
+ *	Set interface queue control (enqueue/dequeue enable/disable)
  */
 static int nss_ppenl_qos_ops_set_interface_queue_ctrl(struct sk_buff *skb, struct genl_info *info)
 {
@@ -779,9 +687,7 @@ static int nss_ppenl_qos_ops_set_interface_queue_ctrl(struct sk_buff *skb, struc
 	struct nss_ppenl_cmn *nl_cm;
 	struct sk_buff *resp;
 	uint32_t pid;
-	int error;
 	enum ppe_qos_ret pt;
-	struct ppe_qos_interface_queue_ctrl_info ctrl_info = {0};
 
 	/*
 	 * Extract the message payload
@@ -799,30 +705,17 @@ static int nss_ppenl_qos_ops_set_interface_queue_ctrl(struct sk_buff *skb, struc
 	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
 	pid = nl_cm->pid;
 
-	ctrl_info.if_data.type = nl_qos_req->msg.queue_ctrl_info.if_data.type;
-	if (ctrl_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&ctrl_info.if_data.interface.dev,
-		       nl_qos_req->msg.queue_ctrl_info.if_data.interface.dev,
-		       sizeof(nl_qos_req->msg.queue_ctrl_info.if_data.interface.dev));
-	} else {
-		ctrl_info.if_data.interface.tcont_id = nl_qos_req->msg.queue_ctrl_info.if_data.interface.tcont_id;
-	}
-
-	ctrl_info.mode = nl_qos_req->msg.queue_ctrl_info.mode;
-	ctrl_info.state = nl_qos_req->msg.queue_ctrl_info.state;
-
 	/*
 	 * copy the NL message for response
 	 */
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
-	pt = ppe_qos_set_interface_queue_ctrl(&ctrl_info);
+	pt = ppe_qos_set_interface_queue_ctrl(&nl_qos_req->msg.queue_ctrl_info);
 	if (pt == PPE_QOS_SUCCESS) {
 		nss_ppenl_info("PPE interface queue control set success");
 	} else {
@@ -836,8 +729,111 @@ static int nss_ppenl_qos_ops_set_interface_queue_ctrl(struct sk_buff *skb, struc
 }
 
 /*
+ * nss_ppenl_qos_ops_set_ucast_prio_map()
+ *	Set unicast priority map
+ */
+static int nss_ppenl_qos_ops_set_ucast_prio_map(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_qos_req *nl_qos_req;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	enum ppe_qos_ret pt;
+
+	/*
+	 * Extract the message payload
+	 */
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_qos_family, info, NSS_PPE_QOS_SET_UCAST_PRIO_MAP);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract unicast priority map data\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate config message before calling API
+	 */
+	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
+	pid = nl_cm->pid;
+
+	/*
+	 * copy the NL message for response
+	 */
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		nss_ppenl_ucast_resp(skb);
+		return -ENOMEM;
+	}
+
+	pt = ppe_qos_set_ucast_prio_map(&nl_qos_req->msg.ucast_prio_map_info);
+	if (pt == PPE_QOS_SUCCESS) {
+		nss_ppenl_info("PPE unicast priority map set success");
+	} else {
+		nss_ppenl_info("Setting unicast priority map in PPE driver failed, error = %d", pt);
+	}
+
+	nl_qos_req = nss_ppenl_get_data(resp);
+	nl_qos_req->msg.ucast_prio_map_info.ret = pt;
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+
+/*
+ * nss_ppenl_qos_ops_set_mcast_prio_map()
+ *	Set multicast priority map
+ */
+static int nss_ppenl_qos_ops_set_mcast_prio_map(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_qos_req *nl_qos_req;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	enum ppe_qos_ret pt;
+
+	/*
+	 * Extract the message payload
+	 */
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_qos_family, info, NSS_PPE_QOS_SET_MCAST_PRIO_MAP);
+	if (!nl_cm) {
+		nss_ppenl_info("unable to extract multicast priority map data\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate config message before calling API
+	 */
+	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
+	pid = nl_cm->pid;
+
+	/*
+	 * copy the NL message for response
+	 */
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
+		nss_ppenl_ucast_resp(skb);
+		return -ENOMEM;
+	}
+
+	pt = ppe_qos_set_mcast_prio_map(&nl_qos_req->msg.mcast_prio_map_info);
+	if (pt == PPE_QOS_SUCCESS) {
+		nss_ppenl_info("PPE multicast priority map set success");
+	} else {
+		nss_ppenl_info("Setting multicast priority map in PPE driver failed, error = %d", pt);
+	}
+
+	nl_qos_req = nss_ppenl_get_data(resp);
+	nl_qos_req->msg.mcast_prio_map_info.ret = pt;
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
  * nss_ppenl_qos_init()
- * handler init
+ *	handler init
  */
 bool nss_ppenl_qos_init(void)
 {
@@ -858,141 +854,8 @@ bool nss_ppenl_qos_init(void)
 }
 
 /*
- * nss_ppenl_qos_ops_set_ucast_prio_map()
- * Set unicast priority map
- */
-static int nss_ppenl_qos_ops_set_ucast_prio_map(struct sk_buff *skb, struct genl_info *info)
-{
-	struct nss_ppenl_qos_req *nl_qos_req;
-	struct nss_ppenl_cmn *nl_cm;
-	struct sk_buff *resp;
-	uint32_t pid;
-	int error;
-	enum ppe_qos_ret pt;
-	struct ppe_qos_ucast_prio_map_info prio_map_info = {0};
-
-	/*
-	 * Extract the message payload
-	 */
-	nl_cm = nss_ppenl_get_msg(&nss_ppenl_qos_family, info, NSS_PPE_QOS_SET_UCAST_PRIO_MAP);
-	if (!nl_cm) {
-		nss_ppenl_info("unable to extract unicast priority map data\n");
-		nss_ppenl_ucast_resp(skb);
-		return -EINVAL;
-	}
-
-	/*
-	 * Validate config message before calling API
-	 */
-	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
-	pid = nl_cm->pid;
-
-	prio_map_info.if_data.type = nl_qos_req->msg.ucast_prio_map_info.if_data.type;
-	if (prio_map_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&prio_map_info.if_data.interface.dev,
-		       nl_qos_req->msg.ucast_prio_map_info.if_data.interface.dev,
-		       sizeof(nl_qos_req->msg.ucast_prio_map_info.if_data.interface.dev));
-	} else {
-		prio_map_info.if_data.interface.tcont_id = nl_qos_req->msg.ucast_prio_map_info.if_data.interface.tcont_id;
-	}
-
-	memcpy(prio_map_info.prio_map, nl_qos_req->msg.ucast_prio_map_info.prio_map,
-	       sizeof(prio_map_info.prio_map));
-
-	/*
-	 * copy the NL message for response
-	 */
-	resp = nss_ppenl_copy_msg(skb);
-	if (!resp) {
-		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
-		nss_ppenl_ucast_resp(skb);
-		return error;
-	}
-
-	pt = ppe_qos_set_ucast_prio_map(&prio_map_info);
-	if (pt == PPE_QOS_SUCCESS) {
-		nss_ppenl_info("PPE unicast priority map set success");
-	} else {
-		nss_ppenl_info("Setting unicast priority map in PPE driver failed, error = %d", pt);
-	}
-
-	nl_qos_req = nss_ppenl_get_data(resp);
-	nl_qos_req->msg.ucast_prio_map_info.ret = pt;
-	nss_ppenl_ucast_resp(resp);
-	return 0;
-}
-
-
-/*
- * nss_ppenl_qos_ops_set_mcast_prio_map()
- * Set multicast priority map
- */
-static int nss_ppenl_qos_ops_set_mcast_prio_map(struct sk_buff *skb, struct genl_info *info)
-{
-	struct nss_ppenl_qos_req *nl_qos_req;
-	struct nss_ppenl_cmn *nl_cm;
-	struct sk_buff *resp;
-	uint32_t pid;
-	int error;
-	enum ppe_qos_ret pt;
-	struct ppe_qos_mcast_prio_map_info prio_map_info = {0};
-
-	/*
-	 * Extract the message payload
-	 */
-	nl_cm = nss_ppenl_get_msg(&nss_ppenl_qos_family, info, NSS_PPE_QOS_SET_MCAST_PRIO_MAP);
-	if (!nl_cm) {
-		nss_ppenl_info("unable to extract multicast priority map data\n");
-		nss_ppenl_ucast_resp(skb);
-		return -EINVAL;
-	}
-
-	/*
-	 * Validate config message before calling API
-	 */
-	nl_qos_req = container_of(nl_cm, struct nss_ppenl_qos_req, cm);
-	pid = nl_cm->pid;
-
-	prio_map_info.if_data.type = nl_qos_req->msg.mcast_prio_map_info.if_data.type;
-	if (prio_map_info.if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		memcpy(&prio_map_info.if_data.interface.dev,
-		       nl_qos_req->msg.mcast_prio_map_info.if_data.interface.dev,
-		       sizeof(nl_qos_req->msg.mcast_prio_map_info.if_data.interface.dev));
-	} else {
-		prio_map_info.if_data.interface.tcont_id = nl_qos_req->msg.mcast_prio_map_info.if_data.interface.tcont_id;
-	}
-
-	memcpy(prio_map_info.prio_map, nl_qos_req->msg.mcast_prio_map_info.prio_map,
-	       sizeof(prio_map_info.prio_map));
-
-	/*
-	 * copy the NL message for response
-	 */
-	resp = nss_ppenl_copy_msg(skb);
-	if (!resp) {
-		nss_ppenl_info("%d:unable to save response data from NL buffer\n", pid);
-		error = -ENOMEM;
-		nss_ppenl_ucast_resp(skb);
-		return error;
-	}
-
-	pt = ppe_qos_set_mcast_prio_map(&prio_map_info);
-	if (pt == PPE_QOS_SUCCESS) {
-		nss_ppenl_info("PPE multicast priority map set success");
-	} else {
-		nss_ppenl_info("Setting multicast priority map in PPE driver failed, error = %d", pt);
-	}
-
-	nl_qos_req = nss_ppenl_get_data(resp);
-	nl_qos_req->msg.mcast_prio_map_info.ret = pt;
-	nss_ppenl_ucast_resp(resp);
-	return 0;
-}
-
-/*
  * nss_ppenl_qos_exit()
- * handler exit
+ *	handler exit
  */
 bool nss_ppenl_qos_exit(void)
 {

@@ -585,7 +585,6 @@ static bool ppe_qos_dump_all_shapers(struct ppe_qos_dump_instance *pqdi)
 	 * Dump all shaper profiles.
 	 */
 	if (!list_empty(&g_qos->shaper_list)) {
-
 		pqdi->shaper_cnt = 0;
 		list_for_each_entry(profile, &g_qos->shaper_list, list) {
 			result = ppe_qos_dump_one_shaper(pqdi, profile);
@@ -596,11 +595,10 @@ static bool ppe_qos_dump_all_shapers(struct ppe_qos_dump_instance *pqdi)
 
 			pqdi->shaper_cnt++;
 		}
-}
+	}
 
 	return 0;
 }
-
 
 /*
  * ppe_qos_dump_all()
@@ -622,7 +620,6 @@ static bool ppe_qos_dump_all(struct ppe_qos_dump_instance *pqdi)
 		ppe_qos_warn("%p: failed to collect dump for shapers", g_qos);
 		return result;
 	}
-
 
 	result = ppe_qos_dump_all_interfaces(pqdi);
 	if (result < 0) {

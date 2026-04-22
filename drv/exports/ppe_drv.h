@@ -40,7 +40,7 @@
 /*
  * PPE Multicast Queue Class Max value
  */
-#define PPE_DRV_MCAST_QUEUE_CLASS_MAX 3			/**< Maximum multicast queue class (0-3) */
+#define PPE_DRV_MCAST_QUEUE_CLASS_MAX 4			/**< Maximum multicast queue class (0-3) */
 
 #define PPE_DRV_MHT_SWITCH_ID	1			/**< MHT switch ID */
 
@@ -573,6 +573,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_QOS_SHAPER_CFG_FAIL,		/**< QoS shaper configuration failed. */
 	PPE_DRV_RET_QOS_PORT_CFG_FAIL,			/**< QoS port configuration failed. */
 	PPE_DRV_RET_QOS_TCONT_CFG_FAIL,			/**< QoS tcont configuration failed. */
+	PPE_DRV_RET_QOS_TCONT_STATS_FAIL,		/**< QoS tcont statistics get failed. */
 	PPE_DRV_RET_PORT_NO_OFFLOAD,			/**< Offload is disabled on the PPE port */
 	PPE_DRV_RET_ACL_RULE_INVALID,			/**< ACL rule invalid */
 	PPE_DRV_RET_ACL_RULE_ADD_FAIL,			/**< Failed to add ACL rule */
@@ -998,7 +999,7 @@ bool ppe_drv_confgiure_ucast_prio_map_tbl(uint8_t profile_id, uint8_t *prio_map)
  *
  * @param[in] port_id    Port ID (must be < PPE_DRV_PHYSICAL_MAX).
  * @param[in] priority   Priority value (must be < PPE_DRV_MAX_PRIORITY).
- * @param[in] queue_class Queue class (0-PPE_DRV_MCAST_QUEUE_CLASS_MAX).
+ * @param[in] queue_class Queue class (0-(PPE_DRV_MCAST_QUEUE_CLASS_MAX - 1)).
  *
  * @return
  * true if successful, false otherwise.
@@ -1039,6 +1040,15 @@ ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp
  * Pointer to PON interface.
  */
 struct ppe_drv_iface *ppe_drv_pon_iface_get(void);
+
+/**
+ * ppe_drv_pon_port_max_pq_get
+ *	Returns maximum PQs assigned to PON port
+ *
+ * @return
+ * Number of PQs.
+ */
+int ppe_drv_pon_port_max_pq_get(void);
 #endif
 
 /**

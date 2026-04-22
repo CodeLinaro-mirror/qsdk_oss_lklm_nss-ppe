@@ -15,20 +15,6 @@
  * QOS Configure Family.
  */
 #define NSS_PPENL_QOS_FAMILY "nss_ppenl_qos"
-#define NSS_PPE_NL_SHAPER_MAX_NAME_LENGTH 64
-
-/*
- * nss_ppenl_qos_interface
- *	PPE QoS interface information.
- * TODO: Extend the support for virtual ports
- */
-struct nss_ppenl_qos_interface {
-	union {
-		char dev[IFNAMSIZ];	/** Device name */
-		uint32_t tcont_id;			/** Tcont ID */
-	} interface;					/** interface info. */
-	uint32_t type;		/** interface type */
-};
 
 /*
  * @brief QOS config.
@@ -43,138 +29,24 @@ struct nss_ppenl_qos_config {
 };
 
 /*
- * @brief PPE QoS interfcae shaper info
- */
-struct nss_ppenl_qos_interface_shaper_info {
-	struct nss_ppenl_qos_interface if_data;		/** Interface info. */
-	char shaper_name[NSS_PPE_NL_SHAPER_MAX_NAME_LENGTH];	/** Shaper name assigned. */
-	int ret;		/* Return value to userspace. */
-};
-
-/*
- * @brief PPE QoS queue traffic management info
- */
-struct nss_ppenl_qos_interface_queues_info {
-	struct nss_ppenl_qos_interface if_data;		/** Interface info. */
-	uint32_t num_queues;	/** Number of queues. */
-	uint32_t queue_type;	/** Queue type: 0=ucast, 1=mcast. */
-	int ret;		/* Return value to userspace. */
-};
-
-#if defined(CONFIG_NSS_PPENL_PON_PORT)
-/*
- * @brief PPE QoS priority queue mapping info
- */
-struct nss_ppenl_qos_map_pq_info {
-	uint32_t queue_id;	/** Queue ID. */
-	uint32_t tcont_id;	/** T-cont port ID. */
-	int ret;		/* Return value to userspace. */
-};
-
-/*
- * @brief PPE QoS Tcont statistics information.
- */
-struct nss_ppenl_qos_tcont_stats_info {
-	uint32_t tcont_id;	/** T-cont ID. */
-	uint32_t credit;	/** T-cont credit. */
-	uint64_t bytes;	/** T-cont pending bytes. */
-	int ret;		/* Return value to userspace. */
-};
-#endif
-
-/*
- * @brief PPE QoS queue traffic management info
- */
-struct nss_ppenl_qos_queue_tm_info {
-	struct nss_ppenl_qos_interface if_data;	/** Interface info. */
-	uint32_t queue_id;	/** Queue number. */
-	uint32_t priority;	/** Priority of the queue. */
-	uint32_t weight;	/** Weight assigned to the queue. */
-	uint32_t queue_type;	/** Queue type: 0=ucast, 1=mcast. */
-	int ret;		/* Return value to userspace. */
-};
-
-/*
- * ppe_qos_queue_limit_info
- *	PPE QoS queue limit configuration.
- */
-struct nss_ppenl_qos_queue_limit_info {
-	struct nss_ppenl_qos_interface if_data;	/** Interface info. */
-	uint32_t queue_id;	/** Queue number. */
-	uint32_t ceiling;	/** Queue ceiling. */
-	bool color_en;		/** Color enable. */
-	bool wred_en;		/** WRED enable. */
-	uint32_t green_min_off;		/** Green minimum offset. */
-	uint32_t yellow_max_off;	/** Yellow maximum offset. */
-	uint32_t yellow_min_off;	/** Yellow minimum offset. */
-	uint32_t red_max_off;		/** Red maximum offset. */
-	uint32_t red_min_off;		/** Red minimum offset. */
-	uint32_t green_resume_off;	/** Green resume offset. */
-	uint32_t yellow_resume_off;	/** Yellow resume offset. */
-	uint32_t red_resume_off;	/** Red resume offset. */
-	uint32_t queue_type;	/** Queue type: 0=ucast, 1=mcast. */
-	int ret;		/* Return value to userspace. */
-};
-
-/*
- * @brief PPE QoS queue traffic management info
- */
-struct nss_ppenl_qos_shaper_info {
-	char name[NSS_PPE_NL_SHAPER_MAX_NAME_LENGTH];	/** Shaper name. */
-	uint32_t cir;	/** Committed Information Rate. */
-	uint32_t eir;	/** Exceed Information Rate. */
-	uint32_t cbs;	/** Committed burst size. */
-	uint32_t ebs;	/** Exceed Burst size. */
-	int ret;		/* Return value to userspace. */
-};
-
-/*
- * @brief PPE QoS interface queue control info
- */
-struct nss_ppenl_qos_queue_ctrl_info {
-	struct nss_ppenl_qos_interface if_data;	/** Interface info. */
-	uint32_t mode;		/** 0=enqueue, 1=dequeue */
-	uint32_t state;		/** 0=disable, 1=enable */
-	int ret;		/* Return value to userspace. */
-};
-
-/*
- * @brief PPE QoS unicast priority map info
- */
-struct nss_ppenl_qos_ucast_prio_map_info {
-	struct nss_ppenl_qos_interface if_data;	/** Interface info. */
-	uint8_t prio_map[PPE_DRV_MAX_PRIORITY]; /* Priority map values */
-	int ret;                             /* Return value to userspace */
-};
-
-/*
- * @brief PPE QoS multicast priority map info
- */
-struct nss_ppenl_qos_mcast_prio_map_info {
-	struct nss_ppenl_qos_interface if_data;	/** Interface info. */
-	uint8_t prio_map[PPE_DRV_MAX_PRIORITY]; /* Priority map values (0-3) */
-	int ret;                             /* Return value to userspace */
-};
-
-/*
  * @brief QOS req.
  */
 struct nss_ppenl_qos_req {
 	struct nss_ppenl_cmn cm;	/*< Common message header. */
 	union {
 		struct nss_ppenl_qos_config config;	/* PPE QoS config. */
-		struct nss_ppenl_qos_shaper_info shaper_info; /* PPE QoS shaper information */
-		struct nss_ppenl_qos_interface_queues_info if_info;	/* PPE QoS interface's queues information */
-		struct nss_ppenl_qos_interface_shaper_info if_shaper_info;	/* PPE QoS interface's shaper information */
-#if defined(CONFIG_NSS_PPENL_PON_PORT)
-		struct nss_ppenl_qos_tcont_stats_info stats_info;	/* PPE QoS Tcont stats information */
-		struct nss_ppenl_qos_map_pq_info pq_info;	/* PPE QoS priority queue mapping information */
+		struct ppe_qos_shaper_info shaper_info; /* PPE QoS shaper information */
+		struct ppe_qos_interface_queues_info if_info;	/* PPE QoS interface's queues information */
+		struct ppe_qos_interface_shaper_info if_shaper_info;	/* PPE QoS interface's shaper information */
+#if defined(NSS_PPE_PON_SUPPORT)
+		struct ppe_qos_tcont_stats_info stats_info;	/* PPE QoS Tcont stats information */
+		struct ppe_qos_pq_to_tcont_info pq_info;	/* PPE QoS priority queue mapping information */
 #endif
-		struct nss_ppenl_qos_queue_tm_info tm_info;	/* PPE QoS traffic management information */
-		struct nss_ppenl_qos_queue_limit_info limit_info;	/* PPE QoS limit and threshold information */
-		struct nss_ppenl_qos_queue_ctrl_info queue_ctrl_info;	/* PPE QoS queue control information */
-		struct nss_ppenl_qos_ucast_prio_map_info ucast_prio_map_info; /* PPE QoS unicast priority map information */
-		struct nss_ppenl_qos_mcast_prio_map_info mcast_prio_map_info; /* PPE QoS multicast priority map information */
+		struct ppe_qos_queue_tm_info tm_info;	/* PPE QoS traffic management information */
+		struct ppe_qos_queue_limit_info limit_info;	/* PPE QoS limit and threshold information */
+		struct ppe_qos_interface_queue_ctrl_info queue_ctrl_info;	/* PPE QoS queue control information */
+		struct ppe_qos_ucast_prio_map_info ucast_prio_map_info; /* PPE QoS unicast priority map information */
+		struct ppe_qos_mcast_prio_map_info mcast_prio_map_info; /* PPE QoS multicast priority map information */
 	} msg;
 };
 

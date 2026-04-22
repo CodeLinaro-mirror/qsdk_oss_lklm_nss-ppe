@@ -1311,6 +1311,14 @@ struct ppe_drv_iface *ppe_drv_pon_iface_get(void)
 	return p->pon_iface;
 }
 EXPORT_SYMBOL(ppe_drv_pon_iface_get);
+
+int ppe_drv_pon_port_max_pq_get()
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	return p->ppe_drv_pon_port_max_pq;
+}
+EXPORT_SYMBOL(ppe_drv_pon_port_max_pq_get);
 #endif
 
 /*
@@ -1660,9 +1668,9 @@ bool ppe_drv_port_mcast_priority_class_set(uint32_t port_id, uint8_t priority, u
 		return false;
 	}
 
-	if (queue_class > PPE_DRV_MCAST_QUEUE_CLASS_MAX) {
+	if (queue_class > (PPE_DRV_MCAST_QUEUE_CLASS_MAX - 1)) {
 		ppe_drv_warn("%p: Invalid queue class: %u (must be 0-%u)\n",
-			     p, queue_class, PPE_DRV_MCAST_QUEUE_CLASS_MAX);
+			     p, queue_class, PPE_DRV_MCAST_QUEUE_CLASS_MAX - 1);
 		return false;
 	}
 
