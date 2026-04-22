@@ -135,7 +135,7 @@ ppe_mcast_ret_t ppe_mcast_delete_entry(struct ppe_mcast_entry_info *info)
 	int port_id;
 
 	/*
-	 * Check if multicast group does not exist exist
+	 * Check if multicast group does not exist
 	 */
 	spin_lock_bh(&g_mcast->lock);
 	mc_grp = ppe_mcast_get_group(&info->gip, info->is_v4);

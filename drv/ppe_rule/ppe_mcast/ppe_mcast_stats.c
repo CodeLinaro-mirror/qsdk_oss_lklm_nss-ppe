@@ -13,9 +13,9 @@
  *	PPE qos statistics
  */
 static const char *ppe_mcast_stats_str[] = {
-	"mcast_create_entry_fail",		/* Multicast create entry fail */
+	"mcast_create_entry_fail",	/* Multicast create entry fail */
 	"mcast_create_entry_success",	/* Multicast create entry success */
-	"mcast_delete_entry_fail",		/* Multicast delete entry fail */
+	"mcast_delete_entry_fail",	/* Multicast delete entry fail */
 	"mcast_delete_entry_success",	/* Multicast create entry success */
 };
 
@@ -26,29 +26,15 @@ static const char *ppe_mcast_stats_str[] = {
 static int ppe_mcast_stats_show(struct seq_file *m, void __attribute__((unused))*ptr)
 {
 	struct ppe_mcast *g_mcast = &gbl_ppe_mcast;
-	uint64_t *stats, *stats_shadow;
-	uint32_t stats_size;
 	int i;
 
-	stats_size = sizeof(g_mcast->stats);
+	atomic64_t *stats = (atomic64_t *)&g_mcast->stats;
 
-	stats = kzalloc(stats_size, GFP_KERNEL);
-	if (!stats) {
-		ppe_mcast_warn("Error in allocating gen stats\n");
-		return -ENOMEM;
+	seq_puts(m, "\nPPE Multicast stats:\n\n");
+	for (i = 0; i < sizeof(struct ppe_mcast_stats) / sizeof(uint64_t); i++, stats++) {
+		seq_printf(m, "\t\t [%s]:  %llu\n", ppe_mcast_stats_str[i], atomic64_read(stats));
 	}
 
-	spin_lock_bh(&g_mcast->lock);
-	memcpy(stats, &g_mcast->stats, sizeof(struct ppe_mcast_stats));
-	spin_unlock_bh(&g_mcast->lock);
-
-	seq_puts(m, "\nPPE stats:\n\n");
-	stats_shadow = stats;
-	for (i = 0; i < sizeof(struct ppe_mcast_stats) / sizeof(uint64_t); i++) {
-		seq_printf(m, "\t\t [%s]:  %llu\n", ppe_mcast_stats_str[i], stats_shadow[i]);
-	}
-
-	kfree(stats);
 	return 0;
 }
 
