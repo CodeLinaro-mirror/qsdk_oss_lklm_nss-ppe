@@ -1316,7 +1316,7 @@ int ppe_drv_pon_port_max_pq_get()
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 
-	return p->ppe_drv_pon_port_max_pq;
+	return p->ppe_drv_pon_port_max_pq ? p->ppe_drv_pon_port_max_pq : pon_max_pq;
 }
 EXPORT_SYMBOL(ppe_drv_pon_port_max_pq_get);
 #endif

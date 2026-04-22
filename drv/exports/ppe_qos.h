@@ -54,7 +54,7 @@ typedef enum ppe_qos_queue_ctrl_mode {
  * TODO: Extend the support for virtual ports
  */
 typedef enum ppe_qos_interface_type {
-	PPE_QOS_INTERFACE_TYPE_PHYSICAL = 0,	/**< Physical interface. */
+	PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP = 0,	/**< Physical or VP interface. */
 	PPE_QOS_INTERFACE_TYPE_TCONT,	/**< Tcont interface. */
 } ppe_qos_interface_type_t;
 

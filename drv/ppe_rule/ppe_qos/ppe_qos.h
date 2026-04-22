@@ -114,6 +114,7 @@ struct ppe_qos_interface_queue {
  *	PPE QoS port resource structure
  */
 struct ppe_qos_interface_res {
+	struct list_head list;	/* List of resources */
 	uint32_t id;		/* Interface/T-cont ID. */
 	uint32_t num_queues; 	/* Number of unicast queues. */
 	uint32_t num_mcast_queues;	/* Number of multicast queues. */
@@ -150,7 +151,7 @@ struct ppe_qos_base {
 	struct dentry *dentry;		/* debugfs entry pointer */
 	struct ppe_qos_stats stats;			/* QoS statistics */
 	struct list_head shaper_list;	/* Shaper profiles list. */
-	struct ppe_qos_interface_res port_res[PPE_DRV_PHYSICAL_MAX];		/* Port structure for QoS resources. */
+	struct list_head port_list;	/* List of ports for QoS resources. */
 	struct ppe_qos_interface_res tcont[PPE_DRV_QOS_TCONT_MAX];		/* Tcont structure for QoS resources. */
 	uint32_t pq_to_tcont_map[PPE_DRV_QOS_TCONT_L0_RES_MAX];	/* List to keep track of PQ to Tcont mapping. */
 	bool l0drr_in_use[PPE_DRV_QOS_TCONT_L0_RES_MAX];	/* List to keep track of used L0 DRR. */
@@ -161,5 +162,6 @@ struct ppe_qos_base {
 
 extern struct ppe_qos_base gbl_ppe_qos;
 
+struct ppe_qos_interface_res *ppe_qos_res_get(uint32_t id, ppe_qos_interface_type_t type);
 void ppe_qos_deinit(void);
 void ppe_qos_init(struct dentry *dentry);

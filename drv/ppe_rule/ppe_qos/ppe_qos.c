@@ -54,18 +54,63 @@ static int ppe_qos_get_interface_id(struct ppe_qos_interface *data)
 }
 
 /*
+ * ppe_qos_res_alloc()
+ *	Allocate the QoS resource.
+ */
+static struct ppe_qos_interface_res *ppe_qos_res_alloc(uint32_t id)
+{
+	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
+	struct ppe_qos_interface_res *res = NULL;
+	int i;
+
+	res = kzalloc(sizeof(struct ppe_qos_interface_res), GFP_ATOMIC);
+	if (!res) {
+		ppe_qos_warn("Fetching of port scheduler resource information failed for UNI:%u", id);
+		return NULL;
+	}
+
+	ppe_qos_trace("Resource allocation for UNI %u", id);
+	res->id = id;
+	res->type = PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP;
+	res->valid = false;
+	INIT_LIST_HEAD(&res->q_list);
+	INIT_LIST_HEAD(&res->mq_list);
+
+	if (ppe_drv_qos_port_res_get(id, &res->port) != PPE_DRV_RET_SUCCESS) {
+		kfree(res);
+		ppe_qos_warn("Fetching of port scheduler resource information failed for UNI:%u", id);
+		return NULL;
+	}
+
+	res->l0sp = res->port.base[PPE_DRV_QOS_RES_TYPE_L0_SP];
+
+#ifdef NSS_PPE_PON_SUPPORT
+	if (id != g_qos->pon_port) {
+#endif
+		for (i = 0; i < PPE_DRV_QOS_PRIORITY_MAX; i++) {
+			res->l0drr[i].offset = i;
+		}
+#ifdef NSS_PPE_PON_SUPPORT
+	}
+#endif
+
+	list_add(&res->list, &g_qos->port_list);
+
+	ppe_qos_warn("%px resource allocated for port:%d", res, id);
+	return res;
+}
+
+/*
  * ppe_qos_disable_all_queue()
  *	Disables all queues corresponding to a port.
  */
-static void ppe_qos_disable_all_queue(uint32_t id, ppe_qos_interface_type_t type)
+static void ppe_qos_disable_all_queue(struct ppe_qos_interface_res *tm_if)
 {
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 	uint32_t qid, offset;
-	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_drv_qos_port *port = NULL;
 	struct ppe_qos_interface_queue *queue = NULL;
 
-	tm_if = type ? &g_qos->tcont[id] : &g_qos->port_res[id];
 	port = &tm_if->port;
 	qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
 
@@ -73,14 +118,14 @@ static void ppe_qos_disable_all_queue(uint32_t id, ppe_qos_interface_type_t type
 	 * Disable queue enqueue, dequeue and flush the queue.
 	 * For UNI, disable all queues, for T-cont disable only assigned queues.
 	 */
-	if (type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+	if (tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		for (offset = 0; offset < port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE]; offset++) {
-			ppe_drv_qos_queue_disable(id, qid + offset);
+			ppe_drv_qos_queue_disable(tm_if->id, qid + offset);
 		}
 
 		qid = port->base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
 		for (offset = 0; offset < port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE]; offset++) {
-			ppe_drv_qos_queue_disable(id, qid + offset);
+			ppe_drv_qos_queue_disable(tm_if->id, qid + offset);
 		}
 	} else {
 		if (!list_empty(&tm_if->q_list)) {
@@ -94,21 +139,18 @@ static void ppe_qos_disable_all_queue(uint32_t id, ppe_qos_interface_type_t type
 		}
 	}
 
-	ppe_qos_info("Interface type:%d id:%d all queues disabled", type, id);
+	ppe_qos_info("Interface type:%d id:%d all queues disabled", tm_if->type, tm_if->id);
 }
 
 /*
  * ppe_qos_enable_all_queue()
  *	Enables all level L0 queues corresponding to a port.
  */
-static void ppe_qos_enable_all_queue(uint32_t id, ppe_qos_interface_type_t type)
+static void ppe_qos_enable_all_queue(struct ppe_qos_interface_res *tm_if)
 {
-	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 	uint32_t qid, offset;
-	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_drv_qos_port *port = NULL;
 
-	tm_if = type ? &g_qos->tcont[id] : &g_qos->port_res[id];
 	port = &tm_if->port;
 	qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
 
@@ -124,22 +166,19 @@ static void ppe_qos_enable_all_queue(uint32_t id, ppe_qos_interface_type_t type)
 		ppe_drv_qos_queue_enable(qid + offset);
 	}
 
-	ppe_qos_info("Interface type:%d id:%d all queues enabled", type, id);
+	ppe_qos_info("Interface type:%d id:%d all queues enabled", tm_if->type, tm_if->id);
 }
 
 /*
  * ppe_qos_enable_assigned_queues()
  *	Enables all assigned level L0 queues corresponding to a port.
  */
-static void ppe_qos_enable_assigned_queues(uint32_t id, ppe_qos_interface_type_t type)
+static void ppe_qos_enable_assigned_queues(struct ppe_qos_interface_res *tm_if)
 {
-	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 	uint32_t qid;
-	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_drv_qos_port *port = NULL;
 	struct ppe_qos_interface_queue *queue = NULL;
 
-	tm_if = type ? &g_qos->tcont[id] : &g_qos->port_res[id];
 	port = &tm_if->port;
 	qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
 
@@ -159,7 +198,7 @@ static void ppe_qos_enable_assigned_queues(uint32_t id, ppe_qos_interface_type_t
 	/*
 	 * Enable queue enqueue and dequeue for multicast queues.
 	 */
-	if (type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+	if (tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		if (!list_empty(&tm_if->mq_list)) {
 			qid = port->base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
 			list_for_each_entry(queue, &tm_if->mq_list, list) {
@@ -172,7 +211,7 @@ static void ppe_qos_enable_assigned_queues(uint32_t id, ppe_qos_interface_type_t
 		}
 	}
 
-	ppe_qos_info("Interface type:%d id:%d assigned queues enabled", type, id);
+	ppe_qos_info("Interface type:%d id:%d assigned queues enabled", tm_if->type, tm_if->id);
 }
 
 /*
@@ -235,11 +274,12 @@ static ppe_qos_ret_t ppe_qos_delete_shaper_profile(char *name)
 	/*
 	 * Traverse the UNI ports and reset the shaper if configured.
 	 */
-	 for (i = 1; i < g_qos->pon_port; i++) {
-		tm_if = &g_qos->port_res[i];
-		if (ppe_qos_delete_L0_shaper(tm_if, name)) {
-			ppe_qos_warn("%px queue shaper reset failed for shaper name:%s", tm_if, name);
-			return PPE_QOS_FAIL;
+	if (!list_empty(&g_qos->port_list)) {
+		list_for_each_entry(tm_if, &g_qos->port_list, list) {
+			if (ppe_qos_delete_L0_shaper(tm_if, name)) {
+				ppe_qos_warn("%px queue shaper reset failed for shaper name:%s", tm_if, name);
+				return PPE_QOS_FAIL;
+			}
 		}
 	}
 
@@ -268,14 +308,14 @@ static ppe_qos_ret_t ppe_qos_delete_shaper_profile(char *name)
  * ppe_qos_reset_l0drr()
  *	Reset L0 DRR
  */
-static void ppe_qos_reset_l0drr(uint32_t id, ppe_qos_interface_type_t type)
+static void ppe_qos_reset_l0drr(struct ppe_qos_interface_res *tm_if)
 {
+#ifdef NSS_PPE_PON_SUPPORT
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
-	struct ppe_qos_interface_res *tm_if = NULL;
+#endif
 	struct ppe_drv_qos_port *port = NULL;
 	uint32_t i;
 
-	tm_if = type ? &g_qos->tcont[id] : &g_qos->port_res[id];
 	port = &tm_if->port;
 
 	for (i = 0; i < PPE_DRV_QOS_PRIORITY_MAX; i++) {
@@ -283,7 +323,7 @@ static void ppe_qos_reset_l0drr(uint32_t id, ppe_qos_interface_type_t type)
 			tm_if->l0drr[i].ref_cnt = 0;
 
 #ifdef NSS_PPE_PON_SUPPORT
-			if (type == PPE_QOS_INTERFACE_TYPE_TCONT) {
+			if (tm_if->type == PPE_QOS_INTERFACE_TYPE_TCONT) {
 				g_qos->l0drr_in_use[tm_if->l0drr[i].offset] = false;
 				tm_if->l0drr[i].offset = 0;
 			}
@@ -300,12 +340,14 @@ static void ppe_qos_reset_l0drr(uint32_t id, ppe_qos_interface_type_t type)
 static void ppe_qos_res_tconts_default_set(void)
 {
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
+	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_drv_qos_res res = {0};
 	struct ppe_drv_qos_port *port = NULL;
 	struct ppe_qos_interface_queue *queue = NULL;
 	int i;
 
-	ppe_qos_disable_all_queue(g_qos->pon_port, PPE_QOS_INTERFACE_TYPE_PHYSICAL);
+	tm_if = ppe_qos_res_get(g_qos->pon_port, PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP);
+	ppe_qos_disable_all_queue(tm_if);
 
 	for (i = 0; i < PPE_DRV_QOS_TCONT_MAX; i++) {
 		ppe_qos_info("Resource allocation for Tcont %u", i);
@@ -314,8 +356,8 @@ static void ppe_qos_res_tconts_default_set(void)
 		g_qos->tcont[i].valid = false;
 		INIT_LIST_HEAD(&g_qos->tcont[i].q_list);
 
-		g_qos->tcont[i].port = g_qos->port_res[g_qos->pon_port].port;
-		g_qos->tcont[i].l0sp = g_qos->port_res[g_qos->pon_port].port.base[PPE_DRV_QOS_RES_TYPE_L0_SP] + i;
+		g_qos->tcont[i].port = tm_if->port;
+		g_qos->tcont[i].l0sp = tm_if->port.base[PPE_DRV_QOS_RES_TYPE_L0_SP] + i;
 
 		/*
 		 * Set Level 1 configuration
@@ -326,6 +368,7 @@ static void ppe_qos_res_tconts_default_set(void)
 		res.scheduler.l1e_drrid = PPE_QOS_TCONT_L1_RES_START + i;
 
 		if (ppe_drv_qos_l1_scheduler_set(&res, g_qos->pon_port) != PPE_DRV_RET_SUCCESS) {
+			ppe_qos_enable_all_queue(tm_if);
 			printk("%px level1 queue scheduler configuration failed tcont:%d", &res, i);
 			return;
 		}
@@ -347,7 +390,7 @@ static void ppe_qos_res_tconts_default_set(void)
 	port = &g_qos->tcont[PPE_QOS_TCONT_DEFAULT_RES].port;
 	queue = kzalloc(sizeof(struct ppe_qos_interface_queue), GFP_ATOMIC);
 	if (!queue) {
-		ppe_qos_enable_all_queue(g_qos->pon_port, PPE_QOS_INTERFACE_TYPE_PHYSICAL);
+		ppe_qos_enable_all_queue(tm_if);
 		ppe_qos_warn("Free queue list allocation failed for default tcont");
 		return;
 	}
@@ -368,20 +411,20 @@ static void ppe_qos_res_tconts_default_set(void)
 	res.l0spid = port->base[PPE_DRV_QOS_RES_TYPE_L0_SP];
 
 	if (ppe_drv_qos_l0_scheduler_set(&res, g_qos->pon_port) != PPE_DRV_RET_SUCCESS) {
-		ppe_qos_enable_all_queue(g_qos->pon_port, PPE_QOS_INTERFACE_TYPE_PHYSICAL);
+		ppe_qos_enable_all_queue(tm_if);
 		kfree(queue);
 		ppe_qos_warn("level0 queue scheduler configuration failed for default tcont");
 		return;
 	}
 
 	if (ppe_drv_qos_tcont_set(&res, PPE_QOS_TCONT_DEFAULT_RES, true) != PPE_DRV_RET_SUCCESS) {
-		ppe_qos_enable_all_queue(g_qos->pon_port, PPE_QOS_INTERFACE_TYPE_PHYSICAL);
+		ppe_qos_enable_all_queue(tm_if);
 		kfree(queue);
 		ppe_qos_warn("tcont configuration failed for default tcont");
 		return;
 	}
 
-	ppe_qos_enable_assigned_queues(PPE_QOS_TCONT_DEFAULT_RES, PPE_QOS_INTERFACE_TYPE_TCONT);
+	ppe_qos_enable_assigned_queues(&g_qos->tcont[PPE_QOS_TCONT_DEFAULT_RES]);
 
 	g_qos->tcont[PPE_QOS_TCONT_DEFAULT_RES].num_queues = 1;
 	g_qos->tcont[PPE_QOS_TCONT_DEFAULT_RES].l0drr[0].offset = 0;
@@ -438,25 +481,23 @@ static const char *ppe_qos_get_queue_type_str(ppe_qos_queue_type_t queue_type)
  * ppe_qos_delete_interface_queues()
  *	Deletes port queues and restores default port configuration
  */
-static ppe_qos_ret_t ppe_qos_delete_interface_queues(uint32_t id, ppe_qos_interface_type_t type)
+static ppe_qos_ret_t ppe_qos_delete_interface_queues(struct ppe_qos_interface_res *tm_if)
 {
-	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
-	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_drv_qos_port *port = NULL;
 	struct ppe_qos_interface_queue *queue, *tmp;
 	uint32_t qid;
 #ifdef NSS_PPE_PON_SUPPORT
+	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 	struct ppe_drv_qos_res res = {0};
 	uint32_t i;
 #endif
 
-	tm_if = type ? &g_qos->tcont[id] : &g_qos->port_res[id];
 	port = &tm_if->port;
 	qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
 
-	if ((!tm_if->valid) || ((type == PPE_QOS_INTERFACE_TYPE_TCONT) && (list_empty(&tm_if->q_list)))
-		|| ((type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) && (((list_empty(&tm_if->q_list)) && (list_empty(&tm_if->mq_list)))))) {
-		ppe_qos_warn("No queue assigned to the interface:%d", id);
+	if ((!tm_if->valid) || ((tm_if->type == PPE_QOS_INTERFACE_TYPE_TCONT) && (list_empty(&tm_if->q_list)))
+		|| ((tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) && (((list_empty(&tm_if->q_list)) && (list_empty(&tm_if->mq_list)))))) {
+		ppe_qos_warn("No queue assigned to the interface:%d", tm_if->id);
 		return PPE_QOS_FAIL;
 	}
 
@@ -464,19 +505,19 @@ static ppe_qos_ret_t ppe_qos_delete_interface_queues(uint32_t id, ppe_qos_interf
 	 * Remove shaper, Reset and remove the allocated queues
 	 * Set port's default config
 	 */
-	ppe_qos_disable_all_queue(id, type);
+	ppe_qos_disable_all_queue(tm_if);
 	list_for_each_entry_safe(queue, tmp, &tm_if->q_list, list) {
 #ifdef NSS_PPE_PON_SUPPORT
-		if (type == PPE_QOS_INTERFACE_TYPE_TCONT) {
+		if (tm_if->type == PPE_QOS_INTERFACE_TYPE_TCONT) {
 
 			/*
 			 * Delete T-cont to queue mapping
 			 */
 			if (queue->valid) {
 				res.q.ucast_qid = qid + queue->offset;
-				if (ppe_drv_qos_tcont_set(&res, id, false) != PPE_DRV_RET_SUCCESS) {
-					ppe_qos_enable_assigned_queues(id, type);
-					ppe_qos_warn("queue unmapping failed for interface:%d", id);
+				if (ppe_drv_qos_tcont_set(&res, tm_if->id, false) != PPE_DRV_RET_SUCCESS) {
+					ppe_qos_enable_assigned_queues(tm_if);
+					ppe_qos_warn("queue unmapping failed for interface:%d", tm_if->id);
 					return PPE_QOS_FAIL;
 				}
 				g_qos->pq_to_tcont_map[queue->offset] = PPE_QOS_TCONT_INVALID;
@@ -494,7 +535,7 @@ static ppe_qos_ret_t ppe_qos_delete_interface_queues(uint32_t id, ppe_qos_interf
 	/*
 	 * Delete mcast queues for UNI ports
 	 */
-	if (type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+	if (tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		list_for_each_entry_safe(queue, tmp, &tm_if->mq_list, list) {
 			queue->valid = false;
 			list_del(&queue->list);
@@ -506,20 +547,20 @@ static ppe_qos_ret_t ppe_qos_delete_interface_queues(uint32_t id, ppe_qos_interf
 	/*
 	 * Reset L0 DRRs used for this port/Tcont
 	 */
-	ppe_qos_reset_l0drr(id, type);
+	ppe_qos_reset_l0drr(tm_if);
 	tm_if->valid = false;
 
 	/*
 	 * Set port default configuration for UNI ports
 	 */
-	if (type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
-		if (ppe_drv_qos_default_conf_set(id) != PPE_DRV_RET_SUCCESS) {
-			ppe_qos_warn("port %u default config set failed", id);
-			ppe_qos_enable_assigned_queues(id, type);
+	if (tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
+		if (ppe_drv_qos_default_conf_set(tm_if->id) != PPE_DRV_RET_SUCCESS) {
+			ppe_qos_warn("port %u default config set failed", tm_if->id);
+			ppe_qos_enable_assigned_queues(tm_if);
 			return PPE_QOS_FAIL;
 		}
 
-		ppe_qos_enable_all_queue(id, type);
+		ppe_qos_enable_all_queue(tm_if);
 		return PPE_QOS_SUCCESS;
 	}
 
@@ -534,7 +575,7 @@ static ppe_qos_ret_t ppe_qos_delete_interface_queues(uint32_t id, ppe_qos_interf
 	}
 
 	if (ppe_drv_qos_default_conf_set(g_qos->pon_port) != PPE_DRV_RET_SUCCESS) {
-		ppe_qos_warn("port %u default config set failed", id);
+		ppe_qos_warn("port %u default config set failed", tm_if->id);
 		return PPE_QOS_FAIL;
 	}
 
@@ -571,21 +612,17 @@ static uint32_t ppe_qos_get_tcont_l0drr_offset(void)
  * ppe_qos_delete_interface_shaper()
  *	Delete shaper for a T-cont/UNI.
  */
-static ppe_qos_ret_t ppe_qos_delete_interface_shaper(uint32_t id, ppe_qos_interface_type_t type)
+static ppe_qos_ret_t ppe_qos_delete_interface_shaper(struct ppe_qos_interface_res *tm_if)
 {
-	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
-	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_drv_qos_res res = {0};
-
-	tm_if = type ? &g_qos->tcont[id] : &g_qos->port_res[id];
-	res.l0spid = tm_if->l0sp;
 
 	/*
 	 * Check if shaper is configured, reset shaper
 	 */
+	res.l0spid = tm_if->l0sp;
 	if (strlen(tm_if->shaper_name)) {
 		if (ppe_drv_qos_flow_shaper_reset(&res) != PPE_DRV_RET_SUCCESS) {
-			ppe_qos_warn("interface shaper reset failed, interface id %d", id);
+			ppe_qos_warn("interface shaper reset failed, interface id %d", tm_if->id);
 				return PPE_QOS_FAIL;
 		}
 		memset(tm_if->shaper_name, 0, PPE_QOS_MAX_NAME_LENGTH);
@@ -602,7 +639,10 @@ static void ppe_qos_res_deinit(void)
 {
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 	struct ppe_qos_shaper_profile *profile = NULL;
+	struct ppe_qos_interface_res *res, *tmp;
+#ifdef NSS_PPE_PON_SUPPORT
 	uint32_t i;
+#endif
 
 	/*
 	 * Remove all shapers, free allocated queues memory,
@@ -615,16 +655,21 @@ static void ppe_qos_res_deinit(void)
 		}
 	}
 
-	for (i = 0; i < PPE_DRV_PHYSICAL_MAX - 1; i++) {
-		if (g_qos->port_res[i].valid) {
-			ppe_qos_delete_interface_queues(g_qos->port_res[i].id, g_qos->port_res[i].type);
+	if (!list_empty(&g_qos->port_list)) {
+		list_for_each_entry_safe(res, tmp, &g_qos->port_list, list) {
+			if (res->valid) {
+				ppe_qos_delete_interface_queues(res);
+			}
+
+			list_del(&res->list);
+			kfree(res);
 		}
 	}
 
 #ifdef NSS_PPE_PON_SUPPORT
 	for (i = 0; i < PPE_DRV_QOS_TCONT_MAX; i++) {
 		if (g_qos->tcont[i].valid) {
-			ppe_qos_delete_interface_queues(g_qos->tcont[i].id, g_qos->tcont[i].type);
+			ppe_qos_delete_interface_queues(&g_qos->tcont[i]);
 		}
 	}
 
@@ -645,44 +690,22 @@ static void ppe_qos_res_deinit(void)
 static void ppe_qos_res_init(void)
 {
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
-	uint32_t i, j;
+#ifdef NSS_PPE_PON_SUPPORT
+	struct ppe_qos_interface_res *res = NULL;
+#endif
 
-	/*
-	 * Assign resources for UNI ports.
-	 */
 	spin_lock_bh(&g_qos->lock);
+	INIT_LIST_HEAD(&g_qos->port_list);
 	g_qos->pon_port = ppe_drv_qos_pon_port_get();
-	for (i = 1; i <= g_qos->pon_port; i++) {
-		ppe_qos_info("Resource allocation for UNI %u", i);
-		g_qos->port_res[i].id = i;
-		g_qos->port_res[i].type = PPE_QOS_INTERFACE_TYPE_PHYSICAL;
-		g_qos->port_res[i].valid = false;
-		INIT_LIST_HEAD(&g_qos->port_res[i].q_list);
-		INIT_LIST_HEAD(&g_qos->port_res[i].mq_list);
-
-		if (ppe_drv_qos_port_res_get(i, &g_qos->port_res[i].port) != PPE_DRV_RET_SUCCESS) {
-			spin_unlock_bh(&g_qos->lock);
-			ppe_qos_warn("Fetching of port scheduler resource information failed for UNI:%u", i);
-			return;
-		}
-
-		g_qos->port_res[i].l0sp = g_qos->port_res[i].port.base[PPE_DRV_QOS_RES_TYPE_L0_SP];
-
-		if (i == g_qos->pon_port)
-			break;
-
-		for (j = 0; j < PPE_DRV_QOS_PRIORITY_MAX; j++) {
-			g_qos->port_res[i].l0drr[j].offset = j;
-		}
-	}
 
 #ifdef NSS_PPE_PON_SUPPORT
-	/*
-	 * Assign resources for t-conts ports.
-	 * The base id for all T-conts resources is set to Upstream port's resources base.
-	 */
-	g_qos->port_res[g_qos->pon_port].type = PPE_QOS_INTERFACE_TYPE_TCONT;
-	g_qos->port_res[g_qos->pon_port].valid = true;
+	if (!g_qos->pon_port) {
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("No PON port, tconts not supported");
+		return;
+	}
+
+	res = ppe_qos_res_alloc(g_qos->pon_port);
 
 	/*
 	 * Set default tconts
@@ -694,6 +717,38 @@ static void ppe_qos_res_init(void)
 }
 
 /*
+ * ppe_qos_res_get()
+ *	Get the QoS resource.
+ */
+struct ppe_qos_interface_res *ppe_qos_res_get(uint32_t id, ppe_qos_interface_type_t type)
+{
+	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
+	struct ppe_qos_interface_res *res = NULL;
+
+#ifdef NSS_PPE_PON_SUPPORT
+	if (type == PPE_QOS_INTERFACE_TYPE_TCONT) {
+		return &g_qos->tcont[id];
+	}
+#endif
+
+	/*
+	 * Get the physical or VP port resource
+	 */
+	if (type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
+		if (!list_empty(&g_qos->port_list)) {
+			list_for_each_entry(res, &g_qos->port_list, list) {
+				if (res->id == id) {
+					ppe_qos_trace("resource found for id:%d, type:%d", id, type);
+					return res;
+				}
+			}
+		}
+	}
+
+	return NULL;
+}
+
+/*
  * ppe_qos_delete_shaper()
  *	Delete QoS shaper profile.
  */
@@ -701,18 +756,21 @@ ppe_qos_ret_t ppe_qos_delete_shaper(struct ppe_qos_shaper_info *info)
 {
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_delete_shaper_fail);
+		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("invalid shaper info");
 		return PPE_QOS_DELETE_SHAPER_FAIL;
 	}
 
 	if (!strlen(info->name)) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_delete_shaper_fail);
+		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("shaper profile name is empty");
 		return PPE_QOS_DELETE_SHAPER_FAIL;
 	}
 
-	spin_lock_bh(&g_qos->lock);
 	 if (ppe_qos_delete_shaper_profile(info->name)) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_delete_shaper_fail);
 		spin_unlock_bh(&g_qos->lock);
@@ -737,18 +795,21 @@ ppe_qos_ret_t ppe_qos_create_shaper(struct ppe_qos_shaper_info *info)
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 	struct ppe_qos_shaper_profile *profile = NULL;
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_create_shaper_fail);
+		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("invalid shaper info");
 		return PPE_QOS_CREATE_SHAPER_FAIL;
 	}
 
 	if (!strlen(info->name)) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_create_shaper_fail);
+		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("shaper profile name is empty");
 		return PPE_QOS_CREATE_SHAPER_FAIL;
 	}
 
-	spin_lock_bh(&g_qos->lock);
 	profile = ppe_qos_get_shaper_profile(info->name);
 	if (profile) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_create_shaper_fail);
@@ -816,7 +877,7 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 		return PPE_QOS_SET_QUEUE_LIMIT_FAIL;
 	}
 
-	tm_if = info->if_data.type ? &g_qos->tcont[id] : &g_qos->port_res[id];
+	tm_if = ppe_qos_res_get(id, info->if_data.type);
 	if (!tm_if) {
 		ppe_qos_stats_inc(failed_stats);
 		spin_unlock_bh(&g_qos->lock);
@@ -845,7 +906,7 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	 * Validate multicast constraints
 	 */
 	if (queue_type == PPE_QOS_QUEUE_TYPE_MCAST) {
-		if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+		if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 			ppe_qos_stats_inc(failed_stats);
 			spin_unlock_bh(&g_qos->lock);
 			ppe_qos_warn("%px multicast queues not supported on T-cont", info);
@@ -856,7 +917,7 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	/*
 	 * Validate params for UNI
 	 */
-	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		if (queue_type == PPE_QOS_QUEUE_TYPE_UCAST) {
 			if (info->queue_id >= tm_if->num_queues) {
 				ppe_qos_stats_inc(failed_stats);
@@ -994,12 +1055,14 @@ ppe_qos_ret_t ppe_qos_set_interface_queue_ctrl(struct ppe_qos_interface_queue_ct
 	ppe_drv_ret_t (*ctrl_func)(uint32_t, bool);
 	bool enable;
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_fail);
+		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("invalid queue info");
 		return PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL;
 	}
 
-	spin_lock_bh(&g_qos->lock);
 	id = ppe_qos_get_interface_id(&info->if_data);
 	if (id < 0) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_fail);
@@ -1008,7 +1071,7 @@ ppe_qos_ret_t ppe_qos_set_interface_queue_ctrl(struct ppe_qos_interface_queue_ct
 		return PPE_QOS_SET_INTERFACE_QUEUE_CTRL_FAIL;
 	}
 
-	tm_if = info->if_data.type ? &g_qos->tcont[id] : &g_qos->port_res[id];
+	tm_if = ppe_qos_res_get(id, info->if_data.type);
 	if (!tm_if) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_queue_ctrl_fail);
 		spin_unlock_bh(&g_qos->lock);
@@ -1059,7 +1122,7 @@ ppe_qos_ret_t ppe_qos_set_interface_queue_ctrl(struct ppe_qos_interface_queue_ct
 	 * For physical interfaces, control all queues.
 	 * For TCONT interfaces, control only assigned queues.
 	 */
-	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		uint32_t offset;
 		for (offset = 0; offset < port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] - 1; offset++) {
 			if (ctrl_func(qid + offset, enable) != PPE_DRV_RET_SUCCESS) {
@@ -1136,7 +1199,7 @@ ppe_qos_ret_t ppe_qos_set_queue_tm(struct ppe_qos_queue_tm_info *info)
 		return PPE_QOS_SET_QUEUE_TM_FAIL;
 	}
 
-	tm_if = info->if_data.type ? &g_qos->tcont[id] : &g_qos->port_res[id];
+	tm_if = ppe_qos_res_get(id, info->if_data.type);
 	if (!tm_if) {
 		ppe_qos_stats_inc(failed_stats);
 		spin_unlock_bh(&g_qos->lock);
@@ -1165,7 +1228,7 @@ ppe_qos_ret_t ppe_qos_set_queue_tm(struct ppe_qos_queue_tm_info *info)
 	 * Validate multicast constraints
 	 */
 	if (queue_type == PPE_QOS_QUEUE_TYPE_MCAST) {
-		if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+		if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 			ppe_qos_stats_inc(failed_stats);
 			spin_unlock_bh(&g_qos->lock);
 			ppe_qos_warn("%px multicast queues not supported on T-cont", info);
@@ -1176,7 +1239,7 @@ ppe_qos_ret_t ppe_qos_set_queue_tm(struct ppe_qos_queue_tm_info *info)
 	/*
 	 * Validate params for UNI
 	 */
-	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		if (queue_type == PPE_QOS_QUEUE_TYPE_UCAST) {
 			if (info->queue_id >= tm_if->num_queues) {
 				ppe_qos_stats_inc(failed_stats);
@@ -1304,7 +1367,7 @@ ppe_qos_ret_t ppe_qos_set_queue_tm(struct ppe_qos_queue_tm_info *info)
 	 * Assuming 8 L0 DRRS are connected each to a single priority line 0~7,
 	 * 0 - lowest, 7 - highest.
 	 */
-	ppe_qos_disable_all_queue(id, info->if_data.type);
+	ppe_qos_disable_all_queue(tm_if);
 
 	res.q.ucast_qid = queue_base + queue->offset;
 	res.scheduler.l0c_drrid = port->base[PPE_DRV_QOS_RES_TYPE_L0_CDRR] + tm_if->l0drr[info->priority].offset;
@@ -1315,14 +1378,14 @@ ppe_qos_ret_t ppe_qos_set_queue_tm(struct ppe_qos_queue_tm_info *info)
 	res.l0spid = tm_if->l0sp;
 
 	if (ppe_drv_qos_l0_scheduler_set(&res, port_id) != PPE_DRV_RET_SUCCESS) {
-		ppe_qos_enable_assigned_queues(id, info->if_data.type);
+		ppe_qos_enable_assigned_queues(tm_if);
 		ppe_qos_stats_inc(failed_stats);
 		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("%px level0 queue scheduler configuration failed", info);
 		return PPE_QOS_SET_QUEUE_TM_FAIL;
 	}
 
-	ppe_qos_enable_assigned_queues(id, info->if_data.type);
+	ppe_qos_enable_assigned_queues(tm_if);
 
 	if (queue_type == PPE_QOS_QUEUE_TYPE_MCAST) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_mcast_queue_tm_set_success);
@@ -1348,12 +1411,14 @@ ppe_qos_ret_t ppe_qos_get_tcont_stats(struct ppe_qos_tcont_stats_info *info)
 	struct ppe_qos_interface_res *tm_if = NULL;
 	struct ppe_drv_qos_tcont_stat stats = {0};
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_tcont_stats_get_fail);
+		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("invalid T-cont info");
 		return PPE_QOS_TCONT_STATS_GET_FAIL;
 	}
 
-	spin_lock_bh(&g_qos->lock);
 	tm_if = &g_qos->tcont[info->tcont_id];
 	if (!tm_if) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_tcont_stats_get_fail);
@@ -1399,12 +1464,14 @@ ppe_qos_ret_t ppe_qos_reset_tcont_credit(struct ppe_qos_tcont_stats_info *info)
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 	struct ppe_qos_interface_res *tm_if = NULL;
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_reset_tcont_credit_fail);
+		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("invalid T-cont info");
 		return PPE_QOS_RESET_TCONT_CREDIT_FAIL;
 	}
 
-	spin_lock_bh(&g_qos->lock);
 	tm_if = &g_qos->tcont[info->tcont_id];
 	if (!tm_if) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_reset_tcont_credit_fail);
@@ -1453,12 +1520,14 @@ ppe_qos_ret_t ppe_qos_map_pq_to_tcont(struct ppe_qos_pq_to_tcont_info *info)
 	struct ppe_drv_qos_res res = {0};
 	bool found = false;
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_pq_to_tcont_mapping_fail);
+		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("invalid mapping info");
 		return PPE_QOS_MAP_PQ_TO_TCONT_FAIL;
 	}
 
-	spin_lock_bh(&g_qos->lock);
 	queue_id = info->queue_id;
 	tm_if = &g_qos->tcont[id];
 	if (!tm_if) {
@@ -1524,11 +1593,11 @@ ppe_qos_ret_t ppe_qos_map_pq_to_tcont(struct ppe_qos_pq_to_tcont_info *info)
 	/*
 	 * Map T-cont to the queue
 	 */
-	ppe_qos_disable_all_queue(id, PPE_QOS_INTERFACE_TYPE_TCONT);
+	ppe_qos_disable_all_queue(tm_if);
 
 	res.q.ucast_qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] + queue_id;
 	if (ppe_drv_qos_tcont_set(&res, id, true) != PPE_DRV_RET_SUCCESS) {
-		ppe_qos_enable_assigned_queues(id, PPE_QOS_INTERFACE_TYPE_TCONT);
+		ppe_qos_enable_assigned_queues(tm_if);
 		ppe_qos_stats_inc(&g_qos->stats.qos_pq_to_tcont_mapping_fail);
 		spin_unlock_bh(&g_qos->lock);
 		return PPE_QOS_MAP_PQ_TO_TCONT_FAIL;
@@ -1537,7 +1606,7 @@ ppe_qos_ret_t ppe_qos_map_pq_to_tcont(struct ppe_qos_pq_to_tcont_info *info)
 	g_qos->pq_to_tcont_map[queue_id] = id;
 	queue->offset = queue_id;
 	queue->valid = true;
-	ppe_qos_enable_assigned_queues(id, PPE_QOS_INTERFACE_TYPE_TCONT);
+	ppe_qos_enable_assigned_queues(tm_if);
 
 	ppe_qos_stats_inc(&g_qos->stats.qos_pq_to_tcont_mapping_success);
 	spin_unlock_bh(&g_qos->lock);
@@ -1560,12 +1629,14 @@ ppe_qos_ret_t ppe_qos_set_interface_shaper(struct ppe_qos_interface_shaper_info 
 	struct ppe_drv_qos_res res = {0};
 	int id;
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
-		ppe_qos_warn("invalid interface shaper info");
+		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_shaper_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("invalid command info");
 		return PPE_QOS_SET_INTERFACE_SHAPER_FAIL;
 	}
 
-	spin_lock_bh(&g_qos->lock);
 	id = ppe_qos_get_interface_id(&info->if_data);
 	if (id < 0) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_shaper_fail);
@@ -1574,7 +1645,7 @@ ppe_qos_ret_t ppe_qos_set_interface_shaper(struct ppe_qos_interface_shaper_info 
 		return PPE_QOS_SET_INTERFACE_SHAPER_FAIL;
 	}
 
-	tm_if = info->if_data.type ? &g_qos->tcont[id] : &g_qos->port_res[id];
+	tm_if = ppe_qos_res_get(id, info->if_data.type);
 	if (!tm_if) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_shaper_fail);
 		spin_unlock_bh(&g_qos->lock);
@@ -1625,7 +1696,7 @@ ppe_qos_ret_t ppe_qos_set_interface_shaper(struct ppe_qos_interface_shaper_info 
 	/*
 	 * Delete shaper from the interface if shaper name is empty
 	 */
-	if (ppe_qos_delete_interface_shaper(id, info->if_data.type)) {
+	if (ppe_qos_delete_interface_shaper(tm_if)) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_set_interface_shaper_fail);
 		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("%px setting shaper: %s configuration failed for interface", info, info->shaper_name);
@@ -1650,12 +1721,14 @@ ppe_qos_ret_t ppe_qos_flush_interface_queues(struct ppe_qos_interface_queues_inf
 	struct ppe_qos_interface_res *tm_if = NULL;
 	int id;
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
-		ppe_qos_warn("invalid interface queues info");
+		ppe_qos_stats_inc(&g_qos->stats.qos_flush_interface_queues_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("invalid command info");
 		return PPE_QOS_FLUSH_INTERFACE_QUEUES_FAIL;
 	}
 
-	spin_lock_bh(&g_qos->lock);
 	id = ppe_qos_get_interface_id(&info->if_data);
 	if (id < 0) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_flush_interface_queues_fail);
@@ -1664,7 +1737,7 @@ ppe_qos_ret_t ppe_qos_flush_interface_queues(struct ppe_qos_interface_queues_inf
 		return PPE_QOS_FLUSH_INTERFACE_QUEUES_FAIL;
 	}
 
-	tm_if = info->if_data.type ? &g_qos->tcont[id] : &g_qos->port_res[id];
+	tm_if = ppe_qos_res_get(id, info->if_data.type);
 	if (!tm_if) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_flush_interface_queues_fail);
 		spin_unlock_bh(&g_qos->lock);
@@ -1672,18 +1745,23 @@ ppe_qos_ret_t ppe_qos_flush_interface_queues(struct ppe_qos_interface_queues_inf
 		return PPE_QOS_FLUSH_INTERFACE_QUEUES_FAIL;
 	}
 
-	if (ppe_qos_delete_interface_queues(id, info->if_data.type)) {
+	if (ppe_qos_delete_interface_queues(tm_if)) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_flush_interface_queues_fail);
 		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("%px port queues reset failed", info);
 		return PPE_QOS_FLUSH_INTERFACE_QUEUES_FAIL;
 	}
 
-	if (ppe_qos_delete_interface_shaper(id, info->if_data.type)) {
+	if (ppe_qos_delete_interface_shaper(tm_if)) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_flush_interface_queues_fail);
 		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("%px delete interface shaper failed", info);
 		return PPE_QOS_FLUSH_INTERFACE_QUEUES_FAIL;
+	}
+
+	if (tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
+		list_del(&tm_if->list);
+		kfree(tm_if);
 	}
 
 	ppe_qos_stats_inc(&g_qos->stats.qos_flush_interface_queues_success);
@@ -1710,24 +1788,38 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
 	uint32_t i;
 	int id;
 
+	spin_lock_bh(&g_qos->lock);
 	if (!info) {
-		ppe_qos_warn("invalid interface queues info");
+		ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("invalid command info");
+		return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+	}
+
+	if (!info->num_queues) {
+		ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
+		spin_unlock_bh(&g_qos->lock);
+		ppe_qos_warn("invalid interface queues");
 		return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
 	}
 
 	/* Get queue type from info structure, default to unicast if not specified */
 	queue_type = info->queue_type;
 
-	spin_lock_bh(&g_qos->lock);
 	id = ppe_qos_get_interface_id(&info->if_data);
 	if (id < 0) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
 		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("%px invalid interface data", info);
-		return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+		return PPE_QOS_FLUSH_INTERFACE_QUEUES_FAIL;
 	}
 
-	tm_if = info->if_data.type ? &g_qos->tcont[id] : &g_qos->port_res[id];
+	tm_if = ppe_qos_res_get(id, info->if_data.type);
+	if ((!tm_if) && (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP)) {
+		ppe_qos_trace("%px allocate resource for port:%d", info, id);
+		tm_if = ppe_qos_res_alloc(id);
+	}
+
 	if (!tm_if) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
 		spin_unlock_bh(&g_qos->lock);
@@ -1738,17 +1830,15 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
 	port = &tm_if->port;
 	if (!port) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
-		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("%px tcont info is not valid", info);
-		return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+		goto res_free;
 	}
 
 #ifndef NSS_PPE_PON_SUPPORT
 	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_TCONT) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
-		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("%px Tcont not supported", info);
-		return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+		goto res_free;
 	}
 #else
 	/*
@@ -1757,9 +1847,8 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
 	if ((info->if_data.type == PPE_QOS_INTERFACE_TYPE_TCONT) &&
 		(info->num_queues + g_qos->pon_port_num_pq > ppe_drv_pon_port_max_pq_get())) {
 			ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
-			spin_unlock_bh(&g_qos->lock);
 			ppe_qos_warn("%px invalid number of queues: %d", info, info->num_queues);
-			return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+			goto res_free;
 	}
 #endif
 
@@ -1767,31 +1856,28 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
 	 * Validate multicast constraints
 	 */
 	if (queue_type == PPE_QOS_QUEUE_TYPE_MCAST) {
-		if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+		if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 			ppe_qos_stats_inc(&g_qos->stats.qos_mcast_queue_create_fail);
-			spin_unlock_bh(&g_qos->lock);
 			ppe_qos_warn("%px multicast queues not supported on T-cont", info);
-			return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+			goto res_free;
 		}
 
-		if (info->num_queues > PPE_QOS_MAX_MCAST_QUEUES_PER_UNI) {
+		if (info->num_queues > port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE]) {
 			ppe_qos_stats_inc(&g_qos->stats.qos_mcast_queue_create_fail);
-			spin_unlock_bh(&g_qos->lock);
 			ppe_qos_warn("Multicast queues %u exceed max queues %u\n",
 				     info->num_queues, PPE_QOS_MAX_MCAST_QUEUES_PER_UNI);
-			return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+			goto res_free;
 		}
 	}
 
 	/*
 	 * Validate unicast constraints for physical ports
 	 */
-	if ((info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) &&
+	if ((info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) &&
 		(info->num_queues > port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE])) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
-		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("%px invalid number of queues: %d", info, info->num_queues);
-		return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+		goto res_free;
 	}
 
 	/* Get appropriate list and counter based on queue type */
@@ -1805,10 +1891,9 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
 		} else {
 			ppe_qos_stats_inc(&g_qos->stats.qos_create_interface_queues_fail);
 		}
-		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("Queues of type %s already assigned to interface %u",
 			     ppe_qos_get_queue_type_str(queue_type), id);
-		return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+		goto res_free;
 	}
 
 	/*
@@ -1830,13 +1915,12 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
 				kfree(queue);
 				(*num_queues_ptr)--;
 			}
-			spin_unlock_bh(&g_qos->lock);
 			ppe_qos_warn("Queue allocation failed for %s queues on interface %u",
 				     ppe_qos_get_queue_type_str(queue_type), id);
-			return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
+			goto res_free;
 		}
 
-		if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+		if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 			queue->offset = i;
 			queue->valid = true;
 		} else {
@@ -1863,7 +1947,19 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
 	ppe_qos_info("Created %u %s queues for interface type:%d id:%d",
 		     info->num_queues, ppe_qos_get_queue_type_str(queue_type),
 		     info->if_data.type, id);
+
 	return PPE_QOS_SUCCESS;
+
+res_free:
+	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
+		if (!tm_if->valid) {
+			list_del(&tm_if->list);
+			kfree(tm_if);
+		}
+	}
+
+	spin_unlock_bh(&g_qos->lock);
+	return PPE_QOS_CREATE_INTERFACE_QUEUES_FAIL;
 }
 EXPORT_SYMBOL(ppe_qos_create_interface_queues);
 
@@ -1934,7 +2030,6 @@ void ppe_qos_init(struct dentry *d_rule)
 
 	spin_lock_init(&g_qos->lock);
 	INIT_LIST_HEAD(&g_qos->shaper_list);
-
 	ppe_qos_stats_debugfs_init(d_rule);
 	ppe_qos_res_init();
 	ppe_qos_dump_init(d_rule);

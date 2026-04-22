@@ -11,6 +11,7 @@
  */
 ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *info)
 {
+	struct ppe_qos_interface_res *res = NULL;
 	struct net_device *dev;
 	uint32_t port_id;
 	uint32_t profile_id;
@@ -25,7 +26,7 @@ ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *inf
 	/*
 	 * Only physical interfaces are supported for this operation
 	 */
-	if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+	if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		ppe_qos_warn("Only physical interfaces are supported for unicast priority map setting");
 		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_ucast_prio_map_fail);
 		return PPE_QOS_SET_UCAST_PRIO_MAP_FAIL;
@@ -65,9 +66,21 @@ ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *inf
 	}
 
 	/*
-	 * Get the profile ID for this port and Configure the unicast priority map
+	 * Get the resource for this port
 	 */
 	spin_lock_bh(&gbl_ppe_qos.lock);
+	res = ppe_qos_res_get(port_id, PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP);
+	if (!res) {
+		spin_unlock_bh(&gbl_ppe_qos.lock);
+		ppe_qos_warn("Failed to get qoS resource for device %s", dev->name);
+		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_ucast_prio_map_fail);
+		dev_put(dev);
+		return PPE_QOS_SET_UCAST_PRIO_MAP_FAIL;
+	}
+
+	/*
+	 * Get the profile ID for this port and Configure the unicast priority map
+	 */
 	profile_id = ppe_drv_port_ucast_queue_profile_get(port_id);
 	if (profile_id == -1) {
 		spin_unlock_bh(&gbl_ppe_qos.lock);
@@ -91,8 +104,8 @@ ppe_qos_ret_t ppe_qos_set_ucast_prio_map(struct ppe_qos_ucast_prio_map_info *inf
 	/*
 	 * Cache the unicast priority map for dump purposes
 	 */
-	memcpy(gbl_ppe_qos.port_res[port_id].ucast_prio_map, info->prio_map, sizeof(info->prio_map));
-	gbl_ppe_qos.port_res[port_id].ucast_prio_map_valid = true;
+	memcpy(res->ucast_prio_map, info->prio_map, sizeof(info->prio_map));
+	res->ucast_prio_map_valid = true;
 
 	spin_unlock_bh(&gbl_ppe_qos.lock);
 	dev_put(dev);
@@ -110,6 +123,7 @@ EXPORT_SYMBOL(ppe_qos_set_ucast_prio_map);
  */
 ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *info)
 {
+	struct ppe_qos_interface_res *res = NULL;
 	struct net_device *dev;
 	uint32_t port_id;
 	int i;
@@ -123,7 +137,7 @@ ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *inf
 	/*
 	 * Only physical interfaces are supported for this operation
 	 */
-	if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL) {
+	if (info->if_data.type != PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		ppe_qos_warn("Only physical interfaces are supported for multicast priority map setting");
 		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_mcast_prio_map_fail);
 		return PPE_QOS_FAIL;
@@ -163,9 +177,21 @@ ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *inf
 	}
 
 	/*
-	 * Call the PPE driver function to configure multicast priority map for each priority
+	 * Get the resource for this port
 	 */
 	spin_lock_bh(&gbl_ppe_qos.lock);
+	res = ppe_qos_res_get(port_id, PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP);
+	if (!res) {
+		spin_unlock_bh(&gbl_ppe_qos.lock);
+		dev_put(dev);
+		ppe_qos_warn("Failed to get qoS resource for port %u", port_id);
+		ppe_qos_stats_inc(&gbl_ppe_qos.stats.qos_set_mcast_prio_map_fail);
+		return PPE_QOS_FAIL;
+	}
+
+	/*
+	 * Call the PPE driver function to configure multicast priority map for each priority
+	 */
 	for (i = 0; i < PPE_DRV_MAX_PRIORITY; i++) {
 		if (!ppe_drv_port_mcast_priority_class_set(port_id, i, info->prio_map[i])) {
 			spin_unlock_bh(&gbl_ppe_qos.lock);
@@ -179,8 +205,8 @@ ppe_qos_ret_t ppe_qos_set_mcast_prio_map(struct ppe_qos_mcast_prio_map_info *inf
 	/*
 	 * Cache the multicast priority map for dump purposes
 	 */
-	memcpy(gbl_ppe_qos.port_res[port_id].mcast_prio_map, info->prio_map, sizeof(info->prio_map));
-	gbl_ppe_qos.port_res[port_id].mcast_prio_map_valid = true;
+	memcpy(res->mcast_prio_map, info->prio_map, sizeof(info->prio_map));
+	res->mcast_prio_map_valid = true;
 
 	spin_unlock_bh(&gbl_ppe_qos.lock);
 	dev_put(dev);
