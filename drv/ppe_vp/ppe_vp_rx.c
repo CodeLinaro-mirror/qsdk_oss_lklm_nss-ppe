@@ -464,6 +464,7 @@ sw_l3_done:
 		client_cb_info.ip_summed = rxi->ip_summed;
 		client_cb_info.napi = rxi->napi;
 		client_cb_info.fake_mac_present = rxi->fake_mac;
+		client_cb_info.service_code = rxi->service_code;
 
 		/*
 		 * If not processed successfully VP receive handler would free the skb

@@ -125,6 +125,7 @@ struct ppe_vp_cb_info {
 	struct napi_struct *napi;	/**< RX napi */
 	struct net_device *phys_dev;	/**< Physical dev for tunnel */
 	uint32_t flow_idx;		/**< Flow index of a packet */
+	uint8_t service_code;		/**< Service code */
 	struct ppe_vp_cb_mdata_info mdata_info;	/**< Metadata info */
 };
 
