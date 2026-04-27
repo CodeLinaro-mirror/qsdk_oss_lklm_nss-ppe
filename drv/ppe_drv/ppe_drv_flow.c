@@ -2132,6 +2132,7 @@ bool ppe_drv_flow_v4_pri_profile_get(struct ppe_drv_v4_conn_flow *pcf, struct pp
 	reverse_tuple.flow_ident = pcf->xlate_dest_ident;
 	reverse_tuple.return_ident = pcf->xlate_src_ident;
 	reverse_tuple.protocol = pcf->match_protocol;
+	reverse_tuple.flow_rule_id = pcf->conn ? pcf->conn->flow_rule_id : 0;
 
 	/*
 	 * This is when its a RFS flow, pcf flag is set as PPE_DRV_V4_CONN_FLAG_PASSIVE_FLOW.
