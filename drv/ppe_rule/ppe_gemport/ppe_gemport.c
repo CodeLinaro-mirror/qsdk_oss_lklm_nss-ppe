@@ -478,7 +478,7 @@ EXPORT_SYMBOL(ppe_gem_port_rule_create);
  */
 void ppe_gem_port_deinit(void)
 {
-	struct ppe_gem_port_base *gem_port_g = &ppe_gem_port_gbl;
+	struct ppe_gem_port_base *gem_port_g __maybe_unused = &ppe_gem_port_gbl;
 
 	ppe_gem_port_dump_exit();
 	ppe_gem_port_stats_debugfs_exit();
