@@ -310,6 +310,14 @@ enum ppe_drv_static_dbg_level {
  */
 #define PPE_DRV_L2TP_DEFAULT_UDP_PORT	1701
 
+#ifdef NSS_PPE_SIXTH_TUPLE
+/*
+ * sixth tuple mode: 0/1/2:disable/vsi/vlanid
+ */
+#define PPE_DRV_SIXTH_TUPLE_MODE_DISABLE		0
+#define PPE_DRV_SIXTH_TUPLE_MODE_VSI			1
+#endif
+
 /*
  * Maximum number of MLO link IDs
  */
@@ -788,6 +796,9 @@ static inline void nss_ppe_drv_minidump_free(void *start_addr, const char *name)
 
 #ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 int ppe_drv_get_tpid_index(uint16_t tpid, const char *type);
+#endif
+#ifdef NSS_PPE_SIXTH_TUPLE
+int ppe_drv_get_sixth_tuple_mode(void);
 #endif
 extern int ppe_drv_get_vxlan_dport(void);
 extern int ppe_drv_get_vxlan_gpe_dport(void);

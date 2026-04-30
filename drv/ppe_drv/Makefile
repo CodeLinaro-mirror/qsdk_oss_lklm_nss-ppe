@@ -42,6 +42,10 @@ ccflags-y += -DNSS_PPE_PM_COUNTER_FEATURE_SUPPORT
 ccflags-y += -DNSS_PPE_EXT_VLAN_FEATURE_SUPPORT
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DNSS_PPE_SIXTH_TUPLE
+endif
+
 ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 ccflags-y += -DPPE_DRV_ESP_SPI_PASSTH_ENABLE
 endif

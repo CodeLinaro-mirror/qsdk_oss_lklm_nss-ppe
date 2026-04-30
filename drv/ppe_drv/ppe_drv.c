@@ -94,6 +94,15 @@ MODULE_PARM_DESC(wlan_coremask, "Coremask for Ethernet to WLAN Flows");
 static unsigned int tun_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
 MODULE_PARM_DESC(tun_coremask, "Coremask for Ethernet to Tunnel, etc Flows");
 
+#ifdef NSS_PPE_SIXTH_TUPLE
+/*
+ * Module parameter to set 6th tuple mode.
+ */
+static int sixth_tuple_mode = PPE_DRV_SIXTH_TUPLE_MODE_DISABLE;
+module_param(sixth_tuple_mode, int, 0644);
+MODULE_PARM_DESC(sixth_tuple_mode, "Sixth tuple mode");
+#endif
+
 uint32_t if_bm_to_offload;
 #ifdef NSS_PPE_PON_SUPPORT
 uint32_t gem_port_bitmap;
@@ -159,6 +168,72 @@ int ppe_drv_get_vxlan_dport(void)
 {
 	return ppe_drv_gbl->vxlan_dport;
 }
+
+#ifdef NSS_PPE_SIXTH_TUPLE
+/*
+ * ppe_drv_get_sixth_tuple_mode()
+ *	Get the sixth tuple mode.
+ */
+int ppe_drv_get_sixth_tuple_mode(void)
+{
+	return sixth_tuple_mode;
+}
+
+/*
+ * ppe_drv_vsi_flow_key_enable()
+ *	Enable the L2/L3 vsi as a key globally.
+ *  this is needed when using vsi VPN_ID as sixth tuple.
+ */
+void ppe_drv_vsi_flow_key_enable(void)
+{
+	sw_error_t ret;
+	fal_flow_global_cfg_t cfg = {0};
+
+	ret = fal_flow_global_cfg_get(PPE_DRV_SWITCH_ID, &cfg);
+	if (ret != SW_OK) {
+		ppe_drv_warn("Failed to fetch the global setting");
+		return;
+	}
+
+	cfg.l2_vpn_en = 1;
+	cfg.l3_vpn_en = 1;
+	ret = fal_flow_global_cfg_set(PPE_DRV_SWITCH_ID, &cfg);
+
+	if (ret != SW_OK) {
+		ppe_drv_warn("Error in enabling l2/l3 vsi as key");
+	} else {
+		ppe_drv_trace("Success in enabling l2/l3 vsi as key");
+	}
+	return;
+}
+
+/*
+ * ppe_drv_vsi_flow_key_disble()
+ *	disable the L2/L3 vsi as a key globally.
+ *  this is needed when using vsi VPN_ID as sixth tuple.
+ */
+void ppe_drv_vsi_flow_key_disable(void)
+{
+	sw_error_t ret;
+	fal_flow_global_cfg_t cfg = {0};
+	ret = fal_flow_global_cfg_get(PPE_DRV_SWITCH_ID, &cfg);
+	if (ret != SW_OK) {
+		ppe_drv_warn("Failed to fetch the global setting");
+		return;
+	}
+
+	cfg.l2_vpn_en = 0;
+	cfg.l3_vpn_en = 0;
+	ret = fal_flow_global_cfg_set(PPE_DRV_SWITCH_ID, &cfg);
+	if (ret != SW_OK) {
+		ppe_drv_warn("Error in enabling l2/l3 vsi as key");
+	} else {
+		ppe_drv_trace("Success in enabling l2/l3 vsi as key");
+	}
+
+	return;
+}
+#endif
 
 /*
  * ppe_drv_get_vxlan_gpe_dport()
@@ -2151,6 +2226,15 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	 */
 	ppe_drv_port_enq_vp_init();
 
+#ifdef NSS_PPE_SIXTH_TUPLE
+	/*
+	 * Enable vsi as flow key.
+	 */
+	if (sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VSI) {
+		ppe_drv_vsi_flow_key_enable();
+	}
+#endif
+
 	nss_ppe_drv_minidump_log(p, sizeof(struct ppe_drv), "ppe_drv");
 
 #ifdef NSS_PPE_FEATURE_DOT1P
@@ -2350,6 +2434,11 @@ static int ppe_drv_remove(struct platform_device *pdev)
 
 	ppe_drv_stats_debugfs_exit();
 
+#ifdef NSS_PPE_SIXTH_TUPLE
+	if (sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VSI) {
+		ppe_drv_vsi_flow_key_disable();
+	}
+#endif
 	for (i = 0; i <  PPE_DRV_PORT_SRC_PROFILE_MAX; i++) {
 		PPE_DRV_PROF2PORT_CLEAR_ALL(p->prof2portmap[i]);
 	}

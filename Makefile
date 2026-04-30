@@ -18,6 +18,11 @@ ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
 ccflags-y += -DNSS_PPE_DRV_HW_GRO
 endif
 
+#comment out below option for sixth tuple in need.
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DNSS_PPE_SIXTH_TUPLE
+endif
+
 KERNELVERSION := $(word 1, $(subst ., ,$(KERNELVERSION))).$(word 2, $(subst ., ,$(KERNELVERSION)))
 
 obj-y += drv/
