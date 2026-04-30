@@ -3286,7 +3286,7 @@ bool ppe_acl_rule_callback_register(ppe_acl_rule_id_t acl_id, ppe_acl_rule_proce
 		return false;
 	}
 
-	ppe_acl_assert(cb, "%p: cannot register null cb for ACL id %u", p, acl_id);
+	ppe_acl_assert(cb, "%p: cannot register null cb for ACL id %u", acl_g, acl_id);
 
 	spin_lock_bh(&acl_g->lock);
 
