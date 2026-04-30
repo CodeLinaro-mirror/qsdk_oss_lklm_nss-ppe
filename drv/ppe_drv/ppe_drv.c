@@ -814,8 +814,8 @@ static bool ppe_drv_enq_vp_queue_set(struct ppe_drv *p,
 {
         sw_error_t err;
 	fal_ucast_queue_dest_t q_dst = {0};
-	struct ppe_drv_port *pp = NULL;
 	int src_profile = -1;
+	struct ppe_drv_port *pp = NULL;
 
 	q_dst.dst_port = enq_vport;
 
@@ -2120,7 +2120,7 @@ static int ppe_drv_probe(struct platform_device *pdev)
 #endif
 
 	for (i = 0; i <  PPE_DRV_PORT_SRC_PROFILE_MAX; i++) {
-		p->prof2portmap[i] = -1;
+		PPE_DRV_PROF2PORT_CLEAR_ALL(p->prof2portmap[i]);
 	}
 
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
@@ -2351,7 +2351,7 @@ static int ppe_drv_remove(struct platform_device *pdev)
 	ppe_drv_stats_debugfs_exit();
 
 	for (i = 0; i <  PPE_DRV_PORT_SRC_PROFILE_MAX; i++) {
-		p->prof2portmap[i] = -1;
+		PPE_DRV_PROF2PORT_CLEAR_ALL(p->prof2portmap[i]);
 	}
 
 	if (p->pub_ip) {
@@ -3387,7 +3387,7 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 	char *end_ch_ptr = NULL;
 	sw_error_t sw_err = SW_OK;
 	int len, i, port_id = 0;
-	uint32_t bitmap = 0;
+	uint32_t bitmap[8] = {0};
 
 	/*
 	 * Find the string, return an error if not found
@@ -3477,9 +3477,9 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 		dev[len] = '\0';
 
 		if (!strcmp(dev, "flush")) {
-			for (port_id = 1; port_id <= PPE_DRV_PHY_ETH_PORT_MAX; port_id++) {
+			for (port_id = 1; port_id < PPE_DRV_PORTS_MAX; port_id++) {
 				pp_local = &p->port[port_id];
-				if (pp_local->src_profile == src_profile) {
+				if (pp_local && (pp_local->src_profile == src_profile)) {
 					sw_err = fal_qm_port_source_profile_set(PPE_DRV_SWITCH_ID, port_id, PPE_DRV_PORT_SRC_PROFILE);
 					if (sw_err != SW_OK) {
 						ppe_drv_warn("Unable to reset source profile for port\n");
@@ -3497,21 +3497,25 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 			 */
 			for (profile = 1; profile <  PPE_DRV_PORT_SRC_PROFILE_MAX; profile++) {
 				uint32_t queue_id;
-				uint8_t profile = 0;
-				uint8_t port_bitmask =  p->prof2portmap[profile];
-				if (!port_bitmask)
+				if (PPE_DRV_PROF2PORT_IS_EMPTY(p->prof2portmap[profile]))
 					continue;
 
 				/*
 				 * Run the loop for Physical ports except for port0 and port7
 				 */
-				for (i = 1; i < (PPE_DRV_PHYSICAL_MAX - 1); i++) {
+				for (i = 1; i < PPE_DRV_PORTS_MAX; i++) {
 					pp_local = &p->port[i];
+
+					if (!pp_local)
+						continue;
 
 					if (!kref_read(&pp_local->ref_cnt))
 						continue;
 
 					if (pp_local->port == up->port)
+						continue;
+
+					if (pp_local->port == PPE_DRV_PORT_EIP197)
 						continue;
 
 					q_dst.src_profile = src_profile;
@@ -3523,10 +3527,9 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 						ppe_drv_warn("%p unable to set port queue base ID", p);
 						continue;
 					}
-
 				}
 
-				p->prof2portmap[profile] = -1;
+				PPE_DRV_PROF2PORT_CLEAR_ALL(p->prof2portmap[profile]);
 			}
 
 			spin_unlock_bh(&p->lock);
@@ -3561,8 +3564,8 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 		/*
 		 * Bitmap of grouped ports
 		 */
-		bitmap |= (1 << pp->port);
-		p->prof2portmap[src_profile] |= (1 << pp->port);
+		PPE_DRV_PROF2PORT_SET(bitmap, pp->port);
+		PPE_DRV_PROF2PORT_SET(p->prof2portmap[src_profile], pp->port);
 
 		dev_put(net_dev);
 	}
@@ -3570,15 +3573,15 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 	ppe_drv_loopback_sc2queue_mapping(p, src_profile);
 
 	/*
-	 * For port isolation, other physical port not mapped to current source profile need to be mapped to upstream port queue
+	 * For port isolation, other port not mapped to current source profile need to be mapped to upstream port queue
 	 */
-	for (i = 1; i < (PPE_DRV_PHYSICAL_MAX - 1); i++) {
+	for (i = 1; i < PPE_DRV_PORTS_MAX; i++) {
 		pp_local = &p->port[i];
 
 		if (!kref_read(&pp_local->ref_cnt))
 			continue;
 
-		if (bitmap & (1 << pp_local->port))
+		if (PPE_DRV_PROF2PORT_TEST(bitmap, pp_local->port))
 			continue;
 
 		if (pp_local->port == up->port)

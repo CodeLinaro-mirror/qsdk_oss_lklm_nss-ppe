@@ -764,7 +764,7 @@ static void ppe_drv_veip_sc_map(struct ppe_drv_port *pp)
 			/*
 			 * PON port to loopback port queue mapping.
 			 */
-			if (!ppe_drv_port_ucast_queue_set(pp, p->loopback_port_info.ucastq_start)) {
+			if (!ppe_drv_port_ucast_queue_set(pp, 0, p->loopback_port_info.ucastq_start)) {
 				ppe_drv_warn("%p: loopback queue mapping to GW port failed.\n", p);
 			}
 			break;
@@ -789,7 +789,7 @@ static void ppe_drv_veip_sc_map(struct ppe_drv_port *pp)
 			/*
 			 * PON port to loopback port queue mapping.
 			 */
-			if (!ppe_drv_port_ucast_queue_set(pp, p->loopback_port_info.ucastq_start)) {
+			if (!ppe_drv_port_ucast_queue_set(pp, 0, p->loopback_port_info.ucastq_start)) {
 				ppe_drv_warn("%p: loopback queue mapping to PON port failed.\n", p);
 			}
 			break;

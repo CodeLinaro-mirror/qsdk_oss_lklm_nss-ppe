@@ -4,6 +4,24 @@
  */
 
 #define PPE_DRV_PORT_SRC_PROFILE_MAX	4	/* Source profile for a port can be between 0-3 */
+
+/* Helper macros for prof2portmap bitmap operations (supports 256 ports) */
+#define PPE_DRV_PROF2PORT_SET(bitmap, port) \
+	((bitmap)[(port) / 32] |= (1U << ((port) % 32)))
+
+#define PPE_DRV_PROF2PORT_CLEAR(bitmap, port) \
+	((bitmap)[(port) / 32] &= ~(1U << ((port) % 32)))
+
+#define PPE_DRV_PROF2PORT_TEST(bitmap, port) \
+	(((bitmap)[(port) / 32] & (1U << ((port) % 32))) != 0)
+
+#define PPE_DRV_PROF2PORT_CLEAR_ALL(bitmap) \
+	memset((bitmap), 0, sizeof(uint32_t) * 8)
+
+#define PPE_DRV_PROF2PORT_IS_EMPTY(bitmap) \
+	(((bitmap)[0] | (bitmap)[1] | (bitmap)[2] | (bitmap)[3] | \
+	  (bitmap)[4] | (bitmap)[5] | (bitmap)[6] | (bitmap)[7]) == 0)
+
 #define PPE_DRV_PHY_PORT_CHK(n) ((n) >= PPE_DRV_PHYSICAL_START && (n) < PPE_DRV_PHYSICAL_MAX)
 #define PPE_DRV_VIRTUAL_PORT_CHK(n) ((n) >= PPE_DRV_VIRTUAL_START && (n) < PPE_DRV_PORTS_MAX)
 #define PPE_DRV_PORT_VIRTUAL_L2_TUN		0x01	/* Port is L2 tunnel virtual port */
@@ -141,7 +159,7 @@ struct ppe_drv_port {
 
 void ppe_drv_port_ucast_queue_update(struct ppe_drv_port *pp, uint8_t queue_id);
 uint8_t ppe_drv_port_ucast_queue_get(struct ppe_drv_port *pp);
-bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, uint8_t queue_id);
+bool ppe_drv_port_ucast_queue_set(struct ppe_drv_port *pp, int src_profile, uint8_t queue_id);
 bool ppe_drv_port_ucast_queue_profile_set(struct ppe_drv_port *pp, uint8_t src_profile, uint8_t queue_id, uint8_t profile);
 uint8_t ppe_drv_port_is_tunnel_vp(struct ppe_drv_port *pp);
 
