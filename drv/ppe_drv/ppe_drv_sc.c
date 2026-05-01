@@ -184,7 +184,10 @@ void ppe_drv_sc_spl_ddrq_config(void)
 	/*
 	 * Set all the first 32-bits in the bypass bitmap 0/1/3
 	 */
-	sc_cfg.bypass_bitmap[0] = PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL;
+
+	sc_cfg.bypass_bitmap[0] = ~((1 << FAKE_MAC_HEADER_BYP)
+			| (1 << SERVICE_CODE_BYP)
+			| (1 << MY_MAC_CHECK_BYP));
 	sc_cfg.bypass_bitmap[1] = PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL;
 	sc_cfg.bypass_bitmap[3] = PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL;
 	sc_cfg.bypass_bitmap[2] = ~(1 << TX_VLAN_COUNTER_BYP);
