@@ -246,6 +246,10 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1ULL << DOT1P_MAPPER_BYP)
 				| (1ULL << DOT1P_DST_LOOKUP_BYPASS)
 #endif
+#if defined(NSS_PPE_IPQ96XX) || defined(NSS_PPE_IPQ52XX)
+				| (1ULL << IN_MIRROR_BYP)
+				| (1ULL << EG_MIRROR_BYP)
+#endif
 				);
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
@@ -644,8 +648,13 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1 << FAKE_L2_PROTO_BYP)
 				| (1 << MY_MAC_CHECK_BYP));
 
-		sc_cfg.bypass_bitmap[1] = ~((1 << ACL_POST_ROUTING_CHECK_BYP)
-				| (1 << DOT1P_MAPPER_BYP));
+		sc_cfg.bypass_bitmap[1] = ~((1ULL << ACL_POST_ROUTING_CHECK_BYP)
+				| (1ULL << DOT1P_MAPPER_BYP)
+#if defined(NSS_PPE_IPQ96XX) || defined(NSS_PPE_IPQ52XX)
+				| (1ULL << IN_MIRROR_BYP)
+				| (1ULL << EG_MIRROR_BYP)
+#endif
+				);
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
