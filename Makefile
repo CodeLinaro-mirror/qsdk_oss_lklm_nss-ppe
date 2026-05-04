@@ -19,7 +19,7 @@ ccflags-y += -DNSS_PPE_DRV_HW_GRO
 endif
 
 #comment out below option for sixth tuple in need.
-ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx ipq54xx))
 ccflags-y += -DNSS_PPE_SIXTH_TUPLE
 endif
 

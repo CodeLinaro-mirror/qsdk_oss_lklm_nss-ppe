@@ -628,7 +628,15 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	 * Fields for action
 	 */
 	xlt_action.cvid_xlt_cmd = (info->cvid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+#ifdef NSS_PPE_SIXTH_TUPLE
+	if (PPE_DRV_SIXTH_TUPLE_MODE_VLAN == ppe_drv_get_sixth_tuple_mode()) {
+		xlt_action.svid_xlt_cmd = 0;
+	} else {
+		xlt_action.svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+	}
+#else
 	xlt_action.svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+#endif
 	xlt_action.vsi_xlt = vsi_idx;
 	xlt_action.vsi_xlt_enable = A_TRUE;
 
@@ -784,7 +792,19 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	 * Fields for action
 	 */
 	xlt_action_in.cvid_xlt_cmd = (info->cvid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+
+	/*
+	 * Keep the svid for use in flow match
+	 */
+#ifdef NSS_PPE_SIXTH_TUPLE
+	if (PPE_DRV_SIXTH_TUPLE_MODE_VLAN == ppe_drv_get_sixth_tuple_mode()) {
+		xlt_action_in.svid_xlt_cmd = 0;
+	} else {
+		xlt_action_in.svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+	}
+#else
 	xlt_action_in.svid_xlt_cmd = (info->svid == 0xFFFF) ? 0 : FAL_VID_XLT_CMD_DELETE;
+#endif
 	xlt_action_in.vsi_xlt = vsi_idx;
 	xlt_action_in.vsi_xlt_enable = A_TRUE;
 
@@ -1215,6 +1235,22 @@ ppe_drv_ret_t ppe_drv_vlan_init(struct ppe_drv_iface *ppe_iface, struct net_devi
 	pp = ppe_drv_iface_port_get(port_if);
 	if (pp) {
 		ppe_drv_port_vsi_attach(pp, vsi);
+#ifdef NSS_PPE_SIXTH_TUPLE
+		if (PPE_DRV_SIXTH_TUPLE_MODE_VLAN == ppe_drv_get_sixth_tuple_mode()) {
+			fal_ip_vlan_as_flow_key_t flow_key;
+			flow_key.valid = A_TRUE;
+			flow_key.mode = FAL_IP_VLAN_AS_FLOW_KEY_FROM_OUTER;
+			if (SW_OK != fal_ip_port_vlan_as_flow_key_set(PPE_DRV_SWITCH_ID, pp->port, &flow_key)) {
+				ppe_drv_port_vsi_detach(pp, vsi);
+				ppe_drv_iface_l3_if_clear(ppe_iface);
+				ppe_drv_l3_if_deref(l3_if);
+				ppe_drv_vsi_deref(vsi);
+				spin_unlock_bh(&p->lock);
+				ppe_drv_warn("failed to set VLAN_AS_FLOW_KEY for vp port:%d", pp->port);
+				return PPE_DRV_RET_VLAN_VPN_MODE_SET_FAIL;
+			}
+		}
+#endif
 	}
 
 	spin_unlock_bh(&p->lock);

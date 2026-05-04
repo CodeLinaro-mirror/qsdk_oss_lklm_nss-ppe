@@ -17,6 +17,7 @@
 #include <linux/if_vlan.h>
 #include "ppe_drv.h"
 #include <fal_vport.h>
+#include <fal_ip.h>
 
 /*
  * ppe_drv_vp_cleanup()
@@ -240,6 +241,8 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_inf
 	if (PPE_DRV_PHY_PORT_CHK(info->xmit_port)) {
 		err = fal_vport_physical_port_id_set(PPE_DRV_SWITCH_ID, port->port, info->xmit_port);
 		if (err != SW_OK) {
+			ppe_drv_port_l3_if_detach(port, l3_if);
+			ppe_drv_l3_if_deref(l3_if);
 			ppe_drv_port_deref(port);
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("%p: failed to set physical port:%d for vp port:%d", p, info->xmit_port, port->port);
@@ -247,6 +250,23 @@ ppe_drv_ret_t ppe_drv_vp_init(struct ppe_drv_iface *iface, struct ppe_drv_vp_inf
 		}
 	}
 
+#ifdef NSS_PPE_SIXTH_TUPLE
+	if (PPE_DRV_SIXTH_TUPLE_MODE_VLAN == ppe_drv_get_sixth_tuple_mode()) {
+		fal_ip_vlan_as_flow_key_t flow_key;
+		flow_key.valid = A_TRUE;
+		flow_key.mode = FAL_IP_VLAN_AS_FLOW_KEY_FROM_OUTER;
+		err = fal_ip_port_vlan_as_flow_key_set(PPE_DRV_SWITCH_ID, port->port, &flow_key);
+		if (err != SW_OK) {
+			ppe_drv_port_l3_if_detach(port, l3_if);
+			ppe_drv_l3_if_deref(l3_if);
+			ppe_drv_port_deref(port);
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%p: failed to set physical port:%d for vp port:%d",
+					p, info->xmit_port, port->port);
+			return PPE_DRV_RET_VLAN_VPN_MODE_SET_FAIL;
+		}
+	}
+#endif
 	port->xmit_port = info->xmit_port;
 
 	if (info->net_dev_type == (uint8_t)PPE_DRV_PORT_NETDEV_TYPE_WIFI) {

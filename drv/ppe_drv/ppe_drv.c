@@ -226,12 +226,127 @@ void ppe_drv_vsi_flow_key_disable(void)
 	cfg.l3_vpn_en = 0;
 	ret = fal_flow_global_cfg_set(PPE_DRV_SWITCH_ID, &cfg);
 	if (ret != SW_OK) {
-		ppe_drv_warn("Error in enabling l2/l3 vsi as key");
+		ppe_drv_warn("Error in disabling l2/l3 vsi as key");
 	} else {
-		ppe_drv_trace("Success in enabling l2/l3 vsi as key");
+		ppe_drv_trace("Success in disabling l2/l3 vsi as key");
 	}
 
 	return;
+}
+
+/*
+ * ppe_drv_vlan_flow_key_disable()
+ *	disable vlan key on all active interfaces.
+ */
+void ppe_drv_vlan_flow_key_disable(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+        struct ppe_drv_iface *iface;
+	int i;
+	sw_error_t err = SW_OK;
+
+	for (i = 0; i < p->iface_num ; i++) {
+		iface = &p->iface[i];
+		if ((iface->flags & PPE_DRV_IFACE_FLAG_VALID) != PPE_DRV_IFACE_FLAG_VALID
+				|| !iface->port) {
+			continue;
+		}
+
+		fal_ip_vlan_as_flow_key_t flow_key = {0};
+		flow_key.valid = A_FALSE;
+		flow_key.mode = FAL_IP_VLAN_AS_FLOW_KEY_DISABLED;
+		err = fal_ip_port_vlan_as_flow_key_set(PPE_DRV_SWITCH_ID, iface->port->port, &flow_key);
+		if (err != SW_OK) {
+			ppe_drv_warn("failed to clear val key setting port:%d", iface->port->port);
+			return;
+		}
+	}
+	ppe_drv_trace("Success in disabling vlan flow key");
+}
+
+/*
+ * ppe_drv_vlan_flow_key_enable()
+ *	disable vlan key on all active interfaces.
+ */
+void ppe_drv_vlan_flow_key_enable(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+        struct ppe_drv_iface *iface;
+	int i;
+	sw_error_t err = SW_OK;
+
+	for (i = 0; i < p->iface_num ; i++) {
+		iface = &p->iface[i];
+		if ((iface->flags & PPE_DRV_IFACE_FLAG_VALID) != PPE_DRV_IFACE_FLAG_VALID
+				|| !iface->port) {
+			continue;
+		}
+
+		fal_ip_vlan_as_flow_key_t flow_key = {0};
+		flow_key.valid = A_TRUE;
+		flow_key.mode = FAL_IP_VLAN_AS_FLOW_KEY_FROM_OUTER;
+		err = fal_ip_port_vlan_as_flow_key_set(PPE_DRV_SWITCH_ID, iface->port->port, &flow_key);
+		if (err != SW_OK) {
+			ppe_drv_warn("failed to clear val key setting port:%d", iface->port->port);
+			return;
+		}
+	}
+	ppe_drv_trace("Success in enabling vlan flow key");
+}
+
+/*
+ * ppe_drv_sixth_tuple_mode_handler()
+ *	change the sixth mode.
+ */
+static int ppe_drv_sixth_tuple_mode_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret, cur_sixth_tuple_mode;
+
+	cur_sixth_tuple_mode = sixth_tuple_mode;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (!write) {
+		return ret;
+	}
+
+	if (cur_sixth_tuple_mode == sixth_tuple_mode) {
+		return 0;
+	}
+
+	/*
+	 * Validate the input value (should be 0/1/2)
+	 */
+	if (sixth_tuple_mode != PPE_DRV_SIXTH_TUPLE_MODE_DISABLE
+			&& sixth_tuple_mode != PPE_DRV_SIXTH_TUPLE_MODE_VSI
+			&& sixth_tuple_mode != PPE_DRV_SIXTH_TUPLE_MODE_VLAN) {
+		ppe_drv_warn("Invalid value for sixth_tuple_mode. Must be 0/1/2\n");
+		sixth_tuple_mode = cur_sixth_tuple_mode;
+		return -EINVAL;
+	}
+
+	/*
+	 * Clear the old seting of 6th-tuple
+	 */
+	if (cur_sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VSI) {
+		ppe_drv_vsi_flow_key_disable();
+	}
+
+	if (cur_sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VLAN) {
+		ppe_drv_vlan_flow_key_disable();
+	}
+
+	/*
+	 * set new seting of 6th-tuple
+	 */
+	if (sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VSI) {
+		ppe_drv_vsi_flow_key_enable();
+	}
+
+	if (sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VLAN) {
+		ppe_drv_vlan_flow_key_enable();
+	}
+	return 0;
 }
 #endif
 
@@ -3806,6 +3921,16 @@ static struct ctl_table ppe_drv_sub[] = {
 		.maxlen		=	sizeof(int),
 		.mode		=	0644,
 		.proc_handler	=	ppe_drv_ipsec_pass_through_en_handler
+	},
+#endif
+
+#ifdef NSS_PPE_SIXTH_TUPLE
+	{
+		.procname	=	"ppe_drv_sixth_tuple_en",
+		.data		=	&sixth_tuple_mode,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_sixth_tuple_mode_handler
 	},
 #endif
 	{}

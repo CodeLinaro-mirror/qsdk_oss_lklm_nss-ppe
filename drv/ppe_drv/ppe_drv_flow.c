@@ -570,6 +570,18 @@ static bool ppe_drv_flow_v6_vpn_id_get(struct ppe_drv_v6_conn_flow *pcf, uint32_
 			}
 			*vpn_id = FAL_VPN_ID_FROM_INTF(l3_if->l3->l3_if_index);
 		}
+
+	} else if (sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VLAN) {
+		uint8_t vlan_hdr_cnt = ppe_drv_v6_conn_flow_ingress_vlan_cnt_get(pcf);
+		*vpn_id = PPE_DRV_VLAN_NOT_CONFIGURED;
+		if (vlan_hdr_cnt > 0) {
+			struct ppe_drv_vlan *vlan_hdr = ppe_drv_v6_conn_flow_ingress_vlan_get(pcf, 0);
+			if (!vlan_hdr) {
+				ppe_drv_warn("No valid vlan hdr.");
+				return false;
+			}
+			*vpn_id = FAL_VPN_ID_FROM_VLAN(vlan_hdr->tci & PPE_DRV_VLAN_ID_MASK);
+		}
 	}
 #endif
 	return true;
@@ -1995,6 +2007,17 @@ static bool ppe_drv_flow_v4_vpn_id_get(struct ppe_drv_v4_conn_flow *pcf, uint32_
 				return false;
 			}
 			*vpn_id = FAL_VPN_ID_FROM_INTF(l3_if->l3->l3_if_index);
+		}
+	} else if (sixth_tuple_mode == PPE_DRV_SIXTH_TUPLE_MODE_VLAN) {
+		uint8_t vlan_hdr_cnt = ppe_drv_v4_conn_flow_ingress_vlan_cnt_get(pcf);
+		*vpn_id = PPE_DRV_VLAN_NOT_CONFIGURED;
+		if (vlan_hdr_cnt > 0) {
+			struct ppe_drv_vlan *vlan_hdr = ppe_drv_v4_conn_flow_ingress_vlan_get(pcf, 0);
+			if (!vlan_hdr) {
+				ppe_drv_warn("No valid vlan hdr");
+				return false;
+			}
+			*vpn_id = FAL_VPN_ID_FROM_VLAN(vlan_hdr->tci & PPE_DRV_VLAN_ID_MASK);
 		}
 	}
 #endif
