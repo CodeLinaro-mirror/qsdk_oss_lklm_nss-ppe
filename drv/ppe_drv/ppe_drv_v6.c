@@ -714,7 +714,7 @@ static bool ppe_drv_v6_is_egress_ddrq_disabled(struct ppe_drv_iface *if_rx, stru
 	uint16_t port_num;
 	uint32_t word_idx = 0, bit_idx = 0, i;
 	sw_error_t err;
-	struct ppe_drv_port *pp_tx;
+	struct ppe_drv_port *pp_tx, *pp_rx;
 
 	if (!if_rx || !if_tx) {
 		ppe_drv_warn("Incomplete Rx iface: %px or Tx iface: %px information available\n", if_rx, if_tx);
@@ -738,6 +738,23 @@ static bool ppe_drv_v6_is_egress_ddrq_disabled(struct ppe_drv_iface *if_rx, stru
 	if (!pp_tx) {
 		ppe_drv_warn("Invalid Tx port for Tx IFACE (%px)\n", if_tx);
 		return false;
+	}
+
+	pp_rx = ppe_drv_iface_port_get(if_rx);
+	if (!pp_rx) {
+		ppe_drv_warn("Invalid Rx port for Rx IFACE (%px)\n", if_rx);
+		return false;
+	}
+
+	/*
+	 * If both the Rx & Tx ports are either PPE-DS or PPE-VP type, then set
+	 * the DDRQ LP SC for that flow
+	 */
+	if (((pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_DS) || (pp_rx->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP)) &&
+			((pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_DS) || (pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP)))
+	{
+		ppe_drv_warn("Both the Rx & Tx port type are DS/VP, setting the DDRQ LP SC code mapping\n");
+		return true;
 	}
 
 	ppe_drv_warn("Rx type is %d, Tx type is %d\n", if_rx->type, if_tx->type);
