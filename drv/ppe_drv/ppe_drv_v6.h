@@ -91,6 +91,8 @@
 					/* Flow has valid wifi AST info */
 #define PPE_DRV_V6_CONN_FLAG_WIFI_PEER_ID_VALID	0x80000000
 					/* Flow has valid wifi peer ID */
+#define PPE_DRV_V6_CONN_FLAG_HOST_ASSIST_QDISC	0x100000000ULL
+					/* Flow requires Qdisc processing in host */
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*
@@ -169,7 +171,7 @@ struct ppe_drv_v6_conn_flow {
 	 */
 	uint32_t int_pri;			/* For QoS */
 	uint8_t egress_dscp;			/* Egress DSCP value */
-	uint32_t flags;				/* Flags */
+	uint64_t flags;				/* Flags */
 
 	/*
 	 * Egress information
@@ -909,7 +911,7 @@ static inline void ppe_drv_v6_conn_flow_in_l3_if_set_and_ref(struct ppe_drv_v6_c
  * ppe_drv_v6_conn_flow_flags_check()
  *      check the bit flags.
  */
-static inline bool ppe_drv_v6_conn_flow_flags_check(struct ppe_drv_v6_conn_flow *pcf, uint32_t flags)
+static inline bool ppe_drv_v6_conn_flow_flags_check(struct ppe_drv_v6_conn_flow *pcf, uint64_t flags)
 {
         return (pcf->flags & flags);
 }
@@ -918,7 +920,7 @@ static inline bool ppe_drv_v6_conn_flow_flags_check(struct ppe_drv_v6_conn_flow 
  * ppe_drv_v6_conn_flow_flags_clear()
  *	Clear a specific bit flag.
  */
-static inline void ppe_drv_v6_conn_flow_flags_clear(struct ppe_drv_v6_conn_flow *pcf, uint32_t flags)
+static inline void ppe_drv_v6_conn_flow_flags_clear(struct ppe_drv_v6_conn_flow *pcf, uint64_t flags)
 {
         pcf->flags &= ~flags;
 }
@@ -927,7 +929,7 @@ static inline void ppe_drv_v6_conn_flow_flags_clear(struct ppe_drv_v6_conn_flow 
  * ppe_drv_v6_conn_flow_flags_set()
  *	Set a specific bit flags.
  */
-static inline void ppe_drv_v6_conn_flow_flags_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t flags)
+static inline void ppe_drv_v6_conn_flow_flags_set(struct ppe_drv_v6_conn_flow *pcf, uint64_t flags)
 {
         pcf->flags |= flags;
 }

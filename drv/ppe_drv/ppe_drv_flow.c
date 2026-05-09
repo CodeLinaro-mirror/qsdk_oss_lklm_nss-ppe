@@ -536,7 +536,8 @@ static bool ppe_drv_flow_v6_flow_cookie40b_get(struct ppe_drv_v6_conn_flow *pcf,
 	 * If the flow contains the host Qdisc information, fill the respective QDISC
 	 * valid bit in the tree id
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		cookie_40b[4] |= 0x80;
 		ret = true;
 	}
@@ -583,7 +584,8 @@ static bool ppe_drv_flow_v6_tree_id_get(struct ppe_drv_v6_conn_flow *pcf, uint8_
 			ret = false;
 	}
 
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		tree_id[2] |= 0x80;
 		ret = true;
 	}
@@ -768,7 +770,8 @@ static bool ppe_drv_flow_v6_wifi_qos_get(struct ppe_drv_v6_conn_flow *pcf, uint8
 	 * bit to indicate the PPE to pass the tree-id field (which contains the
 	 * QDISC valid bit) in the EDMA Rx secondary descriptor
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		*wifi_qos_en = true;
 	}
 
@@ -858,7 +861,8 @@ static void ppe_drv_flow_host_qdisc_info_del(uint32_t flow_idx)
  */
 void ppe_drv_flow_v6_host_qdisc_info_del(struct ppe_drv_v6_conn_flow *pcf, uint32_t flow_idx)
 {
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		ppe_drv_flow_host_qdisc_info_del(flow_idx);
 	}
 }
@@ -894,7 +898,8 @@ static void ppe_drv_flow_host_qdisc_info_set(struct ppe_drv_flow_host_qdisc_info
  */
 static void ppe_drv_flow_v6_host_qdisc_info_set(struct ppe_drv_v6_conn_flow *pcf, uint32_t flow_idx)
 {
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		ppe_drv_flow_host_qdisc_info_set(&pcf->qdisc_info, flow_idx);
 	}
 }
@@ -1219,6 +1224,18 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH);
+			return false;
+		}
+	}
+
+	/*
+	 * Set service code to redirect packet to host for qdisc processing for IPv6.
+	 */
+	if ((sc == PPE_DRV_SC_NONE) && (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_HOST_ASSIST_QDISC))) {
+		sc = PPE_DRV_SC_HOST_QOS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: Host assisted QoS flow required multiple service codes, existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
@@ -2022,7 +2039,8 @@ static bool ppe_drv_flow_v4_flow_cookie40b_get(struct ppe_drv_v4_conn_flow *pcf,
 	 * If the flow contains the host Qdisc information, fill the respective QDISC
 	 * valid bit in the tree id
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		cookie_40b[4] |= 0x80;;
 		ret = true;
 	}
@@ -2066,10 +2084,11 @@ static bool ppe_drv_flow_v4_tree_id_get(struct ppe_drv_v4_conn_flow *pcf, uint8_
 
 		default:
 			ppe_drv_warn("Invalid tree_id_type : (%u)", tree_id_data->type);
-			ret = false;;
+			ret = false;
 	}
 
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		tree_id[2] |= 0x80;
 		ret = true;
 	}
@@ -2177,7 +2196,8 @@ static bool ppe_drv_flow_v4_wifi_qos_get(struct ppe_drv_v4_conn_flow *pcf, uint8
 	 * bit to indicate the PPE to pass the tree-id field (which contains the
 	 * QDISC valid bit) in the EDMA Rx secondary descriptor
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		*wifi_qos_en = true;
 	}
 
@@ -2226,7 +2246,8 @@ static bool ppe_drv_flow_v4_policer_get(struct ppe_drv_v4_conn_flow *pcf, uint32
  */
 void ppe_drv_flow_v4_host_qdisc_info_del(struct ppe_drv_v4_conn_flow *pcf, uint32_t flow_idx)
 {
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		ppe_drv_flow_host_qdisc_info_del(flow_idx);
 	}
 }
@@ -2237,7 +2258,8 @@ void ppe_drv_flow_v4_host_qdisc_info_del(struct ppe_drv_v4_conn_flow *pcf, uint3
  */
 static void ppe_drv_flow_v4_host_qdisc_info_set(struct ppe_drv_v4_conn_flow *pcf, uint32_t flow_idx)
 {
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID)) {
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_VP_HOST_QDISC_INFO_VALID) ||
+			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC)) {
 		ppe_drv_flow_host_qdisc_info_set(&pcf->qdisc_info, flow_idx);
 	}
 }
@@ -2558,6 +2580,18 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
 			ppe_drv_warn("%p: EIP flow requires multiple service codes existing:%u new:%u",
 					pcf, service_code, PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH);
+			return false;
+		}
+	}
+
+	/*
+	 * Set service code to redirect packet to host for qdisc processing.
+	 */
+	if ((sc == PPE_DRV_SC_NONE) && (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC))) {
+		sc = PPE_DRV_SC_HOST_QOS;
+		if (!ppe_drv_sc_check_and_set(&service_code, sc)) {
+			ppe_drv_warn("%p: Host assisted QoS flow required multiple service codes, existing:%u new:%u",
+					pcf, service_code, sc);
 			return false;
 		}
 	}
