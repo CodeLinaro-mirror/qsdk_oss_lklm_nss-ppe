@@ -908,6 +908,10 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 	ctrl_cfg.ac_en = 1;
 	ctrl_cfg.ac_fc_en = 1;
 
+	if (res->q.mcast_valid) {
+		goto config_mcast;
+	}
+
 	ppe_drv_trace("%px:queue flow control set for ucast_qid:%u, enable:%u", p, res->q.ucast_qid, ctrl_cfg.ac_fc_en);
 	if (fal_ac_ctrl_set(PPE_DRV_SWITCH_ID, &obj, &ctrl_cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
@@ -950,6 +954,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	}
 
+config_mcast:
 	/*
 	 * Multicast queue configuration.
 	 */
@@ -960,8 +965,22 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 		} else {
 			obj.obj_id = res->q.mcast_qid;
+			static_cfg.color_enable = res->q.color_en;
 			static_cfg.wred_enable = res->q.red_en;
 			static_cfg.green_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
+			static_cfg.yel_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+			static_cfg.yel_max_off = res->q.max_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+			static_cfg.red_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+			static_cfg.red_max_off = res->q.max_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+
+			/*
+			 * Set resume offsets for all three colors.
+			 * Resume offsets control when the queue resumes accepting packets after dropping,
+			 * which helps prevent buffer oscillation.
+			 */
+			static_cfg.green_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
+			static_cfg.yel_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+			static_cfg.red_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_RED];
 		}
 
 		ppe_drv_trace("%px:multicast queue buffer set for mcast_qid:%u, qlimit:%u", p, res->q.mcast_qid, res->q.qlimit);
