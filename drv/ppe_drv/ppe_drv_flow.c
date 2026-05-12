@@ -458,7 +458,23 @@ static bool ppe_drv_flow_v6_flow_cookie48b_get(struct ppe_drv_v6_conn_flow *pcf,
 		case PPE_DRV_TREE_ID_TYPE_SAWF:
 		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
 			low_bit = (tree_id_data->info.value >> 16) & 0xFF;
-			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, tree_id_data->info.value & 0xFFFF);
+			memcpy(&tmp, &flow_qos->cookie_48b, sizeof(tmp));
+
+			tmp &= ~FAL_FLOW_COOKIE_48BIT_HIGH_8BIT_H;
+			tmp &= ~FAL_FLOW_COOKIE_48BIT_MIDDLE;
+
+			if (pcf->tx_port) {
+				if ((pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS) &&
+				    ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_WIFI_AST_VALID)) {
+					tmp &= ~FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L;
+					ast_info = pcf->fl_mdata.tree_id_data.wifi_metadata.ast_info;
+					tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, ast_info);
+				} else if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
+					tmp &= ~FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L;
+					tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, tree_id_data->info.value & 0xFFFF);
+				}
+			}
+
 			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_8BIT_H, (low_bit | (tree_id_data->type << 4)));
 
 			flow_qos->qos_valid = wifi_qos_en;
@@ -1956,9 +1972,25 @@ static bool ppe_drv_flow_v4_flow_cookie48b_get(struct ppe_drv_v4_conn_flow *pcf,
 
 		case PPE_DRV_TREE_ID_TYPE_SAWF:
 		case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
-                        low_bit = (tree_id_data->info.value >> 16) & 0xFF;
-                        tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, tree_id_data->info.value & 0xFFFF);
-                        tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_8BIT_H, (low_bit | (tree_id_data->type << 4)));
+			low_bit = (tree_id_data->info.value >> 16) & 0xFF;
+			memcpy(&tmp, &flow_qos->cookie_48b, sizeof(tmp));
+
+			tmp &= ~FAL_FLOW_COOKIE_48BIT_HIGH_8BIT_H;
+			tmp &= ~FAL_FLOW_COOKIE_48BIT_MIDDLE;
+
+			if (pcf->tx_port) {
+				if ((pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_DS) &&
+				    ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_WIFI_AST_VALID)) {
+					tmp &= ~FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L;
+					ast_info = pcf->fl_mdata.tree_id_data.wifi_metadata.ast_info;
+					tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, ast_info);
+				} else if (pcf->tx_port->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) {
+					tmp &= ~FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L;
+					tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, tree_id_data->info.value & 0xFFFF);
+				}
+			}
+
+			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_8BIT_H, (low_bit | (tree_id_data->type << 4)));
 
 			flow_qos->qos_valid = wifi_qos_en;
 			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_MIDDLE, wifi_qos);
