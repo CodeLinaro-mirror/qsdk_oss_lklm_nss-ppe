@@ -130,7 +130,14 @@ void ppe_drv_flow_stats_clear(struct ppe_drv_flow *pf)
  */
 void ppe_drv_flow_sawf_sc_stats_add(uint8_t service_class, uint32_t delta_pkts, uint32_t delta_bytes)
 {
-	struct ppe_drv_stats_sawf_sc *sawf_sc_stats = &ppe_drv_gbl->stats.sawf_sc_stats[service_class];
+	struct ppe_drv_stats_sawf_sc *sawf_sc_stats;
+
+	if (!PPE_DRV_SERVICE_CLASS_IS_VALID(service_class)) {
+		ppe_drv_warn("invalid service class: %u", service_class);
+		return;
+	}
+
+	sawf_sc_stats = &ppe_drv_gbl->stats.sawf_sc_stats[service_class];
 
 	atomic64_add(delta_pkts, &sawf_sc_stats->rx_packets);
 	atomic64_add(delta_bytes, &sawf_sc_stats->rx_bytes);
