@@ -977,7 +977,13 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	/*
 	 * Set queue limits and thresholds
 	 */
-	res.q.ucast_qid = queue_base + queue->offset;
+	if (queue_type == PPE_QOS_QUEUE_TYPE_MCAST) {
+		res.q.mcast_qid = queue_base + queue->offset;
+		res.q.mcast_valid = true;
+	} else {
+		res.q.ucast_qid = queue_base + queue->offset;
+	}
+
 	res.q.qlimit = info->ceiling / PPE_DRV_QOS_MEM_BLOCK_SIZE;
 	res.q.color_en = info->color_en;
 	res.q.red_en = info->wred_en;

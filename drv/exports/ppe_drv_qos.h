@@ -119,6 +119,7 @@ struct ppe_drv_qos_queue {
 	bool color_en;		/**< Enable color mode. */
 	bool red_en;		/**< Enable RED algorithm. */
 	bool backpressure_en;	/**< Enable backpressure. */
+	bool mcast_valid;	/**<Multicast queue is valid. */
 };
 
 /**
