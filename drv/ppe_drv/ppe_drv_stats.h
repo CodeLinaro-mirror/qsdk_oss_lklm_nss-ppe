@@ -320,6 +320,8 @@ struct ppe_drv_stats_if_map {
 	int iface_number;	/* Iface_number */
 	int iface_type;		/* Type of the interface */
 	int port_number;	/* Port Number associated with interface */
+	int gw_port_number;	/* GW VP port number for VEIP interface */
+	int pon_port_number;	/* PON VP port number for VEIP interface */
 	int vsi_number;		/* Vsi number associated with interface */
 	int l3_if_number;	/* L3_if_number associated with interface */
 	int src_profile;	/* Source profile of a port */
