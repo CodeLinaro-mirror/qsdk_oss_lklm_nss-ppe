@@ -36,10 +36,10 @@ bool ppe_vp_rx_process_cb(struct ppe_vp_cb_info *info, void *cb_data)
 }
 
 /*
- * ppe_vp_rx_dp_list_cb
+ * __ppe_vp_rx_dp_list_cb
  *	Forward packets received from nss-dp.
  */
-void ppe_vp_rx_dp_list_cb(struct sk_buff_head *head, struct nss_dp_vp_rx_info *rx_info)
+static void __ppe_vp_rx_dp_list_cb(struct sk_buff_head *head, struct nss_dp_vp_rx_info *rx_info)
 {
 	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
 	ppe_vp_list_callback_t dst_list_cb;
@@ -66,7 +66,7 @@ void ppe_vp_rx_dp_list_cb(struct sk_buff_head *head, struct nss_dp_vp_rx_info *r
 	rx_stats = this_cpu_ptr(dest_vp->vp_stats.rx_stats);
 	u64_stats_update_begin(&rx_stats->syncp);
 	rx_stats->rx_pkts += skb_queue_len(head);
-	rx_stats->rx_bytes += rx_info->batch_bytes;
+	rx_stats->rx_bytes += rx_info->total_bytes;
 	u64_stats_update_end(&rx_stats->syncp);
 
 	dst_list_cb = dest_vp->dst_list_cb;
@@ -90,17 +90,12 @@ drop:
 }
 
 /*
- * ppe_vp_rx_dp_cb
+ * __ppe_vp_rx_dp_skb_cb
  *	Process packet received from nss-dp.
  */
-void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
+static void __ppe_vp_rx_dp_skb_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 {
-
 	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
-#ifdef NSS_PPE_DRV_HW_GRO
-	struct nss_vp_rx_custom_mdata *vp_rx_mdata = &rxi->vp_rx_mdata;
-	struct nss_vp_rx_custom_gro_mdata *gro_mdata = NULL;
-#endif
 	struct ppe_vp_cb_info client_cb_info = {0};
 	struct ppe_vp *svp, *dvp;
 	int32_t flow_idx = rxi->flow_idx;
@@ -182,7 +177,7 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 
 		u64_stats_update_begin(&rx_stats->syncp);
 		rx_stats->rx_pkts++;
-		rx_stats->rx_bytes +=skb->len;
+		rx_stats->rx_bytes += skb->len;
 		u64_stats_update_end(&rx_stats->syncp);
 
 		/*
@@ -297,13 +292,13 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 			/* Initialize metadata to NONE by default */
 			client_cb_info.mdata_info.mdata_type = PPE_VP_CB_MDATA_TYPE_NONE;
 #ifdef NSS_PPE_DRV_HW_GRO
-			gro_mdata = &vp_rx_mdata->rx_mdata.gro_mdata;
-			if (unlikely(gro_mdata->hw_gro_en)) {
+			/*
+			 * Verify that the DP and PPE HW GRO bit enums are kept in sync.
+			 */
+			BUILD_BUG_ON((int)NSS_DP_VP_RX_HW_GRO_MAX != (int)PPE_VP_RX_HW_GRO_MAX);
+			if (unlikely(rxi->hw_gro_flags & PPE_VP_RX_HW_GRO_EN)) {
 				client_cb_info.mdata_info.mdata_type = PPE_VP_CB_MDATA_TYPE_HW_GRO;
-				client_cb_info.mdata_info.minfo.gro_info.hw_gro_en = gro_mdata->hw_gro_en;
-				client_cb_info.mdata_info.minfo.gro_info.hw_gro_more = gro_mdata->hw_gro_more;
-				client_cb_info.mdata_info.minfo.gro_info.hw_gro_psh = gro_mdata->hw_gro_psh;
-				client_cb_info.mdata_info.minfo.gro_info.hw_gro_fin = gro_mdata->hw_gro_fin;
+				client_cb_info.mdata_info.hw_gro_flags = rxi->hw_gro_flags;
 			}
 #endif
 			if (unlikely(!dvp->dst_cb(&client_cb_info, dvp->dst_cb_data))) {
@@ -422,4 +417,23 @@ void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rxi)
 	mem_debug_update_skb(skb);
 	dev_kfree_skb_any(skb);
 	return;
+}
+
+/*
+ * ppe_vp_rx_dp_cb()
+ *      Master DP callback demultiplexer
+ */
+void ppe_vp_rx_dp_cb(struct nss_dp_vp_rx_data *rx_data, struct nss_dp_vp_rx_info *vprxi)
+{
+	switch (rx_data->type) {
+	case NSS_DP_VP_RX_TYPE_SKB:
+		__ppe_vp_rx_dp_skb_cb(rx_data->skb, vprxi);
+		break;
+	case NSS_DP_VP_RX_TYPE_SKB_LIST:
+		__ppe_vp_rx_dp_list_cb(rx_data->skb_head, vprxi);
+		break;
+	default:
+		ppe_vp_warn("Invalid payload type %d received\n", rx_data->type);
+		break;
+	}
 }

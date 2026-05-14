@@ -15,6 +15,6 @@
  */
 
 struct nss_dp_vp_rx_info;
-void ppe_vp_rx_dp_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info *rx_info);
+
+void ppe_vp_rx_dp_cb(struct nss_dp_vp_rx_data *rx_data, struct nss_dp_vp_rx_info *rxi);
 bool ppe_vp_rx_process_cb(struct ppe_vp_cb_info *info, void *cb_data);
-void ppe_vp_rx_dp_list_cb(struct sk_buff_head *head, struct nss_dp_vp_rx_info *rx_info);

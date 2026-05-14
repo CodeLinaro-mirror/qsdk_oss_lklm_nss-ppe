@@ -59,6 +59,7 @@ struct ppe_vp {
 
 	ppe_vp_callback_t dst_cb;			/* Packet to interface for transmit callback */
 	ppe_vp_list_callback_t dst_list_cb;		/* skb list interface for transmit callback */
+	ppe_vp_xdp_callback_t dst_xdp_cb;		/* xdp interface for transmit callback */
 	void *dst_cb_data;				/* Callback data */
 	ppe_vp_callback_t src_cb;			/* Packet to be handed over to stack by VP user callback */
 	void *src_cb_data;				/* Callback data */

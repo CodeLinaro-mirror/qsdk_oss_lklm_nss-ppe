@@ -12,6 +12,7 @@
 #define _PPE_VP_PUBLIC_H_
 
 #include <linux/module.h>
+#include <net/xdp.h>
 #include <ppe_drv_port.h>
 
 struct ppe_drv_iface;
@@ -87,15 +88,21 @@ enum ppe_vp_cb_mdata_type {
 };
 
 /*
- * ppe_vp_cb_mdata_info_gro
- *	GRO metadata information
+ * ppe_vp_rx_hw_gro_bit
+ *      HW GRO flags in ppe_vp_cb_mdata_info.hw_gro_flags.
  */
-struct ppe_vp_cb_mdata_info_gro {
-	bool hw_gro_en;		/**< HW GRO enable flag */
-	bool hw_gro_more;	/**< HW GRO more flag */
-	bool hw_gro_fin;	/**< HW GRO fin flag */
-	bool hw_gro_psh;	/**< HW GRO push flag */
+enum ppe_vp_rx_hw_gro_bit {
+	PPE_VP_RX_HW_GRO_EN_BIT = 0,	/* HW GRO is enabled */
+	PPE_VP_RX_HW_GRO_MORE_BIT,	/* HW GRO more segments */
+	PPE_VP_RX_HW_GRO_TCP_FIN_BIT,	/* HW GRO fin segment */
+	PPE_VP_RX_HW_GRO_TCP_PSH_BIT,	/* HW GRO psh segment */
+	PPE_VP_RX_HW_GRO_MAX,
 };
+
+#define PPE_VP_RX_HW_GRO_EN		BIT(PPE_VP_RX_HW_GRO_EN_BIT)
+#define PPE_VP_RX_HW_GRO_MORE		BIT(PPE_VP_RX_HW_GRO_MORE_BIT)
+#define PPE_VP_RX_HW_GRO_TCP_FIN	BIT(PPE_VP_RX_HW_GRO_TCP_FIN_BIT)
+#define PPE_VP_RX_HW_GRO_TCP_PSH	BIT(PPE_VP_RX_HW_GRO_TCP_PSH_BIT)
 
 /*
  * ppe_vp_cb_mdata_info
@@ -103,9 +110,7 @@ struct ppe_vp_cb_mdata_info_gro {
  */
 struct ppe_vp_cb_mdata_info {
 	enum ppe_vp_cb_mdata_type mdata_type;	/**< Metadata type */
-	union {
-		struct ppe_vp_cb_mdata_info_gro gro_info;
-	} minfo;
+	uint32_t hw_gro_flags;			/**< HW GRO flags (PPE_VP_RX_HW_GRO_*) */
 };
 
 /**
@@ -124,6 +129,18 @@ struct ppe_vp_cb_info {
 };
 
 /**
+ * ppe_vp_xdp_cb_info
+ *	Information for VP XDP callback to process XDP packets.
+ */
+struct ppe_vp_xdp_cb_info {
+	struct xdp_buff *xdp;		/**< Single XDP buffer payload */
+	struct xdp_buff **xdp_vec;	/**< Array of XDP buffers */
+	uint32_t total_bytes;		/**< Total payload bytes across all XDP buffers */
+	uint32_t flow_idx;		/**< Flow index of the packet */
+	struct ppe_vp_cb_mdata_info mdata_info;	/**< Metadata info (e.g. HW GRO) */
+};
+
+/**
  * Callback function for VP Rx.
  *
  * @datatypes
@@ -134,6 +151,14 @@ struct ppe_vp_cb_info {
  * @param[in] cb_data		Pointer to the callback data.
  */
 typedef bool(*ppe_vp_callback_t)(struct ppe_vp_cb_info *, void *cb_data);
+
+/**
+ * Callback function for VP XDP Rx.
+ *
+ * @param[in] ppe_vp_xdp_cb_info	Pointer to XDP callback information.
+ * @param[in] cb_data			Pointer to the callback data.
+ */
+typedef bool(*ppe_vp_xdp_callback_t)(struct ppe_vp_xdp_cb_info *, void *cb_data);
 
 /**
  * Callback function for VP Rx list.
@@ -226,6 +251,7 @@ struct ppe_vp_ai {
 	ppe_vp_type_t type;		/**< VP type */
 	ppe_vp_callback_t dst_cb;	/**< VP dst callback */
 	ppe_vp_list_callback_t dst_list_cb;	/**< VP dst callback */
+	ppe_vp_xdp_callback_t dst_xdp_cb;	/**< VP dst XDP callback */
 	void *dst_cb_data;		/**< VP dst callback data */
 	ppe_vp_callback_t src_cb;	/**< VP src callback */
 	void *src_cb_data;		/**< VP src callback data */

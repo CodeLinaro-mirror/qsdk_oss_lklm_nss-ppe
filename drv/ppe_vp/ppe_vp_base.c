@@ -280,11 +280,6 @@ static void ppe_vp_base_init(void)
 	ppe_vp_trace("%px: Allocated %d VPs, active vp %d", pvb, PPE_DRV_VIRTUAL_MAX, pvt->active_vp);
 }
 
-static struct nss_dp_vp_rx_ops vp_rx_ops = {
-	.list_cb = ppe_vp_rx_dp_list_cb,
-	.cb = ppe_vp_rx_dp_cb,
-};
-
 /*
  * ppe_vp_base_module_init()
  *	module init for ppe vp driver.
@@ -319,10 +314,9 @@ static int __init ppe_vp_base_module_init(void)
 	ppe_vp_base_stats_init(pvb);
 
 	/*
-	 * Register ppe_vp Rx handlers with nss-dp
+	 * Register ppe_vp Rx handler with nss-dp
 	 */
 	nss_dp_vp_rx_register_cb(ppe_vp_rx_dp_cb);
-	nss_dp_vp_rx_register_ops(&vp_rx_ops);
 
 	ppe_vp_info("%px: PPE-VP module loaded successfully", pvb);
 
@@ -338,7 +332,6 @@ static void __exit ppe_vp_base_module_exit(void)
 {
 	struct ppe_vp_base *pvb = &vp_base;
 
-	nss_dp_vp_rx_unregister_ops();
 	nss_dp_vp_rx_unregister_cb();
 	del_timer_sync(&pvb->hw_port_stats_timer);
 
