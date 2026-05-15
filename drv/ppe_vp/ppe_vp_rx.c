@@ -7,6 +7,7 @@
 #include <linux/debug_mem_usage.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <net/page_pool/helpers.h>
 #include <ppe_drv.h>
 #include "ppe_vp_base.h"
 
@@ -420,6 +421,70 @@ static void __ppe_vp_rx_dp_skb_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info 
 }
 
 /*
+ * __ppe_vp_rx_dp_xdp_cb
+ *	Handle XDP buffer packets received from nss-dp.
+ */
+static void __ppe_vp_rx_dp_xdp_cb(struct xdp_buff *xdp, struct nss_dp_vp_rx_info *vprxi)
+{
+	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
+	struct ppe_vp_xdp_cb_info client_cb_info = {0};
+	ppe_vp_xdp_callback_t dst_xdp_cb;
+	struct ppe_vp_rx_stats *rx_stats;
+	struct ppe_vp *dvp;
+	void *dst_cb_data;
+
+	if (unlikely(vprxi->dvp < PPE_DRV_VIRTUAL_START) || unlikely(vprxi->dvp > PPE_DRV_VIRTUAL_MAX)) {
+		atomic64_inc(&vp_base.base_stats.rx_dvp_invalid);
+		goto drop;
+	}
+
+	rcu_read_lock();
+	dvp = rcu_dereference(vpa[PPE_VP_BASE_PORT_TO_IDX(vprxi->dvp)]);
+	if (unlikely(!dvp || !(dvp->flags & PPE_VP_FLAG_VP_ACTIVE))) {
+		atomic64_inc(&vp_base.base_stats.rx_dvp_inactive);
+		rcu_read_unlock();
+		goto drop;
+	}
+
+	rx_stats = this_cpu_ptr(dvp->vp_stats.rx_stats);
+	u64_stats_update_begin(&rx_stats->syncp);
+	rx_stats->rx_pkts++;
+	rx_stats->rx_bytes += vprxi->total_bytes;
+	u64_stats_update_end(&rx_stats->syncp);
+
+	dst_xdp_cb = dvp->dst_xdp_cb;
+	dst_cb_data = dvp->dst_cb_data;
+	rcu_read_unlock();
+
+	if (unlikely(!dst_xdp_cb)) {
+		atomic64_inc(&vp_base.base_stats.rx_dvp_no_xdpcb);
+		goto drop;
+	}
+
+	xdp->data += sizeof(struct ethhdr);
+	vprxi->total_bytes -= sizeof(struct ethhdr);
+
+	/*
+	 * Populate ppe_vp_xdp_cb_info from xdp and vprxi.
+	 */
+	client_cb_info.xdp = xdp;
+	client_cb_info.total_bytes = vprxi->total_bytes;
+	client_cb_info.flow_idx = vprxi->flow_idx;
+	client_cb_info.mdata_info.mdata_type = PPE_VP_CB_MDATA_TYPE_NONE;
+#ifdef NSS_PPE_DRV_HW_GRO
+	client_cb_info.mdata_info.hw_gro_flags = vprxi->hw_gro_flags;
+	if (unlikely(vprxi->hw_gro_flags & PPE_VP_RX_HW_GRO_EN))
+		client_cb_info.mdata_info.mdata_type = PPE_VP_CB_MDATA_TYPE_HW_GRO;
+#endif
+
+	dst_xdp_cb(&client_cb_info, dst_cb_data);
+	return;
+
+drop:
+	xdp_return_buff(xdp);
+}
+
+/*
  * ppe_vp_rx_dp_cb()
  *      Master DP callback demultiplexer
  */
@@ -431,6 +496,9 @@ void ppe_vp_rx_dp_cb(struct nss_dp_vp_rx_data *rx_data, struct nss_dp_vp_rx_info
 		break;
 	case NSS_DP_VP_RX_TYPE_SKB_LIST:
 		__ppe_vp_rx_dp_list_cb(rx_data->skb_head, vprxi);
+		break;
+	case NSS_DP_VP_RX_TYPE_XDP:
+		__ppe_vp_rx_dp_xdp_cb(rx_data->xdp, vprxi);
 		break;
 	default:
 		ppe_vp_warn("Invalid payload type %d received\n", rx_data->type);
