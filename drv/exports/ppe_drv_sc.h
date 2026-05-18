@@ -96,6 +96,8 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT = 60,		/* Loopback ring service code for DDR Buffering on second pass */
 	PPE_DRV_SC_UDP_ST = 61,					/* UDP speedtest service code */
 	PPE_DRV_SC_UDP_ST_NEXT = 62,				/* UDP speedtest next service code */
+	PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP = 63,			/* Service code for DDRQ loopback ring for IPSec full inline Encap */
+	PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP = 64,			/* Service code for DDRQ loopback ring for IPSec full inline Decap */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,
