@@ -218,6 +218,8 @@ int ppe_drv_if_map_dump_get(struct ppe_drv_if_map_instance *mfi)
 		stats[active_if].base_iface_number = -EINVAL;
 		stats[active_if].parent_iface_number = -EINVAL;
 		stats[active_if].port_number = -EINVAL;
+		stats[active_if].gw_port_number = -EINVAL;
+		stats[active_if].pon_port_number = -EINVAL;
 		stats[active_if].vsi_number = -EINVAL;
 		stats[active_if].l3_if_number = -EINVAL;
 		port_number = vsi_number = l3_if_number = -EINVAL;
@@ -251,6 +253,17 @@ int ppe_drv_if_map_dump_get(struct ppe_drv_if_map_instance *mfi)
 			if (iface->type == PPE_DRV_IFACE_TYPE_PHYSICAL)
 				stats[active_if].src_profile = ppe_drv_port_src_profile_get_byidx(port_number);
 		}
+
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+		if (iface->type == PPE_DRV_IFACE_TYPE_VEIP) {
+			int32_t gw_port = ppe_drv_veip_get_port_internal(iface, PPE_DRV_PORT_VIRTUAL_GW);
+			int32_t pon_port = ppe_drv_veip_get_port_internal(iface, PPE_DRV_PORT_VIRTUAL_PON);
+			if (gw_port != PPE_DRV_INVALID_PORT)
+				stats[active_if].gw_port_number = gw_port;
+			if (pon_port != PPE_DRV_INVALID_PORT)
+				stats[active_if].pon_port_number = pon_port;
+		}
+#endif
 
 		vsi_number = ppe_drv_iface_vsi_idx_get(iface);
 		if (vsi_number != -1) {
@@ -303,8 +316,20 @@ int ppe_drv_if_map_dump_get(struct ppe_drv_if_map_instance *mfi)
 			goto ppe_drv_if_map_write_error;
 		}
 
-		if (stats[i].port_number != -EINVAL) {
+		if (stats[i].port_number != -EINVAL && stats[i].iface_type != PPE_DRV_IFACE_TYPE_VEIP) {
 			if ((result = ppe_drv_if_map_write(mfi, "port_number", "%u", stats[i].port_number))) {
+				goto ppe_drv_if_map_write_error;
+			}
+		}
+
+		if (stats[i].gw_port_number != -EINVAL) {
+			if ((result = ppe_drv_if_map_write(mfi, "gw_port_number", "%u", stats[i].gw_port_number))) {
+				goto ppe_drv_if_map_write_error;
+			}
+		}
+
+		if (stats[i].pon_port_number != -EINVAL) {
+			if ((result = ppe_drv_if_map_write(mfi, "pon_port_number", "%u", stats[i].pon_port_number))) {
 				goto ppe_drv_if_map_write_error;
 			}
 		}
