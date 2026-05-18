@@ -45,11 +45,6 @@ void ppe_drv_port_mgmt_entries_init(struct ppe_drv_port_mgmt *port_mgmt)
 	 * Clear action tables: default set flooding
 	 */
 	memset(port_mgmt->port_phy_isol_action, 0xAA, sizeof(port_mgmt->port_phy_isol_action));
-	memset(port_mgmt->port_vp_isol_action, 0xAA, sizeof(port_mgmt->port_vp_isol_action));
-#ifdef NSS_PPE_PON_SUPPORT
-	if (gem_port_bitmap)
-		port_mgmt->us_port_id =  __builtin_ffs(gem_port_bitmap) - 1;
-#endif
 #endif
 }
 
@@ -660,18 +655,18 @@ static inline void ppe_drv_port_mgmt_isol_bit_set(struct ppe_drv_port_mgmt *port
 	 * Always allow forwarding to CPU port 0
 	 */
 	port_mgmt->port_phy_isol_action[omci_index][0] &= ~(0x3ULL);
-	port_mgmt->port_vp_isol_action[omci_index][0] &= ~(0x3ULL);
+	port_mgmt->port_vp_isol_action[omci_index][0]  &= ~(0x3ULL);
+	port_mgmt->port_phy_isol_bitmap[omci_index] |= 0x1ULL;
+	port_mgmt->port_vp_isol_bitmap[omci_index]  |= 0x1ULL;
 
 #ifdef NSS_PPE_PON_SUPPORT
 	/*
-	 * Always enable flooding and Forwarding to upstream port
+	 * Always enable Forwarding to upstream port
 	 */
 	if (gem_port_bitmap && (port_mgmt->us_port_id < PPE_DRV_PHYSICAL_MAX)) {
 		bit_pos = port_mgmt->us_port_id;
 		byte_idx = bit_pos / 16;
 		shift_b = (bit_pos % 16) * 2;
-		port_mgmt->port_phy_isol_bitmap[omci_index] &= ~(0x1ULL << bit_pos);
-		port_mgmt->port_vp_isol_bitmap[omci_index] &= ~(0x1ULL << bit_pos);
 		port_mgmt->port_phy_isol_action[omci_index][byte_idx] &= ~(0x3ULL << shift_b);
 		port_mgmt->port_vp_isol_action[omci_index][byte_idx] &= ~(0x3ULL << shift_b);
 	}
