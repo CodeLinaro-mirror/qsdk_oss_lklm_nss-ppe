@@ -130,7 +130,7 @@ uint8_t ppe_drv_tun_encap_xlate_rule_get_index(struct ppe_drv_tun_encap_xlate_ru
  *	Configure encap_xlate_rule_RULE table entry
  */
 bool ppe_drv_tun_encap_xlate_rule_configure(struct ppe_drv_tun_encap_xlate_rule *ptecxr,
-				struct ppe_drv_tun_cmn_ctx_xlate_rule *rule, int8_t tun_len, uint32_t l2_flags, bool dmr)
+				struct ppe_drv_tun_cmn_ctx_xlate_rule *rule, int8_t tun_len, uint32_t l2_flags, bool dmr, bool is_gretap_mapt)
 {
 	fal_tunnel_encap_rule_t mapt_edit_rule = {0};
 	uint8_t daddr_offset;
@@ -184,8 +184,21 @@ bool ppe_drv_tun_encap_xlate_rule_configure(struct ppe_drv_tun_encap_xlate_rule 
 
 	mapt_edit_rule.src1_start = l2_offset + daddr_offset;
 	mapt_edit_rule.src1_sel = FAL_TUNNEL_RULE_SRC1_FROM_HEADER_DATA;
-	mapt_edit_rule.src2_sel = FAL_TUNNEL_RULE_SRC2_PKT_DATA0;
 	mapt_edit_rule.src2_entry[0].enable = A_TRUE;
+
+	/*
+	 * SRC2 sources the v4 DIP bits to embed into the IPv6 address per RFC 6052.
+	 * For GRETAP+MAP-T singlepass (PPE_DRV_GRETAP_MAPT_SINGLEPASS) the inner v4 flow
+	 * rule carries the v4 DIP in the flow cookie (packed by ppe_drv_flow_v4_cookie48b_get),
+	 * so SRC2 must read from FLOW_COOKIE. Without singlepass the v4 DIP is read directly
+	 * from the packet data.
+	 */
+#ifdef PPE_DRV_GRETAP_MAPT_SINGLEPASS
+	mapt_edit_rule.src2_sel = is_gretap_mapt ?
+			FAL_TUNNEL_RULE_SRC2_FLOW_COOKIE : FAL_TUNNEL_RULE_SRC2_PKT_DATA0;
+#else
+	mapt_edit_rule.src2_sel = FAL_TUNNEL_RULE_SRC2_PKT_DATA0;
+#endif
 
 	switch (rule->ipv6_prefix_len) {
 	case 96:

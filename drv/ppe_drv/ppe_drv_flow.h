@@ -24,6 +24,13 @@
 #define PPE_DRV_FLOW_TID_SHIFT				0x1
 #define PPE_DRV_FLOW_DS_HLOS_TID_OVERRIDE_ENABLE	0x80
 #define PPE_DRV_FLOW_HLOS_OVERRIDE_MSDUQ_MAX		0x07
+
+/*
+ * BIT position in flow cookie LOW field used to signal WiFi to derive
+ * the AST index from the packet rather than the flow cookie. Required for
+ * GRE tunnel flows where the flow cookie does not carry a valid AST index.
+ */
+#define PPE_DRV_FLOW_COOKIE_GRE_AST_FROM_PKT_SHIFT	15
 struct ppe_drv_v4_conn_flow;
 struct ppe_drv_v6_conn_flow;
 

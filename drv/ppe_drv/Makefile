@@ -171,6 +171,7 @@ endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
 ccflags-y += -DPPE_DRV_FLOW_COOKIE_48B_SUPPORT
+ccflags-y += -DPPE_DRV_GRETAP_MAPT_SINGLEPASS
 endif
 
 ccflags-y += -Wall -Werror
