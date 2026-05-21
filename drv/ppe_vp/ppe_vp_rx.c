@@ -4,12 +4,12 @@
  */
 
 #include <linux/version.h>
-#include <linux/debug_mem_usage.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <net/page_pool/helpers.h>
 #include <ppe_drv.h>
 #include "ppe_vp_base.h"
+#include <linux/debug_mem_usage.h>
 
 #define PPE_VP_FLOW_IDX_FOR_NO_QDISC	-1
 extern struct ppe_vp_base vp_base;

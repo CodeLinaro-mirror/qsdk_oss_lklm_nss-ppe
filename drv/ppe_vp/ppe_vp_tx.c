@@ -16,13 +16,13 @@
 
 #include <linux/types.h>
 #include <linux/inetdevice.h>
-#include <linux/debug_mem_usage.h>
 #include <linux/etherdevice.h>
 #include <nss_dp_vp.h>
 #include <ppe_drv_port.h>
 #include <ppe_drv_sc.h>
 #include "ppe_vp_base.h"
 #include "ppe_vp_tx.h"
+#include <linux/debug_mem_usage.h>
 
 extern struct ppe_vp_base vp_base;
 
