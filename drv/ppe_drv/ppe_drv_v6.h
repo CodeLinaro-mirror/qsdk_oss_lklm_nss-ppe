@@ -93,6 +93,8 @@
 					/* Flow has valid wifi peer ID */
 #define PPE_DRV_V6_CONN_FLAG_HOST_ASSIST_QDISC	0x100000000ULL
 					/* Flow requires Qdisc processing in host */
+#define PPE_DRV_V6_CONN_FLAG_FLOW_UDP_ST_DROP	0x200000000ULL
+					/* Flow has UDP ST enabled */
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*

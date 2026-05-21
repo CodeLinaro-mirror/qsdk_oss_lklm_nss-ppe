@@ -95,6 +95,8 @@
 					/* Flow has valid wifi peer ID */
 #define PPE_DRV_V4_CONN_FLAG_HOST_ASSIST_QDISC	0x200000000ULL
 					/* Flow requires Qdisc processing in host */
+#define PPE_DRV_V4_CONN_FLAG_FLOW_UDP_ST_DROP	0x400000000ULL
+					/* Flow has UDP ST enabled */
 
 /*
  * ppe_drv_v4_addr_equal()

@@ -59,6 +59,8 @@
 #define PPE_DRV_V6_RULE_ORIG_FLOW_SW_MDATA_VALID	0x00008000	/**< Rule creation for Socket Offload Orig flows */
 #define PPE_DRV_V6_RULE_RET_FLOW_SW_MDATA_VALID		0x00010000	/**< Rule creation for Socket Offload Ret flows */
 #define PPE_DRV_V6_RULE_FLAG_IPSEC_DECAP_FLOW 		0x00020000	/**< Rule creation for is IPsec Decap flow */
+#define PPE_DRV_V6_RULE_FLAG_UDP_ST_TX_FLOW		0x00040000	/**< Rule creation for UDP-ST TX flow */
+#define PPE_DRV_V6_RULE_FLAG_UDP_ST_RX_FLOW		0x00080000	/**< Rule creation for UDP-ST RX flow */
 
 /*
  * v6 valid flags

@@ -173,6 +173,8 @@ struct ppe_drv_policer_rule_create_acl_info {
 	bool grp_cf;			/**< Counter overflow */
 	uint16_t next_ptr;		/**< Next policer number */
 
+	uint8_t length_mode;		/**< Length mode for rate limit calculation */
+
 	struct ppe_drv_policer_rule_create_action action; /* Action for traffic */
 	struct ppe_drv_policer_rule_acl_dir_info dir_info; /**< Policer direction */
 };

@@ -1774,6 +1774,16 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	}
 
 	/*
+	 * For UDP-ST v6 flows, set the flow fwd_type to DROP. This is needed for locally
+	 * terminated UDP-ST traffic where we only want to accelerate the flow
+	 * direction (VP -> WAN) and drop the return direction for tx and drop both 
+	 * for rx.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_UDP_ST_DROP)) {
+		flow_cfg.fwd_type = FAL_FLOW_DROP;
+	}
+
+	/*
 	 * Add the flow
 	 */
 	err = fal_flow_entry_add(PPE_DRV_SWITCH_ID, FAL_FLOW_OP_MODE_KEY, &flow_cfg);
@@ -3369,6 +3379,16 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 			ppe_drv_warn("%p: failed to allocate flow_cfg, unidirectional updates will be disabled", pcf);
 		}
 		flow_cfg.fwd_type = FAL_FLOW_RDT_TO_CPU;
+	}
+
+	/*
+	 * For UDP-ST v4 flows, set the flow fwd_type to DROP. This is needed for locally
+	 * terminated UDP-ST traffic where we only want to accelerate the flow
+	 * direction (VP -> WAN) and drop the return direction for tx and drop both
+	 * for rx.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_UDP_ST_DROP)) {
+		flow_cfg.fwd_type = FAL_FLOW_DROP;
 	}
 
 	/*
