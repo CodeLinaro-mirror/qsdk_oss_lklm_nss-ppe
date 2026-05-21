@@ -1139,6 +1139,21 @@ ppe_drv_ret_t ppe_drv_veip_init(struct ppe_drv_iface *iface, struct net_device *
 	vp_info->gw_vp_num = port_nums[0];
 	vp_info->pon_vp_num = port_nums[1];
 
+#ifdef NSS_PPE_DRV_HW_GRO
+	/*
+	 * Enable HW GRO for both VEIP VP ports (GW and PON) so that PPE flow
+	 * rule push sets gro_en in the hardware flow entry when the peer port
+	 * is a netfn offload VP.  This mirrors what edma_dp_init() does for
+	 * physical ports.  Both ports must be set because either can appear as
+	 * rx_port in ppe_drv_hw_gro_is_enabled() depending on traffic direction.
+	 * This is enabled by default and cannot be disabled via ethtool like other physical ports
+	 */
+	veip_ports[0]->hw_gro_en = true;
+	veip_ports[1]->hw_gro_en = true;
+	ppe_drv_info("%p: HW GRO enabled for VEIP ports GW:%u PON:%u",
+			p, port_nums[0], port_nums[1]);
+#endif
+
 	spin_unlock_bh(&p->lock);
 	ppe_drv_info("%p: VEIP interface initialized - GW: %u, PON: %u", p, port_nums[0], port_nums[1]);
 	return PPE_DRV_RET_SUCCESS;
