@@ -803,13 +803,14 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 	case PPE_DRV_SC_DDRQ_LP_SC:
 		sc_cfg.field_update_bitmap[0] = ((1ULL << EPE_LOOPBACK_VLAN_START)
 				| (1ULL << FLD_UP_DST_INFO_WITH_GEM)
-				| (1ULL << FLD_UP_DST_INFO_FORCE)
-				| (1ULL << FLD_UP_SERVICE_CODE_DDRQ)
-				| (1ULL << FLD_UP_DDRQ_DIRECT_ENQ));
+				| (1ULL << EPE_PRE_HEADER_VALID)
+				| (1ULL << FLD_UP_SERVICE_CODE_DDRQ));
 		sc_cfg.bypass_bitmap[1] = ((1 << EG_VLAN_MEMBER_CHECK_BYP)
 						| (1 << L2_SOURCE_SEC_BYP)
 						| (1 << BRIDGING_FWD_BYP)
-						| (1 << SOURCE_FLTR_BYP));
+						| (1 << SOURCE_FLTR_BYP)
+						| (1 << L2_PKT_EDIT_BYP)
+						| (1 << L3_PKT_EDIT_BYP));
 		sc_cfg.dest_port_valid = A_TRUE;
 		break;
 
