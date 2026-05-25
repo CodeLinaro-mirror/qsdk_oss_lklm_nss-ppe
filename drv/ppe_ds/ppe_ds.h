@@ -20,6 +20,7 @@
 
 #include "nss_dp_ppeds.h"
 #include "ppe_ds_wlan.h"
+#include <linux/string.h>
 
 #define PPE_DS_POLL_MODE	1
 #define PPE_DS_INTR_MODE	0
@@ -70,13 +71,10 @@
 #define PPE_DS_RXFILL_BUDGET_MIN	16	/* PPE-DS node's Rxfill budget minimum */
 #define PPE_DS_RXFILL_BUDGET_MAX	65535	/* PPE-DS node's Rxfill budget maximum */
 #define PPE_DS_RXFILL_BUDGET_DEF	128	/* PPE-DS node's Rxfill budget default */
-#if defined(PPE_DS_MEM_PROFILE_LOW)
-#define PPE_DS_RXFILL_NUM_DESC_MIN	256	/* PPE-DS node's Rxfill minimum descriptor count */
-#define PPE_DS_RXFILL_NUM_DESC_DEF	512	/* PPE-DS node's Rxfill default descriptor count */
-#else
+#define PPE_DS_RXFILL_NUM_DESC_MIN_LOW	256	/* PPE-DS node's Rxfill minimum descriptor count (low profile) */
+#define PPE_DS_RXFILL_NUM_DESC_DEF_LOW	512	/* PPE-DS node's Rxfill default descriptor count (low profile) */
 #define PPE_DS_RXFILL_NUM_DESC_MIN	1024	/* PPE-DS node's Rxfill minimum descriptor count */
 #define PPE_DS_RXFILL_NUM_DESC_DEF	2048	/* PPE-DS node's Rxfill default descriptor count */
-#endif
 #define PPE_DS_TXCMPL_NUM_DESC_MAX	65535	/* PPE-DS node's Txcmpl maximum descriptor count */
 #define PPE_DS_TXCMPL_NUM_DESC_MIN	1024	/* PPE-DS node's Txcmpl minimum descriptor count */
 #define PPE_DS_TXCMPL_NUM_DESC_DEF	8192	/* PPE-DS node's Txcmpl default descriptor count */
@@ -96,6 +94,21 @@ extern unsigned int rxfill_low_threshold;
 extern unsigned int txcmpl_budget;
 extern unsigned int rxfill_budget;
 extern unsigned int txcmpl_chunk_of_reap;
+
+/*
+ * ppe_ds_mem_profile
+ *	Memory profile detected from kernel bootargs (mem-profile=<value>).
+ * PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT : 1G  (default / no param)
+ * PPE_DS_MEM_PROFILE_DYNAMIC_MEDIUM  : 512M (mem-profile=balanced)
+ * PPE_DS_MEM_PROFILE_DYNAMIC_LOW     : 256M (mem-profile=optimized)
+ */
+enum ppe_ds_mem_profile {
+	PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT = 0,
+	PPE_DS_MEM_PROFILE_DYNAMIC_MEDIUM,
+	PPE_DS_MEM_PROFILE_DYNAMIC_LOW,
+};
+
+extern enum ppe_ds_mem_profile ppe_ds_active_mem_profile;
 
 /*
  * ppe_ds_node_state_t
