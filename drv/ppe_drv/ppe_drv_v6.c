@@ -4182,8 +4182,12 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 		ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail_collision);
 		ppe_drv_warn("%p: create collision detected: %p", p, create);
 		ret = PPE_DRV_RET_FAILURE_CREATE_COLLISSION;
-		ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
-		ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
+		if (cn->pcf.eg_port_if)
+			ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
+
+		if (cn->pcr.eg_port_if)
+			ppe_drv_iface_deref_internal(cn->pcr.eg_port_if);
+
 		spin_unlock_bh(&p->lock);
 		kfree(cn);
 		return ret;
@@ -4201,8 +4205,12 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 			ppe_drv_stats_inc(&comm_stats->v6_create_policer_fail);
 			ppe_drv_warn("%p: acceleration of flow failed: %p", p, pcf);
 			ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
-			ppe_drv_iface_deref_internal(pcf->eg_port_if);
-			ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
+			if (cn->pcf.eg_port_if)
+				ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
+
+			if (cn->pcr.eg_port_if)
+				ppe_drv_iface_deref_internal(cn->pcr.eg_port_if);
+
 			spin_unlock_bh(&p->lock);
 			kfree(cn);
 			ppe_drv_v6_conn_flow_flags_clear(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);
@@ -4229,7 +4237,14 @@ ppe_drv_ret_t ppe_drv_v6_policer_flow_create(struct ppe_drv_v6_rule_create *crea
 			ppe_drv_warn("%p: acceleration of return direction failed: %p", p, pcr);
 			ret = PPE_DRV_RET_FAILURE_FLOW_ADD_FAIL;
 			ppe_drv_v6_conn_flow_flags_clear(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_PPE_POLICER_ASSIST);
+			if (cn->pcf.eg_port_if)
+				ppe_drv_iface_deref_internal(cn->pcf.eg_port_if);
+
+			if (cn->pcr.eg_port_if)
+				ppe_drv_iface_deref_internal(cn->pcr.eg_port_if);
+
 			spin_unlock_bh(&p->lock);
+			kfree(cn);
 			return ret;
 		}
 
