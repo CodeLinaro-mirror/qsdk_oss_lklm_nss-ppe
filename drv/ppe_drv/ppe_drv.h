@@ -503,9 +503,10 @@ struct ppe_drv_loopback_ring_info {
 #define PPE_DRV_LPBK_BUFFER_MAP_MAX		16
 
 /*
- * Maximum string length for lpbk_buffer_map sysctl input ("<ingress> <egress>").
+ * Maximum string length for lpbk_buffer_map sysctl read output (all pairs).
+ * Each entry serialises as "IFNAMSIZ IFNAMSIZ\n" = IFNAMSIZ*2+2 bytes.
  */
-#define PPE_DRV_LPBK_BUFFER_MAP_STR_LEN		64
+#define PPE_DRV_LPBK_BUFFER_MAP_STR_LEN		((IFNAMSIZ * 2 + 2) * PPE_DRV_LPBK_BUFFER_MAP_MAX)
 
 /*
  * ppe_drv_lpbk_buffer_map_entry
