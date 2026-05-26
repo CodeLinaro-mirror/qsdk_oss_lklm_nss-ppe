@@ -671,6 +671,10 @@ static void ppe_drv_hw_stats_sync(struct timer_list *tm)
 	}
 #endif
 
+#ifdef NSS_PPE_PON_SUPPORT
+	ppe_drv_dp_pon_stats_update(p);
+#endif
+
 	spin_unlock_bh(&p->lock);
 
 	/*

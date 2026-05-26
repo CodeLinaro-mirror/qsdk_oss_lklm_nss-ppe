@@ -11,6 +11,9 @@
 #ifndef _PPE_DRV_DP_H_
 #define _PPE_DRV_DP_H_
 
+#include <linux/netdevice.h>
+#include "ppe_drv_port.h"
+
 /**
  * @addtogroup ppe_drv_dp_subsystem
  * @{
@@ -146,5 +149,20 @@ ppe_drv_ret_t ppe_drv_dp_set_ppe_offload_enable_flag(struct ppe_drv_iface *iface
  */
 ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
                 bool enable);
+
+/**
+ * ppe_drv_dp_get_pon_stats
+ *	Fill stats with the 64-bit accumulated PON upstream port counters.
+ *
+ * WAR: Read PPE port statistics instead of MIB for PON port.
+ * Note: This will cover only packet and byte counters.
+ *
+ * @param[out] stats   Pointer to ppe_drv_port_hw_stats to fill.
+ *
+ * @return
+ * None.
+ */
+void ppe_drv_dp_get_pon_stats(struct ppe_drv_port_hw_stats *stats);
+
 /** @} */ /* end_addtogroup ppe_drv_dp_subsystem */
 #endif /* _PPE_DRV_DP_H_ */
