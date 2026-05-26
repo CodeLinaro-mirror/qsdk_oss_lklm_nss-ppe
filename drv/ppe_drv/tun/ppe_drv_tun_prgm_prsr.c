@@ -469,7 +469,7 @@ static bool ppe_drv_tun_prgm_prsr_udf_cfg_equal(struct ppe_drv_tun_prgm_prsr_prg
 static bool ppe_drv_tun_prgm_prsr_cfg_equal(struct ppe_drv_tun_prgm_prsr_cfg *a,
 						struct ppe_drv_tun_prgm_prsr_cfg *b)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p __maybe_unused = ppe_drv_gbl;
 
 	if (!a || !b) {
 		return false;
