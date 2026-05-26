@@ -203,7 +203,7 @@ void ppe_drv_sc_spl_ddrq_config(void)
 	 * Reset all the bits in the bypass bitmap 0/1/3
 	 */
 	sc_cfg.bypass_bitmap[0] = 0;
-	sc_cfg.bypass_bitmap[1] = 0;
+	sc_cfg.bypass_bitmap[1] = (1 << FLOW_POLICER_BYP);
 	sc_cfg.bypass_bitmap[3] = 0;
 	sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
 	servcode = FAL_SERVCODE(FAL_SERVCODE_TYPE_PASSTHROUGH, PPE_DRV_SC_DDRQ_PT_SPL_BYPASS_SC);
