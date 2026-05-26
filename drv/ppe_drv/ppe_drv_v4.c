@@ -214,6 +214,21 @@ void ppe_drv_fill_fse_v4_tuple_info(struct ppe_drv_v4_conn_flow *conn, struct pp
 	fse_info->tuple.dest_port = ppe_drv_v4_conn_flow_match_dest_ident_get(conn);
 	fse_info->tuple.protocol = ppe_drv_v4_conn_flow_match_protocol_get(conn);
 
+#ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
+	/*
+	 * Check if ESP SPI flag is set in pcf/pcr.
+	 * If set, extract SPI value and split it into src_port and dest_port fields,
+	 * as FSE hardware expects such split in case of ESP proto.
+	 * 16-bit LSB of SPI goes into src_port field
+	 * 16-bit MSB of SPI goes into dest_port field
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(conn, PPE_DRV_V4_CONN_FLAG_ESP_SPI)) {
+		uint32_t spi = (uint32_t)ppe_drv_v4_conn_flow_esp_spi_get(conn);
+		fse_info->tuple.src_port = (uint16_t)(spi & PPE_DRV_ESP_SPI_MASK);
+		fse_info->tuple.dest_port = (uint16_t)((spi >> PPE_DRV_ESP_SPI_SHIFT) & PPE_DRV_ESP_SPI_MASK);
+	}
+#endif
+
 	pp = ppe_drv_v4_conn_flow_rx_port_get(conn);
 	tx_port = ppe_drv_v4_conn_flow_tx_port_get(conn);
 
