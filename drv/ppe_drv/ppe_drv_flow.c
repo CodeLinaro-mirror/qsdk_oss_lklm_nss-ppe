@@ -1070,7 +1070,13 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	ppe_drv_sc_t sc = PPE_DRV_SC_NONE;
 #ifdef PPE_DRV_DDRQ_ENABLE
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS)) {
-		*scp = PPE_DRV_SC_DDRQ_LP_SC;
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP)) {
+			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP;
+		} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP)) {
+			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP;
+		} else {
+			*scp = PPE_DRV_SC_DDRQ_LP_SC;
+		}
 		ppe_drv_warn("Flow has the DDRQ PT disable flag set, setting SC:%d for it\n", *scp);
 		return true;
 	}
@@ -1776,7 +1782,7 @@ struct ppe_drv_flow *ppe_drv_flow_v6_add(struct ppe_drv_v6_conn_flow *pcf, struc
 	/*
 	 * For UDP-ST v6 flows, set the flow fwd_type to DROP. This is needed for locally
 	 * terminated UDP-ST traffic where we only want to accelerate the flow
-	 * direction (VP -> WAN) and drop the return direction for tx and drop both 
+	 * direction (VP -> WAN) and drop the return direction for tx and drop both
 	 * for rx.
 	 */
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_UDP_ST_DROP)) {
@@ -2547,7 +2553,13 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	ppe_drv_ret_t ret __maybe_unused;
 #ifdef PPE_DRV_DDRQ_ENABLE
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS)) {
-		*scp = PPE_DRV_SC_DDRQ_LP_SC;
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_ENCAP)) {
+			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP;
+		} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP)) {
+			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP;
+		} else {
+			*scp = PPE_DRV_SC_DDRQ_LP_SC;
+		}
 		ppe_drv_warn("Flow has the DDRQ PT disable flag set, setting SC:%d for it\n", *scp);
 		return true;
 	}
