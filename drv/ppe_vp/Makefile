@@ -10,7 +10,9 @@ ccflags-y += -DNSS_PPE_DRV_HW_GRO
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq52xx))
+ifndef PPE_SFU_PROFILE
 ccflags-y += -DPPE_VP_VEIP_FEATURE_SUPPORT
+endif
 endif
 
 obj-m += qca-nss-ppe-vp.o

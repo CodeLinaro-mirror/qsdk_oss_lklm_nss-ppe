@@ -36,7 +36,9 @@ ccflags-y += -DPPE_LOOPBACK_PORT_SUPPORT
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq52xx))
+ifndef PPE_SFU_PROFILE
 ccflags-y += -DNSS_PPE_VEIP_FEATURE_SUPPORT
+endif
 endif
 
 obj-m += qca-nss-ppe-rule.o

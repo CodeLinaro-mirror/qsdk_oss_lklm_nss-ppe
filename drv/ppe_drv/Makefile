@@ -162,12 +162,14 @@ ifeq ($(SoC),$(filter $(SoC),ipq52xx))
 ccflags-y += -DPPE_DRV_PON_PQ_MAPPING
 ccflags-y += -DNSS_PPE_FEATURE_DOT1P
 ccflags-y += -DNSS_PPE_FEATURE_GEMPORT
-ccflags-y += -DPPE_DRV_VEIP_FEATURE_SUPPORT
 ccflags-y += -DNSS_PPE_MCAST_FEATURE_SUPPORT
 qca-nss-ppe-objs += ppe_drv_dot1p.o
 qca-nss-ppe-objs += ppe_drv_gemport.o
-qca-nss-ppe-objs += ppe_drv_veip.o
 qca-nss-ppe-objs += ppe_drv_mcast.o
+ifndef PPE_SFU_PROFILE
+ccflags-y += -DPPE_DRV_VEIP_FEATURE_SUPPORT
+qca-nss-ppe-objs += ppe_drv_veip.o
+endif
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
