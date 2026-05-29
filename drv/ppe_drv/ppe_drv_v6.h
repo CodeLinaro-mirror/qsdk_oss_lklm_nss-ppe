@@ -1058,4 +1058,3 @@ ppe_drv_ret_t ppe_drv_v6_delete_hairpin_flow(struct ppe_drv_v6_conn *cn, struct 
 struct ppe_drv_flow *ppe_drv_v6_flow_hash_tuple_find(struct ppe_drv_v6_5tuple *tuple, struct hlist_head *head_tbl);
 struct ppe_drv_flow *ppe_drv_v6_flow_hash_tuple_find_by_dev(struct ppe_drv_v6_5tuple *tuple,
 		struct hlist_head *head_tbl, struct net_device *dev);
-

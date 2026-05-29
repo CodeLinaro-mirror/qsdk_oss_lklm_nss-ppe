@@ -3591,6 +3591,8 @@ struct ppe_drv_flow *ppe_drv_flow_v4_add(struct ppe_drv_v4_conn_flow *pcf, struc
 /*
  * ppe_drv_flow_v4_attach_mapt_v6_conn
  *	Attach v6 flow entry to the corresponding v4 flow entry for mapt.
+ *	Also caches the v4 pcf in the v6 flow's pf->mapt_info so the detach
+ *	path can find the v4 flow without re-running xlate_6_to_4().
  */
 bool ppe_drv_flow_v4_attach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4, struct ppe_drv_v6_conn_flow *pcf_v6, uint8_t length_adjust)
 {
@@ -3606,17 +3608,34 @@ bool ppe_drv_flow_v4_attach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4, st
 	mapt_info->len_adjust = length_adjust;
 	pf->flags |= PPE_DRV_FLOW_MAPT;
 
+	/*
+	 * Cache the v4 pcf in the v6 flow's pf->mapt_info so the detach path
+	 * can find the v4 flow without re-running xlate_6_to_4().
+	 */
+	if (!pcf_v6->pf) {
+		pcf_v6->pf = kzalloc(sizeof(struct ppe_drv_flow), GFP_ATOMIC);
+		if (!pcf_v6->pf) {
+			ppe_drv_warn("%p: failed to allocate standalone pf for MAP-T outer v6 flow\n", pcf_v6);
+			return false;
+		}
+	}
+
+	pcf_v6->pf->mapt_info.mapt_v4 = pcf_v4;
+
 	return true;
 }
 
 /*
- * ppe_drv_flow_v4_detach_attach_mapt_v6_conn
- *	detach v6 flow entry to the corresponding v4 flow entry for mapt.
+ * ppe_drv_flow_v4_detach_mapt_v6_conn
+ *	Detach v6 flow entry from the corresponding v4 flow entry for mapt.
+ *	Also clears the cached v4 pcf from the v6 flow's pf->mapt_info and
+ *	frees the standalone pf if it was allocated for a MAP-T outer v6 flow.
  */
 bool ppe_drv_flow_v4_detach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4)
 {
 	struct ppe_drv_flow *pf = pcf_v4->pf;
 	struct ppe_drv_flow_mapt_info *mapt_info;
+	struct ppe_drv_v6_conn_flow *pcf_v6;
 
 	if (!pf || !(pf->flags & PPE_DRV_FLOW_MAPT)) {
 		ppe_drv_warn("%p: flow is invalid", pcf_v4);
@@ -3624,6 +3643,17 @@ bool ppe_drv_flow_v4_detach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4)
 	}
 
 	mapt_info = &pf->mapt_info;
+	pcf_v6 = mapt_info->mapt_v6;
+
+	/*
+	 * Clear the cached v4 pcf from the v6 flow's pf.
+	 */
+	if (pcf_v6 && pcf_v6->pf) {
+		pcf_v6->pf->mapt_info.mapt_v4 = NULL;
+		kfree(pcf_v6->pf);
+		pcf_v6->pf = NULL;
+	}
+
 	pf->flags &= ~PPE_DRV_FLOW_MAPT;
 	mapt_info->mapt_v6 = NULL;
 	mapt_info->len_adjust = 0;

@@ -254,6 +254,7 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_fail_invalid_nptv6_ctx;	/* Create failed due to invalid nptv6 context */
 	atomic64_t v4_tun_create_reconfig;		/* No of v4 tunnel decap reconfiguration due to IP address change */
 	atomic64_t v6_tun_create_reconfig;		/* No of v6 tunnel decap reconfiguration due to IP address change */
+	atomic64_t v6_to_v4_detach_fail;		/* No of V6 to V4 detach failed */
 };
 
 /*

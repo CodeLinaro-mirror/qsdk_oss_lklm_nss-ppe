@@ -308,6 +308,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_fail_invalid_nptv6_ctx",	/* Create failed due to invalid nptv6 context */
 	"v4_create_reconfig",			/* No of v4 tunnel decap reconfiguration due to IP address change */
 	"v6_create_reconfig",			/* No of v6 tunnel decap reconfiguration due to IP address change */
+	"v6_to_v4_detach_fail",			/* No of v6 to v4 detach failed */
 };
 
 /*
@@ -478,6 +479,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_fail_invalid_nptv6_ctx",	/* Create failed due to invalid nptv6 context */
 	"v4_tun_create_reconfig",		/* No of v4 tunnel decap reconfiguration due to IP address change */
 	"v6_tun_create_reconfig",		/* No of v6 tunnel decap reconfiguration due to IP address change */
+	"v6_to_v4_detach_fail",			/* No of v6 to v4 detach failed */
 };
 
 /*

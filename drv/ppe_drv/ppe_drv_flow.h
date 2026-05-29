@@ -124,7 +124,8 @@ enum ppe_drv_flow_pmtu_type {
  */
 struct ppe_drv_flow_mapt_info {
 	uint8_t len_adjust;     		/* Packet length to be adjusted for statistics update */
-	struct ppe_drv_v6_conn_flow *mapt_v6;	/* MAP-T IPV6 tunnel flow to update tunnel port stats*/
+	struct ppe_drv_v6_conn_flow *mapt_v6;	/* MAP-T IPV6 tunnel flow to update tunnel port stats */
+	struct ppe_drv_v4_conn_flow *mapt_v4;	/* Cached v4 flow for MAP-T detach from v6 conn */
 };
 
 /*
