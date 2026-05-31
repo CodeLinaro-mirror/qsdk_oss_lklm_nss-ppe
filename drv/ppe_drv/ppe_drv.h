@@ -56,6 +56,10 @@
 #ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 #include "ppe_drv_veip.h"
 #endif
+#ifdef NSS_PPE_PON_SUPPORT
+#include <fal/fal_port_ctrl.h>
+#include <linux/netdevice.h>
+#endif
 
 extern uint32_t static_dbg_level;
 extern bool flow_deacclr_dis;
@@ -687,6 +691,8 @@ struct ppe_drv {
 #ifdef NSS_PPE_PON_SUPPORT
 	int ppe_drv_pon_port_start_pq;		/* Start queue number mapped to pon port. */
 	int ppe_drv_pon_port_max_pq;		/* max pq to be used for pon port. */
+	struct ppe_drv_port_hw_stats pon_stats_acc;	/* 64-bit SW accumulator for PON port counters */
+	fal_port_cnt_t pon_stats_prev;		/* Previous HW snapshot; zero until first sync */
 #endif
 	struct ppe_drv_iface *pon_iface;	/* Memory for PPE PON interface */
 };
@@ -869,6 +875,15 @@ extern uint32_t gem_port_bitmap;
  * Success or error code.
  */
 ppe_drv_ret_t ppe_drv_pon_map_enqueue_vp_to_pq(struct ppe_drv_port *port);
+
+/**
+ * ppe_drv_dp_pon_stats_update
+ *	Read HW counters and accumulate rollover-safe deltas into p->pon_stats_acc.
+ *	Called from ppe_drv_hw_stats_sync() while p->lock is held.
+ *
+ * @param[in] p  Global PPE driver context.
+ */
+void ppe_drv_dp_pon_stats_update(struct ppe_drv *p);
 #endif
 
 #ifdef PPE_DRV_DDRQ_ENABLE

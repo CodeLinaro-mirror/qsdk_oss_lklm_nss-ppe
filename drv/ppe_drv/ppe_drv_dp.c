@@ -7,6 +7,11 @@
 #include <fal/fal_fdb.h>
 #include <fal/fal_ip.h>
 #include <fal/fal_mirror.h>
+#ifdef NSS_PPE_PON_SUPPORT
+#include <fal/fal_port_ctrl.h>
+#include <fal/fal_tunnel.h>
+#include <linux/netdevice.h>
+#endif
 
 /*
  * ppe_drv_dp_set_mirror_if()
@@ -328,6 +333,53 @@ ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
 	return status;
 }
 EXPORT_SYMBOL(ppe_drv_dp_gem_enable);
+
+/*
+ * ppe_drv_dp_pon_stats_update()
+ *	Read HW counters and accumulate rollover-safe deltas into p->pon_stats_acc.
+ */
+void ppe_drv_dp_pon_stats_update(struct ppe_drv *p)
+{
+	struct ppe_drv_port *port;
+	fal_port_cnt_t cur;
+	uint32_t p_port;
+
+	if (!p->pon_iface)
+		return;
+
+	port = ppe_drv_iface_port_get(p->pon_iface);
+	if (!port)
+		return;
+
+	p_port = FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port->port);
+	if (fal_port_cnt_get(PPE_DRV_SWITCH_ID, p_port, &cur) != SW_OK) {
+		ppe_drv_warn("pon_stats: fal_port_cnt_get failed for port %u\n", port->port);
+		return;
+	}
+
+	p->pon_stats_acc.rx_pkt_cnt  += (cur.rx_pkt_cnt - p->pon_stats_prev.rx_pkt_cnt +
+			FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1) & FAL_TUNNEL_DECAP_PKT_CNT_MASK;
+	p->pon_stats_acc.rx_byte_cnt += cur.rx_byte_cnt - p->pon_stats_prev.rx_byte_cnt;
+	p->pon_stats_acc.tx_pkt_cnt  += (cur.tx_pkt_cnt - p->pon_stats_prev.tx_pkt_cnt +
+			FAL_TUNNEL_DECAP_PKT_CNT_MASK + 1) & FAL_TUNNEL_DECAP_PKT_CNT_MASK;
+	p->pon_stats_acc.tx_byte_cnt += cur.tx_byte_cnt - p->pon_stats_prev.tx_byte_cnt;
+	memcpy(&p->pon_stats_prev, &cur, sizeof(fal_port_cnt_t));
+}
+
+/*
+ * ppe_drv_dp_get_pon_stats()
+ *	Fill stats with the 64-bit accumulated PON port counters.
+ */
+void ppe_drv_dp_get_pon_stats(struct ppe_drv_port_hw_stats *stats)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	memcpy(stats, &p->pon_stats_acc, sizeof(struct ppe_drv_port_hw_stats));
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_dp_get_pon_stats);
+
 #else
 ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
                 bool enable)
