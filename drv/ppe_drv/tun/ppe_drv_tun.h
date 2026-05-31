@@ -173,6 +173,7 @@ struct ppe_drv_tun {
 	uint32_t xmit_port_mtu;					/**< xmit ports MTU >*/
 	enum ppe_drv_tun_state tun_state;			/**< tunnel state >*/
 	bool is_veip_tun;					/**< tunnel is on veip interface >*/
+	bool is_gretap_mapt;					/**< tunnel is GRETAP to MAP-T for singlepass >*/
 };
 
 /*

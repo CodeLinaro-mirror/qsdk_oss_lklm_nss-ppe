@@ -411,6 +411,9 @@ static bool ppe_drv_flow_v6_flow_cookie48b_get(struct ppe_drv_v6_conn_flow *pcf,
 	uint16_t ast_info;
 	bool ret = true;
 	uint8_t low_bit = 0;
+#ifdef PPE_DRV_GRETAP_MAPT_SINGLEPASS
+	struct ppe_drv_tun *ptun_tx;
+#endif
 
 	if (!ppe_drv_flow_v6_wifi_qos_get(pcf, &wifi_qos, &wifi_qos_en)) {
 		memset(&flow_qos->cookie_48b, 0, sizeof(flow_qos->cookie_48b));
@@ -441,6 +444,26 @@ static bool ppe_drv_flow_v6_flow_cookie48b_get(struct ppe_drv_v6_conn_flow *pcf,
 			break;
 
 		case PPE_DRV_TREE_ID_TYPE_NONE:
+#ifdef PPE_DRV_GRETAP_MAPT_SINGLEPASS
+			ptun_tx = pcf->tx_port ? ppe_drv_port_tun_get(pcf->tx_port) : NULL;
+
+			/*
+			 * This change is primarily required for GRETAP over WLAN. When the tx port
+			 * is GRETAP, WiFi HW needs the AST index to deliver to the correct client.
+			 * Since we are not filling the flow cookie here, setting
+			 * BIT(PPE_DRV_FLOW_COOKIE_GRE_AST_FROM_PKT_SHIFT) in cookie[15:0] signals
+			 * WiFi HW to read the AST index directly from the packet rather than from
+			 * the flow cookie.
+			 */
+			if (ptun_tx && ptun_tx->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP) {
+				tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_LOW, BIT(PPE_DRV_FLOW_COOKIE_GRE_AST_FROM_PKT_SHIFT));
+				memcpy(&flow_qos->cookie_48b, &tmp, sizeof(flow_qos->cookie_48b));
+				ppe_drv_trace("gre cookie_48b %llx\n", tmp);
+				flow_qos->qos_valid = A_TRUE;
+				flow_qos->type = FAL_FLOW_QOS_TYPE_COOKIE_48B;
+				break;
+			}
+#endif
 			low_bit = (tree_id_data->info.value >> 16) & 0xFF;
 			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, tree_id_data->info.value & 0xFFFF);
 			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_8BIT_H, (low_bit | (tree_id_data->type << 4)));
@@ -1944,6 +1967,11 @@ static bool ppe_drv_flow_v4_flow_cookie48b_get(struct ppe_drv_v4_conn_flow *pcf,
 	uint16_t ast_info;
 	bool ret = true;
 	uint8_t low_bit = 0;
+#ifdef PPE_DRV_GRETAP_MAPT_SINGLEPASS
+	uint32_t xlate_dest_ip;
+	struct ppe_drv_port *tx_port, *rx_port;
+	struct ppe_drv_tun *ptun_tx, *ptun_rx;
+#endif
 
 	if (!ppe_drv_flow_v4_wifi_qos_get(pcf, &wifi_qos, &wifi_qos_en)) {
 		memset(&flow_qos->cookie_48b, 0, sizeof(flow_qos->cookie_48b));
@@ -1972,6 +2000,50 @@ static bool ppe_drv_flow_v4_flow_cookie48b_get(struct ppe_drv_v4_conn_flow *pcf,
 			break;
 
 		case PPE_DRV_TREE_ID_TYPE_NONE:
+#ifdef PPE_DRV_GRETAP_MAPT_SINGLEPASS
+			/*
+			 * For MAP-T encap (CE->BR) the v4 DIP must be packed into the
+			 * flow cookie so HW can reconstruct the IPv6 destination address
+			 * via SRC2=FLOW_COOKIE. Guard on TX port being MAP-T so the
+			 * BR->CE decap direction (DNAT, no encap) is excluded.
+			 * low 16b of DIP -> cookie[15:0], high 16b -> cookie_ext[15:0].
+			 */
+			tx_port = ppe_drv_v4_conn_flow_tx_port_get(pcf);
+			rx_port = ppe_drv_v4_conn_flow_rx_port_get(pcf);
+			ptun_tx = tx_port ? ppe_drv_port_tun_get(tx_port) : NULL;
+			ptun_rx = rx_port ? ppe_drv_port_tun_get(rx_port) : NULL;
+
+			if (ptun_tx && (ptun_tx->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) &&
+					ptun_rx && (ptun_rx->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP)) {
+				xlate_dest_ip = ppe_drv_v4_conn_flow_xlate_dest_ip_get(pcf);
+
+				tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_LOW, xlate_dest_ip & 0xffff);
+				tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, (xlate_dest_ip >> 16) & 0xffff);
+				memcpy(&flow_qos->cookie_48b, &tmp, sizeof(flow_qos->cookie_48b));
+				ppe_drv_trace("mapt cookie_48b %llx xlate_dest_ip %pI4\n", tmp, &xlate_dest_ip);
+				flow_qos->qos_valid = A_TRUE;
+				flow_qos->type = FAL_FLOW_QOS_TYPE_COOKIE_48B;
+				ptun_tx->is_gretap_mapt = true;
+				break;
+			}
+
+			/*
+			 * This change is primarily required for GRETAP over WLAN. When the tx port
+			 * is GRETAP, WiFi HW needs the AST index to deliver to the correct client.
+			 * Since we are not filling the flow cookie here, setting
+			 * BIT(PPE_DRV_FLOW_COOKIE_GRE_AST_FROM_PKT_SHIFT) in cookie[15:0] signals
+			 * WiFi HW to read the AST index directly from the packet rather than from
+			 * the flow cookie.
+			 */
+			if (ptun_tx && ptun_tx->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_GRETAP) {
+				tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_LOW, BIT(PPE_DRV_FLOW_COOKIE_GRE_AST_FROM_PKT_SHIFT));
+				memcpy(&flow_qos->cookie_48b, &tmp, sizeof(flow_qos->cookie_48b));
+				ppe_drv_trace("gre cookie_48b %llx\n", tmp);
+				flow_qos->qos_valid = A_TRUE;
+				flow_qos->type = FAL_FLOW_QOS_TYPE_COOKIE_48B;
+				break;
+			}
+#endif
                         low_bit = (tree_id_data->info.value >> 16) & 0xFF;
                         tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, tree_id_data->info.value & 0xFFFF);
                         tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_8BIT_H, (low_bit | (tree_id_data->type << 4)));
@@ -2567,6 +2639,7 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 
 #ifdef PPE_TUNNEL_ENABLE
 #if defined(PPE_LOOPBACK_RING_SUPPORT)
+#ifndef PPE_DRV_GRETAP_MAPT_SINGLEPASS
 	ret = ppe_drv_tun_gretap_to_mapt_sc(ppe_drv_v4_conn_flow_tx_port_get(pcf), ppe_drv_v4_conn_flow_rx_port_get(pcf), &service_code);
 	if (ret == PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD) {
 		*scp = service_code;
@@ -2574,6 +2647,7 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	} else if (ret == PPE_DRV_RET_GRETAP_TO_MAPT_FLOW_ADD_FAIL) {
 		return false;
 	}
+#endif
 #endif
 #endif
 
