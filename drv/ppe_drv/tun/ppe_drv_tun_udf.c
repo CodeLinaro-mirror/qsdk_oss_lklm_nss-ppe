@@ -100,7 +100,7 @@ void ppe_drv_tun_udf_entry_ref(struct ppe_drv_tun_udf  *pgm_udf)
  */
 bool ppe_drv_tun_udf_compare_udf_profiles(struct ppe_drv_tun_udf_profile *a, struct ppe_drv_tun_udf_profile *b)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p __maybe_unused = ppe_drv_gbl;
 	int i;
 
 	/*
