@@ -35,6 +35,7 @@
 #include <linux/if_vlan.h>
 #include <linux/if_arp.h>
 #endif
+#include <net/dsa.h>
 #include <nss_debug.h>
 
 #define PPE_DRV_STATIC_DBG_LEVEL_STR_LEN 8
@@ -3788,6 +3789,10 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 					if (pp_local->port == PPE_DRV_PORT_EIP197)
 						continue;
 
+					if (!((pp_local->type == PPE_DRV_PORT_PHYSICAL) ||
+					      ((pp_local->type == PPE_DRV_PORT_VIRTUAL) && dsa_slave_dev_check(pp_local->dev))))
+						continue;
+
 					q_dst.src_profile = src_profile;
 					q_dst.dst_port = pp_local->port;
 
@@ -3855,6 +3860,10 @@ static int ppe_drv_src2uni_handler(struct ctl_table *table,
 			continue;
 
 		if (pp_local->port == up->port)
+			continue;
+
+		if (!((pp_local->type == PPE_DRV_PORT_PHYSICAL) ||
+		      ((pp_local->type == PPE_DRV_PORT_VIRTUAL) && dsa_slave_dev_check(pp_local->dev))))
 			continue;
 
 		q_dst.src_profile = src_profile;
