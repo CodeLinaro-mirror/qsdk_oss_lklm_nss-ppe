@@ -1,23 +1,13 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #ifndef _PPE_DRV_TUN_CMN_CTX_H_
 #define _PPE_DRV_TUN_CMN_CTX_H_
 
 #include <linux/if_pppox.h>
+#include <linux/udp.h>
 
 /*
  * L2 flags
@@ -51,6 +41,66 @@
 #define PPE_DRV_TUN_CMN_CTX_GRE_DECAP_CSUM		0x08	/**< Decap checksum is enabled >*/
 
 /*
+ * Max Encap header length
+ */
+#define PPE_DRV_TUN_CMN_ENCAP_HDR_DATA_LEN 128			/**< Custom tunnel Encap header data length >*/
+
+/*
+ * ppe_drv_tun_cmn_ctx_cust_match_flags
+ *	Bit positions for custom tunnel decap match flags.
+ *	Use ppe_drv_tun_cust_match_flag_set() and ppe_drv_tun_cust_match_flag_test()
+ *	to set and test bits in the match_bitmap field.
+ */
+enum ppe_drv_tun_cmn_ctx_cust_match_flags {
+	PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_SIP_EN   = 0,	/**< Bit position: Enable Decap SRC IP check >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_DIP_EN   = 1,	/**< Bit position: Enable Decap DEST IP check >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_PROTO_EN = 2,	/**< Bit position: Enable Decap Protocol check >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_SPORT_EN = 3,	/**< Bit position: Enable Decap SRC PORT check >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_DPORT_EN = 4,	/**< Bit position: Enable Decap DEST PORT check >*/
+};
+
+/*
+ * ppe_drv_tun_cust_match_flag_set
+ *	Set a match flag bit in the bitmap using its bit-position enum value.
+ */
+static inline void ppe_drv_tun_cust_match_flag_set(uint8_t *bitmap,
+						    enum ppe_drv_tun_cmn_ctx_cust_match_flags flag)
+{
+	*bitmap |= (uint8_t)(1 << flag);
+}
+
+/*
+ * ppe_drv_tun_cust_match_flag_test
+ *	Test whether a match flag bit is set in the bitmap.
+ */
+static inline bool ppe_drv_tun_cust_match_flag_test(uint8_t bitmap,
+						     enum ppe_drv_tun_cmn_ctx_cust_match_flags flag)
+{
+	return !!(bitmap & (uint8_t)(1 << flag));
+}
+
+/*
+ * ppe_drv_tun_cmn_ctx_cust_tun_id
+ *	Custom tunnel identifier type.
+ */
+enum ppe_drv_tun_cmn_ctx_cust_tun_id {
+	PPE_DRV_TUN_CMN_CTX_CUST_TUN_ID_ETH_PROTO = 0,	/**< Use Ethernet Protocol as tunnel identifier >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_TUN_ID_IP_PROTO  = 1,	/**< Use IP Protocol as tunnel identifier >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_TUN_ID_UDP_PORT  = 2,	/**< Use UDP Ports as tunnel identifier >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_TUN_ID_CUSTOM    = 3,	/**< Use Custom value as Identifier >*/
+};
+
+/*
+ * ppe_drv_tun_cmn_ctx_cust_tun_offset
+ *	Custom tunnel UDF offset reference point.
+ */
+enum ppe_drv_tun_cmn_ctx_cust_tun_offset {
+	PPE_DRV_TUN_CMN_CTX_CUST_TUN_OFFSET_L2_START = 0,	/**< Offset is provided from Start of L2 header >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_TUN_OFFSET_L3_START = 1,	/**< Offset is provided from Start of L3 header >*/
+	PPE_DRV_TUN_CMN_CTX_CUST_TUN_OFFSET_L4_START = 2,	/**< Offset is provided from Start of L4 header >*/
+};
+
+/*
  * ppe_drv_tun_cmn_ctx_encap_ecn
  *	PPE tunnel encap ecn mode
  */
@@ -67,9 +117,9 @@ enum ppe_drv_tun_cmn_ctx_encap_ecn {
  *	PPE tunnel decap ecn mode
  */
 enum ppe_drv_tun_cmn_ctx_decap_ecn {
-	PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC3168_MODE = 0,	/* RFC3168 mode for decapsulation */
-	PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC4301_MODE = 1,	/* RFC4301 mode for decapsulation */
-	PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC6040_MODE = 2,	/* RFC6040 mode for decapsulation */
+	PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC3168_MODE = 0,	/**< RFC3168 mode for decapsulation >*/
+	PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC4301_MODE = 1,	/**< RFC4301 mode for decapsulation >*/
+	PPE_DRV_TUN_CMN_CTX_DECAP_ECN_RFC6040_MODE = 2,	/**< RFC6040 mode for decapsulation >*/
 };
 
 /*
@@ -93,6 +143,8 @@ enum ppe_drv_tun_cmn_ctx_type {
 	PPE_DRV_TUN_CMN_CTX_TYPE_CUST,		/**< Custom PPE Tunnel header >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN_GPE,	/**< PPE Tunnel header type VxLAN-GPE >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_GRETUN,	/**< PPE Tunnel header type for L3 GRE Tunnel >*/
+	PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2,	/**< PPE custom L2 tunnel type >*/
+	PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3,	/**< PPE custom L3 tunnel type >*/
 	PPE_DRV_TUN_CMN_CTX_TYPE_MAX
 };
 
@@ -249,6 +301,102 @@ struct ppe_drv_tun_cmn_ctx_mape_br {
 };
 
 /*
+ * ppe_drv_tun_cust_tun_ecap
+ *	Custom tunnel encap context.
+ */
+struct ppe_drv_tun_cust_tun_ecap {
+	uint8_t encap_hdr_data_len;		/**< Fixed encap header data length >*/
+	uint8_t encap_hdr_data[PPE_DRV_TUN_CMN_ENCAP_HDR_DATA_LEN];	/**< Fixed encap header data to be added to every packet post ip or UDP header >*/
+	bool proto_update_en;			/**< Enable protocol field update >*/
+	uint8_t proto_offset;			/**< Offset in bytes from start of Ethernet header to the protocol field to be updated >*/
+	uint8_t proto_size;			/**< width of the field in bits which needs to be updated. Max 16 bits update >*/
+	uint16_t ipv4_proto;			/**< 16 bit protocol value to be updated if inner packet is IPv4 >*/
+	uint16_t ipv6_proto;			/**< 16 bit protocol value to be updated if inner packet is IPv6 >*/
+};
+
+#define PPE_DRV_TUN_PRGM_UDF_MAX_ENTRIES 16	/**< Maximum program UDF entries per parser >*/
+
+/*
+ * ppe_drv_tun_cmn_ctx_inner_pkt_type
+ *	Inner packet type for program UDF matching
+ */
+enum ppe_drv_tun_cmn_ctx_inner_pkt_type {
+	PPE_DRV_TUN_CMN_CTX_INNER_PKT_TYPE_ETHERNET = 0,	/**< Inner packet is Ethernet >*/
+	PPE_DRV_TUN_CMN_CTX_INNER_PKT_TYPE_IPV4 = 1,		/**< Inner packet is IPv4 >*/
+	PPE_DRV_TUN_CMN_CTX_INNER_PKT_TYPE_IPV6 = 2,		/**< Inner packet is IPv6 >*/
+};
+
+/*
+ * ppe_drv_tun_cmn_ctx_type_match_entry
+ *	Type match entry (program UDF) for custom tunnel
+ */
+struct ppe_drv_tun_cmn_ctx_type_match_entry {
+	enum ppe_drv_tun_cmn_ctx_inner_pkt_type inner_pkt_type;	/**< Inner packet type for this entry >*/
+	uint16_t udf0_val;					/**< User defined field 0 value to match >*/
+	uint16_t udf0_mask;					/**< User defined field 0 mask to match upto 16 bits >*/
+	uint16_t udf1_val;					/**< User defined field 1 value to match >*/
+	uint16_t udf1_mask;					/**< User defined field 1 mask to match upto 16 bits >*/
+	uint16_t udf2_val;					/**< User defined field 2 value to match >*/
+	uint16_t udf2_mask;					/**< User defined field 2 mask to match upto 16 bits >*/
+	bool udf0_en;						/**< User defined field 0 check enable >*/
+	bool udf1_en;						/**< User defined field 1 check enable >*/
+	bool udf2_en;						/**< User defined field 2 check enable >*/
+};
+
+/*
+ * ppe_drv_tun_cmn_ctx_type_match
+ *	Type match configuration (program UDF entries)
+ */
+struct ppe_drv_tun_cmn_ctx_type_match {
+	uint8_t num_entries;							/**< Number of type match entries (1-16) >*/
+	struct ppe_drv_tun_cmn_ctx_type_match_entry entries[PPE_DRV_TUN_PRGM_UDF_MAX_ENTRIES];	/**< Type match entries array >*/
+};
+
+/*
+ * ppe_drv_tun_cmn_ctx_instance_match
+ *	Instance match configuration (tunnel UDF)
+ */
+struct ppe_drv_tun_cmn_ctx_instance_match {
+	uint16_t instance_udf0_val;	/**< Instance UDF 0 value to match >*/
+	uint16_t instance_udf0_mask;	/**< Instance UDF 0 mask to match >*/
+	uint16_t instance_udf1_val;	/**< Instance UDF 1 value to match >*/
+	uint16_t instance_udf1_mask;	/**< Instance UDF 1 mask to match >*/
+	bool instance_udf0_en;		/**< Instance UDF 0 check enable >*/
+	bool instance_udf1_en;		/**< Instance UDF 1 check enable >*/
+};
+
+/*
+ * ppe_drv_tun_cust_tun_decap
+ *	Custom tunnel decap context.
+ */
+struct ppe_drv_tun_cust_tun_decap {
+	enum ppe_drv_tun_cmn_ctx_cust_tun_offset offset_type;		/**< Offset type >*/
+	enum ppe_drv_tun_cmn_ctx_cust_tun_id tunnel_identifier;		/**< Tunnel identifier >*/
+	struct ppe_drv_tun_cmn_ctx_type_match type_match;		/**< Type match configuration (program UDF entries) >*/
+	struct ppe_drv_tun_cmn_ctx_instance_match instance_match;	/**< Instance match configuration (tunnel UDF) >*/
+	uint8_t decap_data_len;						/**< Decap data length >*/
+	uint8_t match_bitmap;						/**< Decap match bitmap (use flag_set/flag_test helpers) >*/
+	uint8_t exp_mode;						/**< Exception mode >*/
+	uint8_t udf0_offset;						/**< User defined field 0 offset (type match) >*/
+	uint8_t udf1_offset;						/**< User defined field 1 offset (type match) >*/
+	uint8_t udf2_offset;						/**< User defined field 2 offset (type match) >*/
+	uint8_t instance_udf0_offset;					/**< Instance UDF 0 offset >*/
+	uint8_t instance_udf1_offset;					/**< Instance UDF 1 offset >*/
+	bool udp_csum_zero_en;						/**< Enable decap of pkts with UDP csum zero >*/
+};
+
+/*
+ * ppe_drv_tun_cmn_ctx_custom_tun
+ *	custom tunnel common context
+ */
+struct ppe_drv_tun_cmn_ctx_custom_tun {
+	struct ppe_drv_tun_cust_tun_decap decap_data;	/**< Tunnel decap data >*/
+	struct ppe_drv_tun_cust_tun_ecap encap_data;	/**< Tunnel encap data >*/
+	struct udphdr udph;				/**< UDP header data >*/
+	bool udp_hdr_valid;				/**< UDP header valid >*/
+};
+
+/*
  * ppe_drv_tun_cmn_ctx
  *	PPE tunnel header parameters
  */
@@ -262,6 +410,7 @@ struct ppe_drv_tun_cmn_ctx {
 		struct ppe_drv_tun_cmn_ctx_l2tp l2tp;	/**< L2TP tunnel configuration >*/
 		struct ppe_drv_tun_cmn_ctx_cust cust;	/**< Custom tunnel configuration >*/
 		struct ppe_drv_tun_cmn_ctx_mape_br mape;	/**< Map-E BR tunnel configuration >*/
+		struct ppe_drv_tun_cmn_ctx_custom_tun user;	/**< Custom tunnel context >*/
 	} tun;
 	enum ppe_drv_tun_cmn_ctx_type type;
 };

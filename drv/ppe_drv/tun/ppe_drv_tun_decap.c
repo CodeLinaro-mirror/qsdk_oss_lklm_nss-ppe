@@ -12,7 +12,9 @@
 #include <fal_tunnel.h>
 #include <ppe_drv/ppe_drv.h>
 #include "ppe_drv_tun.h"
+#include "ppe_drv_tun_prgm_prsr.h"
 #include <fal_vxlan.h>
+
 
 /*
  * ppe_drv_tun_decap_deconfigure
@@ -51,6 +53,11 @@ static void ppe_drv_tun_decap_free(struct kref *kref)
 
 	if (ptdc->pgm_prsr) {
 		ppe_drv_tun_prgm_prsr_deref(ptdc->pgm_prsr);
+	}
+
+	if (ptdc->tun_udf) {
+		ppe_drv_tun_udf_entry_dref(ptdc->tun_udf);
+		ptdc->tun_udf = NULL;
 	}
 
 	ppe_drv_tun_decap_deconfigure(ptdc);
@@ -563,6 +570,57 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 			ppe_drv_trace("%p: VxLAN-GPE header validation failed", pp);
 			return PPE_DRV_TUN_DECAP_INVALID_IDX;
 		}
+	} else if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2 || pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3) {
+		struct ppe_drv_tun_prgm_prsr *pgm = NULL;
+
+		/*
+		 * Checks for custom tunnel types
+		 */
+		pgm = ppe_drv_tun_custom_prgm_prsr_configure(ptdc, pth);
+		if (!pgm) {
+			ppe_drv_warn("%p: Custom tunnel program parser allocation failed", pp);
+			return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		}
+
+		ptdc->pgm_prsr = pgm;
+
+		/*
+		 * Configure tunnel UDF for instance identification at ptdc level.
+		 * This is done after parser configuration to enable per-tunnel UDF offsets.
+		 */
+		if (!ppe_drv_tun_custom_tun_udf_configure(ptdc, pth)) {
+			ppe_drv_warn("%p: Custom tunnel UDF configuration failed", pp);
+			ppe_drv_tun_prgm_prsr_deref(pgm);
+			ptdc->pgm_prsr = NULL;
+			return PPE_DRV_TUN_DECAP_INVALID_IDX;
+		}
+
+		ftde.decap_rule.tunnel_type = ppe_drv_tun_get_tunnel_type_from_pgm_type(pgm->parser_idx);
+		ftde.decap_rule.l4_proto = pth->l3.proto;
+
+		if (pth->tun.user.udp_hdr_valid) {
+			ftde.decap_rule.l4_proto = IPPROTO_UDP;
+			ftde.decap_rule.dport = ntohs((uint16_t)pth->tun.user.udph.source);
+			ftde.decap_rule.sport = ntohs((uint16_t)pth->tun.user.udph.dest);
+			ftde.decap_rule.key_bmp |= (PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_DPORT_EN)
+							| PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_SPORT_EN));
+
+			if (pth->tun.user.decap_data.udp_csum_zero_en) {
+				ftde.decap_action.udp_csum_zero = A_TRUE;
+				ftde.decap_action.update_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_UDP_CSUM_ZERO_UPDATE);
+			}
+		}
+
+		if (pth->tun.user.decap_data.instance_match.instance_udf0_en) {
+			ftde.decap_rule.udf0 = (uint16_t)pth->tun.user.decap_data.instance_match.instance_udf0_val;
+			ftde.decap_rule.key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_UDF0_EN);
+		}
+
+		if (pth->tun.user.decap_data.instance_match.instance_udf1_en) {
+			ftde.decap_rule.udf1 = (uint16_t)pth->tun.user.decap_data.instance_match.instance_udf1_val;
+			ftde.decap_rule.key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_UDF1_EN);
+		}
+
 	} else {
 		/*
 		 * MAPT cases are not expected to use these tables only other
@@ -580,9 +638,27 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 	ftde.decap_action.src_info_type = PPE_DRV_TUN_TL_TBL_SRC_INFO_TYPE_VP;
 	ftde.decap_action.src_info = vp_num;
 	ftde.decap_action.verify_entry.verify_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_L3IF_CHECK_EN);
-	ftde.decap_rule.key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_SIP_EN) |
-					PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_DIP_EN) |
-					PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_L4PROTO_EN);
+
+	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2 ||
+			pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3) {
+		uint8_t mb = pth->tun.user.decap_data.match_bitmap;
+
+		if (mb & PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_SIP_EN) {
+			ftde.decap_rule.key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_SIP_EN);
+		}
+
+		if (mb & PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_DIP_EN) {
+			ftde.decap_rule.key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_DIP_EN);
+		}
+
+		if (mb & PPE_DRV_TUN_CMN_CTX_CUST_MATCH_DCAP_PROTO_EN) {
+			ftde.decap_rule.key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_L4PROTO_EN);
+		}
+	} else {
+		ftde.decap_rule.key_bmp |= PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_SIP_EN) |
+						PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_DIP_EN) |
+						PPE_DRV_TUN_BIT(FAL_TUNNEL_KEY_L4PROTO_EN);
+	}
 
 	/*
 	 * Allow decapsulated GRETAP tunnel exception service code.
@@ -623,6 +699,14 @@ uint16_t ppe_drv_tun_decap_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_
 		if (ptdc->pgm_prsr) {
 			ppe_drv_tun_prgm_prsr_deref(ptdc->pgm_prsr);
 			ptdc->pgm_prsr = NULL;
+		}
+
+		/*
+		 * Clean up tunnel UDF if it was configured
+		 */
+		if (ptdc->tun_udf) {
+			ppe_drv_tun_udf_entry_dref(ptdc->tun_udf);
+			ptdc->tun_udf = NULL;
 		}
 
 		return PPE_DRV_TUN_DECAP_INVALID_IDX;

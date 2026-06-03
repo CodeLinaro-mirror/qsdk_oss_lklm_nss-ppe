@@ -63,6 +63,7 @@ struct ppe_drv_tun_decap {
 		uint16_t tl_index;	/* Decap entry table index in HW */
 		uint8_t rule_id;	/* Edit rule index associated to this decap for MAP-T */
 		struct ppe_drv_tun_prgm_prsr *pgm_prsr;	/* Programable parser instance */
+		struct ppe_drv_tun_udf *tun_udf;	/* Tunnel UDF for instance identification (per-tunnel) */
 	);			        /* end of ppe_drv_tun_decap_group group */
 #endif
 };

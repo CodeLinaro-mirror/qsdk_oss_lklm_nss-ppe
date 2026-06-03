@@ -82,6 +82,14 @@ static void ppe_drv_tun_prgm_prsr_entry_free(struct kref *kref)
 		break;
 #endif
 
+	case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L2:
+	case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L3:
+		if (!ppe_drv_tun_custom_prgm_prsr_deconfigure(pgm)) {
+			ppe_drv_warn("%p: error deconfiguring custom tunnel parser entry for type: %d, mode %d",
+					pgm, pgm->parser_idx, pgm->ctx.mode);
+		}
+		break;
+
 	default:
 		ppe_drv_warn("%p: unknown programable parser mode %d", pgm, pgm->ctx.mode);
 		break;
@@ -170,6 +178,7 @@ bool ppe_drv_tun_prgm_prsr_deconfigure(struct ppe_drv_tun_prgm_prsr_cfg *prsr_cf
 	pgm.protocol = prsr_cfg->protocol;
 	pgm.protocol_mask = prsr_cfg->protocol_mask;
 #ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
+	pgm.protocol_pos_valid = prsr_cfg->protocol_pos_valid;
 	pgm.protocol_pos_mode = ppe_drv_tun_get_proto_pos_modemode(prsr_cfg->proto_pos_mode);
 	pgm.protocol_pos_offset = prsr_cfg->protocol_pos_offset;
 	pgm.tuple_id_valid = prsr_cfg->tuple_id_valid;
@@ -511,7 +520,6 @@ static bool ppe_drv_tun_prgm_prsr_compare_config(struct ppe_drv_tun_prgm_prsr *p
 							struct ppe_drv_tun_prgm_prsr_decap_cfg *dcap_cfg)
 {
 	struct ppe_drv_tun_prgm_prsr_cfg *prsr_cfg = NULL;
-
 	if (!pgm || !dcap_cfg) {
 		ppe_drv_trace("Invalid input to compare Program Parser configurations\n");
 		return false;
@@ -528,18 +536,16 @@ static bool ppe_drv_tun_prgm_prsr_compare_config(struct ppe_drv_tun_prgm_prsr *p
 	case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L2:
 	case PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L3:
 		/*
-		 * For custom tunnels, check if configurations match
+		 * For custom tunnels, reuse is based solely on outer header configuration
+		 * equality (outer_hdr type, protocol, hdr_len, UDF offsets).
+		 * Type-match UDF entries (inner packet type validation) are configured
+		 * once when the parser is first created and are shared across all tunnels
+		 * that reuse this parser instance.
 		 */
 		if (ppe_drv_tun_prgm_prsr_cfg_equal(&pgm->ctx.prsr_cfg, prsr_cfg)) {
-			/*
-			 * Configuration matches, parser can be reused
-			 */
 			return true;
 		}
 
-		/*
-		 * Configuration doesn't match, cannot reuse this parser
-		 */
 		return false;
 
 	case PPE_DRV_TUN_PROGRAM_MODE_GRE:
@@ -592,7 +598,8 @@ static bool ppe_drv_tun_prgm_prsr_reuse(enum ppe_drv_tun_prgm_prsr_mode mode)
  * ppe_drv_tun_prgm_prsr_entry_alloc
  *	Get free instance of program parser
  */
-struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun_prgm_prsr_mode mode, struct ppe_drv_tun_prgm_prsr_decap_cfg *dcap_cfg)
+struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun_prgm_prsr_mode mode,
+							struct ppe_drv_tun_prgm_prsr_decap_cfg *dcap_cfg)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_tun_prgm_prsr *pgm = p->pgm;
@@ -610,8 +617,10 @@ struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun
 		 */
 		if (pgm[i].ctx.mode == mode && ppe_drv_tun_prgm_prsr_reuse(mode)) {
 			if (dcap_cfg && ppe_drv_tun_prgm_prsr_compare_config(&pgm[i], dcap_cfg)) {
-				ppe_drv_tun_prgm_prsr_ref(&pgm[i]);
-				return &pgm[i];
+				if(ppe_drv_tun_prgm_prsr_configured(&pgm[i])) {
+					ppe_drv_tun_prgm_prsr_ref(&pgm[i]);
+					return &pgm[i];
+				}
 			} else if (!dcap_cfg) {
 				ppe_drv_tun_prgm_prsr_ref(&pgm[i]);
 				return &pgm[i];
@@ -639,6 +648,16 @@ struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_prgm_prsr_entry_alloc(enum ppe_drv_tun
 	ppe_drv_trace("%p: Parser allocated index : %d  mode: %u ref inc:%u", &pgm[free_index], free_index,
 			pgm[free_index].ctx.mode, kref_read(&pgm[free_index].ref));
 
+	if (mode == PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L2 || mode == PPE_DRV_TUN_PROGRAM_MODE_CUSTOM_L3) {
+		struct ppe_drv_tun_prgm_prsr_custom_prgm_udf *prgm_udf;
+		prgm_udf = pgm[free_index].ctx.data.custom.prgm_udf;
+
+		for (i=0; i < PPE_DRV_TUN_CUSTOM_PRGM_UDF_MAX; i++) {
+			prgm_udf[i].prsr = &pgm[free_index];
+		}
+	}
+
+	ppe_drv_trace("%p: mode: %u ref inc:%u", &pgm[free_index], pgm[free_index].ctx.mode, kref_read(&pgm[free_index].ref));
 	return &pgm[free_index];
 }
 

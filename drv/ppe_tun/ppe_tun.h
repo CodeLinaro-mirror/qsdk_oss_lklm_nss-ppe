@@ -1,25 +1,15 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
-#ifndef _PPE_TUN_H_
-#define _PPE_TUN_H_
+#ifndef _PPE_TUN_PRIV_H_
+#define _PPE_TUN_PRIV_H_
 
 #include <ppe_acl.h>
 #include <ppe_drv_sc.h>
 #include <ppe_tun.h>
+#include <linux/udp.h>
 
 #ifdef CONFIG_QCA_MINIDUMP
 #include <soc/qcom/ctx-save.h>
@@ -141,6 +131,7 @@ struct ppe_tun {
 	uint8_t tun_header_len;		/* Tunnel header length */
 	uint32_t tun_xmit_port_mtu;	/* Tunnel xmit port MTU */
 	ppe_tun_data *tun_data;		/* Tunnel specific data from client */
+	uint8_t exp_mode;		/* Tunnel exception mode */
 };
 
 /*
@@ -182,4 +173,4 @@ static inline void nss_ppe_tun_minidump_free(void *start_addr, const char *name)
 #endif
 }
 
-#endif /* _PPE_TUN_H_ */
+#endif /* _PPE_TUN_PRIV_H_ */

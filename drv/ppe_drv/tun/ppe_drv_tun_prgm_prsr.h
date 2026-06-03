@@ -25,6 +25,8 @@
 
 #define PPE_DRV_TUN_PRGM_UDF_MAX	3 /* Program UDF MAC value */
 
+#define PPE_DRV_TUN_CUSTOM_PRGM_UDF_MAX 16
+
 /*
  * decap key bitmap
  */
@@ -199,6 +201,25 @@ struct ppe_drv_tun_prgm_prsr_gre {
 	struct ppe_drv_tun_prgm_prsr_prgm_udf eth_csum_udf;	/* program UDF entry used for matching Ethernet GRETAP inner payload with csum enabled */
 };
 
+/*
+ * ppe_drv_tun_prgm_prsr_custom_prgm_udf
+ *       Custom tunnel program parser specific UDF data
+ */
+struct ppe_drv_tun_prgm_prsr_custom_prgm_udf {
+	struct kref ref;
+	struct ppe_drv_tun_prgm_prsr *prsr;
+	struct ppe_drv_tun_prgm_prsr_prgm_udf udf;	/* UDF profile used for custom tunnel */
+	bool hw_configured;				/* true only after successful HW configure */
+};
+
+/*
+ * ppe_drv_tun_prgm_prsr_custom
+ *     Custom tunnel Program Parser specific data
+ */
+struct ppe_drv_tun_prgm_prsr_custom  {
+	struct ppe_drv_tun_prgm_prsr_custom_prgm_udf prgm_udf[PPE_DRV_TUN_CUSTOM_PRGM_UDF_MAX];
+};
+
 #ifdef NSS_PPE_TUNNEL_ENHANCED_PARSER
 /*
  * ppe_drv_tun_prgm_prsr_proto_pos_mode
@@ -280,6 +301,7 @@ struct ppe_drv_tun_prgm_prsr_decap_cfg {
 #ifdef NSS_PPE_TUNNEL_TPR_ENABLE
 		struct ppe_drv_tun_prgm_prsr_tpr rps;	/* Tunnel RPS specific data */
 #endif
+		struct ppe_drv_tun_prgm_prsr_custom custom;	/* Custom tunnel configuration */
 	} data;
 };
 
@@ -379,4 +401,8 @@ bool ppe_drv_tun_prgm_prsr_deconfigure(struct ppe_drv_tun_prgm_prsr_cfg *prsr_cf
 bool ppe_drv_tun_prgm_prsr_type_allocated(enum ppe_drv_tun_prgm_prsr_mode prsr_mode);
 bool ppe_drv_tun_prgm_prsr_prgm_udf_deconfigure(uint8_t parser_idx, struct ppe_drv_tun_prgm_prsr_prgm_udf *udf);
 bool ppe_drv_tun_prgm_prsr_prgm_udf_configure(uint8_t parser_idx, struct ppe_drv_tun_prgm_prsr_prgm_udf *udf);
+struct ppe_drv_tun_prgm_prsr *ppe_drv_tun_custom_prgm_prsr_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_drv_tun_cmn_ctx *th);
+bool ppe_drv_tun_custom_prgm_prsr_deconfigure(struct ppe_drv_tun_prgm_prsr *program);
+bool ppe_drv_tun_custom_tun_udf_deconfigure(struct ppe_drv_tun *ptun);
+bool ppe_drv_tun_custom_tun_udf_configure(struct ppe_drv_tun_decap *ptdc, struct ppe_drv_tun_cmn_ctx *th);
 #endif /* _PPE_DRV_TUN_PRGM_PRSR_H_ */
