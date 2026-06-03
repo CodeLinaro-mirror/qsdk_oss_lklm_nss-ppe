@@ -502,7 +502,21 @@ ppe_drv_ret_t ppe_drv_v6_tun_del_ce_notify(struct ppe_drv_v6_rule_destroy *destr
 	pcr = &cn->pcr;
 
 	tun = (ppe_drv_port_tun_get(pcf->tx_port)) ? \
-			(ppe_drv_port_tun_get(pcf->tx_port)) : (ppe_drv_port_tun_get(pcf->rx_port));
+	      (ppe_drv_port_tun_get(pcf->tx_port)) : (ppe_drv_port_tun_get(pcf->rx_port));
+
+	/*
+	 * Very unlikely to have tun as NULL here.
+	 */
+	if (unlikely(!tun)) {
+		WARN_ON(1);
+		ppe_drv_stats_inc(&comm_stats->v6_destroy_tun_not_found);
+		ppe_drv_v6_if_walk_release(pcf);
+		ppe_drv_v6_if_walk_release(pcr);
+		list_del(&cn->list);
+		spin_unlock_bh(&p->lock);
+		ppe_drv_v6_conn_free(cn);
+		return PPE_DRV_RET_FAILURE_TUN_CE_DEL_FAILURE;
+	}
 
 	vp_num = tun->vp_num;
 	del_cb = tun->del_cb;

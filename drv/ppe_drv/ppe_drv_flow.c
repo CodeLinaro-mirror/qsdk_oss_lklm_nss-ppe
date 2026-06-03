@@ -3609,8 +3609,7 @@ bool ppe_drv_flow_v4_attach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4, st
 	pf->flags |= PPE_DRV_FLOW_MAPT;
 
 	/*
-	 * Cache the v4 pcf in the v6 flow's pf->mapt_info so the detach path
-	 * can find the v4 flow without re-running xlate_6_to_4().
+	 * pf might not be valid as we didn't push the inner flow rule.
 	 */
 	if (!pcf_v6->pf) {
 		pcf_v6->pf = kzalloc(sizeof(struct ppe_drv_flow), GFP_ATOMIC);
@@ -3620,6 +3619,10 @@ bool ppe_drv_flow_v4_attach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4, st
 		}
 	}
 
+	/*
+	 * Cache the v4 pcf in the v6 flow's pf->mapt_info so the detach path
+	 * can find the v4 flow without re-running xlate_6_to_4().
+	 */
 	pcf_v6->pf->mapt_info.mapt_v4 = pcf_v4;
 
 	return true;

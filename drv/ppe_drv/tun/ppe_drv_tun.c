@@ -790,26 +790,14 @@ bool ppe_drv_tun_detach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn)
 {
 	struct ppe_drv_v4_conn_flow *pcf = &cn->pcf;
 	struct ppe_drv_v4_conn_flow *pcr = &cn->pcr;
-	struct ppe_drv_tun *ptun;
 	struct ppe_drv_v6_conn_flow *pcf_v6;
-
-	ptun = ppe_drv_tun_mapt_port_tun_get(pcf->tx_port, pcf->rx_port);
-
-	if (!ptun) {
-		return false;
-	}
 
 	/*
 	 * Use the v6 pcf cached in the v4 flow's pf->mapt_info at attach time.
 	 * This avoids re-running xlate_4_to_6() which may fail if the MAP-T
 	 * rule is already torn down.
 	 */
-	pcf_v6 = pcf->pf ? pcf->pf->mapt_info.mapt_v6 : NULL;
-	if (!pcf_v6) {
-		ppe_drv_warn("%px: v6 flow not cached; skipping MAP-T detach\n", cn);
-		return false;
-	}
-
+	pcf_v6 = pcf->pf->mapt_info.mapt_v6;
 	ppe_drv_trace("%px: MAP-T detach cached v6: (%pI6c:%u -> %pI6c:%u) proto=%u\n",
 			cn,
 			pcf_v6->match_src_ip,
@@ -1117,16 +1105,17 @@ static bool ppe_drv_tun_detach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6
 		if (!ppe_drv_flow_accel_suspend(pcf_v4->pf)) {
 			ppe_drv_warn("%p: failed to suspend flow for pcf_v4\n", pp);
 		}
+
+		ppe_drv_flow_v4_detach_mapt_v6_conn(pcf_v4);
 	}
 
 	if (pcr_v4) {
 		if (!ppe_drv_flow_accel_suspend(pcr_v4->pf)) {
 			ppe_drv_warn("%p: failed to suspend flow for pcr_v4\n", pp);
 		}
-	}
 
-	ppe_drv_flow_v4_detach_mapt_v6_conn(pcf_v4);
-	ppe_drv_flow_v4_detach_mapt_v6_conn(pcr_v4);
+		ppe_drv_flow_v4_detach_mapt_v6_conn(pcr_v4);
+	}
 
 	return true;
 }
@@ -1249,7 +1238,7 @@ void ppe_drv_tun_v6_conn_tun_del(struct ppe_drv_tun *ptun)
 		/*
 		 * Detach v6 tun pcf from v4 flow before deleting cn from the list for MAPT
 		 */
-		if (cn_ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
+		if (ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
 			if (!ppe_drv_tun_detach_mapt_v6_to_v4(cn)) {
 				ppe_drv_warn("%p: MAP-T v6 to v4 detach failed", p);
 				ppe_drv_stats_inc(&comm_stats->v6_to_v4_detach_fail);
@@ -1268,7 +1257,7 @@ void ppe_drv_tun_v6_conn_tun_del(struct ppe_drv_tun *ptun)
 		/*
 		 * Release the reference taken during activation
 		 */
-		ppe_drv_tun_deref(cn_ptun);
+		ppe_drv_tun_deref(ptun);
 	}
 
 	ppe_drv_v6_conn_stats_free(cns);
@@ -1384,9 +1373,8 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 		 */
 		if (ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
 			if (!ppe_drv_tun_detach_mapt_v6_to_v4(cn_v6)) {
-				ppe_drv_warn("%p: MAP-T v6 from v4 detach failed", p);
+				ppe_drv_warn("%p: MAP-T v6 from v4 detach failed; v4 may already be freed, continuing v6 cleanup", p);
 				ppe_drv_stats_inc(&comm_stats->v6_to_v4_detach_fail);
-				goto error;
 			}
 		}
 
@@ -1647,6 +1635,10 @@ bool ppe_drv_tun_deconfigure(uint16_t port_num)
 	}
 
 	pth = &ptun->th;
+	ppe_drv_warn("%px: deconfigure tun_idx=%u vp=%u type=%d state=%d ref=%u flow=%d ptec=%px ptdc=%px\n",
+			ptun, ptun->tun_idx, ptun->vp_num, ptun->th.type, ptun->tun_state,
+			kref_read(&ptun->ref), atomic_read(&ptun->flow_count),
+			ptun->ptec, ptun->ptdc);
 	ppe_drv_trace("%p: Destroying Tunnel %d at index %u", ptun, pth->type, ptun->tun_idx);
 
 	/*
@@ -2135,6 +2127,7 @@ skip_tunnel_activation:
 				ppe_drv_trace("%p: MAP-T v6 to v4 attach failed", ptun);
 			}
 		}
+
 	} else if (cn_v4) {
 		/*
 		 * Take reference

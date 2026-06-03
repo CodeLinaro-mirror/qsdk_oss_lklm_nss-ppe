@@ -3317,6 +3317,7 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	}
 
 	pcf = &cn->pcf;
+	pcr = &cn->pcr;
 
 	/*
 	 * Avoid deletion for PPE ASSIST rule type
@@ -3335,13 +3336,20 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	}
 #endif
 
+#ifdef PPE_TUNNEL_ENABLE
+	if (pcf->pf && pcf->pf->mapt_info.mapt_v6) {
+			if (!ppe_drv_tun_detach_mapt_v4_to_v6(cn)) {
+				ppe_drv_trace("%p: mapt v4 to v6 detach failed", p);
+		}
+	}
+#endif
+
 	if (!ppe_drv_v4_flow_del(pcf)) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_stats_inc(&comm_stats->v4_destroy_fail);
 		ppe_drv_warn("%p: deletion of flow failed: %p", p, pcf);
 		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
 	}
-
 
 	/*
 	 * Release references on interfaces.
@@ -3352,8 +3360,6 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	 * Delete flow entry from flow hash table.
 	 */
 	hlist_del_init(&pcf->hnode);
-
-	pcr = &cn->pcr;
 
 #if defined(NSS_PPE_DRV_HW_GRO)
 	if (ppe_drv_v4_conn_flow_flags_check(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
@@ -3376,14 +3382,6 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	 * Release references on interfaces.
 	 */
 	ppe_drv_v4_if_walk_release(pcr);
-
-#ifdef PPE_TUNNEL_ENABLE
-	if (ppe_drv_tun_mapt_port_tun_get(pcf->tx_port, pcf->rx_port)) {
-		if (!ppe_drv_tun_detach_mapt_v4_to_v6(cn)) {
-			ppe_drv_trace("%p: mapt v4 to v6 detach failed", p);
-		}
-	}
-#endif
 
 	/*
 	 * Delete connection entry from the active connection list.
