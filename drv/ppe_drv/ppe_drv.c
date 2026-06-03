@@ -1553,6 +1553,12 @@ static ppe_drv_ret_t ppe_drv_rfs_map_core_to_enqueue_vp(uint8_t core, uint8_t qu
 	p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_WLAN] = wlan_coremask;
 
 	/*
+	 * Set UDP_ST coremask in global structure
+	 */
+	p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_UDP_ST] = eth_coremask;
+	p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_UDP_ST] = eth_coremask;
+
+	/*
 	 * Default coremask for the physical interface is set.
 	 */
 	p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_PHYSICAL] = eth_coremask;

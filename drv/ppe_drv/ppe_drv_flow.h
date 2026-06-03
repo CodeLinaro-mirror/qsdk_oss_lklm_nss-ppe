@@ -31,6 +31,18 @@
  * GRE tunnel flows where the flow cookie does not carry a valid AST index.
  */
 #define PPE_DRV_FLOW_COOKIE_GRE_AST_FROM_PKT_SHIFT	15
+
+/*
+ * Macros for configuration of udp-st rule id in tree_id
+ */
+#define PPE_DRV_UDP_ST_TREE_ID_0_MASK			0xFF
+#define PPE_DRV_UDP_ST_TREE_ID_0_SHIFT			0
+#define PPE_DRV_UDP_ST_TREE_ID_1_MASK			0xFF00
+#define PPE_DRV_UDP_ST_TREE_ID_1_SHIFT			8
+#define PPE_DRV_UDP_ST_TREE_ID_2_MASK			0xF0000
+#define PPE_DRV_UDP_ST_TREE_ID_2_SHIFT			16
+#define PPE_DRV_UDP_ST_TREE_ID_DATA_TYPE_SHIFT		4
+
 struct ppe_drv_v4_conn_flow;
 struct ppe_drv_v6_conn_flow;
 

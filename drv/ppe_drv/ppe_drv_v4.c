@@ -422,7 +422,7 @@ ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, st
 	 * Check if the PPE offload is disabled on the physical Rx port
 	 */
 	if ((pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_ACTIVE_VP) ||
-			(pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
+		(pp_tx->user_type == PPE_DRV_PORT_USER_TYPE_DS)) {
 		if (!ppe_drv_port_check_flow_offload_enabled(pp_rx)) {
 			ppe_drv_stats_inc(&comm_stats->v4_create_offload_disabled);
 			ppe_drv_v4_conn_flow_flags_set(pcf,
@@ -478,6 +478,13 @@ ppe_drv_ret_t ppe_drv_v4_rfs_conn_fill(struct ppe_drv_v4_rule_create *create, st
 	case PPE_DRV_CONN_TYPE_TUNNEL:
 		pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL];
 		pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL];
+		break;
+	case PPE_DRV_CONN_TYPE_UDP_ST:
+		ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLAG_UDP_ST_FLOW);
+		pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_UDP_ST];
+		pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_UDP_ST];
+		pcf->fl_mdata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_UDP_ST;
+		pcf->fl_mdata.tree_id_data.info.value = create->qos_rule.flow_qos_tag;
 		break;
 	default:
 		/*
@@ -3730,6 +3737,9 @@ ppe_drv_ret_t ppe_drv_v4_assist_rule_create(struct ppe_drv_v4_rule_create *creat
 			conn_type = PPE_DRV_CONN_TYPE_TUNNEL;
 			ppe_iface_chk_needed = false;
 			break;
+		case PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST:
+			conn_type = PPE_DRV_CONN_TYPE_UDP_ST;
+			break;
 		default:
 			ppe_drv_warn("%p: Invalid feature type, feature: %u\n", create, feature);
 			goto fail;
@@ -3794,8 +3804,7 @@ fail:
 		ppe_drv_iface_deref_internal(cn->pcf.in_l3_if);
 	}
 
-	if (ppe_drv_assist_feature_type_check(feature, PPE_DRV_ASSIST_FEATURE_RFS_ETH) ||
-			ppe_drv_assist_feature_type_check(feature, PPE_DRV_ASSIST_FEATURE_RFS_WLAN)) {
+	if (ppe_drv_assist_feature_type_is_rfs(feature)) {
 		ppe_drv_v4_conn_flow_flags_clear(&cn->pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST);
 	} else if (ppe_drv_assist_feature_type_check(feature, PPE_DRV_ASSIST_FEATURE_PRIORITY)) {
 		ppe_drv_v4_conn_flow_flags_clear(&cn->pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PRIORITY_PPE_ASSIST);

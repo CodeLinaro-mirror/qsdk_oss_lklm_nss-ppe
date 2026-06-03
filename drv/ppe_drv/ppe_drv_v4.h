@@ -97,6 +97,8 @@
 					/* Flow requires Qdisc processing in host */
 #define PPE_DRV_V4_CONN_FLAG_FLOW_UDP_ST_DROP	0x400000000ULL
 					/* Flow has UDP ST enabled */
+#define PPE_DRV_V4_CONN_FLAG_UDP_ST_FLOW	0x800000000ULL
+					/* Flow is UDP Speedtest */
 
 /*
  * ppe_drv_v4_addr_equal()
