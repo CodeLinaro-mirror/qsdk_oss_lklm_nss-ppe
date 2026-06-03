@@ -611,6 +611,43 @@ static bool ppe_drv_tun_port_configure(struct ppe_drv_tun *ptun, uint16_t xmit_p
 
 	ppe_drv_port_flags_set(ptun->pp, PPE_DRV_PORT_FLAG_TUN_ACTIVE);
 
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	if (ptun->th.type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT &&
+			p->loopback_ring_info.enabled &&
+			(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_DDR_BUFFER)) {
+		struct net_device *tun_dev = ppe_drv_port_to_dev(pp);
+		struct ppe_drv_lpbk_buffer_map_entry *map_entry;
+
+		list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
+			int32_t xmit_queue;
+
+			if (map_entry->egress_dev != tun_dev) {
+				continue;
+			}
+
+			xmit_queue = ppe_drv_port_ucast_queue_get_by_port(xmit_port);
+			if (xmit_queue < 0) {
+				ppe_drv_warn("%p: failed to get ucast queue for xmit port %d", ptun, xmit_port);
+				return false;
+			}
+
+			err = ppe_drv_sc_in_service_tbl_dest_port(PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT, xmit_port);
+			if (err != SW_OK) {
+				ppe_drv_warn("%p: DDR buffer SC dest port config failed for xmit port %d", ptun, xmit_port);
+				return false;
+			}
+
+			ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_LOOPBACK_RING_DDR_BUFFER_NEXT,
+					(uint8_t)xmit_queue,
+					PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+
+			ppe_drv_info("%p: DDR buffer NEXT SC configured for MAPT: xmit_port %d queue %d",
+					ptun, xmit_port, xmit_queue);
+			break;
+		}
+	}
+#endif
+
 	return true;
 }
 
