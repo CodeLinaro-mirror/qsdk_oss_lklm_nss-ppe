@@ -732,8 +732,12 @@ bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t handle_id, struct
 	}
 
 	/*
-	 * Iterate through the list of leaf nodes
+	 * Hold q_list_lock across the entire traversal to prevent concurrent
+	 * ppe_qdisc_stats_qdisc_detach from calling list_del on a node we are
+	 * about to dereference, which would cause use-after-free.
+	 * Lock order: q_list_lock -> cursor->lock -> p->lock
 	 */
+	spin_lock_bh(&pqr->stats_wq->q_list_lock);
 	list_for_each_entry(cursor, &pqr->stats_wq->q_list_head, q_list_element) {
 		if (cursor != NULL) {
 			spin_lock_bh(&cursor->lock);
@@ -751,6 +755,7 @@ bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t handle_id, struct
 			break;
 		}
 	}
+	spin_unlock_bh(&pqr->stats_wq->q_list_lock);
 
 	return true;
 }

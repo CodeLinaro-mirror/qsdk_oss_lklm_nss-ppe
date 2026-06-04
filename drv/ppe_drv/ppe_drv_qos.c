@@ -102,13 +102,24 @@ EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_register);
 bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info* pq_info)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	ppe_drv_qos_queue_info_callback_t cb;
 	int8_t ret = 0;
 
+	/*
+	 * Read the callback pointer under p->lock for visibility, then release
+	 * before invoking. This avoids an ABBA deadlock with the stats workqueue
+	 * path (ppe_qdisc_stats_get_node) which holds cursor->lock and then
+	 * acquires p->lock inside ppe_drv_qos_queue_stats_get. If we held p->lock
+	 * here while the callback acquires cursor->lock, the two lock orders
+	 * would be inverted causing a deadlock.
+	 */
 	spin_lock_bh(&p->lock);
-	if (p->queue_info_get_cb) {
-		ret = p->queue_info_get_cb(dev, handle_id, pq_info);
-	}
+	cb = p->queue_info_get_cb;
 	spin_unlock_bh(&p->lock);
+
+	if (cb) {
+		ret = cb(dev, handle_id, pq_info);
+	}
 
 	ppe_drv_info("%px:get int_pri:%d successful for dev:%px handle_id:%u", p, pq_info->int_pri, dev, handle_id);
 	return ret;
@@ -122,13 +133,21 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_info_get);
 int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t handle_id)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	ppe_drv_qos_int_pri_callback_t cb;
 	uint8_t int_pri = 0;
 
+	/*
+	 * Same lock ordering fix as ppe_drv_qos_queue_info_get: read the
+	 * callback pointer under p->lock, then release before calling to
+	 * avoid ABBA deadlock with the stats workqueue path.
+	 */
 	spin_lock_bh(&p->lock);
-	if (p->int_pri_get_cb) {
-		int_pri = p->int_pri_get_cb(dev, handle_id);
-	}
+	cb = p->int_pri_get_cb;
 	spin_unlock_bh(&p->lock);
+
+	if (cb) {
+		int_pri = cb(dev, handle_id);
+	}
 
 	ppe_drv_info("%px:get int_pri:%d successful for dev:%px handle_id:%u", p, int_pri, dev, handle_id);
 	return int_pri;

@@ -170,12 +170,23 @@ static void ppe_qdisc_stats_get_node(struct ppe_qdisc *pqr)
 	struct ppe_drv_qos_q_stat prev_stats = {0};
 	struct ppe_drv_qos_q_stat cur_stats = {0};
 	bool is_red;
+	uint32_t ucast_qid;
 
 	/*
-	 * Iterate through the list of leaf node list and update statistics
+	 * Hold q_list_lock across the entire iteration to prevent concurrent
+	 * ppe_qdisc_stats_qdisc_detach from calling list_del while we are
+	 * traversing the list. This prevents list corruption and use-after-free
+	 * of cursor during factory reset / reboot stress testing.
+	 *
+	 * Lock order: q_list_lock -> cursor->lock -> p->lock
 	 */
+	spin_lock_bh(&pqr->stats_wq->q_list_lock);
+
 	list_for_each_entry(cursor, &pqr->stats_wq->q_list_head, q_list_element) {
 		if (cursor != NULL) {
+			/*
+			 * Read previous stats and queue ID under cursor->lock.
+			 */
 			spin_lock_bh(&cursor->lock);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 			prev_stats.tx_pkts = cursor->qdisc->bstats.packets;
@@ -188,10 +199,25 @@ static void ppe_qdisc_stats_get_node(struct ppe_qdisc *pqr)
 #endif
 			prev_stats.drop_pkts = cursor->qdisc->qstats.drops;
 			is_red = (cursor->type == PPE_QDISC_NODE_TYPE_RED) ? true : false;
+			ucast_qid = cursor->res.q.ucast_qid;
+			spin_unlock_bh(&cursor->lock);
+
 			/*
-			 * Getting statistics from PPE
+			 * Read HW stats WITHOUT holding cursor->lock to avoid the ABBA
+			 * deadlock: ppe_drv_qos_queue_stats_get acquires p->lock, while
+			 * ppe_drv_qos_queue_info_get (ppecfg path) acquires p->lock first
+			 * and then cursor->lock inside its callback.
+			 *
+			 * q_list_lock is still held here, so cursor cannot be deleted by
+			 * ppe_qdisc_stats_qdisc_detach (which waits for q_list_lock before
+			 * calling list_del). This prevents use-after-free of cursor.
 			 */
-			ppe_drv_qos_queue_stats_get(cursor->res.q.ucast_qid, is_red, &cur_stats);
+			ppe_drv_qos_queue_stats_get(ucast_qid, is_red, &cur_stats);
+
+			/*
+			 * Update kernel-side stats under cursor->lock.
+			 */
+			spin_lock_bh(&cursor->lock);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 			cursor->qdisc->bstats.packets = cur_stats.tx_pkts;
 			cursor->qdisc->bstats.bytes = cur_stats.tx_bytes;
@@ -205,6 +231,8 @@ static void ppe_qdisc_stats_get_node(struct ppe_qdisc *pqr)
 			ppe_qdisc_stats_update_parent(cursor, &cur_stats, &prev_stats);
 		}
 	}
+
+	spin_unlock_bh(&pqr->stats_wq->q_list_lock);
 
 	ppe_qdisc_info("%px Root node stats for port id = %d is updated with stats of all"
 			" leaf nodes under it.", pqr, pqr->port_id);
@@ -310,18 +338,23 @@ void ppe_qdisc_stats_sync_many_exit(struct ppe_qdisc *pq)
 
 cleanup:
 	/*
-	 * Use del_timer_sync() instead of del_timer() to ensure that any
-	 * currently-executing timer callback (ppe_qdisc_stats_sync_restart)
-	 * has fully completed before we free pqsw. del_timer() only cancels
-	 * a pending (not-yet-fired) timer and returns immediately if the
-	 * callback is already running on another CPU, which would allow
-	 * the callback to dereference the freed pqsw (use-after-free).
-	 *
-	 * del_timer_sync() is safe here because ppe_qdisc_stats_sync_restart
-	 * never calls ppe_qdisc_stats_sync_many_exit(), so there is no
-	 * deadlock risk.
+	 * Use del_timer_sync (not del_timer) to wait for any currently executing
+	 * timer callback (ppe_qdisc_stats_sync_restart) to complete before freeing
+	 * pqsw. The timer callback accesses pqsw fields and must not run after free.
 	 */
 	del_timer_sync(&pqsw->stats_get_timer);
+
+	/*
+	 * The work function (ppe_qdisc_stats_sync_process_work) dequeues pqsw from
+	 * ppe_qdisc_stats_list at the start and then calls ppe_qdisc_stats_get_node
+	 * (pqsw->pq). If it was running when we set stats_polling_stopped above, it
+	 * will not be in the list and we will not have found it above. Flush the
+	 * workqueue to ensure the running work completes and stops accessing pqsw
+	 * before we free it. This prevents use-after-free during factory reset /
+	 * reboot stress testing where the root qdisc is destroyed while stats
+	 * polling is active.
+	 */
+	flush_workqueue(ppe_qdisc_stats_workqueue);
 
 	/*
 	 * Free the qdisc stats list for this root node
@@ -354,9 +387,11 @@ bool ppe_qdisc_stats_sync_many_init(struct ppe_qdisc *pq)
 	pq->stats_wq->pq = pq;
 
 	/*
-	 * Initialize stats list head
+	 * Initialize stats list head and its protecting lock.
+	 * Lock order: q_list_lock -> cursor->lock -> p->lock
 	 */
 	INIT_LIST_HEAD(&pq->stats_wq->q_list_head);
+	spin_lock_init(&pq->stats_wq->q_list_lock);
 
 	/*
 	 * Initialize the timer that restarts the polling loop
@@ -444,12 +479,21 @@ void ppe_qdisc_stats_qdisc_attach(struct ppe_qdisc *pq)
 		return;
 	}
 
+	/*
+	 * Hold q_list_lock before modifying q_list_head to serialize with
+	 * ppe_qdisc_stats_get_node which holds q_list_lock during iteration.
+	 */
+	spin_lock_bh(&rpq->stats_wq->q_list_lock);
+
 	if (rpq == list_first_entry(&rpq->stats_wq->q_list_head, struct ppe_qdisc, q_list_element)) {
 		ppe_qdisc_info("%px Deleting root node %px from leaf list", pq, rpq);
 		list_del(&rpq->q_list_element);
 	}
 
 	list_add_tail(&pq->q_list_element, &rpq->stats_wq->q_list_head);
+
+	spin_unlock_bh(&rpq->stats_wq->q_list_lock);
+
 	spin_lock_bh(&pq->lock);
 	ppe_drv_qos_queue_stats_reset(pq->res.q.ucast_qid);
 	spin_unlock_bh(&pq->lock);
@@ -486,9 +530,21 @@ void ppe_qdisc_stats_qdisc_detach(struct ppe_qdisc *pq)
 		return;
 	}
 
+	/*
+	 * Hold q_list_lock before modifying q_list_head. This serializes with
+	 * ppe_qdisc_stats_get_node which holds q_list_lock during the entire
+	 * list iteration, preventing list corruption and use-after-free of the
+	 * cursor pointer during factory reset / reboot stress testing.
+	 *
+	 * Lock order: q_list_lock -> cursor->lock -> p->lock
+	 */
+	spin_lock_bh(&rpq->stats_wq->q_list_lock);
 	spin_lock_bh(&pq->lock);
 	ppe_drv_qos_queue_stats_reset(pq->res.q.ucast_qid);
 	spin_unlock_bh(&pq->lock);
 	list_del(&pq->q_list_element);
+	spin_unlock_bh(&rpq->stats_wq->q_list_lock);
+
 	ppe_qdisc_info("%px Node detached from list of leaf nodes under the root %px", pq, rpq);
 }
+
