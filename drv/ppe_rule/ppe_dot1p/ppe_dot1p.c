@@ -412,6 +412,8 @@ static bool ppe_dot1p_action_fill(struct ppe_dot1p *dot1p, struct ppe_dot1p_rule
 {
 	struct ppe_drv_dot1p_rule *info = &dot1p->info;
 	struct ppe_drv_dot1p_action *dot1p_action = &info->action;
+	struct ppe_dot1p_rule *rule_info = &dot1p->rule;
+	struct ppe_dot1p_rule_action *dot1p_rule_action = &rule_info->action;
 #ifdef NSS_PPE_PON_SUPPORT
 	uint8_t enq_vp, int_pri;
 #endif
@@ -435,8 +437,15 @@ static bool ppe_dot1p_action_fill(struct ppe_dot1p *dot1p, struct ppe_dot1p_rule
 			}
 			dot1p_action->enq_vp = enq_vp;
 			dot1p_action->action_flags = dot1p_action->action_flags | PPE_DRV_DOT1P_ACTION_FLAG_ENQ_VP;
+
+			dot1p_rule_action->enq_vp = enq_vp;
+			dot1p_rule_action->action_flags = dot1p_rule_action->action_flags | PPE_DOT1P_ACTION_FLAG_ENQ_VP;
+
 			dot1p_action->int_pri = int_pri;
 			dot1p_action->action_flags = dot1p_action->action_flags | PPE_DRV_DOT1P_ACTION_FLAG_INT_PRI;
+
+			dot1p_rule_action->int_pri = int_pri;
+			dot1p_rule_action->action_flags = dot1p_rule_action->action_flags | PPE_DOT1P_ACTION_FLAG_INT_PRI;
 		}
 	}
 
@@ -449,6 +458,9 @@ static bool ppe_dot1p_action_fill(struct ppe_dot1p *dot1p, struct ppe_dot1p_rule
 			}
 			dot1p_action->enq_vp = enq_vp;
 			dot1p_action->action_flags = dot1p_action->action_flags | PPE_DRV_DOT1P_ACTION_FLAG_ENQ_VP;
+
+			dot1p_rule_action->enq_vp = enq_vp;
+			dot1p_rule_action->action_flags = dot1p_rule_action->action_flags | PPE_DOT1P_ACTION_FLAG_ENQ_VP;
 		}
 	}
 #endif

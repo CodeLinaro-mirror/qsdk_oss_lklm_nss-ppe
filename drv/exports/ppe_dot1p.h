@@ -60,6 +60,8 @@ typedef int16_t ppe_dot1p_rule_id_t;
 #define PPE_DOT1P_ACTION_FLAG_FWD_CMD				0x00000080	/**< Rule action for forward command. */
 #define PPE_DOT1P_ACTION_FLAG_DST_INFO				0x00000100	/**< Rule action for destination info command. */
 #define PPE_DOT1P_ACTION_FLAG_BASE_PQ				0x00000200	/**< Rule action to update base priority queue ID. */
+#define PPE_DOT1P_ACTION_FLAG_ENQ_VP				0x00000400	/**< Rule action to update enqueue vp. */
+#define PPE_DOT1P_ACTION_FLAG_INT_PRI				0x00000800	/**< Rule action to update int_pri. */
 
 /**
  * ppe_dot1p_ret
@@ -151,6 +153,8 @@ struct ppe_dot1p_rule_action {
 	bool us_policer_en;					/**< Enable policer id for upstream traffic. */
 	bool ds_policer_en;					/**< Enable policer id for dowstream traffic. */
 	uint8_t int_dp;						/**< Changed drop precedence. */
+	uint8_t enq_vp;						/**< Enqueue VP derived from pq configuration. */
+	uint8_t int_pri;					/**< Internal priority derived from pq configuration. */
 	char dst_info[IFNAMSIZ];				/**< Destination info. */
 	ppe_dot1p_cmd_t fwd_cmd;				/**< Forward action for matched packets. */
 
