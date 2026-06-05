@@ -3909,7 +3909,7 @@ static int ppe_drv_ddr_buffer_resolve_dev(struct ppe_drv *p,
 	/*
 	 * PPPoE
 	 */
-	if (is_ingress && cur->type == ARPHRD_PPP) {
+	if (cur->type == ARPHRD_PPP) {
 		struct ppe_drv_iface *pppoe_iface;
 		struct ppe_drv_iface *base_iface;
 		struct ppe_drv_l3_if *l3_if;
@@ -4151,8 +4151,30 @@ static int ppe_drv_lpbk_buffer_map_handler(struct ctl_table *table,
 	size_t len;
 	int cmd_mode = PPE_DRV_LPBK_MAP_CMD_INVALID;
 
+	if (!write) {
+		if (*ppos == 0) {
+			struct ppe_drv_lpbk_buffer_map_entry *map_entry;
+			int off = 0;
+
+			spin_lock_bh(&p->lock);
+			off += scnprintf(lpbk_buffer_map_str + off,
+					sizeof(lpbk_buffer_map_str) - off,
+					"Total rules: %u\n", p->lpbk_buffer_map_count);
+			list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
+				off += scnprintf(lpbk_buffer_map_str + off,
+						sizeof(lpbk_buffer_map_str) - off,
+						"%s %s\n",
+						map_entry->ingress_dev->name,
+						map_entry->egress_dev->name);
+			}
+			spin_unlock_bh(&p->lock);
+		}
+
+		return proc_dostring(table, write, buffer, lenp, ppos);
+	}
+
 	ret = proc_dostring(table, write, buffer, lenp, ppos);
-	if (ret || !write) {
+	if (ret) {
 		return ret;
 	}
 
