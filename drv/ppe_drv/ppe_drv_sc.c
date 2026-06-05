@@ -851,6 +851,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1ULL << EG_MIRROR_BYP)
 #endif
 				);
+		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
 		sc_cfg.bypass_bitmap[3] = (1 << TL_PRE_IPO_BYP);
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
@@ -939,6 +940,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1ULL << DROP_CPUCODE_CNT_BYP)
 				| (1ULL << (DROP_CPUCODE_CNT_BYP + 1))
 				| (1ULL << PCP_QOS_BYP));
+		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
 		sc_cfg.bypass_bitmap[3] = (1 << TL_PRE_IPO_BYP);
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
@@ -958,6 +960,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1ULL << QM_PASSTHROUGH_CPU_CODE_1_SEL)
 				| (1ULL << DROP_CPUCODE_CNT_BYP)
 				| (1ULL << PCP_QOS_BYP));
+		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
 		sc_cfg.bypass_bitmap[3] = (1 << TL_PRE_IPO_BYP);
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
