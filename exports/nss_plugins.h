@@ -167,6 +167,20 @@ struct ppe_ds_wlan_arch_reg_info {
 
 struct ppe_vp_ui;
 
+/**
+ * ppe_ds_wlan_wifi8_rxfill_ring_info
+ *	WiFi8 PPE-DS secondary and primary RxFill ring filled-count information
+ */
+struct ppe_ds_wlan_wifi8_rxfill_ring_info {
+	uint16_t secd_prod_idx;		/**< Secondary RxFill ring producer index */
+	uint16_t secd_cons_idx;		/**< Secondary RxFill ring consumer index (read from HW) */
+	uint16_t secd_active_cnt;	/**< Secondary RxFill ring active count */
+	uint16_t prim_prod_idx;		/**< Primary RxFill ring producer index (read from HW) */
+	uint16_t prim_cons_idx;		/**< Primary RxFill ring consumer index */
+	uint16_t prim_active_cnt;	/**< Primary RxFill ring active count */
+	bool hw_buff_mgmt_en;		/**< HW buffer manager enabled flag */
+};
+
 #define ppe_ds_wlan_ops_v2 ppe_ds_wlan_ops
 
 /**
@@ -362,6 +376,19 @@ typedef ppe_vp_status_t (*update_vp_config_func_t)(struct net_device *ath_dev, s
  * nss_plugins_ops
  * 	Data structure for NSS Plugin ops
  */
+/*
+ * get_rxfill_ring_info_func_t
+ * 	Callback for ppe_ds_wlan_get_rxfill_ring_info
+ *
+ * @param[in] ppeds_node_id Index of PPE-DS node configuration
+ * @param[out] info WiFi8 RxFill ring filled-count info
+ *
+ * @return
+ * None
+ */
+typedef void (*get_rxfill_ring_info_func_t)(int ppeds_node_id,
+		struct ppe_ds_wlan_wifi8_rxfill_ring_info *info);
+
 struct nss_plugins_ops {
 	ds_inst_alloc_func_t ds_inst_alloc;		/**< Callback for PPE-DS WLAN instance allocation API */
 	ds_inst_start_func_t ds_inst_start;		/**< Callback for PPE-DS WLAN instance start API */
@@ -376,6 +403,7 @@ struct nss_plugins_ops {
 	get_vp_num_func_t get_vp_num;		/**< Callback to get vp number */
 	service_status_update_func_t service_status_update;		/**< Callback to get status update */
 	update_vp_config_func_t vp_cfg_update; 		/**< Callback to update VP config */
+	get_rxfill_ring_info_func_t get_rxfill_ring_info;	/**< WiFi8 callback to get SW and HW RxFill ring filled-count info */
 };
 
 /*
