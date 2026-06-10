@@ -190,9 +190,7 @@ void ppe_drv_acl_uni_to_l2vp_sc_map(struct ppe_drv_acl_ctx *ctx)
 
 	spin_lock_bh(&p->lock);
 	if (ctx->dev_valid) {
-		if (ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L2_PORT ||
-				ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L3_PORT) {
-
+		if (ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L2_PORT) {
 			if (ctx->dev >= PPE_DRV_PORTS_MAX) {
 				ppe_drv_warn("%p: invalid port number: %d\n", ctx, ctx->dev);
 				spin_unlock_bh(&p->lock);
@@ -223,9 +221,7 @@ void ppe_drv_acl_uni_to_l2vp_sc_unmap(struct ppe_drv_acl_ctx *ctx)
 
 	spin_lock_bh(&p->lock);
 	if (ctx->dev_valid) {
-		if (ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L2_PORT ||
-				ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L3_PORT) {
-
+		if (ctx->dev_type == PPE_DRV_ACL_DEV_TYPE_DEST_L2_PORT) {
 			if (ctx->dev >= PPE_DRV_PORTS_MAX) {
 				ppe_drv_warn("%p: invalid port number: %d\n", ctx, ctx->dev);
 				return;
