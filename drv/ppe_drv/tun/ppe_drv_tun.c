@@ -792,6 +792,11 @@ bool ppe_drv_tun_detach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn)
 	struct ppe_drv_v4_conn_flow *pcr = &cn->pcr;
 	struct ppe_drv_v6_conn_flow *pcf_v6;
 
+	if (!(pcf->pf->flags & PPE_DRV_FLOW_MAPT)) {
+		ppe_drv_warn("pf flag not set for MAPT pcf: %px pcr: %px\n", pcf, pcr);
+		return false;
+	}
+
 	/*
 	 * Use the v6 pcf cached in the v4 flow's pf->mapt_info at attach time.
 	 * This avoids re-running xlate_4_to_6() which may fail if the MAP-T
@@ -958,6 +963,8 @@ static bool ppe_drv_tun_mapt_translate_v6_to_v4(bool is_flow_dir, struct net_dev
 	struct ppe_drv_v4_conn_flow *pcf_v4, *pcr_v4;
 	struct ppe_drv_v6_conn_flow *pcf_v6 = &conn_tun_v6->pcf;
 	struct ppe_drv_flow *flow;
+	struct ppe_drv_v6_conn_flow *pcf_v6_det = NULL;
+	struct ppe_drv_v4_conn_flow *mapt_v4_cached = NULL;
 
 	if (is_attach) {
 		memset(&ip6, 0, sizeof(struct ipv6hdr));
@@ -1015,8 +1022,13 @@ static bool ppe_drv_tun_mapt_translate_v6_to_v4(bool is_flow_dir, struct net_dev
 		 * flow's pf was not valid). In that case nothing was linked, so return
 		 * false to skip detach.
 		 */
-		struct ppe_drv_v6_conn_flow *pcf_v6_det = &conn_tun_v6->pcf;
-		struct ppe_drv_v4_conn_flow *mapt_v4_cached = (pcf_v6_det->pf) ?
+		if (!netdev) {
+			ppe_drv_warn("netdev is null in detach\n");
+			return false;
+		}
+
+		pcf_v6_det = &conn_tun_v6->pcf;
+		mapt_v4_cached = (pcf_v6_det->pf) ?
 				pcf_v6_det->pf->mapt_info.mapt_v4 : NULL;
 
 		if (!mapt_v4_cached) {
@@ -1064,9 +1076,9 @@ static bool ppe_drv_tun_mapt_translate_v6_to_v4(bool is_flow_dir, struct net_dev
 static bool ppe_drv_tun_detach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6)
 {
 	struct ppe_drv_tun *ptun;
-	struct ppe_drv_port *pp;
+	struct ppe_drv_port *pp = NULL;
 	uint8_t tun_vp_port;
-	struct net_device *netdev;
+	struct net_device *netdev = NULL;
 	struct ppe_drv_v4_conn_flow *pcf_v4 = NULL, *pcr_v4 = NULL;
 	struct ppe_drv_v6_conn_flow *pcf = &conn_tun_v6->pcf;
 	struct ppe_drv_v6_conn_flow *pcr = &conn_tun_v6->pcr;
@@ -1076,8 +1088,8 @@ static bool ppe_drv_tun_detach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6
 
 	ptun = ppe_drv_tun_mapt_port_tun_get(pcf->tx_port, pcf->rx_port);
 	if (!ptun) {
-		ppe_drv_trace("invalid tunnel to detach\n");
-		return false;
+		ppe_drv_trace("invalid tunnel to detach, doing cache detach\n");
+		goto do_detach;
 	}
 
 	pp = ptun->pp;
@@ -1092,8 +1104,9 @@ static bool ppe_drv_tun_detach_mapt_v6_to_v4(struct ppe_drv_v6_conn *conn_tun_v6
 		is_flow_dir = false;
 	}
 
+do_detach:
 	if (!ppe_drv_tun_mapt_translate_v6_to_v4(is_flow_dir, netdev, conn_tun_v6, &pcf_v4, &pcr_v4, false)) {
-		ppe_drv_trace("%p: cant find pcf v4 corresponding to pcf v6 \n", pp);
+		ppe_drv_warn("cant find pcf v4 corresponding to pcf v6, cn_v6->pcf: %px cn_v6->pcr: %px \n", pcf, pcr);
 		return false;
 	}
 
@@ -1293,6 +1306,14 @@ void ppe_drv_tun_v4_conn_tun_del(struct ppe_drv_tun *ptun)
 			continue;
 		}
 
+		if (pcf->pf) {
+			pcf->pf->mapt_info.mapt_v6 = NULL;
+		}
+
+		if (pcr->pf) {
+			pcr->pf->mapt_info.mapt_v6 = NULL;
+		}
+
 		/*
 		 * Release references on interfaces.
 		 */
@@ -1340,6 +1361,7 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 	struct ppe_drv_v6_conn *cn_v6 = NULL;
 	struct ppe_drv_v4_conn *cn_v4 = NULL;
 	bool is_ipv6;
+	struct ppe_drv_v4_conn_flow *pcf, *pcr;
 
 	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
 	spin_lock_bh(&p->lock);
@@ -1392,6 +1414,13 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 		if (ret != PPE_DRV_RET_SUCCESS) {
 			spin_unlock_bh(&p->lock);
 			return false;
+		}
+
+		pcf = &cn_v4->pcf;
+		pcr = &cn_v4->pcr;
+
+		if (pcf->pf) {
+			pcf->pf->mapt_info.mapt_v6 = NULL;
 		}
 
 		/*

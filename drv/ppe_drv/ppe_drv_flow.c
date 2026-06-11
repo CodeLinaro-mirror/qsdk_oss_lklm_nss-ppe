@@ -284,16 +284,20 @@ void ppe_drv_flow_v4_stats_update(struct ppe_drv_v4_conn_flow *pcf)
 		ppe_drv_v4_conn_flow_tx_stats_add(pcf, delta_pkts, delta_bytes);
 	}
 
-	if (pf->flags & PPE_DRV_FLOW_MAPT) {
+	/*
+	 * Update the stats only if flow is not suspended.
+	 */
+	if ((pf->flags & PPE_DRV_FLOW_MAPT) && !(pf->flow_cfg)) {
 		mapt_pcf_v6 = pf->mapt_info.mapt_v6;
-		mapt_cn_v6 = mapt_pcf_v6->conn;
+		if (mapt_pcf_v6) {
+			mapt_cn_v6 = mapt_pcf_v6->conn;
+			delta_bytes += delta_pkts * pf->mapt_info.len_adjust;
+			ppe_drv_v6_conn_flow_rx_stats_add(mapt_pcf_v6, delta_pkts, delta_bytes);
 
-		delta_bytes += delta_pkts * pf->mapt_info.len_adjust;
-		ppe_drv_v6_conn_flow_rx_stats_add(mapt_pcf_v6, delta_pkts, delta_bytes);
-
-		if (ppe_drv_v6_conn_flags_check(mapt_pcf_v6->conn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
-			mapt_pcr_v6 = (mapt_pcf_v6 == &mapt_cn_v6->pcf) ? &mapt_cn_v6->pcr : &mapt_cn_v6->pcf;
-			ppe_drv_v6_conn_flow_tx_stats_add(mapt_pcr_v6, delta_pkts, delta_bytes);
+			if (ppe_drv_v6_conn_flags_check(mapt_pcf_v6->conn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
+				mapt_pcr_v6 = (mapt_pcf_v6 == &mapt_cn_v6->pcf) ? &mapt_cn_v6->pcr : &mapt_cn_v6->pcf;
+				ppe_drv_v6_conn_flow_tx_stats_add(mapt_pcr_v6, delta_pkts, delta_bytes);
+			}
 		}
 	}
 
@@ -2944,6 +2948,9 @@ bool ppe_drv_flow_del(struct ppe_drv_flow *pf)
 		kfree(pf->unidir_info.flow_cfg);
 		pf->unidir_info.flow_cfg = NULL;
 	}
+	pf->mapt_info.mapt_v6 = NULL;
+	pf->mapt_info.mapt_v4 = NULL;
+	pf->mapt_info.len_adjust = 0;
 
 	if (pf->flow_cfg) {
 		kfree(pf->flow_cfg);
@@ -3598,6 +3605,7 @@ bool ppe_drv_flow_v4_attach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4, st
 {
 	struct ppe_drv_flow *pf = pcf_v4->pf;
 	struct ppe_drv_flow_mapt_info *mapt_info = &pf->mapt_info;
+	struct ppe_drv_v4_conn_flow *old_pcf_v4;
 
 	if (!(pf->flags & PPE_DRV_FLOW_V4)) {
 		ppe_drv_trace("%p: flow is invalid", pf);
@@ -3617,6 +3625,20 @@ bool ppe_drv_flow_v4_attach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4, st
 			ppe_drv_warn("%p: failed to allocate standalone pf for MAP-T outer v6 flow\n", pcf_v6);
 			return false;
 		}
+	}
+
+	/*
+	 * Ideally there is a 1:1 mapping between a v4 and v6 connection in MAP-T.
+	 * However, in a corner case the same v6 outer flow can get attached to one
+	 * v4 inner flow and later re-attached to a different v4 inner flow, possibly
+	 * due to an incorrect NAT46 translation result at the first attach.
+	 * Clear the stale mapt_v6 back-reference from the old v4 flow so that when
+	 * it is eventually destroyed it does not attempt to detach from a v6 flow
+	 * that now belongs to a different v4 connection.
+	 */
+	old_pcf_v4 = pcf_v6->pf->mapt_info.mapt_v4;
+	if (old_pcf_v4 && old_pcf_v4 != pcf_v4 && old_pcf_v4->pf) {
+		old_pcf_v4->pf->mapt_info.mapt_v6 = NULL;
 	}
 
 	/*
@@ -3651,7 +3673,7 @@ bool ppe_drv_flow_v4_detach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4)
 	/*
 	 * Clear the cached v4 pcf from the v6 flow's pf.
 	 */
-	if (pcf_v6 && pcf_v6->pf) {
+	if (pcf_v6 && pcf_v6->pf && pcf_v6->pf->mapt_info.mapt_v4 == pcf_v4) {
 		pcf_v6->pf->mapt_info.mapt_v4 = NULL;
 		kfree(pcf_v6->pf);
 		pcf_v6->pf = NULL;
