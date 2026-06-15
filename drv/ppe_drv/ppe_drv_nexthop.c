@@ -6,7 +6,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
 #include <fal/fal_ip.h>
-#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+#if defined(NSS_VLAN_BASED_DSA_SUPPORT) || defined(NSS_ATH_HDR_BASED_DSA_SUPPORT)
 #include <linux/dsa/8021q.h>
 #include <net/dsa.h>
 #endif
@@ -525,7 +525,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 	if (iface_tx->dev) {
 		is_vlan_as_vp = is_vlan_dev(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 		is_vlan_as_veip = is_vlan_dev(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VEIP);
-#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+#if defined(NSS_VLAN_BASED_DSA_SUPPORT) || defined(NSS_ATH_HDR_BASED_DSA_SUPPORT)
 		is_dsa_dev = dsa_slave_dev_check(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 #endif
 	}
@@ -1019,7 +1019,7 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 	if (iface_tx->dev) {
 		is_vlan_as_vp = is_vlan_dev(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 		is_vlan_as_veip = is_vlan_dev(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VEIP);
-#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+#if defined(NSS_VLAN_BASED_DSA_SUPPORT) || defined(NSS_ATH_HDR_BASED_DSA_SUPPORT)
 		is_dsa_dev = dsa_slave_dev_check(iface_tx->dev) && (iface_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 #endif
 	}

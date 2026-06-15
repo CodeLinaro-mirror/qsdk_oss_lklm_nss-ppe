@@ -6,11 +6,11 @@ ccflags-y += -Wall -Werror
 export BUILD_ID = \"Build Id: $(shell date +'%m/%d/%y, %H:%M:%S')\"
 ccflags-y += -DNSS_PPE_BUILD_ID="$(BUILD_ID)"
 
-ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx ipq96xx ipq52xx))
+ifeq ($(CONFIG_NET_DSA)_$(filter $(SoC),ipq95xx ipq53xx ipq54xx ipq96xx ipq52xx),y_$(SoC))
 ccflags-y += -DNSS_VLAN_BASED_DSA_SUPPORT
 endif
 
-ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq54xx ipq96xx ipq52xx))
+ifeq ($(CONFIG_NET_DSA)_$(filter $(SoC),ipq53xx ipq54xx ipq96xx ipq52xx),y_$(SoC))
 ccflags-y += -DNSS_ATH_HDR_BASED_DSA_SUPPORT
 endif
 

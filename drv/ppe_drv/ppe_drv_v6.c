@@ -4,7 +4,7 @@
  */
 
 #include <linux/if_vlan.h>
-#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+#if defined(NSS_VLAN_BASED_DSA_SUPPORT) || defined(NSS_ATH_HDR_BASED_DSA_SUPPORT)
 #include <linux/dsa/8021q.h>
 #include <net/dsa.h>
 #endif
@@ -2572,7 +2572,7 @@ bool ppe_drv_v6_if_walk(struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_top_if_
 	is_vlan_as_vp = is_vlan_dev(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 
 	is_vlan_as_veip = is_vlan_dev(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VEIP);
-#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+#if defined(NSS_VLAN_BASED_DSA_SUPPORT) || defined(NSS_ATH_HDR_BASED_DSA_SUPPORT)
 	is_dsa_dev = dsa_slave_dev_check(tx_port_if->dev) && (tx_port_if->type == PPE_DRV_IFACE_TYPE_VIRTUAL);
 #endif
 
