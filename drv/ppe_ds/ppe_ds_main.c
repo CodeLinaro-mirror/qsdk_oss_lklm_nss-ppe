@@ -20,6 +20,8 @@
 #include "ppe_ds_stats.h"
 #include "ppe_ds.h"
 
+extern char *saved_command_line;
+
 /*
  * PPE-DS ring processing mode selection parameter.
  * The default mode PPE_DS_INTR_MODE (0) will use interrupt mode
@@ -56,11 +58,12 @@ unsigned int cpu_mask_6g = 0x1;
 module_param(cpu_mask_6g, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(cpu_mask_6g, "CPU mask for the 6G radio VAP");
 
-#if defined(PPE_DS_MEM_PROFILE_LOW)
-unsigned int ppe2tcl_rxfill_num_desc = 512;
-#else
-unsigned int ppe2tcl_rxfill_num_desc = 2048;
-#endif
+/*
+ * Active memory profile detected at runtime from kernel bootargs.
+ */
+enum ppe_ds_mem_profile ppe_ds_active_mem_profile = PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT;
+
+unsigned int ppe2tcl_rxfill_num_desc;
 module_param(ppe2tcl_rxfill_num_desc, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(ppe2tcl_rxfill_num_desc, "PPE2TCL Rxfill ring descriptor count");
 
@@ -68,11 +71,7 @@ unsigned int reo2ppe_txcmpl_num_desc = 16384;
 module_param(reo2ppe_txcmpl_num_desc, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(reo2ppe_txcmpl_num_desc, "REO2PPE Tx complete ring descriptor count");
 
-#if defined(NSS_PPE_IPQ53XX) && !defined(PPE_DS_MEM_PROFILE_LOW)
-unsigned int rxfill_low_threshold = 1024;
-#else
-unsigned int rxfill_low_threshold = 256;
-#endif
+unsigned int rxfill_low_threshold;
 module_param(rxfill_low_threshold, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(rxfill_low_threshold, "RxFill low threshold value");
 
@@ -92,12 +91,83 @@ struct ppe_ds_node_config ppe_ds_node_cfg[PPE_DS_MAX_NODE];
 struct ppe_ds_intr_ts prev_wlan_intr_ts[PPE_DS_MAX_NODE];
 
 /*
+ * ppe_ds_mem_profile_detect()
+ *	Parse the kernel command line for "mem-profile=<value>" and set
+ *	ppe_ds_active_mem_profile accordingly.
+ *
+ *	  mem-profile=balanced   -> PPE_DS_MEM_PROFILE_DYNAMIC_MEDIUM (512M)
+ *	  mem-profile=optimized  -> PPE_DS_MEM_PROFILE_DYNAMIC_LOW    (256M)
+ *	  mem-profile=default    -> PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT (1G)
+ *	  (absent)               -> PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT (1G)
+ */
+static void ppe_ds_mem_profile_detect(void)
+{
+	ppe_ds_active_mem_profile = PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT;
+
+#ifdef PPE_DS_MEM_PROFILE_MEDIUM
+	ppe_ds_active_mem_profile = PPE_DS_MEM_PROFILE_DYNAMIC_MEDIUM;
+#elif defined(PPE_DS_MEM_PROFILE_LOW)
+	ppe_ds_active_mem_profile = PPE_DS_MEM_PROFILE_DYNAMIC_LOW;
+#else
+	const char *cmdline = saved_command_line;
+	const char *param = strstr(cmdline, "mem-profile=");
+	if (!param) {
+		ppe_ds_active_mem_profile = PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT;
+		ppe_ds_info("mem-profile not found in bootargs, using DEFAULT\n");
+		return;
+	}
+
+	param += strlen("mem-profile=");
+
+	if (strncmp(param, "optimized", strlen("optimized")) == 0) {
+		ppe_ds_active_mem_profile = PPE_DS_MEM_PROFILE_DYNAMIC_LOW;
+		ppe_ds_info("mem-profile=optimized detected, using LOW\n");
+	} else if (strncmp(param, "balanced", strlen("balanced")) == 0) {
+		ppe_ds_active_mem_profile = PPE_DS_MEM_PROFILE_DYNAMIC_MEDIUM;
+		ppe_ds_info("mem-profile=balanced detected, using MEDIUM\n");
+	} else {
+		ppe_ds_active_mem_profile = PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT;
+		ppe_ds_info("mem-profile=default detected, using DEFAULT\n");
+	}
+#endif
+}
+
+/*
+ * ppe_ds_set_default_params()
+ *	Set default module parameters based on detected memory profile.
+ */
+static void ppe_ds_set_default_params(void)
+{
+	switch (ppe_ds_active_mem_profile) {
+	case PPE_DS_MEM_PROFILE_DYNAMIC_LOW:
+		ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF_LOW;
+		rxfill_low_threshold = 256;
+		break;
+	case PPE_DS_MEM_PROFILE_DYNAMIC_MEDIUM:
+		ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
+		rxfill_low_threshold = 1024;
+		break;
+	case PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT:
+	default:
+		ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
+		rxfill_low_threshold = 1024;
+		break;
+	}
+
+	ppe_ds_info("Memory profile: %d, ppe2tcl_rxfill_num_desc: %u, rxfill_low_threshold: %u\n",
+		    ppe_ds_active_mem_profile, ppe2tcl_rxfill_num_desc, rxfill_low_threshold);
+}
+
+/*
  * ppe_ds_module_init()
  *	Module init for PPE-DS driver
  */
 static int __init ppe_ds_module_init(void)
 {
 	uint32_t i;
+
+	ppe_ds_mem_profile_detect();
+	ppe_ds_set_default_params();
 
 	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
 		rwlock_init(&ppe_ds_node_cfg[i].lock);
