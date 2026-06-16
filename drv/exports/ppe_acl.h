@@ -51,6 +51,9 @@ typedef enum ppe_acl_rule_match_type {
 	PPE_ACL_RULE_MATCH_TYPE_DPORT,			/**< L4 destination port rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_IP_GEN,			/**< General IP fields rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_UDF,			/**< User Defined fields (UDF) rule type. */
+	PPE_ACL_RULE_MATCH_TYPE_UDF_WITH_IP,		/**< UDF with L3 IP (IPv4/IPv6) rule type.
+							     Uses FAL_ACL_RULE_IP4 or FAL_ACL_RULE_IP6
+							     as rule type instead of FAL_ACL_RULE_UDF. */
 	PPE_ACL_RULE_MATCH_TYPE_CTPID,			/**< CTPID Index rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_STPID,			/**< STPID Index rule type. */
 	PPE_ACL_RULE_MATCH_TYPE_CDEI,			/**< CDEI rule type. */
@@ -84,6 +87,7 @@ typedef enum ppe_acl_rule_match_type {
 #define PPE_ACL_RULE_MATCH_TYPE_DPORT_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_DPORT)
 #define PPE_ACL_RULE_MATCH_TYPE_IP_GEN_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_IP_GEN)
 #define PPE_ACL_RULE_MATCH_TYPE_UDF_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_UDF)
+#define PPE_ACL_RULE_MATCH_TYPE_UDF_WITH_IP_VALID	(1 << PPE_ACL_RULE_MATCH_TYPE_UDF_WITH_IP)
 #define PPE_ACL_RULE_MATCH_TYPE_DEFAULT_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_DEFAULT)
 #define PPE_ACL_RULE_MATCH_TYPE_CTPID_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_CTPID)
 #define PPE_ACL_RULE_MATCH_TYPE_STPID_VALID		(1 << PPE_ACL_RULE_MATCH_TYPE_STPID)
@@ -646,6 +650,113 @@ struct ppe_acl_rule_match_udf {
 	struct ppe_acl_rule_udf udf_d;		/**< UDF-D configuration. */
 };
 
+/*
+ * IP miscellaneous match flags for ppe_acl_rule_match_ip_misc.flags.
+ * Set the corresponding bit to indicate which fields are valid/enabled.
+ */
+enum ppe_acl_ip_misc_bit {
+	PPE_ACL_IP_MISC_BIT_L3_FRAG = 0,	/**< Bit position for l3_fragment_flag. */
+	PPE_ACL_IP_MISC_BIT_ESP_HDR,		/**< Bit position for esp_hdr_flag. */
+	PPE_ACL_IP_MISC_BIT_AH_HDR,		/**< Bit position for ah_hdr_flag. */
+	PPE_ACL_IP_MISC_BIT_MOBILITY_HDR,	/**< Bit position for mobility_hdr_flag. */
+	PPE_ACL_IP_MISC_BIT_OTHER_EXT_HDR,	/**< Bit position for other_extension_hdr_flag. */
+	PPE_ACL_IP_MISC_BIT_FRAG_HDR,		/**< Bit position for frag_hdr_flag. */
+	PPE_ACL_IP_MISC_BIT_IPV4_OPTION,	/**< Bit position for l3_state_option_flag. */
+	PPE_ACL_IP_MISC_BIT_HOP_LIMIT,		/**< Bit position for hop_limit. */
+	PPE_ACL_IP_MISC_BIT_TCP_FLAGS,		/**< Bit position for tcp_flags. */
+	PPE_ACL_IP_MISC_BIT_L3_1ST_FRAG,	/**< Bit position for l3_1st_fragment_flag. */
+	PPE_ACL_IP_MISC_BIT_TOS_TC,		/**< Bit position for l3_tos_tc. */
+	PPE_ACL_IP_MISC_BIT_PROTO_NEXTHDR,	/**< Bit position for l3_v4proto_v6nexthdr. */
+	PPE_ACL_IP_MISC_BIT_L3_LEN,		/**< Bit position for l3_length. */
+	PPE_ACL_IP_MISC_BIT_IP_VER,		/**< Bit position for ip_ver. */
+};
+
+#define PPE_ACL_IP_MISC_FLAG_L3_FRAG		BIT(PPE_ACL_IP_MISC_BIT_L3_FRAG)	/**< l3_fragment_flag field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_ESP_HDR		BIT(PPE_ACL_IP_MISC_BIT_ESP_HDR)	/**< esp_hdr_flag field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_AH_HDR		BIT(PPE_ACL_IP_MISC_BIT_AH_HDR)		/**< ah_hdr_flag field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_MOBILITY_HDR	BIT(PPE_ACL_IP_MISC_BIT_MOBILITY_HDR)	/**< mobility_hdr_flag field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_OTHER_EXT_HDR	BIT(PPE_ACL_IP_MISC_BIT_OTHER_EXT_HDR)	/**< other_extension_hdr_flag field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_FRAG_HDR		BIT(PPE_ACL_IP_MISC_BIT_FRAG_HDR)	/**< frag_hdr_flag field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_IPV4_OPTION	BIT(PPE_ACL_IP_MISC_BIT_IPV4_OPTION)	/**< l3_state_option_flag field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_HOP_LIMIT		BIT(PPE_ACL_IP_MISC_BIT_HOP_LIMIT)	/**< hop_limit field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_TCP_FLAGS		BIT(PPE_ACL_IP_MISC_BIT_TCP_FLAGS)	/**< tcp_flags field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_L3_1ST_FRAG	BIT(PPE_ACL_IP_MISC_BIT_L3_1ST_FRAG)	/**< l3_1st_fragment_flag field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_TOS_TC		BIT(PPE_ACL_IP_MISC_BIT_TOS_TC)		/**< l3_tos_tc field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_PROTO_NEXTHDR	BIT(PPE_ACL_IP_MISC_BIT_PROTO_NEXTHDR)	/**< l3_v4proto_v6nexthdr field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_L3_LEN		BIT(PPE_ACL_IP_MISC_BIT_L3_LEN)		/**< l3_length field is valid. */
+#define PPE_ACL_IP_MISC_FLAG_IP_VER		BIT(PPE_ACL_IP_MISC_BIT_IP_VER)		/**< ip_ver field is valid. */
+
+/**
+ * ppe_acl_rule_match_ip_misc
+ *	IP miscellaneous match fields for ACL rule.
+ *	Mirrors ppe_drv_acl_ip_misc in ppe_drv_acl.h.
+ *	Set the corresponding PPE_ACL_IP_MISC_FLAG_* bit in 'flags' to
+ *	indicate which fields are valid/enabled before copying to the driver.
+ */
+struct ppe_acl_rule_match_ip_misc {
+	uint32_t flags;			/**< Bitmask of PPE_ACL_IP_MISC_FLAG_* indicating which fields are valid. */
+	ppe_acl_ip_type_t ip_ver;		/**< IP version based match. */
+	uint8_t l3_fragment_flag;		/**< L3 fragment flag match. */
+	uint8_t other_extension_hdr_flag;	/**< Other extension header flag match. */
+	uint8_t frag_hdr_flag;			/**< Frag header flag match. */
+	uint8_t mobility_hdr_flag;		/**< Mobility header flag match. */
+	uint8_t esp_hdr_flag;			/**< ESP header flag match. */
+	uint8_t ah_hdr_flag;			/**< AH header flag match. */
+	uint8_t hop_limit;			/**< TTL/Hop-limit based match. */
+	uint8_t l3_state_option_flag;		/**< L3 state option flag match. */
+	uint8_t tcp_flags;			/**< TCP flags based match. */
+	uint8_t l3_1st_fragment_flag;		/**< L3 first fragment flag match. */
+	uint8_t l3_tos_tc;			/**< L3 ToS/TC based match. */
+	uint8_t l3_v4proto_v6nexthdr;		/**< L4 proto/nexth-header based match. */
+	uint16_t l3_length;			/**< L3 length based match. */
+
+	uint8_t inverse_en;			/**< L3 fields match with inverse logic. */
+	uint8_t range_en;			/**< L3 length range match. */
+
+	/*
+	 * Mask
+	 */
+	uint8_t ip_ver_mask;			/**< IP version mask. */
+	uint8_t l3_fragment_flag_mask;		/**< L3 fragment flag mask. */
+	uint8_t other_extension_hdr_flag_mask;	/**< Other extension header flag mask. */
+	uint8_t frag_hdr_flag_mask;		/**< Frag header flag mask. */
+	uint8_t mobility_hdr_flag_mask;		/**< Mobility header flag mask. */
+	uint8_t esp_hdr_flag_mask;		/**< ESP header flag mask. */
+	uint8_t ah_hdr_flag_mask;		/**< AH header flag mask. */
+	uint8_t hop_limit_mask;			/**< TTL/Hop-limit based mask. */
+	uint8_t l3_state_option_flag_mask;	/**< L3 state option flag mask. */
+	uint8_t tcp_flags_mask;			/**< TCP flags mask. */
+	uint8_t l3_1st_fragment_flag_mask;	/**< L3 first fragment flag mask. */
+	uint8_t l3_tos_tc_mask;			/**< L3 ToS/TC mask. */
+	uint8_t l3_v4proto_v6nexthdr_mask;	/**< L4 proto/nexth-header mask. */
+	uint8_t reserved;			/**< Reserved for explicit 2-byte alignment of l3_length_mask_max. */
+	uint16_t l3_length_mask_max;		/**< L3 length mask or max for range. */
+};
+
+/**
+ * ppe_acl_rule_match_udf_with_ip
+ *	UDF with L3 IP version based ACL rule.
+ *	Matches UDF fields and sets the FAL rule type to IP4 or IP6
+ *	(instead of UDF) based on the specified IP version.
+ *	Optionally matches IP general/miscellaneous fields alongside
+ *	the UDF fields using the same PPE_ACL_RULE_FLAG_* bitmask as
+ *	PPE_ACL_RULE_MATCH_TYPE_IP_GEN.
+ *	NOTE: UDF-D is supporting only mask match operation.
+ */
+struct ppe_acl_rule_match_udf_with_ip {
+	struct ppe_acl_rule_udf udf_a;		/**< UDF-A configuration. */
+	struct ppe_acl_rule_udf udf_b;		/**< UDF-B configuration. */
+	struct ppe_acl_rule_udf udf_c;		/**< UDF-C configuration. */
+	struct ppe_acl_rule_udf udf_d;		/**< UDF-D configuration. */
+	bool is_ipv6;				/**< If true, use FAL_ACL_RULE_IP6 as rule type;
+					     otherwise use FAL_ACL_RULE_IP4. */
+	struct ppe_acl_rule_match_ip_misc ip_misc;
+					/**< IP miscellaneous match fields (L3_FRAG, ESP_HDR,
+					     AH_HDR, MOBILITY_HDR, OTHER_EXT_HDR, FRAG_HDR,
+					     IPV4_OPTION). Zero flags = no IP misc matching. */
+};
+
+
 /**
  * ppe_acl_rule_match_default
  *	Default ACL rule.
@@ -739,7 +850,8 @@ struct ppe_acl_rule_match_one {
 							/**< Rule with L3 length match. */
 		struct ppe_acl_rule_match_ttl_hop ttl_hop;
 							/**< Rule with TTL/hop-limit match. */
-		struct ppe_acl_rule_match_udf udf;	/**< Rule with user-defined match. */
+		struct ppe_acl_rule_match_udf udf;		/**< Rule with user-defined match. */
+		struct ppe_acl_rule_match_udf_with_ip udf_with_ip;	/**< Rule with UDF and L3 IP version match. */
 		struct ppe_acl_rule_match_default def;	/**< Rule with default match. */
 		struct ppe_acl_rule_match_tpid ctpid;
 							/**< Rule with CTPID val match. */

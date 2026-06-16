@@ -834,6 +834,85 @@ static bool ppe_drv_acl_rule_fill(struct ppe_drv_acl_ctx *ctx, struct ppe_drv_ac
 				ctx->rule_type_valid = true;
 				fal_rule->rule_type = FAL_ACL_RULE_UDF;
 			}
+			break;
+
+		case PPE_DRV_ACL_SLICE_TYPE_UDF_WITH_IP:
+			slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_UDF_WITH_IP];
+
+			if (slice->rule.udf_with_ip.udf0.udf_valid) {
+				ppe_drv_udf_fill_fal_rule(&slice->rule.udf_with_ip.udf0, fal_rule);
+			}
+
+			if (slice->rule.udf_with_ip.udf1.udf_valid) {
+				ppe_drv_udf_fill_fal_rule(&slice->rule.udf_with_ip.udf1, fal_rule);
+			}
+
+			if (slice->rule.udf_with_ip.udf2.udf_valid) {
+				ppe_drv_udf_fill_fal_rule(&slice->rule.udf_with_ip.udf2, fal_rule);
+			}
+
+			if (slice->rule.udf_with_ip.udf3.udf_valid) {
+				ppe_drv_udf_fill_fal_rule(&slice->rule.udf_with_ip.udf3, fal_rule);
+			}
+
+			/*
+			 * Apply optional IP miscellaneous field matching alongside
+			 * the UDF match. Uses the same PPE_DRV_ACL_IP_MISC_FLAG_*
+			 * bitmask and FAL field population as IP_MISC slice type.
+			 */
+			if (slice->rule.udf_with_ip.ip_misc_flags & PPE_DRV_ACL_IP_MISC_FLAG_L3FRAG) {
+				fal_rule->is_fragement_val = slice->rule.udf_with_ip.ip_misc.l3_fragment_flag;
+				fal_rule->is_fragement_mask = slice->rule.udf_with_ip.ip_misc.l3_fragment_flag_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_L3_FRAGMENT);
+			}
+
+			if (slice->rule.udf_with_ip.ip_misc_flags & PPE_DRV_ACL_IP_MISC_FLAG_OTHEXT_HDR) {
+				fal_rule->is_other_header_val = slice->rule.udf_with_ip.ip_misc.other_extension_hdr_flag;
+				fal_rule->is_other_header_mask = slice->rule.udf_with_ip.ip_misc.other_extension_hdr_flag_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_OTHER_EXT_HEADER);
+			}
+
+			if (slice->rule.udf_with_ip.ip_misc_flags & PPE_DRV_ACL_IP_MISC_FLAG_FRAG_HDR) {
+				fal_rule->is_fragment_header_val = slice->rule.udf_with_ip.ip_misc.frag_hdr_flag;
+				fal_rule->is_fragment_header_mask = slice->rule.udf_with_ip.ip_misc.frag_hdr_flag_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_FRAGMENT_HEADER);
+			}
+
+			if (slice->rule.udf_with_ip.ip_misc_flags & PPE_DRV_ACL_IP_MISC_FLAG_MOB_HDR) {
+				fal_rule->is_mobility_header_val = slice->rule.udf_with_ip.ip_misc.mobility_hdr_flag;
+				fal_rule->is_mobility_header_mask = slice->rule.udf_with_ip.ip_misc.mobility_hdr_flag_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_MOBILITY_HEADER);
+			}
+
+			if (slice->rule.udf_with_ip.ip_misc_flags & PPE_DRV_ACL_IP_MISC_FLAG_ESP_HDR) {
+				fal_rule->is_esp_header_val = slice->rule.udf_with_ip.ip_misc.esp_hdr_flag;
+				fal_rule->is_esp_header_mask = slice->rule.udf_with_ip.ip_misc.esp_hdr_flag_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_ESP_HEADER);
+			}
+
+			if (slice->rule.udf_with_ip.ip_misc_flags & PPE_DRV_ACL_IP_MISC_FLAG_AH_HDR) {
+				fal_rule->is_ah_header_val = slice->rule.udf_with_ip.ip_misc.ah_hdr_flag;
+				fal_rule->is_ah_header_mask = slice->rule.udf_with_ip.ip_misc.ah_hdr_flag_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_AH_HEADER);
+			}
+
+			if (slice->rule.udf_with_ip.ip_misc_flags & PPE_DRV_ACL_IP_MISC_FLAG_L3STATE) {
+				fal_rule->is_ipv4_option_val = slice->rule.udf_with_ip.ip_misc.l3_state_option_flag;
+				fal_rule->is_ipv4_option_mask = slice->rule.udf_with_ip.ip_misc.l3_state_option_flag_mask;
+				FAL_FIELD_FLG_SET(fal_rule->field_flg, FAL_ACL_FIELD_L3_TTL);
+			}
+
+			/*
+			 * Set rule type based on IP version: IP6 for IPv6, IP4 for IPv4.
+			 * This allows the UDF rule to match IP packets of the specified
+			 * version using FAL_ACL_RULE_IP4 or FAL_ACL_RULE_IP6 instead of
+			 * FAL_ACL_RULE_UDF.
+			 */
+			if (!ctx->rule_type_valid) {
+				ctx->rule_type_valid = true;
+				fal_rule->rule_type = slice->rule.udf_with_ip.is_ipv6 ?
+							FAL_ACL_RULE_IP6 : FAL_ACL_RULE_IP4;
+			}
 
 			break;
 
