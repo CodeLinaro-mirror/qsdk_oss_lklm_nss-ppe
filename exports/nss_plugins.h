@@ -76,7 +76,6 @@ struct ppe_ds_wlan_reg_info {
 	uint32_t reo2ppe_start_idx;		/**< REO2PPE ring index */
 	bool ppe_ds_int_mode_enabled;	/**< Interrupt mode to process PPE2TCL */
 	uint8_t dp_ppeds_node_id;	/**< Node id of ds node */
-	uint32_t wlan_rx_hdr_tlv_sz;	/**< size of TLV header in REO2PPE ring */
 };
 
 struct ppe_ds_reg_addr_info {
@@ -138,7 +137,6 @@ struct ppe_ds_wlan_arch_reg_info {
 	ppe_ds_wlan_node_type_t node_type;	/**< PPE-DS node type */
 	uint8_t dp_ppeds_node_id;	/**< Node id of ds node */
 	uint8_t wifi_arch_mode;	/**< 7 = wifi 7, 8 = wifi8 */
-	uint32_t wlan_rx_hdr_tlv_sz;	/**< size of TLV header in REO2PPE ring */
 
 	union {
 		struct {
