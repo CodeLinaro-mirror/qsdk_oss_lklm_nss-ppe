@@ -156,6 +156,7 @@ static char packet_padding[PPE_DRV_PACKET_PADDING_STR_LEN];
 int l4_checksum_exception_enable = false;
 int mac_lrn_exception_en = true;
 uint32_t ppe_drv_jhash_rnd __read_mostly;
+int wlan_host_assist_qdisc_en = 0;
 
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 int ppe_drv_ipsec_passth_en = 0;
@@ -3122,6 +3123,34 @@ static int ppe_drv_loopback_port_feature_write_handler(struct ctl_table *table, 
 }
 #endif
 
+/*
+ * ppe_drv_wlan_host_assist_qdisc_en_handler()
+ *	Handler for wlan_host_assist_qdisc_en sysctl
+ */
+static int ppe_drv_wlan_host_assist_qdisc_en_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (!write) {
+		return ret;
+	}
+
+	/*
+	 * Validate the input value (should be 0 or 1)
+	 */
+	if (wlan_host_assist_qdisc_en != 0 && wlan_host_assist_qdisc_en != 1) {
+		ppe_drv_warn("Invalid value for wlan_host_assist_qdisc_en. Must be 0 or 1\n");
+		wlan_host_assist_qdisc_en = 0;
+		return -EINVAL;
+	}
+
+	ppe_drv_info("PPE acceleration of WALN flow with host assist qdisc enable is set to %d\n", wlan_host_assist_qdisc_en);
+
+	return 0;
+}
+
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 /*
  * ppe_drv_ipsec_pass_through_en_handler()
@@ -4475,6 +4504,13 @@ static struct ctl_table ppe_drv_sub[] = {
 		.proc_handler	=	ppe_drv_sixth_tuple_mode_handler
 	},
 #endif
+	{
+		.procname	=	"wlan_host_assist_qdisc_en",
+		.data		=	&wlan_host_assist_qdisc_en,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_wlan_host_assist_qdisc_en_handler
+	},
 	{}
 };
 
