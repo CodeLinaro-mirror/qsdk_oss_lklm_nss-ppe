@@ -390,7 +390,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
-	case PPE_DRV_SC_UDP_ST_PON:
+	case PPE_DRV_SC_UDP_ST_HGU:
 #ifdef PPE_DRV_DDRQ_ENABLE
 		/*
 		 * DDRQ WAR: Bypass packet format checks in the first pass for avoiding
@@ -425,7 +425,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
-	case PPE_DRV_SC_UDP_ST_PON_NEXT:
+	case PPE_DRV_SC_UDP_ST_HGU_NEXT:
 		sc_cfg.bypass_bitmap[0] = (1 << FLOW_SERVICE_CODE_BYP)
 					| (1 << FLOW_LOOKUP_BYP);
 		sc_cfg.bypass_bitmap[1] = (1 << L2_SOURCE_SEC_BYP)
@@ -1336,8 +1336,8 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 #ifdef PPE_UDP_ST_SUPPORT
 	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST, PPE_DRV_SC_UDP_ST_NEXT, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
-	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST_PON, PPE_DRV_SC_UDP_ST_PON_NEXT, p->loopback_port_info.port_id);
-	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST_PON_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST_HGU, PPE_DRV_SC_UDP_ST_HGU_NEXT, p->loopback_port_info.port_id);
+	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST_HGU_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST_SFU, PPE_DRV_SC_UDP_ST_SFU_NEXT, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_UDP_ST_SFU_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 #endif

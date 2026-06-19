@@ -98,8 +98,8 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_UDP_ST_NEXT = 62,				/* UDP speedtest next service code */
 	PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP = 63,			/* Service code for DDRQ loopback ring for IPSec full inline Encap */
 	PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP = 64,			/* Service code for DDRQ loopback ring for IPSec full inline Decap */
-	PPE_DRV_SC_UDP_ST_PON = 65,				/* UDP speedtest service code for PON */
-	PPE_DRV_SC_UDP_ST_PON_NEXT = 66,			/* UDP speedtest next service code for PON */
+	PPE_DRV_SC_UDP_ST_HGU = 65,				/* UDP speedtest service code for HGU */
+	PPE_DRV_SC_UDP_ST_HGU_NEXT = 66,			/* UDP speedtest next service code for HGU */
 	PPE_DRV_SC_UDP_ST_SFU = 67,				/* UDP speedtest service code for SFU case */
 	PPE_DRV_SC_UDP_ST_SFU_NEXT = 68,			/* UDP speedtest next service code for SFU case */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
