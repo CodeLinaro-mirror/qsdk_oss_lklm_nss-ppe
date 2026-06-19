@@ -269,6 +269,7 @@ ppe_dscp_ret_t ppe_dscp_p_tbl_configure(struct ppe_dscp_rule *rule)
 	rule->ret = PPE_DSCP_RET_SUCCESS;
 
 	spin_unlock_bh(&dscp_g->lock);
+	ppe_dscp_free(dscp);
 
 	return PPE_DSCP_RET_SUCCESS;
 
