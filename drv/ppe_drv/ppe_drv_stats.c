@@ -151,6 +151,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v4_create_fail",			/* No of v4 create failure */
 	"v4_destroy_req",			/* No of v4 delete requests */
 	"v4_destroy_fail",			/* No of v4 delete failure */
+	"v4_destroy_invalid_rfs_del_fail",	/* Invalid destroy call for assist type. */
 	"v4_create_fail_bridge_nat",		/* No of v4 create failure due to NAT with bridge flow */
 	"v4_create_fail_snat_dnat",		/* No of v4 create failure due to both SNAT and DNAT is requested */
 	"v4_destroy_conn_not_found",		/* No of v4 delete failure due to connection not found */
@@ -229,6 +230,7 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_fail",			/* No of v6 create failure */
 	"v6_destroy_req",			/* No of v6 delete requests */
 	"v6_destroy_fail",			/* No of v6 delete failure */
+	"v6_destroy_invalid_rfs_del_fail",	/* Invalid destroy call for assist type. */
 	"v6_create_fail_bridge_nat",		/* No of v6 create failure due to NAT with bridge flow */
 	"v6_create_fail_snat_dnat",		/* No of v6 create failure due to both SNAT and DNAT is requested */
 	"v6_create_fail_invalid_nf_target",	/* No of v6 create failure due to invalid netfilter target used */
@@ -315,6 +317,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v4_tun_create_fail",			/* No of v4 create failure */
 	"v4_tun_destroy_req",			/* No of v4 delete requests */
 	"v4_tun_destroy_fail",			/* No of v4 delete failure */
+	"v4_tun_destroy_invalid_rfs_del_fail",	/* Invalid destroy call for assist type. */
 	"v4_tun_create_fail_bridge_nat",	/* No of v4 create failure due to NAT with bridge flow */
 	"v4_tun_create_fail_snat_dnat",		/* No of v4 create failure due to both SNAT and DNAT is requested */
 	"v4_tun_destroy_conn_not_found",	/* No of v4 delete failure due to connection not found */
@@ -394,6 +397,7 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_tun_create_fail",			/* No of v6 create failure */
 	"v6_tun_destroy_req",			/* No of v6 delete requests */
 	"v6_tun_destroy_fail",			/* No of v6 delete failure */
+	"v6_tun_destroy_rfs_conn_not_found",	/* No of v6 RFS delete failure due to connection not found */
 	"v6_tun_create_fail_bridge_nat",	/* No of v6 create failure due to NAT with bridge flow */
 	"v6_tun_create_fail_snat_dnat",		/* No of v6 create failure due to both SNAT and DNAT is requested */
 	"v6_tun_create_fail_invalid_nf_target",	/* No of v6 create failure due to invalid netfilter target used */

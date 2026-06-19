@@ -3318,6 +3318,16 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 
 	pcf = &cn->pcf;
 
+	/*
+	 * Avoid deletion for PPE ASSIST rule type
+	 */
+	if (unlikely(ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST))) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_stats_inc(&comm_stats->v4_destroy_invalid_rfs_del_fail);
+		ppe_drv_warn("%p: RFS connections should not be deleted from here.", p);
+		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+	}
+
 #if defined(NSS_PPE_DRV_HW_GRO)
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
 		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
