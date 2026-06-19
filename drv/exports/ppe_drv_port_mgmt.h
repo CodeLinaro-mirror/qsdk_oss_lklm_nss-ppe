@@ -91,6 +91,18 @@ struct ppe_drv_omci_port_node {
 };
 
 /*
+ * ppe_drv_port_mac_lrn_limit
+ *	Port mac learn limit configuration
+ */
+struct ppe_drv_port_mac_lrn_limit {
+	uint32_t port_id;				/**< Port id */
+	bool port_learn_limit_en;			/**< Mac learn limit enable */
+	uint32_t port_learn_limit;			/**< Mac learn limit */
+	bool lrn_exceed_action_en;			/**< Mac learn action valid */
+	ppe_drv_port_mgmt_fwd_cmd_t lrn_exceed_action;	/**< Mac learn exceed action command */
+};
+
+/*
  * ppe_drv_port_mgmt
  *	Structure for global port‑management context.
  */
@@ -113,18 +125,11 @@ struct ppe_drv_port_mgmt {
 	bool mc_isol_en;							   	/**< Global multicast isolation enable */
 	bool bc_isol_en;							   	/**< Global broadcast isolation enable */
 	uint8_t us_port_id;							  	/**< Upstream port ID */
-};
-
-/*
- * ppe_drv_port_mac_lrn_limit
- *	Port mac learn limit configuration
- */
-struct ppe_drv_port_mac_lrn_limit {
-	uint32_t port_id;				/**< Port id */
-	bool port_learn_limit_en;			/**< Mac learn limit enable */
-	uint32_t port_learn_limit;			/**< Mac learn limit */
-	bool lrn_exceed_action_en;			/**< Mac learn action valid */
-	ppe_drv_port_mgmt_fwd_cmd_t lrn_exceed_action;	/**< Mac learn exceed action command */
+	struct ppe_drv_port_mac_lrn_limit mac_lrn_limit_cache[PPE_DRV_PORTS_MAX];
+											/**< Cached MAC learn-limit config per port */
+	bool mac_lrn_limit_valid[PPE_DRV_PORTS_MAX];
+											/**< Whether a learn-limit has been set for this port */
+	struct list_head mac_filter_cache;						/**< Cached MAC filter entries (set by mac_filter_set, removed by mac_filter_clear) */
 };
 
 /*
@@ -135,6 +140,18 @@ struct ppe_drv_port_mac_filter {
 	uint8_t mac[ETH_ALEN];				/**< MAC addressto filter. */
 	bool fid_valid;					/**< Filter ID info valid. */
 	uint8_t fid_index;				/**< Filter Index. */
+};
+
+/*
+ * ppe_drv_mac_filter_node
+ *	Cache node for a MAC filter entry installed by ppe_drv_port_mgmt_mac_filter_set().
+ *	Stores only the MAC address and FID needed for the debugfs dump.
+ *	Stored in ppe_drv_port_mgmt.mac_filter_cache list.
+ */
+struct ppe_drv_mac_filter_node {
+	struct list_head list;			/**< List linkage */
+	uint8_t mac[ETH_ALEN];			/**< Filtered MAC address */
+	uint8_t fid_index;			/**< Forwarding/filter domain ID */
 };
 
 /**
@@ -255,6 +272,16 @@ ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_flush(void);
 void ppe_drv_port_mgmt_omci_port_list_show(struct seq_file *m);
 
 /**
+ * ppe_drv_port_mgmt_isol_dump()
+ *	Dump port isolation state grouped by OMCI ID to a seq_file.
+ *	For each active OMCI index, prints the omci_id, port_cnt, and
+ *	the dev_name + port_id of every port mapped to that OMCI index.
+ *
+ * @param[in] m		seq_file to write output to.
+ */
+void ppe_drv_port_mgmt_isol_dump(struct seq_file *m);
+
+/**
  * ppe_drv_port_mgmt_omci_port_find_and_ref()
  *	Find a device in the OMCI-managed port list and increment its refcount.
  *	Caller must call ppe_drv_port_mgmt_omci_port_deref() when done with the node.
@@ -274,6 +301,24 @@ struct ppe_drv_omci_port_node *ppe_drv_port_mgmt_omci_port_find_and_ref(const ch
  * @param[in] node		Node previously returned by find_and_ref().
  */
 void ppe_drv_port_mgmt_omci_port_deref(struct ppe_drv_omci_port_node *node);
+
+/**
+ * ppe_drv_port_mgmt_mac_lrn_limit_dump()
+ *	Dump the cached MAC learn-limit configuration for every port that has
+ *	had a limit applied, to a seq_file (for debugfs).
+ *
+ * @param[in] m		seq_file to write output to.
+ */
+void ppe_drv_port_mgmt_mac_lrn_limit_dump(struct seq_file *m);
+
+/**
+ * ppe_drv_port_mgmt_mac_filter_dump()
+ *	Dump all static DROP entries currently present in the FDB to a
+ *	seq_file (for debugfs).
+ *
+ * @param[in] m		seq_file to write output to.
+ */
+void ppe_drv_port_mgmt_mac_filter_dump(struct seq_file *m);
 
 /**
  * ppe_drv_port_mgmt_fid_get()
