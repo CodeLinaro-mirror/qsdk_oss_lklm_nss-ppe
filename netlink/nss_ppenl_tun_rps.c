@@ -41,8 +41,8 @@
 /*
  * Constants for validation
  */
-#define NSS_PPENL_TUN_RPS_MAX_HDR_LEN 255
-#define NSS_PPENL_TUN_RPS_MAX_UDF_OFFSET 255
+#define NSS_PPENL_TUN_RPS_MAX_HDR_LEN 126
+#define NSS_PPENL_TUN_RPS_MAX_UDF_OFFSET 126
 
 /*
  * prototypes
@@ -407,6 +407,14 @@ static int nss_ppenl_tun_rps_validate_rule(struct nss_ppe_nl_tun_rps *rule, bool
 					rule->hdr_len, NSS_PPENL_TUN_RPS_MAX_HDR_LEN);
 			return -EINVAL;
 		}
+
+		/*
+		 * Validate that header length is even (multiple of 2) as required by hardware/SSDK
+		 */
+		if (rule->hdr_len % 2 != 0) {
+			nss_ppenl_warn("Header length %d must be an even number (multiple of 2)\n", rule->hdr_len);
+			return -EINVAL;
+		}
 	}
 
 	/*
@@ -540,6 +548,24 @@ static int nss_ppenl_tun_rps_validate_rule(struct nss_ppe_nl_tun_rps *rule, bool
 			return -EINVAL;
 		}
 
+		if (rule->usr_data.udf[0].data_offset % 2 != 0) {
+			nss_ppenl_warn("udf[0].data_offset %d must be an even number (multiple of 2)\n",
+					rule->usr_data.udf[0].data_offset);
+			return -EINVAL;
+		}
+
+		if (is_create && ((rule->usr_data.udf[0].data_offset + 2) > rule->hdr_len)) {
+			nss_ppenl_warn("udf[0].data_offset %d + 2 exceeds hdr_len %d\n",
+					rule->usr_data.udf[0].data_offset, rule->hdr_len);
+			return -EINVAL;
+		}
+
+		if (is_create && (rule->hdr_len_type == PPE_TUN_RPS_HDR_LEN_TYPE_ETH) && (rule->usr_data.udf[0].data_offset < 14)) {
+			nss_ppenl_warn("udf[0].data_offset %d is within outer Ethernet header (< 14)\n",
+					rule->usr_data.udf[0].data_offset);
+			return -EINVAL;
+		}
+
 		/*
 		 * Validate that mask is not zero when field is enabled
 		 */
@@ -560,6 +586,24 @@ static int nss_ppenl_tun_rps_validate_rule(struct nss_ppe_nl_tun_rps *rule, bool
 			return -EINVAL;
 		}
 
+		if (rule->usr_data.udf[1].data_offset % 2 != 0) {
+			nss_ppenl_warn("udf[1].data_offset %d must be an even number (multiple of 2)\n",
+					rule->usr_data.udf[1].data_offset);
+			return -EINVAL;
+		}
+
+		if (is_create && ((rule->usr_data.udf[1].data_offset + 2) > rule->hdr_len)) {
+			nss_ppenl_warn("udf[1].data_offset %d + 2 exceeds hdr_len %d\n",
+					rule->usr_data.udf[1].data_offset, rule->hdr_len);
+			return -EINVAL;
+		}
+
+		if (is_create && (rule->hdr_len_type == PPE_TUN_RPS_HDR_LEN_TYPE_ETH) && (rule->usr_data.udf[1].data_offset < 14)) {
+			nss_ppenl_warn("udf[1].data_offset %d is within outer Ethernet header (< 14)\n",
+					rule->usr_data.udf[1].data_offset);
+			return -EINVAL;
+		}
+
 		if (rule->usr_data.udf[1].data_mask == 0) {
 			nss_ppenl_warn("udf[1].data_mask cannot be zero when enabled\n");
 			return -EINVAL;
@@ -574,6 +618,24 @@ static int nss_ppenl_tun_rps_validate_rule(struct nss_ppe_nl_tun_rps *rule, bool
 		if (rule->usr_data.udf[2].data_offset > NSS_PPENL_TUN_RPS_MAX_UDF_OFFSET) {
 			nss_ppenl_warn("Invalid udf[2].data_offset %d (max: %d)\n",
 					rule->usr_data.udf[2].data_offset, NSS_PPENL_TUN_RPS_MAX_UDF_OFFSET);
+			return -EINVAL;
+		}
+
+		if (rule->usr_data.udf[2].data_offset % 2 != 0) {
+			nss_ppenl_warn("udf[2].data_offset %d must be an even number (multiple of 2)\n",
+					rule->usr_data.udf[2].data_offset);
+			return -EINVAL;
+		}
+
+		if (is_create && ((rule->usr_data.udf[2].data_offset + 2) > rule->hdr_len)) {
+			nss_ppenl_warn("udf[2].data_offset %d + 2 exceeds hdr_len %d\n",
+					rule->usr_data.udf[2].data_offset, rule->hdr_len);
+			return -EINVAL;
+		}
+
+		if (is_create && (rule->hdr_len_type == PPE_TUN_RPS_HDR_LEN_TYPE_ETH) && (rule->usr_data.udf[2].data_offset < 14)) {
+			nss_ppenl_warn("udf[2].data_offset %d is within outer Ethernet header (< 14)\n",
+					rule->usr_data.udf[2].data_offset);
 			return -EINVAL;
 		}
 
@@ -612,6 +674,8 @@ static int nss_ppenl_tun_rps_validate_rule(struct nss_ppe_nl_tun_rps *rule, bool
 	 * Validate inner IP protocol configuration when inner_pkt_type is IP
 	 */
 	if (is_create && (rule->inner_pkt_type == 1)) {
+		uint16_t default_mask = 0xFFFF;
+
 		nss_ppenl_info("Validating inner IP protocol configuration\n");
 
 		/*
@@ -629,13 +693,43 @@ static int nss_ppenl_tun_rps_validate_rule(struct nss_ppe_nl_tun_rps *rule, bool
 			nss_ppenl_warn("ip_proto_offset is mandatory when inner_pkt_type is IP\n");
 			return -EINVAL;
 		}
-		if (rule->inner_ip_proto.ip_proto_ipv4_mask == 0) {
-			nss_ppenl_warn("ip_proto_ipv4_mask is mandatory when inner_pkt_type is IP\n");
+
+		/*
+		 * Either IPv4, IPv6 protocol or both needs to be matched
+		 */
+		if (rule->inner_ip_proto.ip_proto_ipv4_value == 0 &&
+		    rule->inner_ip_proto.ip_proto_ipv6_value == 0) {
+			nss_ppenl_warn("At least one inner IP protocol value must be matched when inner_pkt_type is IP\n");
 			return -EINVAL;
 		}
-		if (rule->inner_ip_proto.ip_proto_ipv6_mask == 0) {
-			nss_ppenl_warn("ip_proto_ipv6_mask is mandatory when inner_pkt_type is IP\n");
+
+		/*
+		 * At least one inner IP protocol mask must be non-zero
+		 */
+		if (rule->inner_ip_proto.ip_proto_ipv4_mask == 0 &&
+		    rule->inner_ip_proto.ip_proto_ipv6_mask == 0) {
+			nss_ppenl_warn("At least one of ip_proto_ipv4_mask or ip_proto_ipv6_mask must be non-zero when inner_pkt_type is IP\n");
 			return -EINVAL;
+		}
+
+		/*
+		 * If one mask is provided and the other is not, use the provided mask for the other case.
+		 * If both are zero, default to 0xFFFF (though handled by validation above).
+		 */
+		if (rule->inner_ip_proto.ip_proto_ipv4_mask != 0) {
+			default_mask = rule->inner_ip_proto.ip_proto_ipv4_mask;
+		} else if (rule->inner_ip_proto.ip_proto_ipv6_mask != 0) {
+			default_mask = rule->inner_ip_proto.ip_proto_ipv6_mask;
+		}
+
+		if (rule->inner_ip_proto.ip_proto_ipv4_mask == 0) {
+			rule->inner_ip_proto.ip_proto_ipv4_mask = default_mask;
+			rule->inner_ip_proto.ip_proto_ipv4_value = 0;
+		}
+
+		if (rule->inner_ip_proto.ip_proto_ipv6_mask == 0) {
+			rule->inner_ip_proto.ip_proto_ipv6_mask = default_mask;
+			rule->inner_ip_proto.ip_proto_ipv6_value = 0;
 		}
 
 		/*
@@ -644,6 +738,34 @@ static int nss_ppenl_tun_rps_validate_rule(struct nss_ppe_nl_tun_rps *rule, bool
 		if (rule->inner_ip_proto.ip_proto_offset > NSS_PPENL_TUN_RPS_MAX_UDF_OFFSET) {
 			nss_ppenl_warn("ip_proto_offset %d exceeds maximum %d\n",
 					rule->inner_ip_proto.ip_proto_offset, NSS_PPENL_TUN_RPS_MAX_UDF_OFFSET);
+			return -EINVAL;
+		}
+
+		/*
+		 * Validate that inner IP protocol offset is an even number (multiple of 2)
+		 */
+		if (rule->inner_ip_proto.ip_proto_offset % 2 != 0) {
+			nss_ppenl_warn("ip_proto_offset %d must be an even number (multiple of 2)\n",
+					rule->inner_ip_proto.ip_proto_offset);
+			return -EINVAL;
+		}
+
+		/*
+		 * Validate that inner IP protocol offset does not exceed header length
+		 */
+		if ((rule->inner_ip_proto.ip_proto_offset + 2) > rule->hdr_len) {
+			nss_ppenl_warn("ip_proto_offset %d + 2 exceeds hdr_len %d\n",
+					rule->inner_ip_proto.ip_proto_offset, rule->hdr_len);
+			return -EINVAL;
+		}
+
+		/*
+		 * Validate that inner IP protocol offset is not within Ethernet header if type is eth
+		 */
+		if ((rule->hdr_len_type == PPE_TUN_RPS_HDR_LEN_TYPE_ETH) &&
+		    (rule->inner_ip_proto.ip_proto_offset < 14)) {
+			nss_ppenl_warn("ip_proto_offset %d falls within Ethernet header (< 14)\n",
+					rule->inner_ip_proto.ip_proto_offset);
 			return -EINVAL;
 		}
 

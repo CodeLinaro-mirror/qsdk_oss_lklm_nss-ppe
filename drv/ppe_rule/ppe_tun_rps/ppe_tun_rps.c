@@ -16,8 +16,8 @@
 /*
  * Constants for validation
  */
-#define PPE_TUN_RPS_MAX_HDR_LEN 255
-#define PPE_TUN_RPS_MAX_UDF_OFFSET 255
+#define PPE_TUN_RPS_MAX_HDR_LEN 126
+#define PPE_TUN_RPS_MAX_UDF_OFFSET 126
 
 struct ppe_tun_rps gbl_tun_rps;
 
@@ -306,6 +306,27 @@ static inline bool ppe_tun_rps_validate_udf_fields(struct ppe_drv_tun_rps_rule_c
 			return false;
 		}
 
+		if (create->cmn.udf0_offset % 2 != 0) {
+			ppe_tun_rps_warn("user_data1_offset %d must be an even number (multiple of 2)\n",
+					create->cmn.udf0_offset);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
+		if ((create->cmn.udf0_offset + 2) > create->header_len) {
+			ppe_tun_rps_warn("user_data1_offset %d + 2 exceeds header length %d\n",
+					create->cmn.udf0_offset, create->header_len);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
+		if (create->offset_type == PPE_DRV_TUN_RPS_OFFSET_TYPE_ETH && create->cmn.udf0_offset < 14) {
+			ppe_tun_rps_warn("user_data1_offset %d falls within Ethernet header (< 14)\n",
+					create->cmn.udf0_offset);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
 		if (create->cmn.udf0_mask == 0) {
 			ppe_tun_rps_warn("user_data1_mask cannot be zero when enabled\n");
 			*ret = PPE_TUN_RPS_RET_INVALID_UDF_MASK;
@@ -325,6 +346,27 @@ static inline bool ppe_tun_rps_validate_udf_fields(struct ppe_drv_tun_rps_rule_c
 			return false;
 		}
 
+		if (create->cmn.udf1_offset % 2 != 0) {
+			ppe_tun_rps_warn("user_data2_offset %d must be an even number (multiple of 2)\n",
+					create->cmn.udf1_offset);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
+		if ((create->cmn.udf1_offset + 2) > create->header_len) {
+			ppe_tun_rps_warn("user_data2_offset %d + 2 exceeds header length %d\n",
+					create->cmn.udf1_offset, create->header_len);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
+		if (create->offset_type == PPE_DRV_TUN_RPS_OFFSET_TYPE_ETH && create->cmn.udf1_offset < 14) {
+			ppe_tun_rps_warn("user_data2_offset %d falls within Ethernet header (< 14)\n",
+					create->cmn.udf1_offset);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
 		if (create->cmn.udf1_mask == 0) {
 			ppe_tun_rps_warn("user_data2_mask cannot be zero when enabled\n");
 			*ret = PPE_TUN_RPS_RET_INVALID_UDF_MASK;
@@ -340,6 +382,27 @@ static inline bool ppe_tun_rps_validate_udf_fields(struct ppe_drv_tun_rps_rule_c
 		if (create->cmn.udf2_offset > PPE_TUN_RPS_MAX_UDF_OFFSET) {
 			ppe_tun_rps_warn("Invalid user_data3_offset %d (max: %d)\n",
 					create->cmn.udf2_offset, PPE_TUN_RPS_MAX_UDF_OFFSET);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
+		if (create->cmn.udf2_offset % 2 != 0) {
+			ppe_tun_rps_warn("user_data3_offset %d must be an even number (multiple of 2)\n",
+					create->cmn.udf2_offset);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
+		if ((create->cmn.udf2_offset + 2) > create->header_len) {
+			ppe_tun_rps_warn("user_data3_offset %d + 2 exceeds header length %d\n",
+					create->cmn.udf2_offset, create->header_len);
+			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+			return false;
+		}
+
+		if (create->offset_type == PPE_DRV_TUN_RPS_OFFSET_TYPE_ETH && create->cmn.udf2_offset < 14) {
+			ppe_tun_rps_warn("user_data3_offset %d falls within Ethernet header (< 14)\n",
+					create->cmn.udf2_offset);
 			*ret = PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
 			return false;
 		}
@@ -410,6 +473,15 @@ static enum ppe_tun_rps_ret ppe_tun_rps_validate_create_rule(struct ppe_drv_tun_
 	}
 
 	/*
+	 * Validate that header length is even (multiple of 2) as required by hardware/SSDK
+	 */
+	if (create->header_len % 2 != 0) {
+		ppe_tun_rps_warn("Header length %d must be an even number (multiple of 2)\n",
+				create->header_len);
+		return PPE_TUN_RPS_RET_INVALID_HDR_LEN;
+	}
+
+	/*
 	 * Check for at least one matching criterion
 	 * Zero values are treated as wildcards
 	 */
@@ -456,6 +528,8 @@ static enum ppe_tun_rps_ret ppe_tun_rps_validate_create_rule(struct ppe_drv_tun_
  */
 static enum ppe_tun_rps_ret ppe_tun_rps_validate_inner_ip_config(struct ppe_drv_tun_rps_rule_create *create)
 {
+	uint16_t default_mask = 0xFFFF;
+
 	/*
 	 * Only validate when inner packet type is IP
 	 */
@@ -483,14 +557,42 @@ static enum ppe_tun_rps_ret ppe_tun_rps_validate_inner_ip_config(struct ppe_drv_
 		return PPE_TUN_RPS_RET_INVALID_INNER_IP_CONFIG;
 	}
 
-	if (create->inner_ip_proto.ip_proto_ipv4_mask == 0) {
-		ppe_tun_rps_warn("ip_proto_ipv4_mask is mandatory when inner_pkt_type is IP\n");
+	/*
+	 * Either IPv4, IPv6 protocol or both needs to be matched
+	 */
+	if (create->inner_ip_proto.ip_proto_ipv4_value == 0 &&
+	    create->inner_ip_proto.ip_proto_ipv6_value == 0) {
+		ppe_tun_rps_warn("At least one inner IP protocol value must be matched when inner_pkt_type is IP\n");
 		return PPE_TUN_RPS_RET_INVALID_INNER_IP_CONFIG;
 	}
 
-	if (create->inner_ip_proto.ip_proto_ipv6_mask == 0) {
-		ppe_tun_rps_warn("ip_proto_ipv6_mask is mandatory when inner_pkt_type is IP\n");
+	/*
+	 * At least one inner IP protocol mask must be non-zero
+	 */
+	if (create->inner_ip_proto.ip_proto_ipv4_mask == 0 &&
+	    create->inner_ip_proto.ip_proto_ipv6_mask == 0) {
+		ppe_tun_rps_warn("At least one of ip_proto_ipv4_mask or ip_proto_ipv6_mask must be non-zero\n");
 		return PPE_TUN_RPS_RET_INVALID_INNER_IP_CONFIG;
+	}
+
+	/*
+	 * If one mask is provided and the other is not, use the provided mask for the other case.
+	 * If both are zero, default to 0xFFFF (though handled by validation above).
+	 */
+	if (create->inner_ip_proto.ip_proto_ipv4_mask != 0) {
+		default_mask = create->inner_ip_proto.ip_proto_ipv4_mask;
+	} else if (create->inner_ip_proto.ip_proto_ipv6_mask != 0) {
+		default_mask = create->inner_ip_proto.ip_proto_ipv6_mask;
+	}
+
+	if (create->inner_ip_proto.ip_proto_ipv4_mask == 0) {
+		create->inner_ip_proto.ip_proto_ipv4_mask = default_mask;
+		create->inner_ip_proto.ip_proto_ipv4_value = 0;
+	}
+
+	if (create->inner_ip_proto.ip_proto_ipv6_mask == 0) {
+		create->inner_ip_proto.ip_proto_ipv6_mask = default_mask;
+		create->inner_ip_proto.ip_proto_ipv6_value = 0;
 	}
 
 	/*
@@ -499,6 +601,34 @@ static enum ppe_tun_rps_ret ppe_tun_rps_validate_inner_ip_config(struct ppe_drv_
 	if (create->inner_ip_proto.ip_proto_offset > PPE_TUN_RPS_MAX_UDF_OFFSET) {
 		ppe_tun_rps_warn("ip_proto_offset %d exceeds maximum %d\n",
 				create->inner_ip_proto.ip_proto_offset, PPE_TUN_RPS_MAX_UDF_OFFSET);
+		return PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+	}
+
+	/*
+	 * Validate that inner IP protocol offset is an even number (multiple of 2)
+	 */
+	if (create->inner_ip_proto.ip_proto_offset % 2 != 0) {
+		ppe_tun_rps_warn("ip_proto_offset %d must be an even number (multiple of 2)\n",
+				create->inner_ip_proto.ip_proto_offset);
+		return PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+	}
+
+	/*
+	 * Validate that inner IP protocol offset does not exceed header length
+	 */
+	if ((create->inner_ip_proto.ip_proto_offset + 2) > create->header_len) {
+		ppe_tun_rps_warn("ip_proto_offset %d + 2 exceeds header length %d\n",
+				create->inner_ip_proto.ip_proto_offset, create->header_len);
+		return PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
+	}
+
+	/*
+	 * Validate that inner IP protocol offset is not within Ethernet header if type is eth
+	 */
+	if (create->offset_type == PPE_DRV_TUN_RPS_OFFSET_TYPE_ETH &&
+	    create->inner_ip_proto.ip_proto_offset < 14) {
+		ppe_tun_rps_warn("ip_proto_offset %d falls within Ethernet header (< 14)\n",
+				create->inner_ip_proto.ip_proto_offset);
 		return PPE_TUN_RPS_RET_INVALID_UDF_OFFSET;
 	}
 

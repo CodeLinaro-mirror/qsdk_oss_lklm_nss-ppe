@@ -962,13 +962,39 @@ ppe_drv_ret_t ppe_drv_tun_rps_rule_create(struct ppe_drv_tun_rps_rule_create *ru
 		/* Adjust header length */
 		rule_create->header_len -= (2 * ETH_ALEN);
 
-		/* Adjust UDF offsets */
-		if (rule_create->cmn.udf0_en) rule_create->cmn.udf0_offset -= (2 * ETH_ALEN);
-		if (rule_create->cmn.udf1_en) rule_create->cmn.udf1_offset -= (2 * ETH_ALEN);
-		if (rule_create->cmn.udf2_en) rule_create->cmn.udf2_offset -= (2 * ETH_ALEN);
+		/*
+		 * Adjust UDF offsets with protection against unsigned underflow
+		 */
+		if (rule_create->cmn.udf0_en) {
+			if (rule_create->cmn.udf0_offset < (2 * ETH_ALEN)) {
+				ppe_drv_warn("%p: udf0_offset %d is less than 12", rule_create, rule_create->cmn.udf0_offset);
+				return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
+			}
+			rule_create->cmn.udf0_offset -= (2 * ETH_ALEN);
+		}
+		if (rule_create->cmn.udf1_en) {
+			if (rule_create->cmn.udf1_offset < (2 * ETH_ALEN)) {
+				ppe_drv_warn("%p: udf1_offset %d is less than 12", rule_create, rule_create->cmn.udf1_offset);
+				return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
+			}
+			rule_create->cmn.udf1_offset -= (2 * ETH_ALEN);
+		}
+		if (rule_create->cmn.udf2_en) {
+			if (rule_create->cmn.udf2_offset < (2 * ETH_ALEN)) {
+				ppe_drv_warn("%p: udf2_offset %d is less than 12", rule_create, rule_create->cmn.udf2_offset);
+				return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
+			}
+			rule_create->cmn.udf2_offset -= (2 * ETH_ALEN);
+		}
 
-		/* Adjust Inner IP protocol offset */
+		/*
+		 * Adjust Inner IP protocol offset with protection against unsigned underflow
+		 */
 		if (rule_create->inner_type == PPE_DRV_TUN_RPS_INNER_PKT_TYPE_IP) {
+			if (rule_create->inner_ip_proto.ip_proto_offset < (2 * ETH_ALEN)) {
+				ppe_drv_warn("%p: ip_proto_offset %d is less than 12", rule_create, rule_create->inner_ip_proto.ip_proto_offset);
+				return PPE_DRV_RET_TUN_RPS_CREATE_RULE_FAIL;
+			}
 			rule_create->inner_ip_proto.ip_proto_offset -= (2 * ETH_ALEN);
 		}
 	}
