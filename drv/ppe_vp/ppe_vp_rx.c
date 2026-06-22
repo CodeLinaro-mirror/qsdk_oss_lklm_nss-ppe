@@ -359,27 +359,54 @@ static void __ppe_vp_rx_dp_skb_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info 
 		rx_stats = this_cpu_ptr(svp->vp_stats.rx_stats);
 
 		if (svp->vp_type == PPE_VP_TYPE_SW_L3) {
-			struct ethhdr *ethh;
+			u8 version;
+
 			ppe_vp_trace("%px: Rx VP#%d, Rx dev:%p with name: %s: L3 VP \n", svp, rxi->svp, dev, dev->name);
 
-			if (unlikely(!pskb_may_pull(skb, (sizeof(struct ethhdr))))) {
-				rcu_read_unlock();
-
-				u64_stats_update_begin(&rx_stats->syncp);
-				rx_stats->rx_drops++;
-				u64_stats_update_end(&rx_stats->syncp);
-
-				mem_debug_update_skb(skb);
-				dev_kfree_skb_any(skb);
-				ppe_vp_info("%px: Rx VP:%d skb pull failed dropping skb:%p\n", svp, rxi->svp, skb);
-				return;
+			/*
+			 * Pull any fake MAC + 1byte(ip version) added by PPE for L3 interfaces.
+			 */
+			if (unlikely(!pskb_may_pull(skb, rxi->l3offset + 1))) {
+				ppe_vp_info("%px: rx vp %d l3 pull failed (offset %u), drop skb %px\n",
+						svp, rxi->svp, rxi->l3offset, skb);
+				goto sw_l3_drop;
 			}
 
-			ethh = (struct ethhdr *)skb->data;
-			skb->protocol = ethh->h_proto;
-			skb_pull(skb, (sizeof(struct ethhdr)));
+			skb_pull(skb, rxi->l3offset);
+			skb_reset_network_header(skb);
+
+			/*
+			 * Detect IP version and set protocol.
+			 */
+			version = (*(u8 *)skb->data) >> 4;
+			if (likely(version == 4)) {
+				skb->protocol = htons(ETH_P_IP);
+			} else if (likely(version == 6)) {
+				skb->protocol = htons(ETH_P_IPV6);
+			} else {
+				ppe_vp_info("%px: rx vp %d invalid IP version %u, drop skb %px\n",
+						svp, rxi->svp, version, skb);
+				goto sw_l3_drop;
+			}
+
+			/*
+			 * Successfully identified IP version; continue with common exception path.
+			 */
+			goto sw_l3_done;
+
+sw_l3_drop:
+			rcu_read_unlock();
+
+			u64_stats_update_begin(&rx_stats->syncp);
+			rx_stats->rx_drops++;
+			u64_stats_update_end(&rx_stats->syncp);
+
+			mem_debug_update_skb(skb);
+			dev_kfree_skb_any(skb);
+			return;
 		}
 
+sw_l3_done:
 		u64_stats_update_begin(&rx_stats->syncp);
 		rx_stats->rx_excp_pkts++;
 		rx_stats->rx_excp_bytes += skb->len;
