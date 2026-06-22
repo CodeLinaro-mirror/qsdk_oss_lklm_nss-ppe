@@ -780,7 +780,7 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi7(struct ppe_ds *node, struct ppe_d
 	priv_node_state = node_cfg->node_state;
 	if ((priv_node_state != PPE_DS_NODE_STATE_ALLOC) &&
 			(priv_node_state != PPE_DS_NODE_STATE_STOP_DONE)) {
-		printk("Invalid node state: %d, PPE-DS registration failed\n",
+		ppe_ds_err("Invalid node state: %d, PPE-DS registration failed\n",
 				node_cfg->node_state);
 		write_unlock_bh(&node_cfg->lock);
 		return false;
@@ -1063,8 +1063,8 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi8(struct ppe_ds *node, struct ppe_d
 	 * During wifi up/down we could come here, get the current
 	 * EDMA producer and consumer indices.
 	 */
-	if (priv_node_state == PPE_DS_NODE_STATE_STOP_DONE) {
-
+	if (priv_node_state == PPE_DS_NODE_STATE_STOP_DONE &&
+				(!node->umac_reset_inprogress)) {
 		write_lock_bh(&node_cfg->lock);
 		node_cfg->node_state = PPE_DS_NODE_STATE_REG_DONE;
 		write_unlock_bh(&node_cfg->lock);
@@ -1322,10 +1322,13 @@ int ppe_ds_wlan_instance_start(struct ppe_ds *node,
 	struct nss_dp_ppeds_wifi8_handle *wifi8_hdl = &edma_handle->wifi8_hdl;
 	write_lock_bh(&node_cfg->lock);
 	if(node_cfg->node_state != PPE_DS_NODE_STATE_REG_DONE) {
-		ppe_ds_err("Invalid node state: %d, PPE-DS start failed\n",
-				node_cfg->node_state);
-		write_unlock_bh(&node_cfg->lock);
-		return -1;
+		if ((node_cfg->node_state != PPE_DS_NODE_STATE_STOP_DONE) ||
+				(!node->umac_reset_inprogress)) {
+			ppe_ds_err("Invalid node state: %d, PPE-DS start failed\n",
+					node_cfg->node_state);
+			write_unlock_bh(&node_cfg->lock);
+			return -1;
+		}
 	}
 	node_cfg->node_state = PPE_DS_NODE_STATE_START_IN_PROG;
 	write_unlock_bh(&node_cfg->lock);
@@ -1456,7 +1459,7 @@ struct ppe_ds *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_s
 
 	dp_ops = nss_dp_ppeds_get_wifi_arch_mode_ops(wifi_arch_mode);
 	if (!dp_ops || !dp_ops->alloc) {
-		printk("NULL EDMA operation in PPE-DS alloc API\n");
+		ppe_ds_err("NULL EDMA operation in PPE-DS alloc API\n");
 		return NULL;
 	}
 
@@ -1470,7 +1473,7 @@ struct ppe_ds *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_s
 	}
 
 	if(i == PPE_DS_MAX_NODE) {
-		printk("Could not get a free PPE-DS node entry\n");
+		ppe_ds_err("Could not get a free PPE-DS node entry\n");
 		return NULL;
 	}
 
@@ -1514,7 +1517,7 @@ struct ppe_ds *ppe_ds_wlan_inst_alloc(struct ppe_ds_wlan_ops *ops, size_t priv_s
 	ppe_ds_node_cfg[i].node_state = PPE_DS_NODE_STATE_ALLOC;
 	write_unlock_bh(&ppe_ds_node_cfg[i].lock);
 
-	printk("%px: PPE-DS alloc successful\n", node);
+	ppe_ds_info("%px: PPE-DS alloc successful\n", node);
 
 	return node;
 
