@@ -318,4 +318,14 @@ bool ppe_drv_port_is_gem(uint16_t port_num);
  * PPE port number.
  */
 int32_t ppe_drv_port_num_from_ifname(const char *ifname);
+
+/**
+ * ppe_drv_port_vlan_append_set
+ *	Set or clear asymmetric VLAN append flag on a port.
+ *
+ * @param[in] dev     Net device.
+ * @param[in] enable  True to enable, false to disable.
+ */
+void ppe_drv_port_vlan_append_set(struct net_device *dev, bool enable);
+
 #endif /* _PPE_DRV_PORT_H_ */

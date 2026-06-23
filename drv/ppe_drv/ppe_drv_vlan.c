@@ -613,8 +613,8 @@ ppe_drv_ret_t ppe_drv_vlan_del_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	/*
 	 * Fields for match
 	 */
-	xlt_rule.s_tagged = (info->svid == 0xFFFF) ? 0x1 : 0x4;
-	xlt_rule.c_tagged = (info->cvid == 0xFFFF) ? 0x1 : 0x4;
+	xlt_rule.s_tagged = (info->svid == 0xFFFF) ? 0x1 : ((info->svid == 0) ? 0x2 : 0x4);
+	xlt_rule.c_tagged = (info->cvid == 0xFFFF) ? 0x1 : ((info->cvid == 0) ? 0x2 : 0x4);
 	xlt_rule.s_vid = (info->svid == 0xFFFF) ? 0 : info->svid;
 	xlt_rule.s_vid_enable = (info->svid == 0xFFFF) ? A_FALSE : A_TRUE;
 	xlt_rule.c_vid = (info->cvid == 0xFFFF) ? 0 : info->cvid;
@@ -777,8 +777,8 @@ ppe_drv_ret_t ppe_drv_vlan_add_xlate_rule(struct ppe_drv_iface *iface, struct pp
 	/*
 	 * Fields for match
 	 */
-	xlt_rule_in.s_tagged = (info->svid == 0xFFFF) ? 0x1 : 0x4;
-	xlt_rule_in.c_tagged = (info->cvid == 0xFFFF) ? 0x1 : 0x4;
+	xlt_rule_in.s_tagged = (info->svid == 0xFFFF) ? 0x1 : ((info->svid == 0) ? 0x2 : 0x4);
+	xlt_rule_in.c_tagged = (info->cvid == 0xFFFF) ? 0x1 : ((info->cvid == 0) ? 0x2 : 0x4);
 	xlt_rule_in.s_vid_enable = (info->svid == 0xFFFF) ? A_FALSE : A_TRUE;
 	xlt_rule_in.s_vid = (info->svid == 0xFFFF) ? 0 : info->svid;
 	xlt_rule_in.c_vid_enable = (info->cvid == 0xFFFF) ? A_FALSE : A_TRUE;

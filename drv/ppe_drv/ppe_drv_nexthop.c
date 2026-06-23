@@ -563,12 +563,14 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 		fal_nh.port = pp->port;
 	} else {
 		if (vsi && vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled
-		   && !(ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV))) {
+		   && !(ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_BRIDGE_VLAN_NETDEV))
+		   && !pp->vlan_append_en) {
 			fal_nh.type = FAL_NEXTHOP_L3;
 			fal_nh.vsi = vsi->index;
 		} else {
 			/*
-			 * FDB learning is disabled, program vlan-ID directly in NEXTHOP_TBL.
+			 * FDB learning is disabled or asymmetric VLAN append configured,
+			 * program vlan-ID directly in NEXTHOP_TBL.
 			 */
 			fal_nh.type = FAL_NEXTHOP_VP;
 			fal_nh.port = pp->port;
@@ -1058,12 +1060,14 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 		fal_nh.port = pp->port;
 	} else {
 		if (vsi && vsi->is_fdb_learn_enabled && pp->is_fdb_learn_enabled && pp_rx->is_fdb_learn_enabled &&
-		   !(ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_BRIDGE_VLAN_NETDEV))) {
+		   !(ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_BRIDGE_VLAN_NETDEV)) &&
+		   !pp->vlan_append_en) {
 			fal_nh.type = FAL_NEXTHOP_L3;
 			fal_nh.vsi = vsi->index;
 		} else {
 			/*
-			 * FDB learning is disabled, program vlan-ID directly in NEXTHOP_TBL.
+			 * FDB learning is disabled or asymmetric VLAN append configured,
+			 * program vlan-ID directly in NEXTHOP_TBL.
 			 */
 			fal_nh.type = FAL_NEXTHOP_VP;
 			fal_nh.port = pp->port;
