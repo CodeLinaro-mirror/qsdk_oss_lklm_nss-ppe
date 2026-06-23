@@ -309,7 +309,19 @@ void ppe_qdisc_stats_sync_many_exit(struct ppe_qdisc *pq)
 	spin_unlock_bh(&ppe_qdisc_stats_list_lock);
 
 cleanup:
-	del_timer(&pqsw->stats_get_timer);
+	/*
+	 * Use del_timer_sync() instead of del_timer() to ensure that any
+	 * currently-executing timer callback (ppe_qdisc_stats_sync_restart)
+	 * has fully completed before we free pqsw. del_timer() only cancels
+	 * a pending (not-yet-fired) timer and returns immediately if the
+	 * callback is already running on another CPU, which would allow
+	 * the callback to dereference the freed pqsw (use-after-free).
+	 *
+	 * del_timer_sync() is safe here because ppe_qdisc_stats_sync_restart
+	 * never calls ppe_qdisc_stats_sync_many_exit(), so there is no
+	 * deadlock risk.
+	 */
+	del_timer_sync(&pqsw->stats_get_timer);
 
 	/*
 	 * Free the qdisc stats list for this root node
@@ -480,4 +492,3 @@ void ppe_qdisc_stats_qdisc_detach(struct ppe_qdisc *pq)
 	list_del(&pq->q_list_element);
 	ppe_qdisc_info("%px Node detached from list of leaf nodes under the root %px", pq, rpq);
 }
-

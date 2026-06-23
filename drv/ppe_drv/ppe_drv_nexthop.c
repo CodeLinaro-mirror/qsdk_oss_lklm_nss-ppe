@@ -419,6 +419,9 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 	bool is_vlan_as_vp;
 	bool is_vlan_as_veip;
 	bool is_dsa_dev = false;
+#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+	struct dsa_port *dp;
+#endif
 
 	ppe_drv_v6_conn_flow_match_src_ip_get(pcf, match_src_ip);
 	ppe_drv_v6_conn_flow_match_dest_ip_get(pcf, match_dest_ip);
@@ -581,6 +584,21 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v6_get_and_ref(struct ppe_drv_v6_conn_fl
 				fal_nh.ctag_fmt = 1;
 				fal_nh.cvid = in_vlan;
 			} else {
+#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+				dp = dsa_port_from_netdev(iface_tx->dev);
+				/*
+				 * DSA VP egress VLAN translation rule unconditionally replaces the
+				 * S-VLAN with the DSA standalone VID.  When a VLAN is created over
+				 * a VLAN-based DSA interface, program the VLAN ID as C-VLAN so that
+				 * S-VLAN remains available for DSA tagging.
+				 */
+				if ((is_dsa_dev) && (dp) && (dp->cpu_dp->tag_ops->proto == DSA_TAG_PROTO_QCA_8021Q)) {
+					ppe_drv_trace("%p: DSA egress, programming bridge VLAN %u as CTAG",
+							pcf, in_vlan);
+					fal_nh.ctag_fmt = 1;
+					fal_nh.cvid = in_vlan;
+				} else
+#endif
 				if (pcf->egress_vlan[0].tpid == p->gbl_stpid) {
 					ppe_drv_trace("%p: fdb learning disabled configuring STAG:%u", pcf, in_vlan);
 					fal_nh.stag_fmt = 1;
@@ -880,6 +898,9 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 	bool is_vlan_as_vp;
 	bool is_vlan_as_veip;
 	bool is_dsa_dev = false;
+#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+	struct dsa_port *dp;
+#endif
 
 	/*
 	 * Both single and double VLANs are handled by EG_VLAN_XLT_* tables, we just need to
@@ -1058,6 +1079,21 @@ struct ppe_drv_nexthop *ppe_drv_nexthop_v4_get_and_ref(struct ppe_drv_v4_conn_fl
 				fal_nh.ctag_fmt = 1;
 				fal_nh.cvid = in_vlan;
 			} else {
+#ifdef NSS_VLAN_BASED_DSA_SUPPORT
+				dp = dsa_port_from_netdev(iface_tx->dev);
+				/*
+				 * DSA VP egress VLAN translation rule unconditionally replaces the
+				 * S-VLAN with the DSA standalone VID.  When a VLAN is created over
+				 * a VLAN-based DSA interface, program the VLAN ID as C-VLAN so that
+				 * S-VLAN remains available for DSA tagging.
+				 */
+				if ((is_dsa_dev) && (dp) && (dp->cpu_dp->tag_ops->proto == DSA_TAG_PROTO_QCA_8021Q)) {
+					ppe_drv_trace("%p: DSA egress, programming bridge VLAN %u as CTAG",
+							pcf, in_vlan);
+					fal_nh.ctag_fmt = 1;
+					fal_nh.cvid = in_vlan;
+				} else
+#endif
 				if (pcf->egress_vlan[0].tpid == p->gbl_stpid) {
 					ppe_drv_trace("%p: fdb learning disabled configuring STAG:%u", pcf, in_vlan);
 					fal_nh.stag_fmt = 1;
