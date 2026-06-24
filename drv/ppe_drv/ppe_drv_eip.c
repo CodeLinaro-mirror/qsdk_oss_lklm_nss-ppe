@@ -18,7 +18,7 @@
 
 /*
  * ppe_drv_eip_set_sc_queue_config
- *	Configure ucast queue for service code PPE_DRV_SC_IPSEC_PPE2EIP_DECAP
+ *	Configure ucast queue for service code for PPE to EIP
  */
 void ppe_drv_eip_sc_queue_config_set(void)
 {
@@ -39,6 +39,18 @@ void ppe_drv_eip_sc_queue_config_set(void)
 	 * Set ucast for encap direction
 	 */
 	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP, queue_id,
+			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+
+	/*
+	 * Set ucast for VP encap direction
+	 */
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_ENCAP, queue_id,
+			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+
+	/*
+	 * Set ucast for VP decap direction
+	 */
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_DECAP, queue_id,
 			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
 }
 EXPORT_SYMBOL(ppe_drv_eip_sc_queue_config_set);
