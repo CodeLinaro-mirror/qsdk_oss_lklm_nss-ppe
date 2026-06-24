@@ -112,15 +112,17 @@ endif
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))
-ccflags-y += -DPPE_DRV_NPTV6_HW_SUPPORT
+ccflags-$(CONFIG_NF_CONNTRACK_NPTV6_EXT) += -DPPE_DRV_NPTV6_HW_SUPPORT
 ccflags-y += -DPPE_DRV_RPS_HASH_SELECT
 ccflags-y += -DPPE_DRV_PKT_PADDING_STRIP
 ccflags-y += -DPPE_DRV_BRIDGE_NEXT_HOP
 ccflags-y += -DPPE_DRV_SRC_INTERFACE_CHECK
 ccflags-y += -DPPE_DRV_FLOW_TBL_POLICER
 ccflags-y += -DNSS_PPE_IPQ54XX
+ifeq ($(CONFIG_NF_CONNTRACK_NPTV6_EXT),y)
 qca-nss-ppe-objs += ppe_drv_nptv6.o
 qca-nss-ppe-objs += ppe_drv_nptv6_hairpin.o
+endif
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx ipq96xx ipq52xx))
@@ -141,7 +143,7 @@ ccflags-y += -DPPE_LOOPBACK_PORT_SUPPORT
 ccflags-y += -DPPE_ACL_DEST_BIND_SUPPORT
 ccflags-y += -DNSS_PPE_DRV_PORT_ISOL_SUPPORT
 ccflags-y += -DNSS_PPE_DRV_PORT_MGMT_SUPPORT
-ccflags-y += -DPPE_DRV_NPTV6_HW_SUPPORT
+ccflags-$(CONFIG_NF_CONNTRACK_NPTV6_EXT) += -DPPE_DRV_NPTV6_HW_SUPPORT
 ccflags-y += -DNSS_PPE_L2_VP_SC_ENQ_BYPASS
 ccflags-y += -DNSS_PPE_FEATURE_EXCEPTION_EDIT
 ccflags-y += -DPPE_DRV_RPS_HASH_SELECT
@@ -149,8 +151,10 @@ ccflags-y += -DPPE_DRV_PKT_PADDING_STRIP
 ccflags-y += -DPPE_DRV_BRIDGE_NEXT_HOP
 ccflags-y += -DPPE_DRV_SRC_INTERFACE_CHECK
 ccflags-y += -DPPE_DRV_FLOW_TBL_POLICER
+ifeq ($(CONFIG_NF_CONNTRACK_NPTV6_EXT),y)
 qca-nss-ppe-objs += ppe_drv_nptv6.o
 qca-nss-ppe-objs += ppe_drv_nptv6_hairpin.o
+endif
 ccflags-y += -DPPE_DRV_DDRQ_ENABLE
 ccflags-y += -DPPE_UDP_ST_SUPPORT
 endif
