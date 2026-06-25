@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/vmalloc.h>
@@ -237,6 +226,7 @@ bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_bu
 	bool ret = false;
 	uint16_t cc = cc_info->cpu_code;
 	struct iphdr *iph;
+	struct net_device *src_dev = NULL;
 
 	ppe_drv_assert((cc > 0) && (cc < PPE_DRV_CC_MAX), "%p: invalid cpu code %u", p, cc);
 
@@ -294,13 +284,19 @@ bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_bu
 	/*
 	 * Attempt flush
 	 */
+	if (cc_info->is_src_vp) {
+		src_dev = ppe_drv_port_num_to_dev(cc_info->src_vp_num);
+	} else {
+		src_dev = skb->dev;
+	}
+
 	switch (keys.control.addr_type) {
 		case FLOW_DISSECTOR_KEY_IPV4_ADDRS:
-			ppe_drv_cc_process_v4((ppe_drv_cc_t)cc, &keys, skb->dev);
+			ppe_drv_cc_process_v4((ppe_drv_cc_t)cc, &keys, src_dev);
 			break;
 
 		case FLOW_DISSECTOR_KEY_IPV6_ADDRS:
-			ppe_drv_cc_process_v6((ppe_drv_cc_t)cc, &keys, skb->dev);
+			ppe_drv_cc_process_v6((ppe_drv_cc_t)cc, &keys, src_dev);
 			break;
 
 		default:
