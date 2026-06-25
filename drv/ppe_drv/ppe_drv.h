@@ -445,6 +445,9 @@ enum ppe_drv_loopback_port_feature_type  {
 	PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_DS = 0x02,		/* Loopback port feature is enabled for PON HGU downstream */
 	PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US = 0x03,		/* Loopback port feature is enabled for PON HGU upstream */
 #endif
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	PPE_DRV_LOOPBACK_PORT_FT_TYPE_HAIRPIN_NAT = 0x04,		/* Loopback port feature is enabled for Hairpin NPTV6 */
+#endif
 };
 
 /*
@@ -453,9 +456,9 @@ enum ppe_drv_loopback_port_feature_type  {
  */
 enum ppe_drv_loopback_port_ctx_dir {
 	PPE_DRV_LOOPBACK_PORT_CTX_FLOW_SC,			/* Context for flow direction first service code */
-	PPE_DRV_LOOPBACK_PORT_CTX_FLOW_SC_NEXT,		/* Context for flow direction next service code */
-	PPE_DRV_LOOPBACK_PORT_CTX_RETURN_SC,		/* Context for return direction first service code */
-	PPE_DRV_LOOPBACK_PORT_CTX_RETURN_SC_NEXT,	/* Context for return direction next service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_FLOW_SC_NEXT,			/* Context for flow direction next service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_RETURN_SC,			/* Context for return direction first service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_RETURN_SC_NEXT,		/* Context for return direction next service code */
 	PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC,			/* Context for pon direction first service code */
 	PPE_DRV_LOOPBACK_PORT_CTX_PON_ACL_SC_NEXT,		/* Context for PON direction next service code */
 #ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
@@ -777,13 +780,36 @@ static inline bool ppe_drv_loopback_port_ft_pon_hgu_ds_enabled(struct ppe_drv *p
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*
+ * ppe_drv_nptv6_hairpin_loopback_port_enabled()
+ *	Check NPTv6 Hairpin NAT loopback port enabled.
+ */
+static inline bool ppe_drv_nptv6_hairpin_loopback_port_enabled(struct ppe_drv *p)
+{
+#if defined(PPE_LOOPBACK_PORT_SUPPORT)
+    return !!(p->loopback_port_info.enabled &&
+        (p->loopback_port_info.ft_type == PPE_DRV_LOOPBACK_PORT_FT_TYPE_HAIRPIN_NAT));
+#else
+    return false;
+#endif
+}
+
+/*
  * ppe_drv_nptv6_hairpin_loopback_enabled()
- *	Check NPTv6 Hairpin NAT loopback ring enabled.
+ *	Check NPTv6 Hairpin NAT loopback support enabled.
  */
 static inline bool ppe_drv_nptv6_hairpin_loopback_enabled(struct ppe_drv *p)
 {
-	return !!(p->loopback_ring_info.enabled &&
-		(p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT));
+#if defined(PPE_LOOPBACK_PORT_SUPPORT)
+    if (ppe_drv_nptv6_hairpin_loopback_port_enabled(p)) {
+        return true;
+    }
+#endif
+#if defined(PPE_LOOPBACK_RING_SUPPORT)
+    return !!(p->loopback_ring_info.enabled &&
+        (p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT));
+#else
+    return false;
+#endif
 }
 #endif
 

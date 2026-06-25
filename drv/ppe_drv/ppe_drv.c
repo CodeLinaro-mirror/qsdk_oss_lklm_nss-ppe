@@ -3113,6 +3113,13 @@ static int ppe_drv_loopback_port_feature_write_handler(struct ctl_table *table, 
 	 * configure the queue to service code mapping.
 	 * set p->loopback_port_info.ft_type.
 	 */
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+	case PPE_DRV_LOOPBACK_PORT_FT_TYPE_HAIRPIN_NAT:
+		 if (!ppe_drv_lpbk_port_info_ctx_fill(PPE_DRV_LOOPBACK_PORT_FT_TYPE_HAIRPIN_NAT)) {
+			ppe_drv_warn("%p: Failed to configure hairpin NAT loopback port\n", p);
+		 }
+		break;
+#endif
 	default:
 		ppe_drv_warn("invalid feature type %u\n", loopback_port_ft_type);
 		break;
@@ -3575,7 +3582,25 @@ bool ppe_drv_lpbk_port_info_ctx_fill(enum ppe_drv_loopback_port_feature_type ft_
 			ppe_drv_sc_ucast_queue_set(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT].sc, host_queue, PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_PORT_SRC_PROFILE);
 			break;
 #endif
+#ifdef PPE_DRV_NPTV6_HW_SUPPORT
+		case PPE_DRV_LOOPBACK_PORT_FT_TYPE_HAIRPIN_NAT:
+			/*
+			 * Reconfigure NPT66 hairpin NAT service codes to use loopback PORT
+			 * (instead of loopback ring):
+			 *   First-pass  (NPT66_HAIRPIN_NAT)      → loopback port
+			 *   Second-pass (NPT66_HAIRPIN_NAT_NEXT) → CPU (bypass all)
+			 */
+			p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_HAIRPIN_NAT;
+			ppe_drv_info("Hairpin NAT loopback port: port_id=%d base_queue=%d\n",
+							p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
+			ppe_drv_sc_config(PPE_DRV_SC_NPT66_HAIRPIN_NAT, PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT, p->loopback_port_info.port_id);
+			ppe_drv_sc_config(PPE_DRV_SC_NPT66_HAIRPIN_NAT_NEXT, PPE_DRV_SC_BYPASS_ALL, PPE_DRV_PORT_CPU);
 
+			/* Map NPT66_HAIRPIN_NAT SC to loopback port queue */
+			ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_NPT66_HAIRPIN_NAT, p->loopback_port_info.ucastq_start,
+									PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+			break;
+#endif
 		default:
 			ppe_drv_warn("invalid feature type %u\n", ft_type);
 			break;
