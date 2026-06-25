@@ -400,6 +400,18 @@ int ppe_dot1p_dump_one(struct ppe_dot1p_dump_instance *ddi, struct ppe_dot1p *do
 		}
 	}
 
+	if (r_action->action_flags & PPE_DOT1P_ACTION_FLAG_ENQ_VP) {
+		if ((result = ppe_dot1p_dump_write(ddi, "enq_vp", "%d", r_action->enq_vp))) {
+			goto error;
+		}
+	}
+
+	if (r_action->action_flags & PPE_DOT1P_ACTION_FLAG_INT_PRI) {
+		if ((result = ppe_dot1p_dump_write(ddi, "int_pri", "%d", r_action->int_pri))) {
+			goto error;
+		}
+	}
+
 	if (r_action->action_flags & PPE_DOT1P_ACTION_FLAG_SVC_CODE) {
 		if ((result = ppe_dot1p_dump_write(ddi, "svc_code", "%d", r_action->svc_code))) {
 			goto error;
