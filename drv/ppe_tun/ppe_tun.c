@@ -18,6 +18,7 @@
 
 struct ppe_tun_priv *ptp;
 static bool ppe_tun_tx_to_ppe(struct net_device *dev, struct sk_buff *skb);
+static ppe_vp_type_t ppe_tun_get_tun_vp_type(enum ppe_drv_tun_cmn_ctx_type type);
 
 /*
  * Offload ops for tunnels which supports encapsulation in hardware
@@ -316,41 +317,42 @@ done:
  */
 static bool ppe_tun_tx_to_ppe(struct net_device *dev, struct sk_buff *skb)
 {
-       struct ppe_tun *tun;
+	struct ppe_vp_tx_info tx_info = {0};
+	struct ppe_tun *tun;
 
-       tun = ppe_tun_get_tun_by_netdev_and_ref(dev);
-       if (!tun || !(tun->state & PPE_TUN_STATE_ACTIVATED)) {
-               ppe_tun_warn("%p: failed to queue packet to VP tunnel not found", tun);
-               goto err;
-       }
+	tun = ppe_tun_get_tun_by_netdev_and_ref(dev);
+	if (!tun || !(tun->state & PPE_TUN_STATE_ACTIVATED)) {
+		ppe_tun_warn("%p: failed to queue packet to VP tunnel not found", tun);
+		goto err;
+	}
 
-       if ((skb->len + tun->tun_header_len) > tun->tun_xmit_port_mtu) {
-               ppe_tun_warn("%p: post encap packet length %d exceeds xmit port mtu %d", tun,
-                               (skb->data_len + tun->tun_header_len),  tun->tun_xmit_port_mtu );
-               goto err;
-       }
+	if ((skb->len + tun->tun_header_len) > tun->tun_xmit_port_mtu) {
+		ppe_tun_warn("%p: post encap packet length %d exceeds xmit port mtu %d", tun,
+				(skb->data_len + tun->tun_header_len), tun->tun_xmit_port_mtu);
+		goto err;
+	}
 
-       if (!ppe_vp_tx_to_vp(tun->vp_num,skb)) {
+	if (!ppe_vp_tx_to_vp(tun->vp_num, &tx_info, skb)) {
 		/*
 		 * skb is consumed in ppe_vp_tx_to_vp if tx fails.
 		 * Hence no need to free the same here. Just accounting
 		 * for failure count here.
 		 */
-	       atomic64_inc(&tun->tun_hybrid_offload_tx_fail_cnt);
-       }
+		atomic64_inc(&tun->tun_hybrid_offload_tx_fail_cnt);
+	}
 
-       atomic64_inc(&tun->tun_hybrid_offload_tx_pkt_cnt);
+	atomic64_inc(&tun->tun_hybrid_offload_tx_pkt_cnt);
 
-       ppe_tun_deref(tun);
-       return true;
+	ppe_tun_deref(tun);
+	return true;
 
 err:
-       if (tun) {
-               ppe_tun_deref(tun);
-       }
-       atomic64_inc(&tun->tun_hybrid_offload_tx_fail_cnt);
+	if (tun) {
+		ppe_tun_deref(tun);
+	}
+	atomic64_inc(&tun->tun_hybrid_offload_tx_fail_cnt);
 
-       return false;
+	return false;
 }
 
 

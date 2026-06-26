@@ -118,10 +118,10 @@ EXPORT_SYMBOL(ppe_vp_tx_to_ppe);
  * ppe_vp_tx_to_vp()
  *	process the packets destined to VP in PPE
  *
- * sbks are consumed by this function regardless of the return
+ * skbs are consumed by this function regardless of the return
  * value.
  */
-bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
+bool ppe_vp_tx_to_vp(int32_t vp_num, struct ppe_vp_tx_info *tx_info, struct sk_buff *skb)
 {
 	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
 	struct ppe_vp *dvp;
@@ -148,7 +148,10 @@ bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
 	rx_stats = this_cpu_ptr(dvp->vp_stats.rx_stats);
 	dptxi.fake_mac = false;
 
-	if (dvp->vp_type == PPE_VP_TYPE_HW_L3TUN) {
+	/*
+	 * L3 VPs and HW L3 tunnels do not carry an Ethernet header, so prepend a fake one for PPE.
+	 */
+	if (dvp->vp_type == PPE_VP_TYPE_SW_L3 || dvp->vp_type == PPE_VP_TYPE_HW_L3TUN) {
 		dptxi.fake_mac = true;
 		skb_push(skb, ETH_HLEN);
 	}
@@ -156,6 +159,29 @@ bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
 	dptxi.dvp = vp_num;
 	dptxi.svp = 0;
 	dptxi.sc = PPE_DRV_SC_FMAC_BYPASS;
+
+	switch (tx_info->type) {
+	case PPE_VP_TX_TYPE_IPSEC_ENCAP:
+		/*
+		 * Send IPsec packet to EIP for encapsulation.
+		 */
+		dptxi.flags |= NSS_DP_VP_TX_FLAG_PKT_MODE;
+		dptxi.pkt_mode = NSS_DP_VP_FULL_PKT_MODE;
+		dptxi.sc = PPE_DRV_SC_IPSEC_EDMA_VP_ENCAP;
+		break;
+
+	case PPE_VP_TX_TYPE_IPSEC_DECAP:
+		/*
+		 * Send IPsec packet to EIP for decapsulation.
+		 */
+		dptxi.flags |= NSS_DP_VP_TX_FLAG_PKT_MODE;
+		dptxi.pkt_mode = NSS_DP_VP_FULL_PKT_MODE;
+		dptxi.sc = PPE_DRV_SC_IPSEC_EDMA_VP_DECAP;
+		break;
+
+	default:
+		break;
+	}
 
 	len = skb->len;
 

@@ -11,6 +11,26 @@
 #define PPE_VP_TX_INVALID_MACID		0
 
 /*
+ * ppe_vp_tx_type_info
+ *	Type of VP TX packet.
+ */
+enum ppe_vp_tx_type_info {
+	PPE_VP_TX_TYPE_NONE = 0,		/**< No specific type */
+	PPE_VP_TX_TYPE_IPSEC_ENCAP,		/**< IPsec encapsulation */
+	PPE_VP_TX_TYPE_IPSEC_DECAP,		/**< IPsec decapsulation */
+};
+
+/*
+ * ppe_vp_tx_info
+ *	Generic TX info for PPE VP packet transmission.
+ *	Callers provide high-level intent; PPE resolves HW specifics internally.
+ */
+struct ppe_vp_tx_info {
+	uint32_t valid_flags;		/**< Reserved for future use */
+	enum ppe_vp_tx_type_info type;	/**< Packet type */
+};
+
+/*
  * ppe_vp_tx_set_macid_tag()
  *      API to set the valid macid tag in skb->mark for active VP WLAN connection.
  *
@@ -71,12 +91,13 @@ bool ppe_vp_tx_to_ppe_by_dev(struct net_device *dev, struct sk_buff *skb);
  *      API for transmitting the packets to VP in PPE.
  *
  * @param[IN] vp_num   VP num corresponding to its interface.
- * @param[IN] skb  Socket buffer to be enqueued.
+ * @param[IN] tx_info  TX info with optional type (encap/decap).
+ * @param[IN] skb      Socket buffer to be enqueued.
  *
  * @return
  * true if packet is successfully forwarded to VP in PPE, false if its dropped.
  */
-bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb);
+bool ppe_vp_tx_to_vp(int32_t vp_num, struct ppe_vp_tx_info *tx_info, struct sk_buff *skb);
 
 /*
  * ppe_vp_tx_to_ppe_by_sc()
