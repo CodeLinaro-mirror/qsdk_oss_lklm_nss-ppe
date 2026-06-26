@@ -249,7 +249,11 @@ int ppe_drv_if_map_dump_get(struct ppe_drv_if_map_instance *mfi)
 
 		port_number = ppe_drv_iface_port_idx_get(iface);
 		if (port_number != -1) {
+			struct ppe_drv_port *pp = ppe_drv_port_from_port_num(port_number);
 			stats[active_if].port_number = port_number;
+			if (pp) {
+				stats[active_if].port_flags = pp->flags;
+			}
 			if (iface->type == PPE_DRV_IFACE_TYPE_PHYSICAL)
 				stats[active_if].src_profile = ppe_drv_port_src_profile_get_byidx(port_number);
 		}
@@ -318,6 +322,9 @@ int ppe_drv_if_map_dump_get(struct ppe_drv_if_map_instance *mfi)
 
 		if (stats[i].port_number != -EINVAL && stats[i].iface_type != PPE_DRV_IFACE_TYPE_VEIP) {
 			if ((result = ppe_drv_if_map_write(mfi, "port_number", "%u", stats[i].port_number))) {
+				goto ppe_drv_if_map_write_error;
+			}
+			if ((result = ppe_drv_if_map_write(mfi, "port_flags", "%u", stats[i].port_flags))) {
 				goto ppe_drv_if_map_write_error;
 			}
 		}
