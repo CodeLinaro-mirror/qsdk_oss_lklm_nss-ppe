@@ -534,8 +534,8 @@ process:
 	pol_cfg.length_mode = ainfo->length_mode;	/* Frame length mode for rate limit calculation: 0 - original, 1 - decap, 2 - output */
 
 	if (ainfo->meter_unit == 0) {
-		pol_cfg.cir = (ainfo->cir * 8) / 1000;		/* kbits for byte based */
-		pol_cfg.eir = (ainfo->eir * 8) / 1000;		/* kbits for byte based */
+		pol_cfg.cir = div_u64((uint64_t)ainfo->cir * 8, 1000);		/* kbits for byte based */
+		pol_cfg.eir = div_u64((uint64_t)ainfo->eir * 8, 1000);		/* kbits for byte based */
 	} else if (ainfo->meter_unit == 1) {
 		pol_cfg.cir = ainfo->cir;
 		pol_cfg.eir = ainfo->eir;
