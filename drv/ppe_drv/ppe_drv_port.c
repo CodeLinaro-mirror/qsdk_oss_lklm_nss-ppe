@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: ISC
  */
@@ -2809,3 +2809,25 @@ struct ppe_drv_port *ppe_drv_port_entries_alloc(void)
 
 	return port;
 }
+
+/*
+ * ppe_drv_port_vlan_append_set()
+ *      Set or clear asymmetric VLAN append flag on a port.
+ */
+void ppe_drv_port_vlan_append_set(struct net_device *dev, bool enable)
+{
+	struct ppe_drv_port *pp = NULL;
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_dev(dev);
+	if (!pp) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p unable to find valid ppe port for given dev: %s\n", dev, dev->name);
+		return;
+	}
+
+	pp->vlan_append_en = enable;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_port_vlan_append_set);
