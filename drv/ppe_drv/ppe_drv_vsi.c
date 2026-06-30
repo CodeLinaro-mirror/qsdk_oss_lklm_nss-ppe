@@ -179,6 +179,7 @@ void ppe_drv_vsi_l3_if_attach(struct ppe_drv_vsi *vsi, struct ppe_drv_l3_if *l3_
 static void ppe_drv_vsi_free(struct kref *kref)
 {
 	struct ppe_drv_vsi *vsi = container_of(kref, struct ppe_drv_vsi, ref);
+	struct ppe_drv_l3_if *l3_if = NULL;
 	fal_vsi_member_t vsi_mem_cfg = {0};
 	fal_vsi_newaddr_lrn_t addr_cfg = {0};
 	fal_vsi_stamove_t sta_cfg = {0};
@@ -217,15 +218,28 @@ static void ppe_drv_vsi_free(struct kref *kref)
 	}
 
 	/*
-	 * Detach L3 IF attached to vsi (if any)
+	 * Save the l3_if pointer before any deref, since ppe_drv_vsi_l3_if_detach
+	 * will NULL vsi->l3_if after dropping the attach reference.
+	 * This prevents use-after-free and double-free if the first deref drops
+	 * the last reference.
 	 */
-	ppe_drv_trace("%p: detaching l3_if %u from vsi %u", vsi, vsi->l3_if->l3_if_index, vsi->index);
+	l3_if = vsi->l3_if;
+
+	ppe_drv_trace("%p: detaching l3_if %u from vsi %u", vsi, l3_if->l3_if_index, vsi->index);
+
+	/*
+	 * Detach L3 IF from VSI hardware and drop the "attach" ref
+	 * (taken via ppe_drv_l3_if_ref in ppe_drv_vsi_l3_if_attach).
+	 * This also sets vsi->l3_if = NULL.
+	 */
+	ppe_drv_vsi_l3_if_detach(vsi);
 
 	/*
 	 * Free l3_if ref, which was taken while creating l3_if from vsi_create
+	 * (ppe_drv_l3_if_alloc in ppe_drv_vsi_alloc). Use the saved pointer
+	 * since vsi->l3_if is now NULL after detach.
 	 */
-	ppe_drv_l3_if_deref(vsi->l3_if);
-	ppe_drv_vsi_l3_if_detach(vsi);
+	ppe_drv_l3_if_deref(l3_if);
 }
 
 /*
