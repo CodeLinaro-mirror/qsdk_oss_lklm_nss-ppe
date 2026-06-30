@@ -385,15 +385,36 @@ ppe_drv_ret_t ppe_drv_qos_tcont_set(struct ppe_drv_qos_res *res, uint32_t tcont_
 }
 EXPORT_SYMBOL(ppe_drv_qos_tcont_set);
 
+#ifdef NSS_PPE_PON_SUPPORT
 /*
  * ppe_drv_qos_pon_port_get()
  *	Gets the PON port ID.
  */
 uint32_t ppe_drv_qos_pon_port_get(void)
 {
-	return PON_PORT_ID;
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_iface *pon_iface = NULL;
+	struct ppe_drv_port *pon_port = NULL;
+
+	spin_lock_bh(&p->lock);
+	pon_iface = ppe_drv_pon_iface_get();
+	spin_unlock_bh(&p->lock);
+
+	if (!pon_iface) {
+		ppe_drv_trace("%px:PON interface not present", p);
+		return 0;
+	}
+
+	pon_port = pon_iface->port;
+	if (!pon_port) {
+		ppe_drv_trace("%px:PON port not present", p);
+		return 0;
+	}
+
+	return pon_port->port;
 }
 EXPORT_SYMBOL(ppe_drv_qos_pon_port_get);
+#endif
 
 /*
  * ppe_drv_qos_l1_scheduler_set()
