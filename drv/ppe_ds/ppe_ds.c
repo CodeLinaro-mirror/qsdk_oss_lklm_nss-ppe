@@ -585,6 +585,56 @@ void ppe_ds_wlan_service_status_update(struct ppe_ds *node, bool enable)
 EXPORT_SYMBOL(ppe_ds_wlan_service_status_update);
 
 /*
+ * ppe_ds_wlan_get_rxfill_ring_info()
+ *	Get RxFill ring filled-count information.
+ */
+void ppe_ds_wlan_get_rxfill_ring_info(struct ppe_ds *node,
+				struct ppe_ds_wlan_rxfill_ring_info *info)
+{
+	nss_dp_ppeds_handle_t *edma_handle;
+	struct nss_dp_ppeds_ops *dp_ops;
+	struct nss_dp_ppeds_rxfill_ring_info dp_info = {};
+
+	if (!node) {
+		ppe_ds_err("NULL PPE-DS node in get_rxfill_ring_info\n");
+		return;
+	}
+
+	edma_handle = node->edma_handle;
+	dp_ops = node->dp_ops;
+
+	if (!dp_ops || !dp_ops->get_rxfill_ring_info) {
+		ppe_ds_err("NULL get_rxfill_ring_info API\n");
+		return;
+	}
+
+	dp_ops->get_rxfill_ring_info(edma_handle, &dp_info);
+
+	info->arch_mode = dp_info.arch_mode;
+
+	switch (dp_info.arch_mode) {
+	case EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7:
+		info->wifi7.prim_prod_idx	= dp_info.wifi7.prim_prod_idx;
+		info->wifi7.prim_cons_idx	= dp_info.wifi7.prim_cons_idx;
+		info->wifi7.prim_active_cnt	= dp_info.wifi7.prim_active_cnt;
+		break;
+	case EDMA_PPEDS_WIFI_ARCH_MODE_WIFI8:
+		info->wifi8.prim_prod_idx	= dp_info.wifi8.prim_prod_idx;
+		info->wifi8.prim_cons_idx	= dp_info.wifi8.prim_cons_idx;
+		info->wifi8.prim_active_cnt	= dp_info.wifi8.prim_active_cnt;
+		info->wifi8.secd_prod_idx	= dp_info.wifi8.secd_prod_idx;
+		info->wifi8.secd_cons_idx	= dp_info.wifi8.secd_cons_idx;
+		info->wifi8.secd_active_cnt	= dp_info.wifi8.secd_active_cnt;
+		info->wifi8.hw_buff_mgmt_en	= dp_info.wifi8.hw_buff_mgmt_en;
+		break;
+	default:
+		ppe_ds_err("Unknown arch_mode %u in get_rxfill_ring_info\n", dp_info.arch_mode);
+		break;
+	}
+}
+EXPORT_SYMBOL(ppe_ds_wlan_get_rxfill_ring_info);
+
+/*
  * ppe_ds_get_cur_prod_cons_ring_idx_mode_wifi7()
  *	Get the current EDMA producer and consumer ring indices
  */

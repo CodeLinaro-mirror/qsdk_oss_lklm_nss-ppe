@@ -14,6 +14,7 @@
 #include <nss_plugins.h>
 
 struct ppe_ds;
+struct ppe_ds_wlan_rxfill_ring_info;
 /**
  * ppe_ds_wlan_priv
  *	Wrapper to return PPE-DS WLAN handle's private area pointer.
@@ -232,6 +233,20 @@ void *ppe_ds_wlan_get_intr_ctxt(struct ppe_ds *node);
  * @param[in] enable        Enable/Disable service
  */
 void ppe_ds_wlan_service_status_update(struct ppe_ds *node, bool enable);
+
+/**
+ * ppe_ds_wlan_get_rxfill_ring_info
+ *	Get RxFill ring filled-count information
+ *
+ * @datatypes
+ * ppe_ds
+ * ppe_ds_wlan_rxfill_ring_info
+ *
+ * @param[in] node   PPE-DS node
+ * @param[out] info  Pointer to rxfill ring info structure to be filled
+ */
+void ppe_ds_wlan_get_rxfill_ring_info(struct ppe_ds *node,
+				struct ppe_ds_wlan_rxfill_ring_info *info);
 
 /**
  * ppe_ds_wlan_plugins_cb_register
