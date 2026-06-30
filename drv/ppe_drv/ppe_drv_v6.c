@@ -1901,7 +1901,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			/*
 			 * Make sure from interface is not WLAN and Qdisc rule is valid.
 			 */
-			if (ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
+			if (!wlan_host_assist_qdisc_en && ppe_drv_port_flags_check(pp_rx, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
 				ppe_drv_trace("%p: From interface is WLAN for E2E host assisted Qdisc flow\n", create);
 				return PPE_DRV_RET_FAILURE_NOT_SUPPORTED;
 			}
@@ -2260,7 +2260,7 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			/*
 			 * Make sure from interface is not WLAN and Qdisc rule is valid.
 			 */
-			if (ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
+			if (!wlan_host_assist_qdisc_en && ppe_drv_port_flags_check(pp_tx, PPE_DRV_PORT_FLAG_WIFI_DEV)) {
 				ppe_drv_trace("%p: From interface is WLAN for E2E host assisted Qdisc flow\n", create);
 				return PPE_DRV_RET_FAILURE_NOT_SUPPORTED;
 			}

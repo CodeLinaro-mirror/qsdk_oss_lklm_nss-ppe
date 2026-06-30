@@ -65,6 +65,7 @@ extern uint32_t static_dbg_level;
 extern bool flow_deacclr_dis;
 extern int mac_lrn_exception_en;
 extern uint32_t ppe_drv_jhash_rnd __read_mostly;
+extern int wlan_host_assist_qdisc_en;
 
 #ifdef PPE_DRV_DDRQ_ENABLE
 extern bool ddrq_lp_sc_set_en;
