@@ -157,6 +157,7 @@ struct ppe_drv_flow {
 	uint8_t pri_profile;		/* Pri_profile for flow entry */
 	struct ppe_drv_flow_mapt_info mapt_info; /* MAP-T specific entries used for stats */
 	struct ppe_drv_flow_unidir_info unidir_info;	/* Unidirection acceleration info */
+	void *flow_cfg;			/* Stores the flow config context */
 };
 
 bool ppe_drv_flow_valid_set(struct ppe_drv_flow *pf, bool enable);
@@ -196,3 +197,5 @@ bool ppe_drv_flow_v4_attach_mapt_v6_conn(struct ppe_drv_v4_conn_flow *pcf_v4, st
 bool ppe_drv_flow_accel_enable(struct ppe_drv_flow *flow);
 bool ppe_drv_flow_v4_wlan_metadata_set(struct ppe_drv_v4_conn_flow *pcf);
 bool ppe_drv_flow_v6_wlan_metadata_set(struct ppe_drv_v6_conn_flow *pcf);
+bool ppe_drv_flow_accel_suspend(struct ppe_drv_flow *pf);
+ppe_drv_ret_t ppe_drv_flow_accel_resume(struct ppe_drv_flow *pf);
