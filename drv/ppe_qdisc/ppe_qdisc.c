@@ -128,6 +128,12 @@ static int ppe_qdisc_set_parent(struct ppe_qdisc *pq, uint32_t parent)
 				return PPE_QDISC_PARENT_NOT_EXISTING;
 			}
 
+			if (!parent_qdisc->ops->cl_ops) {
+				ppe_qdisc_warning("PPE qdisc/class %px parent qdisc %px is classless, cannot attach to class %x",
+						pq->qdisc, parent_qdisc, parent);
+				return PPE_QDISC_PARENT_NOT_EXISTING;
+			}
+
 			parent_class = parent_qdisc->ops->cl_ops->find(parent_qdisc, parent);
 			if (!parent_class) {
 				pq->parent = NULL;
