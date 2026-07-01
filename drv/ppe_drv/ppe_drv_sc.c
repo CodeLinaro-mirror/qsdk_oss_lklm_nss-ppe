@@ -236,6 +236,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 
 	switch (sc) {
 	case PPE_DRV_SC_BYPASS_ALL:
+	case PPE_DRV_SC_SPF_BYPASS_NEXT:
 		sc_cfg.bypass_bitmap[0] = ~((1 << FAKE_MAC_HEADER_BYP)
 					| (1 << SERVICE_CODE_BYP)
 					| (1 << FAKE_L2_PROTO_BYP)
@@ -351,7 +352,8 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 						| (1 << SOURCE_FLTR_BYP)
 						| (1 << BRIDGING_FWD_BYP)
 						| (1 << L2_SOURCE_SEC_BYP));
-		sc_cfg.dest_port_valid = A_FALSE;
+		sc_cfg.field_update_bitmap[0] = ((1ULL << EPE_PRE_HEADER_VALID));
+		sc_cfg.dest_port_valid = A_TRUE;
 		break;
 
 #ifdef PPE_UDP_ST_SUPPORT
@@ -1256,7 +1258,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_SC_IPSEC_EIP2PPE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_VLAN_FILTER_BYPASS, PPE_DRV_SC_VLAN_FILTER_BYPASS, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_L3_EXCEPT, PPE_DRV_SC_L3_EXCEPT, PPE_DRV_PORT_CPU);
-	ppe_drv_sc_config(PPE_DRV_SC_SPF_BYPASS, PPE_DRV_SC_SPF_BYPASS, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_SPF_BYPASS, PPE_DRV_SC_SPF_BYPASS_NEXT, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_REDIR_CORE0, PPE_DRV_SC_NOEDIT_REDIR_CORE0, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_REDIR_CORE1, PPE_DRV_SC_NOEDIT_REDIR_CORE1, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_NOEDIT_REDIR_CORE2, PPE_DRV_SC_NOEDIT_REDIR_CORE2, PPE_DRV_PORT_CPU);
@@ -1278,6 +1280,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_FDB_BYPASS, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_GEM_LOOKUP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_HOST_QOS, PPE_DRV_SC_HOST_QOS, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_SPF_BYPASS_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 
 	/*
 	 * Initialize FLOW ACL service code
