@@ -65,8 +65,6 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 		skb_push(skb, ETH_HLEN);
 	}
 
-	rcu_read_unlock();
-
 	dptxi.svp = vp_num;
 	dptxi.sc = PPE_DRV_SC_SPF_BYPASS;
 
@@ -101,6 +99,7 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 		skb->fast_xmit = 0;
 		mem_debug_update_skb(skb);
 		dev_kfree_skb_any(skb);
+		rcu_read_unlock();
 		return true;
 	}
 
@@ -109,6 +108,7 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 	tx_stats->tx_bytes += len;
 	u64_stats_update_end(&tx_stats->syncp);
 
+	rcu_read_unlock();
 	return true;
 }
 EXPORT_SYMBOL(ppe_vp_tx_to_ppe);
@@ -153,8 +153,6 @@ bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
 		skb_push(skb, ETH_HLEN);
 	}
 
-	rcu_read_unlock();
-
 	dptxi.dvp = vp_num;
 	dptxi.svp = 0;
 	dptxi.sc = PPE_DRV_SC_FMAC_BYPASS;
@@ -173,6 +171,7 @@ bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
 		skb->fast_xmit = 0;
 		mem_debug_update_skb(skb);
 		dev_kfree_skb_any(skb);
+		rcu_read_unlock();
 		return false;
 	}
 
@@ -181,6 +180,7 @@ bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
 	rx_stats->rx_bytes += len;
 	u64_stats_update_end(&rx_stats->syncp);
 
+	rcu_read_unlock();
 	return true;
 }
 EXPORT_SYMBOL(ppe_vp_tx_to_vp);
