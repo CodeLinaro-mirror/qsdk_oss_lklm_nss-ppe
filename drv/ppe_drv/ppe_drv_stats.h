@@ -252,6 +252,8 @@ struct ppe_drv_comm_stats {
 	atomic64_t v6_create_fail_invalid_ds_node;	/* Create failed due to invalid DS node */
 	atomic64_t v6_create_nptv6_hairpin_fail; /* Create failed due to nptv6 hairpin failure */
 	atomic64_t v6_create_fail_invalid_nptv6_ctx;	/* Create failed due to invalid nptv6 context */
+	atomic64_t v4_tun_create_reconfig;		/* No of v4 tunnel decap reconfiguration due to IP address change */
+	atomic64_t v6_tun_create_reconfig;		/* No of v6 tunnel decap reconfiguration due to IP address change */
 };
 
 /*

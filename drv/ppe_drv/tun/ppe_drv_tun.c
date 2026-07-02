@@ -1866,6 +1866,30 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 		goto skip_tunnel_activation;
 	}
 
+	/*
+	 * Update SIP/DIP from ECM rule and reconfigure decap if needed
+	 */
+	if (ptun->ptdc && vcreate_rule) {
+		uint32_t saved_saddr[4];
+		memcpy(saved_saddr, pth->l3.saddr, sizeof(saved_saddr));
+		if (ppe_drv_tun_decap_reconfigure_check(ptun, vcreate_rule)) {
+			if (!ppe_drv_tun_decap_reconfigure(ptun->ptdc, pth)) {
+				ppe_drv_warn("%p: failed to reconfigure decap entry", ptun);
+				/*
+				 * Restore original saddr to keep tunnel context consistent
+				 */
+				memcpy(pth->l3.saddr, saved_saddr, sizeof(saved_saddr));
+				goto err_fail;
+			}
+
+			if (is_ipv6) {
+				ppe_drv_stats_inc(&comm_stats->v6_tun_create_reconfig);
+			} else {
+				ppe_drv_stats_inc(&comm_stats->v4_tun_create_reconfig);
+			}
+		}
+	}
+
 	port_id = ptun->vp_num;
 
 	/*

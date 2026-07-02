@@ -17,22 +17,101 @@
 
 
 /*
+ * ppe_drv_tun_decap_hw_entry_del
+ *	Delete hardware decap entry at given index.
+ */
+static inline sw_error_t ppe_drv_tun_decap_hw_entry_del(uint16_t hwidx)
+{
+	fal_tunnel_decap_entry_t ftde = {0};
+
+	ftde.decap_rule.entry_id = hwidx;
+	return fal_tunnel_decap_entry_del(PPE_DRV_SWITCH_ID, FAL_TUNNEL_OP_MODE_INDEX, &ftde);
+}
+
+/*
  * ppe_drv_tun_decap_deconfigure
  *	Deconfigure TL_TBL index allocated for tunnel decap
  */
 static bool ppe_drv_tun_decap_deconfigure(struct ppe_drv_tun_decap *ptdc)
 {
-	fal_tunnel_decap_entry_t ftde = {0};
 	sw_error_t err;
 	uint16_t tun_hw_idx = ptdc->tl_index;
 
-	ftde.decap_rule.entry_id = tun_hw_idx;
-	err = fal_tunnel_decap_entry_del(PPE_DRV_SWITCH_ID, FAL_TUNNEL_OP_MODE_INDEX, &ftde);
+	err = ppe_drv_tun_decap_hw_entry_del(tun_hw_idx);
 	if (err != SW_OK) {
 		ppe_drv_warn("%p: unable to free decap entry at %d", ptdc, tun_hw_idx);
 		return false;
 	}
 
+	return true;
+}
+
+/*
+ * ppe_drv_tun_decap_reconfigure
+ *	Reconfigure hardware decap entry with updated SIP and DIP.
+ */
+bool ppe_drv_tun_decap_reconfigure(struct ppe_drv_tun_decap *ptdc, struct ppe_drv_tun_cmn_ctx *pth)
+{
+	fal_tunnel_decap_entry_t ftde = {0};
+	sw_error_t err;
+	uint16_t old_hwidx = ptdc->tl_index;
+
+	/*
+	 * Get the old hardware entry to retrieve the rest of the fields
+	 * (decap action, verify entry, etc.)
+	 */
+	ftde.decap_rule.entry_id = old_hwidx;
+	err = fal_tunnel_decap_entry_get(PPE_DRV_SWITCH_ID, FAL_TUNNEL_OP_MODE_INDEX, &ftde);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to retrieve old decap entry from index %d", ptdc, old_hwidx);
+		return false;
+	}
+
+	/*
+	 * Update the SIP and DIP in the retrieved entry with the new pth addresses
+	 */
+	if (pth->l3.flags & PPE_DRV_TUN_CMN_CTX_L3_IPV4) {
+		ftde.decap_rule.sip.ip4_addr = ntohl(pth->l3.daddr[0]);
+		ftde.decap_rule.dip.ip4_addr = ntohl(pth->l3.saddr[0]);
+	} else {
+		ftde.decap_rule.sip.ip6_addr.ul[0] = ntohl(pth->l3.daddr[0]);
+		ftde.decap_rule.sip.ip6_addr.ul[1] = ntohl(pth->l3.daddr[1]);
+		ftde.decap_rule.sip.ip6_addr.ul[2] = ntohl(pth->l3.daddr[2]);
+		ftde.decap_rule.sip.ip6_addr.ul[3] = ntohl(pth->l3.daddr[3]);
+		ftde.decap_rule.dip.ip6_addr.ul[0] = ntohl(pth->l3.saddr[0]);
+		ftde.decap_rule.dip.ip6_addr.ul[1] = ntohl(pth->l3.saddr[1]);
+		ftde.decap_rule.dip.ip6_addr.ul[2] = ntohl(pth->l3.saddr[2]);
+		ftde.decap_rule.dip.ip6_addr.ul[3] = ntohl(pth->l3.saddr[3]);
+	}
+
+	/*
+	 * Add the new decap entry
+	 */
+	err = fal_tunnel_decap_entry_add(PPE_DRV_SWITCH_ID, FAL_TUNNEL_OP_MODE_HASH, &ftde);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to add updated decap entry to hardware", ptdc);
+		return false;
+	}
+
+	/*
+	 * Delete the old hardware entry
+	 */
+	err = ppe_drv_tun_decap_hw_entry_del(old_hwidx);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: unable to delete old decap entry at index %d, rolling back", ptdc, old_hwidx);
+		/*
+		 * Roll back: delete the newly added entry
+		 */
+		ppe_drv_tun_decap_hw_entry_del(ftde.decap_rule.entry_id);
+		return false;
+	}
+
+	/*
+	 * Update software tracking index
+	 */
+	ptdc->tl_index = ftde.decap_rule.entry_id;
+
+	ppe_drv_trace("%p: decap entry successfully reconfigured from index %d to index %d\n", ptdc, old_hwidx, ftde.decap_rule.entry_id);
 	return true;
 }
 
@@ -777,4 +856,87 @@ struct ppe_drv_tun_decap *ppe_drv_tun_decap_entries_alloc(struct ppe_drv *p)
 	}
 
 	return ptun_dc;
+}
+
+/*
+ * ppe_drv_tun_decap_reconfigure_check()
+ *	Check if dynamic IP address change (e.g. SIP/DIP updated by ECM) requires decap reconfiguration.
+ */
+bool ppe_drv_tun_decap_reconfigure_check(struct ppe_drv_tun *ptun, void *vcreate_rule)
+{
+	struct ppe_drv_tun_cmn_ctx *pth = &ptun->th;
+	bool is_ipv6 = ppe_drv_tun_cmn_ctx_tun_is_ipv6(pth);
+	uint32_t fip[4] = {0};
+	uint32_t rip[4] = {0};
+	bool addr_changed = false;
+
+	if (is_ipv6) {
+		struct ppe_drv_v6_rule_create *create = (struct ppe_drv_v6_rule_create *)vcreate_rule;
+		if (!create) {
+			return false;
+		}
+
+		fip[0] = htonl(create->tuple.flow_ip[0]);
+		fip[1] = htonl(create->tuple.flow_ip[1]);
+		fip[2] = htonl(create->tuple.flow_ip[2]);
+		fip[3] = htonl(create->tuple.flow_ip[3]);
+
+		rip[0] = htonl(create->tuple.return_ip[0]);
+		rip[1] = htonl(create->tuple.return_ip[1]);
+		rip[2] = htonl(create->tuple.return_ip[2]);
+		rip[3] = htonl(create->tuple.return_ip[3]);
+
+		/*
+		 * Check current tunnel addresses already match the ECM rule
+		 */
+		if ((memcmp(pth->l3.saddr, fip, sizeof(fip)) == 0 && memcmp(pth->l3.daddr, rip, sizeof(rip)) == 0) ||
+		    (memcmp(pth->l3.saddr, rip, sizeof(rip)) == 0 && memcmp(pth->l3.daddr, fip, sizeof(fip)) == 0)) {
+			return false;
+		}
+
+		/*
+		 * Extract the correct local IP based on the matched remote IP
+		 */
+		if (memcmp(pth->l3.daddr, rip, sizeof(rip)) == 0) {
+			memcpy(pth->l3.saddr, fip, sizeof(fip));
+			addr_changed = true;
+		} else if (memcmp(pth->l3.daddr, fip, sizeof(fip)) == 0) {
+			memcpy(pth->l3.saddr, rip, sizeof(rip));
+			addr_changed = true;
+		}
+	} else {
+		struct ppe_drv_v4_rule_create *create = (struct ppe_drv_v4_rule_create *)vcreate_rule;
+		if (!create) {
+			return false;
+		}
+
+		fip[0] = htonl(create->tuple.flow_ip);
+		rip[0] = htonl(create->tuple.return_ip);
+
+		/*
+		 * Check current tunnel addresses already match the ECM rule
+		 */
+		if ((pth->l3.saddr[0] == fip[0] && pth->l3.daddr[0] == rip[0]) ||
+		    (pth->l3.saddr[0] == rip[0] && pth->l3.daddr[0] == fip[0])) {
+			return false;
+		}
+
+		/*
+		 * Extract the correct local IP based on the matched remote IP
+		 */
+		if (pth->l3.daddr[0] == rip[0]) {
+			pth->l3.saddr[0] = fip[0];
+			addr_changed = true;
+		} else if (pth->l3.daddr[0] == fip[0]) {
+			pth->l3.saddr[0] = rip[0];
+			addr_changed = true;
+		}
+	}
+
+	if (addr_changed) {
+		ppe_drv_trace("%p: Tunnel SIP updated. New SIP: %pI4 DIP: %pI4\n",
+			ptun, &pth->l3.saddr[0], &pth->l3.daddr[0]);
+	}
+
+	return addr_changed;
 }

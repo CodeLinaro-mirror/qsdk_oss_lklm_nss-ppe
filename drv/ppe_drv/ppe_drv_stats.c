@@ -306,6 +306,8 @@ static const char * const ppe_drv_comm_stats_flow_conn_str[] = {
 	"v6_create_fail_invalid_ds_node",	/* Create failed due to invalid DS node */
 	"v6_create_nptv6_hairpin_fail",		/* Create failed due to nptv6 hairpin failure */
 	"v6_create_fail_invalid_nptv6_ctx",	/* Create failed due to invalid nptv6 context */
+	"v4_create_reconfig",			/* No of v4 tunnel decap reconfiguration due to IP address change */
+	"v6_create_reconfig",			/* No of v6 tunnel decap reconfiguration due to IP address change */
 };
 
 /*
@@ -474,6 +476,8 @@ static const char * const ppe_drv_comm_stats_tun_conn_str[] = {
 	"v6_create_fail_invalid_ds_node",	/* Create failed due to invalid DS node */
 	"v6_tun_create_nptv6_hairpin_fail",		/* Create failed due to nptv6 hairpin failure */
 	"v6_tun_create_fail_invalid_nptv6_ctx",	/* Create failed due to invalid nptv6 context */
+	"v4_tun_create_reconfig",		/* No of v4 tunnel decap reconfiguration due to IP address change */
+	"v6_tun_create_reconfig",		/* No of v6 tunnel decap reconfiguration due to IP address change */
 };
 
 /*

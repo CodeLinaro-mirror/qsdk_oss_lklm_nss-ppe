@@ -75,6 +75,8 @@ struct ppe_drv_tun_decap *ppe_drv_tun_decap_ref(struct ppe_drv_tun_decap *ptdc);
 bool ppe_drv_tun_decap_activate(struct ppe_drv_tun_decap *ptdc, uint16_t xmit_port, struct ppe_drv_tun_cmn_ctx_l2 *l2_hdr);
 bool ppe_drv_tun_decap_enable(struct ppe_drv_tun_decap *ptdc);
 bool ppe_drv_tun_decap_disable(struct ppe_drv_tun_decap *ptdc);
+bool ppe_drv_tun_decap_reconfigure(struct ppe_drv_tun_decap *ptdc, struct ppe_drv_tun_cmn_ctx *pth);
+bool ppe_drv_tun_decap_reconfigure_check(struct ppe_drv_tun *ptun, void *vcreate_rule);
 void ppe_drv_tun_decap_set_tl_index(struct ppe_drv_tun_decap *ptdc, uint32_t hwidx);
 void ppe_drv_tun_decap_set_tl_l3_idx(struct ppe_drv_tun_decap *ptdc, uint8_t tl_l3_idx);
 void ppe_drv_tun_decap_entries_free(struct ppe_drv_tun_decap *ptun_dc);
