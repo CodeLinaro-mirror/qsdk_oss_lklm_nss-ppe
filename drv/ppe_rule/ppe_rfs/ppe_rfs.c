@@ -54,7 +54,12 @@ bool ppe_rfs_rule_eligible_get(int src_interface_num, int dst_interface_num, boo
 
 	if (mcast_flow) {
 		status = false;
+#if defined(NSS_PPE_LOWMEM_PROFILE_16M) || defined(NSS_PPE_LOWMEM_PROFILE_256M) || defined(PPE_SFU_PROFILE)
+		if(net_ratelimit())
+			ppe_rfs_trace("Multicast flows are currently not supported.\n");
+#else
 		ppe_rfs_warn("Multicast flows are currently not supported.\n");
+#endif
 		goto ret_status;
 	}
 
