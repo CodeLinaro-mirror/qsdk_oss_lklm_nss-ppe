@@ -5784,14 +5784,19 @@ static ppe_drv_ret_t ppe_drv_v6_unidir_rule_update(struct ppe_drv_v6_conn *conn,
 		dscp = update_info->dscp.return_dscp;
 	}
 
+	if (!pcf) {
+		ppe_drv_warn("Invalid flow state for update");
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
 	qos_tag = (qos_tag > PPE_DRV_INT_PRI_MAX) ? PPE_DRV_INT_PRI_MAX : qos_tag;
 
-	if (update_info->valid_flags & PPE_DRV_V4_VALID_FLAG_QOS) {
+	if (update_info->valid_flags & PPE_DRV_V6_VALID_FLAG_QOS) {
 		if (ppe_drv_v6_conn_flow_tree_id_type_get(pcf) == PPE_DRV_TREE_ID_TYPE_WIFI_TID) {
 			pcf->fl_mdata.wifi_qos = qos_tag;
-			ppe_drv_v6_conn_flow_int_pri_set(pcf, int_pri);
-			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
 		}
+		ppe_drv_v6_conn_flow_int_pri_set(pcf, int_pri);
+		ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_QOS_VALID);
 	}
 
 	if (update_info->valid_flags & PPE_DRV_V6_VALID_FLAG_DSCP_MARKING) {
