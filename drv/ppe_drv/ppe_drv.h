@@ -465,6 +465,7 @@ enum ppe_drv_loopback_port_ctx_dir {
 #ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC,		/* Context for PON HGU US direction first service code */
 	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT,		/* Context for PON HGU US direction next service code */
+	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT_DDRQ,	/* Context for PON HGU US direction DDRQ third pass service code */
 	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC,		/* Context for PON HGU DS direction first service code */
 	PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_DS_SC_NEXT,		/* Context for PON HGU DS direction next service code */
 #endif

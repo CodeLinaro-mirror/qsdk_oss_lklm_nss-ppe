@@ -103,6 +103,9 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_UDP_ST_SFU = 67,				/* UDP speedtest service code for SFU case */
 	PPE_DRV_SC_UDP_ST_SFU_NEXT = 68,			/* UDP speedtest next service code for SFU case */
 	PPE_DRV_SC_SPF_BYPASS_NEXT = 69,			/* Source port filtering bypass next service code */
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT_DDRQ = 70,	/* Service code for loopback port for third pass */
+#endif
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,

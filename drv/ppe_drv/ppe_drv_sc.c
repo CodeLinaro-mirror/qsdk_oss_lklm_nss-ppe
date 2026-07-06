@@ -667,6 +667,17 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 						| (1 << FLOW_LOOKUP_BYP);
 			sc_cfg.bypass_bitmap[1] = (1 << L2_SOURCE_SEC_BYP)
 						| (1 << EG_VLAN_MEMBER_CHECK_BYP);
+			sc_cfg.field_update_bitmap[0] = (1ULL << FLD_UP_DST_INFO_WITH_GEM)
+						| (1ULL << FLD_UP_DST_INFO_FORCE)
+						| (1ULL << EPE_PRE_HEADER_VALID)
+						| (1ULL << EPE_LOOPBACK_VLAN_START);
+			sc_cfg.dest_port_valid = A_FALSE;
+		}
+		break;
+
+	case PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT_DDRQ:
+		if (ppe_drv_loopback_port_ft_pon_hgu_us_enabled(p)) {
+			sc_cfg.bypass_bitmap[0] = (1 << FLOW_SERVICE_CODE_BYP);
 			sc_cfg.dest_port_valid = A_FALSE;
 		}
 		break;
@@ -1322,7 +1333,8 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 #endif
 #ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT, p->loopback_port_info.port_id);
-	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT_DDRQ, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT_DDRQ, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC, PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT, p->loopback_port_info.port_id);
 	ppe_drv_sc_config(PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_FEATURE_PON_HGU_PPTP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
