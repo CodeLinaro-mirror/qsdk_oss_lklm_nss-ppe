@@ -375,7 +375,15 @@ static bool ppe_policer_create_port(struct ppe_policer_create_info *info)
 	} else {
 		/* RFC2697 and RFC4115 */
 		port_info->ebs = cinfo->peak_burst_size - cinfo->committed_burst_size;
-		port_info->eir = cinfo->peak_rate - cinfo->committed_rate;
+
+		/*
+		 * RFC 2697 expects EIR to be 0
+		 */
+		if (cinfo->mode == PPE_POLICER_MODE_RFC2697) {
+			port_info->eir = 0;
+		} else {
+			port_info->eir = (cinfo->peak_rate - cinfo->committed_rate);
+		}
 	}
 
 	memset(&port_info->action, 0, sizeof(struct ppe_drv_policer_rule_create_action));

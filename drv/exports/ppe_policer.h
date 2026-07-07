@@ -19,6 +19,7 @@
 #define PPE_RULE_POLICER_ACTION_YELLOW_CHG_PCP  0x8	/**< Change PCP for yellow coloured traffic */
 #define PPE_RULE_POLICER_ACTION_YELLOW_CHG_DEI  0x10	/**< Change DEI yellow coloured traffic */
 #define PPE_RULE_POLICER_ACTION_YELLOW_CHG_DSCP  0x20	/**< Change DSCP for yellow coloured traffic */
+#define PPE_RULE_POLICER_MIN_INFO_RATE_BYTE	0x1F40	/**< HW supported byte based min rate 64 kbps */
 
 /*
  * ppe_policer_meter_unit
