@@ -43,6 +43,7 @@
  */
 static int nss_ppenl_edma_ddrq_ops_cfg_rule(struct sk_buff *skb, struct genl_info *info);
 static int nss_ppenl_edma_ddrq_ops_grp_cfg_rule(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_edma_ddrq_ops_bypass_cfg_rule(struct sk_buff *skb, struct genl_info *info);
 
 /*
  * operation table called by the generic netlink layer based on the command
@@ -50,6 +51,7 @@ static int nss_ppenl_edma_ddrq_ops_grp_cfg_rule(struct sk_buff *skb, struct genl
 static struct genl_ops nss_ppenl_edma_ddrq_ops[] = {
 	{.cmd = NSS_PPE_EDMA_DDRQ_CFG_RULE_MSG, .doit = nss_ppenl_edma_ddrq_ops_cfg_rule,},
 	{.cmd = NSS_PPE_EDMA_DDRQ_GRP_CFG_RULE_MSG, .doit = nss_ppenl_edma_ddrq_ops_grp_cfg_rule,},
+	{.cmd = NSS_PPE_EDMA_DDRQ_BYPASS_CFG_RULE_MSG, .doit = nss_ppenl_edma_ddrq_ops_bypass_cfg_rule,},
 
 };
 
@@ -285,6 +287,69 @@ static int nss_ppenl_edma_ddrq_ops_grp_cfg_rule(struct sk_buff *skb, struct genl
 	nl_edma_rule = nss_ppenl_get_data(resp);
 	nl_edma_rule->msg.ddrq_grp_cfg.ret = ret;
 	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
+ * nss_ppenl_edma_ddrq_ops_bypass_cfg_rule()
+ *	API to handle EDMA DDRQ bypass configuration rule
+ */
+static int nss_ppenl_edma_ddrq_ops_bypass_cfg_rule(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_edma_ddrq_rule *nl_edma_rule;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	uint32_t pid;
+	nss_dp_ddrq_ret_t ret = DDRQ_RET_ERR;
+	struct nss_ppenl_edma_ddrq_bypass_config *ddrq_bypass_cfg;
+
+	/*
+	 * Extract the message payload
+	 */
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_edma_ddrq_family, info, NSS_PPE_EDMA_DDRQ_BYPASS_CFG_RULE_MSG);
+	if (!nl_cm) {
+		nss_ppenl_warn("unable to extract EDMA DDRQ bypass config data\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate config message before calling rule API
+	 */
+	nl_edma_rule = container_of(nl_cm, struct nss_ppenl_edma_ddrq_rule, cm);
+	ddrq_bypass_cfg = &nl_edma_rule->msg.ddrq_bypass_cfg;
+	pid = nl_cm->pid;
+
+	if (ddrq_bypass_cfg->ddrq_obj.cfg_type != NSS_DP_DDRQ_CFG_TYPE_QUEUE) {
+		nss_ppenl_warn("Queue id is not provided to extract EDMA DDRQ bypass configuration\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	/*
+	 * copy the NL message for response
+	 */
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_warn("%d:unable to save response data from NL buffer\n", pid);
+		nss_ppenl_ucast_resp(skb);
+		return -ENOMEM;
+	}
+
+	/*
+	 * Set DDRQ configuration from NSS DP module
+	 */
+	ret = nss_dp_ddrq_bypass_cfg_set(&ddrq_bypass_cfg->ddrq_obj, ddrq_bypass_cfg->set);
+	if (ret != DDRQ_RET_SUCCESS) {
+		nss_ppenl_warn("%d:Error in setting the DDRQ bypass configuration set operation\n", pid);
+	} else {
+		nss_ppenl_info("EDMA DDRQ bypass configuration operation completed\n");
+	}
+
+	nl_edma_rule = nss_ppenl_get_data(resp);
+	nl_edma_rule->msg.ddrq_bypass_cfg.ret = ret;
+	nss_ppenl_ucast_resp(resp);
+	nss_ppenl_info("EDMA DDRQ cfg set configuration completed\n");
 	return 0;
 }
 

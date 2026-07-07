@@ -31,6 +31,13 @@
 #define PPE_DRV_QOS_MEM_BLOCK_SIZE 256
 
 /**
+ * Queue drop state which needs to be configured during the DDRQ bypass
+ * configuration and its reset state
+ */
+#define PPE_DRV_QOS_DDRQ_BYPASS_DROP_STATE	9
+#define PPE_DRV_QOS_DDRQ_BYPASS_DROP_STATE_RESET	0
+
+/**
  * ppe_drv_qos_res_type
  *	QoS resource type.
  */
@@ -702,4 +709,27 @@ ppe_drv_ret_t ppe_drv_qos_port_htt_res_get(uint32_t port_id, uint8_t index, stru
 
 /** @} */ /* end_addtogroup ppe_drv_qos_subsystem */
 
+/**
+ * ppe_drv_qos_ddrq_bypass_set
+ *	API to configure DDRQ bypass configuration on the given queue id.
+ *
+ * @datatypes
+ * ppe_drv_ret_t
+ *
+ * @return
+ * Status of the DDRQ bypass configuration operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_ddrq_bypass_set(uint32_t qid);
+
+/**
+ * ppe_drv_qos_ddrq_bypass_reset
+ *	API to reset DDRQ bypass configuration on the given queue id.
+ *
+ * @datatypes
+ * ppe_drv_ret_t
+ *
+ * @return
+ * Status of the DDRQ bypass reset configuration operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_ddrq_bypass_reset(uint32_t qid);
 #endif /* _PPE_DRV_V4_H_ */
