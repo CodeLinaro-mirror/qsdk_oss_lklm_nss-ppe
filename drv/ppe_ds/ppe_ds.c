@@ -608,9 +608,8 @@ void ppe_ds_wlan_get_rxfill_ring_info(struct ppe_ds *node,
 		return;
 	}
 
+	dp_info.arch_mode = info->arch_mode;
 	dp_ops->get_rxfill_ring_info(edma_handle, &dp_info);
-
-	info->arch_mode = dp_info.arch_mode;
 
 	switch (dp_info.arch_mode) {
 	case EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7:
