@@ -3564,6 +3564,9 @@ bool ppe_drv_lpbk_port_info_ctx_fill(enum ppe_drv_loopback_port_feature_type ft_
 			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
 			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT;
 
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT_DDRQ].dir_ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
+			p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT_DDRQ].sc = PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT_DDRQ;
+
 			p->loopback_port_info.ft_type = PPE_DRV_LOOPBACK_PORT_FT_TYPE_PON_HGU_US;
 			ppe_drv_info("port_id: %d base queue: %d\n", p->loopback_port_info.port_id, p->loopback_port_info.ucastq_start);
 
@@ -3572,7 +3575,8 @@ bool ppe_drv_lpbk_port_info_ctx_fill(enum ppe_drv_loopback_port_feature_type ft_
 			 */
 			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc,
 					p->loopback_port_info.port_id);
-			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT].sc, p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT_DDRQ].sc, PPE_DRV_PORT_CPU);
+			ppe_drv_sc_config(p->loopback_port_info.ctx[PPE_DRV_LOOPBACK_PORT_CTX_PON_HGU_US_SC_NEXT_DDRQ].sc, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 
 			break;
 
