@@ -7,7 +7,6 @@
 
 #define PPE_QOS_TCONT_INVALID 0xFF
 #define PPE_QOS_TCONT_DEFAULT_RES 0
-#define PPE_QOS_TCONT_L1_RES_START 9
 
 struct ppe_qos_base gbl_ppe_qos = {0};
 
@@ -363,9 +362,9 @@ static void ppe_qos_res_tconts_default_set(void)
 		 * Set Level 1 configuration
 		 */
 		res.l0spid = g_qos->tcont[i].l0sp;
-		res.l1spid = PPE_QOS_TCONT_L1_RES_START + i;
-		res.scheduler.l1c_drrid = PPE_QOS_TCONT_L1_RES_START + i;
-		res.scheduler.l1e_drrid = PPE_QOS_TCONT_L1_RES_START + i;
+		res.l1spid = tm_if->port.base[PPE_DRV_QOS_RES_TYPE_L1_SP] + i;
+		res.scheduler.l1c_drrid = tm_if->port.base[PPE_DRV_QOS_RES_TYPE_L1_CDRR] + i;
+		res.scheduler.l1e_drrid = tm_if->port.base[PPE_DRV_QOS_RES_TYPE_L1_EDRR] + i;
 
 		if (ppe_drv_qos_l1_scheduler_set(&res, g_qos->pon_port) != PPE_DRV_RET_SUCCESS) {
 			ppe_qos_enable_all_queue(tm_if);
@@ -696,9 +695,9 @@ static void ppe_qos_res_init(void)
 
 	spin_lock_bh(&g_qos->lock);
 	INIT_LIST_HEAD(&g_qos->port_list);
-	g_qos->pon_port = ppe_drv_qos_pon_port_get();
 
 #ifdef NSS_PPE_PON_SUPPORT
+	g_qos->pon_port = ppe_drv_qos_pon_port_get();
 	if (!g_qos->pon_port) {
 		spin_unlock_bh(&g_qos->lock);
 		ppe_qos_warn("No PON port, tconts not supported");

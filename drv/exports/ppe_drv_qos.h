@@ -630,6 +630,7 @@ void ppe_drv_qos_port_bm_control_enable(uint32_t port_id, bool set);
  */
 ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port *port);
 
+#ifdef NSS_PPE_PON_SUPPORT
 /**
  * ppe_drv_qos_pon_port_get
  *	Gets the PON port ID.
@@ -641,6 +642,8 @@ ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port
  * PON port ID.
  */
 uint32_t ppe_drv_qos_pon_port_get(void);
+#endif
+
 /** @} */ /* end_addtogroup ppe_drv_qos_subsystem */
 
 #endif /* _PPE_DRV_V4_H_ */
