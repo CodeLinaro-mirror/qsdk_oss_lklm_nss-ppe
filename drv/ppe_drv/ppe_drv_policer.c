@@ -855,3 +855,41 @@ void ppe_drv_policer_acl_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, 
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_policer_acl_get_hw_stats);
+
+/*
+ * ppe_drv_policer_acl_red_stats_get()
+ *	API to read ACL policer red (dropped) counters directly from hardware and return the
+ *	delta since the previous call. The baseline is private to this API.
+ */
+ppe_drv_ret_t ppe_drv_policer_acl_red_stats_get(struct ppe_drv_policer_acl *ctx,
+						    uint64_t *delta_red_pkts,
+						    uint64_t *delta_red_bytes)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_policer_red_stats_base *st;
+	fal_policer_counter_t policer_cntrs = {0};
+	sw_error_t err;
+
+	spin_lock_bh(&p->lock);
+
+	err = fal_acl_policer_counter_get(PPE_DRV_SWITCH_ID, ctx->acl_index, &policer_cntrs);
+	if (err != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: failed to get policer stats for acl index: %u", ctx, ctx->acl_index);
+		return PPE_DRV_RET_FAILURE_POLICER_COUNTER_GET_FAIL;
+	}
+
+	/*
+	 * Calculate the delta between the latest counters and previously read counters.
+	 */
+	st = &ctx->red_stats_base;
+	*delta_red_pkts = PPE_DRV_POLICER_PKT_CNTR_ROLLOVER(policer_cntrs.red_packet_counter - st->red_pkts);
+	*delta_red_bytes = PPE_DRV_POLICER_BYTE_CNTR_ROLLOVER(policer_cntrs.red_byte_counter - st->red_bytes);
+
+	st->red_pkts = policer_cntrs.red_packet_counter;
+	st->red_bytes = policer_cntrs.red_byte_counter;
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_policer_acl_red_stats_get);

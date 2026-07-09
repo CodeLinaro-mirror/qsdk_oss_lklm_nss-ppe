@@ -137,6 +137,15 @@ struct ppe_drv_flow_unidir_info {
 };
 
 /*
+ * ppe_drv_flow_hw_stats_base
+ *	Last HW flow counters read by the HW stats API.
+ */
+struct ppe_drv_flow_hw_stats_base {
+	uint64_t pkts;		/* Last packet counter read */
+	uint64_t bytes;		/* Last byte counter read */
+};
+
+/*
  * ppe_drv_flow
  *	Flow information
  */
