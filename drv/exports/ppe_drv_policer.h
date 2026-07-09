@@ -397,3 +397,16 @@ void ppe_drv_policer_acl_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, 
  * none.
  */
 void ppe_drv_policer_port_get_hw_stats(struct ppe_drv_policer_hw_stats *pol_ctx, struct ppe_drv_policer_port *ctx);
+
+/*
+ * ppe_drv_policer_acl_red_stats_get
+ *	Get ACL policer red (dropped) packet/byte counters directly from hardware.
+ *
+ * @param[IN] acl context
+ * @param[OUT] delta red packet count since last call
+ * @param[OUT] delta red byte count since last call
+ *
+ * @return
+ * ppe_drv_ret_t status.
+ */
+ppe_drv_ret_t ppe_drv_policer_acl_red_stats_get(struct ppe_drv_policer_acl *ctx, uint64_t *delta_red_pkts, uint64_t *delta_red_bytes);

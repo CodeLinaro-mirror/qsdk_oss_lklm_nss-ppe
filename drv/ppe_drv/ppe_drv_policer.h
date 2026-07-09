@@ -18,6 +18,15 @@
 #define PPE_DRV_POLICER_BYTE_CNTR_ROLLOVER(delta) (((delta) + FAL_FLOW_BYTE_CNT_MASK + 1) & FAL_FLOW_BYTE_CNT_MASK)
 
 /*
+ * ppe_drv_policer_red_stats_base
+ *	Last HW policer counters read by the HW stats API
+ */
+struct ppe_drv_policer_red_stats_base {
+	uint64_t red_pkts;	/* Last red (dropped) packet counter read */
+	uint64_t red_bytes;	/* Last red (dropped) byte counter read */
+};
+
+/*
  * ppe_drv_policer_port
  *	 Policer Port interface information
  */
@@ -57,6 +66,8 @@ struct ppe_drv_policer_acl {
 	atomic64_t yellow_byte_counter;		/*yellow byte counter */
 	atomic64_t red_packet_counter;		/*red packet counter */
 	atomic64_t red_byte_counter;		/*red byte counter */
+
+	struct ppe_drv_policer_red_stats_base red_stats_base;	/* Policer HW counter baselines for delta reads */
 };
 
 /*

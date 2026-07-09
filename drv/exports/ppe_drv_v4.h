@@ -68,6 +68,8 @@
 
 #define PPE_DRV_V4_MAX_CONN_COUNT		2048
 
+struct ppe_drv_v4_conn;
+
 /**
  * ppe_drv_v4_5tuple
  *	Common 5-tuple information.
@@ -142,6 +144,7 @@ struct ppe_drv_v4_rule_create {
 	 */
 	uint16_t flow_index_orig;			/**< Flow index for Original flow */
 	uint16_t flow_index_ret;			/**< FLow index for Return flow. */
+	struct ppe_drv_v4_conn *conn_ptr;		/**< Driver-owned connection handle for v4 object. */
 };
 
 /**
@@ -249,6 +252,23 @@ void ppe_drv_v4_conn_sync_many(struct ppe_drv_v4_conn_sync_many *cn_syn, uint8_t
  * Status of the stats sync.
  */
 ppe_drv_ret_t ppe_drv_v4_get_conn_stats(struct ppe_drv_v4_flow_conn_stats *conn_stats);
+
+/**
+ * ppe_drv_v4_conn_hw_stats_get
+ *	Read original and reply hardware counters and return deltas since the last successful call.
+ *
+ * @param[in] conn           Connection handle.
+ * @param[out] orig_delta_pkts     Original direction packet delta.
+ * @param[out] orig_delta_bytes    Original direction byte delta.
+ * @param[out] reply_delta_pkts    Reply direction packet delta.
+ * @param[out] reply_delta_bytes   Reply direction byte delta.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_v4_conn_hw_stats_get(struct ppe_drv_v4_conn *conn,
+		uint64_t *orig_delta_pkts, uint64_t *orig_delta_bytes,
+		uint64_t *reply_delta_pkts, uint64_t *reply_delta_bytes);
 
 /**
  * ppe_drv_v4_policer_create
