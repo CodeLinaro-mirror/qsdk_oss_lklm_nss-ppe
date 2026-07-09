@@ -45,7 +45,8 @@ static const char *ppe_acl_dump_slice_type_str[] = {
         "SLICE_SRC_IPV6_1",      /* ACL source IPv6 1 slice type. */
         "SLICE_SRC_IPV6_2",      /* ACL source IPv6 2 slice type. */
         "SLICE_IP_MISC",         /* ACL IP miscellaneous slice type. */
-	"PPE_DRV_ACL_SLICE_TYPE_UDF_OFFSET",	/* ACL UDF with offset */
+	"SLICE_TYPE_UDF",			/* ACL UDF with offset */
+	"SLICE_UDF_WITH_IP",			/* ACL UDF with L3 IP (IPv4/IPv6) slice type */
 	"SLICE_EXT_VLAN",	 /* ACL ext VLAN slice type. */
 };
 
@@ -1198,6 +1199,196 @@ int ppe_acl_dump_one(struct ppe_acl_dump_instance *adi, struct ppe_acl *acl)
 								ppe_acl_dump_udf_offset_from_str[r->rule.udf.udf_d.offset_base]))) {
 					goto error;
 				}
+			}
+
+			if ((result = ppe_acl_dump_prefix_remove(adi))) {
+				goto error;
+			}
+
+			break;
+
+		case PPE_ACL_RULE_MATCH_TYPE_UDF_WITH_IP:
+			if ((result = ppe_acl_dump_prefix_add(adi, "UDF_with_IP"))) {
+				goto error;
+			}
+
+			if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_L3_FRAG) {
+				if ((result = ppe_acl_dump_write(adi, "ip_misc_l3_frag", "%s", "true"))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_ESP_HDR) {
+				if ((result = ppe_acl_dump_write(adi, "ip_misc_esp_hdr", "%s", "true"))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_AH_HDR) {
+				if ((result = ppe_acl_dump_write(adi, "ip_misc_ah_hdr", "%s", "true"))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_MOBILITY_HDR) {
+				if ((result = ppe_acl_dump_write(adi, "ip_misc_mobility_hdr", "%s", "true"))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_OTHER_EXT_HDR) {
+				if ((result = ppe_acl_dump_write(adi, "ip_misc_other_ext_hdr", "%s", "true"))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_FRAG_HDR) {
+				if ((result = ppe_acl_dump_write(adi, "ip_misc_frag_hdr", "%s", "true"))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_IPV4_OPTION) {
+				if ((result = ppe_acl_dump_write(adi, "ip_misc_ipv4_option", "%s", "true"))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.udf_a.valid_op) {
+				if ((result = ppe_acl_dump_write(adi, "udf_0_op", "%s",
+								ppe_acl_dump_udf_op_from_str[r->rule.udf_with_ip.udf_a.valid_op]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_0", "0x%x",
+								r->rule.udf_with_ip.udf_a.min))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_0_mask_max", "0x%x",
+								r->rule.udf_with_ip.udf_a.mask_max))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_0_offset", "%d",
+								r->rule.udf_with_ip.udf_a.offset))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_0_proto", "%s",
+								ppe_acl_dump_udf_type_str[r->rule.udf_with_ip.udf_a.proto]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_0_offset_base", "%s",
+								ppe_acl_dump_udf_offset_from_str[r->rule.udf_with_ip.udf_a.offset_base]))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.udf_b.valid_op) {
+				if ((result = ppe_acl_dump_write(adi, "udf_1_op", "%s",
+								ppe_acl_dump_udf_op_from_str[r->rule.udf_with_ip.udf_b.valid_op]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_1", "0x%x",
+								r->rule.udf_with_ip.udf_b.min))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_1_mask_max", "0x%x",
+								r->rule.udf_with_ip.udf_b.mask_max))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_1_offset", "%d",
+								r->rule.udf_with_ip.udf_b.offset))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_1_proto", "%s",
+								ppe_acl_dump_udf_type_str[r->rule.udf_with_ip.udf_b.proto]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_1_offset_base", "%s",
+								ppe_acl_dump_udf_offset_from_str[r->rule.udf_with_ip.udf_b.offset_base]))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.udf_c.valid_op) {
+				if ((result = ppe_acl_dump_write(adi, "udf_2_op", "%s",
+								ppe_acl_dump_udf_op_from_str[r->rule.udf_with_ip.udf_c.valid_op]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2", "0x%x",
+								r->rule.udf_with_ip.udf_c.min))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2_mask_max", "0x%x",
+								r->rule.udf_with_ip.udf_c.mask_max))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2_offset", "%d",
+								r->rule.udf_with_ip.udf_c.offset))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2_proto", "%s",
+								ppe_acl_dump_udf_type_str[r->rule.udf_with_ip.udf_c.proto]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_2_offset_base", "%s",
+								ppe_acl_dump_udf_offset_from_str[r->rule.udf_with_ip.udf_c.offset_base]))) {
+					goto error;
+				}
+			}
+
+			if (r->rule.udf_with_ip.udf_d.valid_op) {
+				if ((result = ppe_acl_dump_write(adi, "udf_3_op", "%s",
+								ppe_acl_dump_udf_op_from_str[r->rule.udf_with_ip.udf_d.valid_op]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3", "0x%x",
+								r->rule.udf_with_ip.udf_d.min))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3_mask_max", "0x%x",
+								r->rule.udf_with_ip.udf_d.mask_max))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3_offset", "%d",
+								r->rule.udf_with_ip.udf_d.offset))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3_proto", "%s",
+								ppe_acl_dump_udf_type_str[r->rule.udf_with_ip.udf_d.proto]))) {
+					goto error;
+				}
+
+				if ((result = ppe_acl_dump_write(adi, "udf_3_offset_base", "%s",
+								ppe_acl_dump_udf_offset_from_str[r->rule.udf_with_ip.udf_d.offset_base]))) {
+					goto error;
+				}
+			}
+
+			/*
+			 * Dump is_ipv6 at the end, matching the order in ppe_drv_acl.c
+			 * where rule type is set after all field matching is configured.
+			 */
+			if ((result = ppe_acl_dump_write(adi, "is_ipv6", "%s",
+							r->rule.udf_with_ip.is_ipv6 ? "true" : "false"))) {
+				goto error;
 			}
 
 			if ((result = ppe_acl_dump_prefix_remove(adi))) {

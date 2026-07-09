@@ -151,7 +151,8 @@ enum ppe_drv_acl_slice_type {
 	PPE_DRV_ACL_SLICE_TYPE_SRC_IPV6_1,	/**< ACL source IPv6 1 slice type. */
 	PPE_DRV_ACL_SLICE_TYPE_SRC_IPV6_2,	/**< ACL source IPv6 2 slice type. */
 	PPE_DRV_ACL_SLICE_TYPE_IP_MISC,		/**< ACL IP miscellaneous slice type. */
-	PPE_DRV_ACL_SLICE_TYPE_UDF,	/**< ACL UDF with offset slice type */
+	PPE_DRV_ACL_SLICE_TYPE_UDF,		/**< ACL UDF with offset slice type */
+	PPE_DRV_ACL_SLICE_TYPE_UDF_WITH_IP,	/**< ACL UDF with L3 IP (IPv4/IPv6) slice type */
 	PPE_DRV_ACL_SLICE_TYPE_EXT_VLAN,	/**< ACL Extended VLAN slice type. */
 	PPE_DRV_ACL_SLICE_TYPE_MAX,		/**< ACL slice type max. */
 };
@@ -583,6 +584,7 @@ struct ppe_drv_acl_ip_misc {
 	uint8_t l3_1st_fragment_flag_mask;	/**< L3 first fragment flag mask. */
 	uint8_t l3_tos_tc_mask;			/**< L3 ToS/TC mask. */
 	uint8_t l3_v4proto_v6nexthdr_mask;	/**< L4 proto/nexth-header mask. */
+	uint8_t reserved;			/**< Reserved for explicit 2-byte alignment of l3_length_mask_max. */
 	uint16_t l3_length_mask_max;		/**< L3 length mask or max for range. */
 };
 
@@ -679,6 +681,30 @@ struct ppe_drv_acl_udf {
 	struct ppe_drv_acl_udf_data udf3;	/**< Forth UDF data */
 };
 
+/*
+ * ppe_drv_acl_udf_with_ip
+ *	UDF with L3 IP version offset data for all udfs.
+ *	Sets FAL rule type to FAL_ACL_RULE_IP4 or FAL_ACL_RULE_IP6
+ *	based on is_ipv6 flag, instead of FAL_ACL_RULE_UDF.
+ *	Optionally matches IP miscellaneous fields (fragment, TTL, TCP
+ *	flags, TOS/TC, L4 proto, L3 length, etc.) alongside the UDF
+ *	fields by embedding struct ppe_drv_acl_ip_misc.
+ */
+struct ppe_drv_acl_udf_with_ip {
+	struct ppe_drv_acl_udf_data udf0;	/**< First UDF data */
+	struct ppe_drv_acl_udf_data udf1;	/**< Second UDF data */
+	struct ppe_drv_acl_udf_data udf2;	/**< Third UDF data */
+	struct ppe_drv_acl_udf_data udf3;	/**< Fourth UDF data */
+	bool is_ipv6;				/**< If true, use FAL_ACL_RULE_IP6 as rule type;
+					     otherwise use FAL_ACL_RULE_IP4. */
+	struct ppe_drv_acl_ip_misc ip_misc;	/**< Optional IP miscellaneous match fields
+					     (fragment, TTL, TCP flags, TOS/TC, L4 proto,
+					     L3 length, etc.) to combine with the UDF match. */
+	uint32_t ip_misc_flags;			/**< PPE_DRV_ACL_IP_MISC_FLAG_* bitmask indicating
+					     which ip_misc fields are valid. Zero means no
+					     IP misc matching is applied. */
+};
+
 
 /*
  * ppe_drv_acl_rule_match_one
@@ -704,6 +730,7 @@ struct ppe_drv_acl_rule_match_one {
 		struct ppe_drv_acl_ipv6 sip_v6_2;	/**< Source IPv6 rule slice 2. */
 		struct ppe_drv_acl_ip_misc ip;		/**< L3 field slice. */
 		struct ppe_drv_acl_udf udf;		/**< UDF with offset */
+		struct ppe_drv_acl_udf_with_ip udf_with_ip;	/**< UDF with L3 IP version */
 		struct ppe_drv_acl_ext_vlan ext_vlan;	/**< Extended VLAN rule slice. */
 	} rule;
 };

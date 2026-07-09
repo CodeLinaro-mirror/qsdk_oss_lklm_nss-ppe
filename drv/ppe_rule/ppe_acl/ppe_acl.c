@@ -179,6 +179,34 @@ static void ppe_acl_rule_free(struct kref *kref)
 	}
 
 	/*
+	 * Return ACL UDF_WITH_IP offset entry if allocated
+	 */
+	if (acl->slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF_WITH_IP]) {
+		struct ppe_drv_acl_udf_with_ip *udf_with_ip_entry =
+			&acl->info.chain[PPE_DRV_ACL_SLICE_TYPE_UDF_WITH_IP].rule.udf_with_ip;
+
+		if (udf_with_ip_entry->udf0.udf_valid) {
+			ppe_drv_acl_offset_entry_put(udf_with_ip_entry->udf0.udf_offset_entry);
+			udf_with_ip_entry->udf0.udf_valid = false;
+		}
+
+		if (udf_with_ip_entry->udf1.udf_valid) {
+			ppe_drv_acl_offset_entry_put(udf_with_ip_entry->udf1.udf_offset_entry);
+			udf_with_ip_entry->udf1.udf_valid = false;
+		}
+
+		if (udf_with_ip_entry->udf2.udf_valid) {
+			ppe_drv_acl_offset_entry_put(udf_with_ip_entry->udf2.udf_offset_entry);
+			udf_with_ip_entry->udf2.udf_valid = false;
+		}
+
+		if (udf_with_ip_entry->udf3.udf_valid) {
+			ppe_drv_acl_offset_entry_put(udf_with_ip_entry->udf3.udf_offset_entry);
+			udf_with_ip_entry->udf3.udf_valid = false;
+		}
+	}
+
+	/*
 	 * Destroy the rule in PPE driver.
 	 */
 	if (acl->ctx) {
@@ -570,6 +598,11 @@ static void ppe_acl_rule_to_slice_type(struct ppe_acl_rule_match_one *r, ppe_acl
 
 	case PPE_ACL_RULE_MATCH_TYPE_UDF:
 		slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF] = true;
+
+		break;
+
+	case PPE_ACL_RULE_MATCH_TYPE_UDF_WITH_IP:
+		slice_type[PPE_DRV_ACL_SLICE_TYPE_UDF_WITH_IP] = true;
 
 		break;
 
@@ -1474,6 +1507,133 @@ static bool ppe_acl_rule_info_fill(struct ppe_acl *acl, struct ppe_acl_rule_matc
 		slice->type = PPE_DRV_ACL_SLICE_TYPE_UDF;
 		slice->valid = true;
 		break;
+
+	case PPE_ACL_RULE_MATCH_TYPE_UDF_WITH_IP: {
+		struct ppe_drv_acl_udf_with_ip *udf_with_ip_entry;
+
+		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_UDF_WITH_IP];
+		udf_with_ip_entry = &slice->rule.udf_with_ip;
+
+		if (r->rule.udf_with_ip.udf_a.valid_op) {
+			udf_with_ip_entry->udf0.udf_valid = true;
+			udf_with_ip_entry->udf0.udf_op = PPE_ACL_TO_DRV_UDF_OP(r->rule.udf_with_ip.udf_a.valid_op);
+			udf_with_ip_entry->udf0.udf_min = r->rule.udf_with_ip.udf_a.min;
+			udf_with_ip_entry->udf0.udf_mask = r->rule.udf_with_ip.udf_a.mask_max;
+			udf_with_ip_entry->udf0.base_info.offset_base = PPE_ACL_TO_DRV_OFST_FROM(r->rule.udf_with_ip.udf_a.offset_base);
+			udf_with_ip_entry->udf0.base_info.proto = PPE_ACL_TO_DRV_OFST_PROTO(r->rule.udf_with_ip.udf_a.proto);
+			udf_with_ip_entry->udf0.base_info.offset = r->rule.udf_with_ip.udf_a.offset;
+			udf_with_ip_entry->udf0.udf_offset_entry = NULL;
+		}
+
+		if (r->rule.udf_with_ip.udf_b.valid_op) {
+			udf_with_ip_entry->udf1.udf_valid = true;
+			udf_with_ip_entry->udf1.udf_op = PPE_ACL_TO_DRV_UDF_OP(r->rule.udf_with_ip.udf_b.valid_op);
+			udf_with_ip_entry->udf1.udf_min = r->rule.udf_with_ip.udf_b.min;
+			udf_with_ip_entry->udf1.udf_mask = r->rule.udf_with_ip.udf_b.mask_max;
+			udf_with_ip_entry->udf1.base_info.offset_base = PPE_ACL_TO_DRV_OFST_FROM(r->rule.udf_with_ip.udf_b.offset_base);
+			udf_with_ip_entry->udf1.base_info.proto = PPE_ACL_TO_DRV_OFST_PROTO(r->rule.udf_with_ip.udf_b.proto);
+			udf_with_ip_entry->udf1.base_info.offset = r->rule.udf_with_ip.udf_b.offset;
+			udf_with_ip_entry->udf1.udf_offset_entry = NULL;
+		}
+
+		if (r->rule.udf_with_ip.udf_c.valid_op) {
+			udf_with_ip_entry->udf2.udf_valid = true;
+			udf_with_ip_entry->udf2.udf_op = PPE_ACL_TO_DRV_UDF_OP(r->rule.udf_with_ip.udf_c.valid_op);
+			udf_with_ip_entry->udf2.udf_min = r->rule.udf_with_ip.udf_c.min;
+			udf_with_ip_entry->udf2.udf_mask = r->rule.udf_with_ip.udf_c.mask_max;
+			udf_with_ip_entry->udf2.base_info.offset_base = PPE_ACL_TO_DRV_OFST_FROM(r->rule.udf_with_ip.udf_c.offset_base);
+			udf_with_ip_entry->udf2.base_info.proto = PPE_ACL_TO_DRV_OFST_PROTO(r->rule.udf_with_ip.udf_c.proto);
+			udf_with_ip_entry->udf2.base_info.offset = r->rule.udf_with_ip.udf_c.offset;
+			udf_with_ip_entry->udf2.udf_offset_entry = NULL;
+		}
+
+		if (r->rule.udf_with_ip.udf_d.valid_op) {
+			/*
+			 * UDF-D(UDF3) supports only MASK operation.
+			 */
+			udf_with_ip_entry->udf3.udf_op = PPE_ACL_TO_DRV_UDF_OP(r->rule.udf_with_ip.udf_d.valid_op);
+			if (udf_with_ip_entry->udf3.udf_op != PPE_DRV_ACL_UDF_OP_MASK) {
+				ppe_acl_warn("%p: UDF_WITH_IP UDF-D(udf3) supports only MASK match operation\n", r);
+				return false;
+			}
+
+			udf_with_ip_entry->udf3.udf_valid = true;
+			udf_with_ip_entry->udf3.udf_min = r->rule.udf_with_ip.udf_d.min;
+			udf_with_ip_entry->udf3.udf_mask = r->rule.udf_with_ip.udf_d.mask_max;
+			udf_with_ip_entry->udf3.base_info.offset_base = PPE_ACL_TO_DRV_OFST_FROM(r->rule.udf_with_ip.udf_d.offset_base);
+			udf_with_ip_entry->udf3.base_info.proto = PPE_ACL_TO_DRV_OFST_PROTO(r->rule.udf_with_ip.udf_d.proto);
+			udf_with_ip_entry->udf3.base_info.offset = r->rule.udf_with_ip.udf_d.offset;
+			udf_with_ip_entry->udf3.udf_offset_entry = NULL;
+		}
+
+		/*
+		 * Propagate the is_ipv6 flag from the UDF_WITH_IP rule to the driver
+		 * structure. When set, the driver will use FAL_ACL_RULE_IP6 as the
+		 * rule type; otherwise FAL_ACL_RULE_IP4 is used.
+		 */
+		udf_with_ip_entry->is_ipv6 = r->rule.udf_with_ip.is_ipv6;
+
+		/*
+		 * Propagate IP miscellaneous match fields from the UDF_WITH_IP rule
+		 * to the driver ip_misc structure. Check PPE_ACL_IP_MISC_FLAG_* first
+		 * to determine which fields are valid, then copy value + mask.
+		 */
+		if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_L3_FRAG) {
+			udf_with_ip_entry->ip_misc_flags |= PPE_DRV_ACL_IP_MISC_FLAG_L3FRAG;
+			udf_with_ip_entry->ip_misc.l3_fragment_flag = r->rule.udf_with_ip.ip_misc.l3_fragment_flag;
+			udf_with_ip_entry->ip_misc.l3_fragment_flag_mask = r->rule.udf_with_ip.ip_misc.l3_fragment_flag_mask;
+		}
+
+		if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_ESP_HDR) {
+			udf_with_ip_entry->ip_misc_flags |= PPE_DRV_ACL_IP_MISC_FLAG_ESP_HDR;
+			udf_with_ip_entry->ip_misc.esp_hdr_flag = r->rule.udf_with_ip.ip_misc.esp_hdr_flag;
+			udf_with_ip_entry->ip_misc.esp_hdr_flag_mask = r->rule.udf_with_ip.ip_misc.esp_hdr_flag_mask;
+		}
+
+		if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_AH_HDR) {
+			udf_with_ip_entry->ip_misc_flags |= PPE_DRV_ACL_IP_MISC_FLAG_AH_HDR;
+			udf_with_ip_entry->ip_misc.ah_hdr_flag = r->rule.udf_with_ip.ip_misc.ah_hdr_flag;
+			udf_with_ip_entry->ip_misc.ah_hdr_flag_mask = r->rule.udf_with_ip.ip_misc.ah_hdr_flag_mask;
+		}
+
+		if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_MOBILITY_HDR) {
+			udf_with_ip_entry->ip_misc_flags |= PPE_DRV_ACL_IP_MISC_FLAG_MOB_HDR;
+			udf_with_ip_entry->ip_misc.mobility_hdr_flag = r->rule.udf_with_ip.ip_misc.mobility_hdr_flag;
+			udf_with_ip_entry->ip_misc.mobility_hdr_flag_mask = r->rule.udf_with_ip.ip_misc.mobility_hdr_flag_mask;
+		}
+
+		if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_OTHER_EXT_HDR) {
+			udf_with_ip_entry->ip_misc_flags |= PPE_DRV_ACL_IP_MISC_FLAG_OTHEXT_HDR;
+			udf_with_ip_entry->ip_misc.other_extension_hdr_flag = r->rule.udf_with_ip.ip_misc.other_extension_hdr_flag;
+			udf_with_ip_entry->ip_misc.other_extension_hdr_flag_mask = r->rule.udf_with_ip.ip_misc.other_extension_hdr_flag_mask;
+		}
+
+		if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_FRAG_HDR) {
+			udf_with_ip_entry->ip_misc_flags |= PPE_DRV_ACL_IP_MISC_FLAG_FRAG_HDR;
+			udf_with_ip_entry->ip_misc.frag_hdr_flag = r->rule.udf_with_ip.ip_misc.frag_hdr_flag;
+			udf_with_ip_entry->ip_misc.frag_hdr_flag_mask = r->rule.udf_with_ip.ip_misc.frag_hdr_flag_mask;
+		}
+
+		if (r->rule.udf_with_ip.ip_misc.flags & PPE_ACL_IP_MISC_FLAG_IPV4_OPTION) {
+			udf_with_ip_entry->ip_misc_flags |= PPE_DRV_ACL_IP_MISC_FLAG_L3STATE;
+			udf_with_ip_entry->ip_misc.l3_state_option_flag = r->rule.udf_with_ip.ip_misc.l3_state_option_flag;
+			udf_with_ip_entry->ip_misc.l3_state_option_flag_mask = r->rule.udf_with_ip.ip_misc.l3_state_option_flag_mask;
+		}
+
+		/*
+		 * Set UDF offset entries for UDF_WITH_IP.
+		 * Reuses ppe_acl_set_offset() via cast since both structs share
+		 * the same udf0-udf3 fields at the start.
+		 */
+		if (!ppe_acl_set_offset((struct ppe_drv_acl_udf *)udf_with_ip_entry)) {
+			ppe_acl_warn("%p: Failed to set UDF_WITH_IP offset\n", r);
+			return false;
+		}
+
+		slice->type = PPE_DRV_ACL_SLICE_TYPE_UDF_WITH_IP;
+		slice->valid = true;
+		break;
+	}
 
 	case PPE_ACL_RULE_MATCH_TYPE_DEFAULT:
 		slice = &info->chain[PPE_DRV_ACL_SLICE_TYPE_SRC_MAC];
