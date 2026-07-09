@@ -187,6 +187,25 @@ static void __ppe_vp_rx_dp_skb_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info 
 		if (likely(dvp->flags & PPE_VP_FLAG_VP_FAST_XMIT)) {
 			struct ethhdr *ethh;
 
+#if defined(CONFIG_SKB_EXTENSIONS) && defined(CONFIG_IPQ_PON)
+			if (unlikely(skb->active_extensions)) {
+				atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
+
+				/*
+				 * Update the skb protocol field
+				 */
+				ethh = (struct ethhdr *)skb->data;
+				skb->protocol = ethh->h_proto;
+				skb_reset_mac_header(skb);
+				skb_set_network_header(skb, rxi->l3offset);
+
+				mem_debug_update_skb(skb);
+				dev_queue_xmit(skb);
+
+				rcu_read_unlock();
+				return;
+			}
+#endif
 			/*
 			 * Check if valid flow index and valid Qdisc info is received
 			 */
