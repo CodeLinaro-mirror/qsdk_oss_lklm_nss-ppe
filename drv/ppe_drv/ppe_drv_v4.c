@@ -2127,6 +2127,9 @@ static bool ppe_drv_v4_flow_del(struct ppe_drv_v4_conn_flow *pcf)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_flow *flow = pcf->pf;
+#ifdef PPE_TUNNEL_ENABLE
+	struct ppe_drv_v4_conn *cn = pcf->conn;
+#endif
 	struct ppe_drv_flow_tree_id_data *tree_id_data = &(pcf->fl_mdata.tree_id_data);
 	struct ppe_drv_fse_rule_info fse_info = {0};
 	uint8_t service_class;
@@ -2134,6 +2137,17 @@ static bool ppe_drv_v4_flow_del(struct ppe_drv_v4_conn_flow *pcf)
 	struct ppe_drv_port *rx_port = NULL;
 
 	ppe_drv_trace("%p, flow deletion request for flow-idx: %d host-idx: %u", pcf, flow->index, flow->host->index);
+
+#ifdef PPE_TUNNEL_ENABLE
+	/*
+	 * Detach MAP-T v4 to v6 connection before deleting the flow
+	 */
+	if (flow && (flow->flags & PPE_DRV_FLOW_MAPT) && flow->mapt_info.mapt_v6) {
+		if (!ppe_drv_tun_detach_mapt_v4_to_v6(cn)) {
+			ppe_drv_trace("%p: mapt v4 to v6 detach failed", p);
+		}
+	}
+#endif
 
 	/*
 	 * As opposed to 'add', flow 'delete' needs host and flow entry to be handled separately.
@@ -3333,14 +3347,6 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
 		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
 		atomic_dec(&p->gro_ctx.num_hw_gro_flows);
-	}
-#endif
-
-#ifdef PPE_TUNNEL_ENABLE
-	if (pcf->pf && pcf->pf->mapt_info.mapt_v6) {
-			if (!ppe_drv_tun_detach_mapt_v4_to_v6(cn)) {
-				ppe_drv_trace("%p: mapt v4 to v6 detach failed", p);
-		}
 	}
 #endif
 
