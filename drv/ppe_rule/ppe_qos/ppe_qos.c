@@ -682,37 +682,95 @@ static void ppe_qos_res_deinit(void)
 }
 
 /*
+ * ppe_qos_pon_port_res_init()
+ *	Deferred PON port QoS resource allocation.
+ *	Called via callback from ppe_drv_dp_gem_enable() after the PON port
+ *	is configured in HW. This ensures fal_port_scheduler_resource_get()
+ *	returns valid tcont resources for the PON port.
+ *
+ *	Also called directly from ppe_qos_init() as a fallback in case
+ *	gem_enable() was already invoked before this module loaded/reloaded.
+ */
+#ifdef NSS_PPE_PON_SUPPORT
+static void ppe_qos_pon_port_res_init(uint32_t pon_port_id)
+{
+	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
+
+	spin_lock_bh(&g_qos->lock);
+
+	if (g_qos->pon_port) {
+		ppe_qos_warn("PON port QoS resources already initialized for port %u", g_qos->pon_port);
+		spin_unlock_bh(&g_qos->lock);
+		return;
+	}
+
+	g_qos->pon_port = pon_port_id;
+
+	if (!ppe_qos_res_alloc(g_qos->pon_port)) {
+		ppe_qos_warn("Resource allocation failed for PON port %u", pon_port_id);
+		g_qos->pon_port = 0;
+		spin_unlock_bh(&g_qos->lock);
+		return;
+	}
+
+	/*
+	 * Set default tcont resources for the PON port.
+	 */
+	ppe_qos_res_tconts_default_set();
+
+	spin_unlock_bh(&g_qos->lock);
+	ppe_qos_info("PON port %u QoS resources initialized via gem_enable callback", pon_port_id);
+}
+#endif
+
+/*
  * ppe_qos_res_init()
- *	qos resource init
- * TODO: Retrun error if fetching QoS info fails?
+ *	QoS resource init.
+ *	Initializes non-PON port resources. If the PON port was already
+ *	enabled via gem_enable() before this module loaded or reloaded,
+ *	allocates PON port resources immediately as a fallback by setting
+ *	g_qos->pon_port and calling the allocation helpers directly.
+ *	This ensures the guard check in ppe_qos_pon_port_res_init() correctly
+ *	detects double-initialization if the callback fires afterwards.
+ *	Otherwise, PON port resource allocation is deferred to
+ *	ppe_qos_pon_port_res_init(), invoked via callback from
+ *	ppe_drv_dp_gem_enable() after gem port is enabled.
  */
 static void ppe_qos_res_init(void)
 {
 	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
 #ifdef NSS_PPE_PON_SUPPORT
-	struct ppe_qos_interface_res *res = NULL;
+	uint32_t pon_port;
 #endif
 
 	spin_lock_bh(&g_qos->lock);
 	INIT_LIST_HEAD(&g_qos->port_list);
+	spin_unlock_bh(&g_qos->lock);
 
 #ifdef NSS_PPE_PON_SUPPORT
-	g_qos->pon_port = ppe_drv_qos_pon_port_get();
-	if (!g_qos->pon_port) {
-		spin_unlock_bh(&g_qos->lock);
-		ppe_qos_warn("No PON port, tconts not supported");
-		return;
-	}
-
-	res = ppe_qos_res_alloc(g_qos->pon_port);
-
 	/*
-	 * Set default tconts
+	 * Fallback: if gem_enable() was already called before this module
+	 * loaded or reloaded, allocate PON port resources immediately.
+	 * Set g_qos->pon_port here (under the lock) so that the callback
+	 * guard in ppe_qos_pon_port_res_init() correctly detects
+	 * double-initialization if the callback fires afterwards.
 	 */
-	ppe_qos_res_tconts_default_set();
+	pon_port = ppe_drv_qos_pon_port_get();
+	if (pon_port) {
+		ppe_qos_info("PON port %u already enabled, initializing QoS resources now", pon_port);
+		spin_lock_bh(&g_qos->lock);
+		g_qos->pon_port = pon_port;
+		if (!ppe_qos_res_alloc(g_qos->pon_port)) {
+			ppe_qos_warn("Resource allocation failed for PON port %u", pon_port);
+			g_qos->pon_port = 0;
+			spin_unlock_bh(&g_qos->lock);
+		} else {
+			ppe_qos_res_tconts_default_set();
+			spin_unlock_bh(&g_qos->lock);
+			ppe_qos_info("PON port %u QoS resources initialized at module init", pon_port);
+		}
+	}
 #endif
-
-	spin_unlock_bh(&g_qos->lock);
 }
 
 /*
@@ -2019,6 +2077,13 @@ EXPORT_SYMBOL(ppe_qos_get_int_pri_func);
  */
 void ppe_qos_deinit(void)
 {
+#ifdef NSS_PPE_PON_SUPPORT
+	/*
+	 * Unregister the PON port QoS resource allocation callback before
+	 * tearing down resources to prevent a race with gem_enable().
+	 */
+	ppe_drv_qos_pon_port_alloc_callback_unregister();
+#endif
 	ppe_qos_stats_debugfs_exit();
 	ppe_qos_res_deinit();
 	ppe_qos_dump_exit();
@@ -2027,7 +2092,6 @@ void ppe_qos_deinit(void)
 /*
  * ppe_qos_init()
  *	qos init API
- * TODO: Return error if fetching QoS info fails?
  */
 void ppe_qos_init(struct dentry *d_rule)
 {
@@ -2038,4 +2102,13 @@ void ppe_qos_init(struct dentry *d_rule)
 	ppe_qos_stats_debugfs_init(d_rule);
 	ppe_qos_res_init();
 	ppe_qos_dump_init(d_rule);
+
+#ifdef NSS_PPE_PON_SUPPORT
+	/*
+	 * Register the callback so that ppe_drv_dp_gem_enable() can trigger
+	 * PON port QoS resource allocation after the PON port is configured in HW.
+	 * The fallback for already-enabled PON port is handled inside ppe_qos_res_init().
+	 */
+	ppe_drv_qos_pon_port_alloc_callback_register(ppe_qos_pon_port_res_init);
+#endif
 }
