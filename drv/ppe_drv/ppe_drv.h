@@ -700,6 +700,7 @@ struct ppe_drv {
 	int ppe_drv_pon_port_max_pq;		/* max pq to be used for pon port. */
 	struct ppe_drv_port_hw_stats pon_stats_acc;	/* 64-bit SW accumulator for PON port counters */
 	fal_port_cnt_t pon_stats_prev;		/* Previous HW snapshot; zero until first sync */
+	ppe_drv_qos_pon_port_alloc_callback_t pon_port_alloc_cb;	/* Callback to allocate QoS resources for PON port */
 #endif
 	struct ppe_drv_iface *pon_iface;	/* Memory for PPE PON interface */
 };

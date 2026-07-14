@@ -387,6 +387,34 @@ EXPORT_SYMBOL(ppe_drv_qos_tcont_set);
 
 #ifdef NSS_PPE_PON_SUPPORT
 /*
+ * ppe_drv_qos_pon_port_alloc_callback_unregister()
+ *	API to unregister PON port QoS resource allocation callback.
+ */
+void ppe_drv_qos_pon_port_alloc_callback_unregister(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	p->pon_port_alloc_cb = NULL;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_qos_pon_port_alloc_callback_unregister);
+
+/*
+ * ppe_drv_qos_pon_port_alloc_callback_register()
+ *	API to register PON port QoS resource allocation callback.
+ */
+void ppe_drv_qos_pon_port_alloc_callback_register(ppe_drv_qos_pon_port_alloc_callback_t cb)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	p->pon_port_alloc_cb = cb;
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_qos_pon_port_alloc_callback_register);
+
+/*
  * ppe_drv_qos_pon_port_get()
  *	Gets the PON port ID.
  */

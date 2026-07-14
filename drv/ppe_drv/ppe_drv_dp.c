@@ -301,7 +301,10 @@ EXPORT_SYMBOL(ppe_drv_dp_set_ppe_offload_enable_flag);
 /*
  * ppe_drv_dp_gem_enable()
  *	API to set GEM type enable flag in PPE port
- *	And do enqueue vp to pq mapping
+ *	And do enqueue vp to pq mapping.
+ *	After releasing the lock, invokes the registered QoS resource
+ *	allocation callback so that ppe_qos can set up PON port tcont
+ *	resources.
  */
 ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
 		bool enable)
@@ -309,6 +312,7 @@ ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 	ppe_drv_ret_t status = PPE_DRV_RET_SUCCESS;
+	uint32_t pon_port_id = 0;
 
 	spin_lock_bh(&p->lock);
 	port = ppe_drv_iface_port_get(iface);
@@ -319,8 +323,8 @@ ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
 	}
 
 	/*
-	 * Set the OFFLOAD enabled flag in the PPE port if the input
-	 * flag indicates so.
+	 * Set the GEM flag in the PPE port and map enqueue VPs to PQs.
+	 * Save the port ID before releasing the lock.
 	 */
 	if (enable) {
 		port->flags |= PPE_DRV_PORT_FLAG_PORT_GEM;
@@ -329,9 +333,20 @@ ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
 			p->port_mgmt->us_port_id = __builtin_ffs(gem_port_bitmap) - 1;
 		status = ppe_drv_pon_map_enqueue_vp_to_pq(port);
 		p->pon_iface = iface;
+		pon_port_id = port->port;
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	/*
+	 * Invoke the QoS resource allocation callback for the PON port
+	 * outside p->lock to avoid deadlock - the callback calls
+	 * ppe_drv_qos_port_res_get() which also acquires p->lock.
+	 */
+	if (enable && (status == PPE_DRV_RET_SUCCESS) && pon_port_id && p->pon_port_alloc_cb) {
+		p->pon_port_alloc_cb(pon_port_id);
+	}
+
 	return status;
 }
 EXPORT_SYMBOL(ppe_drv_dp_gem_enable);
