@@ -76,13 +76,11 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC = 44,		/* Service code for loopback port for pon pass */
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_SC_NEXT = 45,		/* Service code for loopback port for second pass */
 	PPE_DRV_SC_FDB_BYPASS = 46,		/* Service code for gem port table to bypass destination selection from FDB table */
-#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC = 47,	/* Service code for loopback port for pon pass */
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_US_SC_NEXT = 48,	/* Service code for loopback port for second pass */
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC = 49,	/* Service code for loopback port for pon pass */
 	PPE_DRV_SC_LOOPBACK_PORT_FEATURE_PON_HGU_DS_SC_NEXT = 50,	/* Service code for loopback port for second pass */
 	PPE_DRV_SC_FEATURE_PON_HGU_PPTP = 51,	/* Service code for enabling PPTP flow with HGU enabled */
-#endif
 	PPE_DRV_SC_GEM_LOOKUP = 52,	/* Service code for GEM port lookup */
 #ifdef NSS_PPE_TUNNEL_TPR_ENABLE
 	PPE_DRV_SC_NOEDIT_TUN_RPS = 53,		/* Service code to redirect the packets to CPU port with Tunnel RPS configured */

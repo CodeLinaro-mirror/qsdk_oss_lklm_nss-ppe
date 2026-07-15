@@ -497,6 +497,31 @@ bool ppe_drv_is_mht_dev(struct net_device *dev)
 EXPORT_SYMBOL(ppe_drv_is_mht_dev);
 
 /*
+ * ppe_drv_is_veip_dev()
+ *	Check if the given net device is a VEIP net device.
+ */
+bool ppe_drv_is_veip_dev(struct net_device *dev)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_iface *iface;
+	bool is_veip;
+
+	spin_lock_bh(&p->lock);
+	iface = ppe_drv_iface_get_by_dev_internal(dev);
+	if (!iface) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: No valid PPE interface for dev", dev);
+		return false;
+	}
+
+	is_veip = (iface->type == PPE_DRV_IFACE_TYPE_VEIP);
+
+	spin_unlock_bh(&p->lock);
+	return is_veip;
+}
+EXPORT_SYMBOL(ppe_drv_is_veip_dev);
+
+/*
  * ppe_drv_isram_queue_profile_init()
  *	API to enable ISRAM queue for all the PPE ports
  */
