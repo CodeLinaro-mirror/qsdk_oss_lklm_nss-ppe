@@ -211,6 +211,31 @@ static void __ppe_vp_rx_dp_skb_cb(struct sk_buff *skb, struct nss_dp_vp_rx_info 
 			 */
 			if (likely((flow_idx == PPE_VP_FLOW_IDX_FOR_NO_QDISC))
 					|| !(rxi->qdisc_valid)) {
+				/*
+				 * packets via GRE tap tunnel over wlan interface in ACTIVE mode
+				 * arrive with no valid SAWF MLO assist tag.
+				 * skb->mark[31:24] != 0xAA. dev_fast_xmit_vp()
+				 * sets fast_xmit=1 unconditionally, but ath12k requires a
+				 * valid MLO assist tag when fast_xmit=1. Fall back to
+				 * dev_queue_xmit() for such packets to avoid the ath12k drop.
+				 * This check is only needed for WiFi (ACTIVE/PASSIVE) VPs;
+				 * Ethernet and other VP types are unaffected by fast_xmit=1.
+				 */
+				if (unlikely((dvp->vp_user_mode == PPE_VP_USER_TYPE_ACTIVE) &&
+						(PPE_DRV_SAWF_GET_TAG(skb->mark) != PPE_DRV_SAWF_VALID_TAG))) {
+					ppe_vp_info("mark=0x%x SAWF_TAG=0x%x != SAWF_VALID=0x%x "
+					       "-> dev_queue_xmit (no MLO tag)\n",
+					       skb->mark, PPE_DRV_SAWF_GET_TAG(skb->mark), PPE_DRV_SAWF_VALID_TAG);
+					ethh = (struct ethhdr *)skb->data;
+					skb->protocol = ethh->h_proto;
+					skb_reset_mac_header(skb);
+					skb_set_network_header(skb, rxi->l3offset);
+					mem_debug_update_skb(skb);
+					dev_queue_xmit(skb);
+					rcu_read_unlock();
+					return;
+				}
+
 				mem_debug_update_skb(skb);
 				if (unlikely(!dev_fast_xmit_vp(skb, dev))) {
 					atomic64_inc(&vp_base.base_stats.rx_fastxmit_fails);
