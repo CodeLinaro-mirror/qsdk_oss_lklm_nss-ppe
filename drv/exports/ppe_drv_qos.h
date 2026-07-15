@@ -642,6 +642,34 @@ ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port
  * PON port ID.
  */
 uint32_t ppe_drv_qos_pon_port_get(void);
+
+/**
+ * Callback function for allocating QoS resources for the PON port.
+ * Invoked from ppe_drv_dp_gem_enable() after the PON port is configured in HW.
+ *
+ * @param[in] pon_port_id  PON port ID.
+ */
+typedef void (*ppe_drv_qos_pon_port_alloc_callback_t)(uint32_t pon_port_id);
+
+/**
+ * ppe_drv_qos_pon_port_alloc_callback_register
+ *	Register callback for PON port QoS resource allocation.
+ *
+ * @param[in] cb  Pointer to the callback function.
+ *
+ * @return
+ * None.
+ */
+void ppe_drv_qos_pon_port_alloc_callback_register(ppe_drv_qos_pon_port_alloc_callback_t cb);
+
+/**
+ * ppe_drv_qos_pon_port_alloc_callback_unregister
+ *	Unregister callback for PON port QoS resource allocation.
+ *
+ * @return
+ * None.
+ */
+void ppe_drv_qos_pon_port_alloc_callback_unregister(void);
 #endif
 
 /** @} */ /* end_addtogroup ppe_drv_qos_subsystem */
