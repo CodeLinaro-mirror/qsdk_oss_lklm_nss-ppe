@@ -8,6 +8,10 @@
 #include <fal/fal_qm.h>
 #include "ppe_drv.h"
 #include "ppe_drv_stats.h"
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+#include "tun/ppe_drv_tun_tpr.h"
+#include "tun/ppe_drv_tun_prgm_prsr.h"
+#endif
 
 /*
  * ppe_drv_stats_sc_name_str
@@ -949,6 +953,236 @@ static const struct file_operations ppe_drv_ddr_buffer_stats_file_ops = {
 };
 #endif /* PPE_DRV_DDR_BUFFER_SPEED_MISMATCH */
 
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+/*
+ * ppe_drv_stats_tpr_show()
+ *	Read and display active TPR entries merged with their linked program parsers
+ */
+static int ppe_drv_stats_tpr_show(struct seq_file *m, void __attribute__((unused))*ptr)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_tun_tpr *tun_tpr_snapshot;
+	struct ppe_drv_tun_prgm_prsr *pgm_snapshot;
+	int i, j;
+
+	/*
+	 * Allocate snapshot memory to safely copy data under lock without sleeping
+	 */
+	tun_tpr_snapshot = vzalloc(sizeof(struct ppe_drv_tun_tpr) * PPE_DRV_TUN_TPR_ENTRY_MAX);
+	if (!tun_tpr_snapshot) {
+		return -ENOMEM;
+	}
+
+	pgm_snapshot = vzalloc(sizeof(struct ppe_drv_tun_prgm_prsr) * PPE_DRV_TUN_PRGM_PRSR_MAX);
+	if (!pgm_snapshot) {
+		vfree(tun_tpr_snapshot);
+		return -ENOMEM;
+	}
+
+	/*
+	 * Atomic Snapshot copy under spinlock
+	 */
+	spin_lock_bh(&p->lock);
+	if (p->tun_tpr) {
+		memcpy(tun_tpr_snapshot, p->tun_tpr, sizeof(struct ppe_drv_tun_tpr) * PPE_DRV_TUN_TPR_ENTRY_MAX);
+	}
+	if (p->pgm) {
+		memcpy(pgm_snapshot, p->pgm, sizeof(struct ppe_drv_tun_prgm_prsr) * PPE_DRV_TUN_PRGM_PRSR_MAX);
+	}
+	spin_unlock_bh(&p->lock);
+
+	seq_puts(m, "\nPPE Tunnel TPR & Keygen Hardware Configuration:\n");
+	seq_puts(m, "======================================================================\n");
+
+	/*
+	 * Output Active TPR configurations safely outside the lock context
+	 */
+	for (i = 0; i < PPE_DRV_TUN_TPR_ENTRY_MAX; i++) {
+		struct ppe_drv_tun_tpr *tpr = &tun_tpr_snapshot[i];
+		struct ppe_drv_tun_tpr_entry *tpre = &tpr->tpre;
+		struct ppe_drv_tun_prgm_prsr *linked_pgm = NULL;
+
+		/*
+		 * Only display active indices (refcount > 0)
+		 */
+		if (!kref_read(&tpr->ref)) {
+			continue;
+		}
+
+		seq_printf(m, "[TPR Entry Index %d] (Active, RefCount: %d)\n", tpr->tpr_index, kref_read(&tpr->ref));
+		seq_puts(m, "  - Tuple Match keys:\n");
+		if (tpre->ip_version == PPE_DRV_TUN_TPR_ENTRY_TYPE_IPV4) {
+			seq_printf(m, "    * IP Version: IPv4\n");
+			if (tpre->tpr_bitmap & (1 << PPE_DRV_TUN_TPR_KEY_SIP_EN)) {
+				__be32 sip = htonl(tpre->src_ip[0]);
+				seq_printf(m, "    * SIP: %pI4\n", &sip);
+			}
+			if (tpre->tpr_bitmap & (1 << PPE_DRV_TUN_TPR_KEY_DIP_EN)) {
+				__be32 dip = htonl(tpre->dest_ip[0]);
+				seq_printf(m, "    * DIP: %pI4\n", &dip);
+			}
+		} else {
+			seq_printf(m, "    * IP Version: IPv6\n");
+			if (tpre->tpr_bitmap & (1 << PPE_DRV_TUN_TPR_KEY_SIP_EN)) {
+				__be32 sip6[4];
+				sip6[0] = htonl(tpre->src_ip[0]);
+				sip6[1] = htonl(tpre->src_ip[1]);
+				sip6[2] = htonl(tpre->src_ip[2]);
+				sip6[3] = htonl(tpre->src_ip[3]);
+				seq_printf(m, "    * SIP: %pI6\n", sip6);
+			}
+			if (tpre->tpr_bitmap & (1 << PPE_DRV_TUN_TPR_KEY_DIP_EN)) {
+				__be32 dip6[4];
+				dip6[0] = htonl(tpre->dest_ip[0]);
+				dip6[1] = htonl(tpre->dest_ip[1]);
+				dip6[2] = htonl(tpre->dest_ip[2]);
+				dip6[3] = htonl(tpre->dest_ip[3]);
+				seq_printf(m, "    * DIP: %pI6\n", dip6);
+			}
+		}
+
+		if (tpre->tpr_bitmap & (1 << PPE_DRV_TUN_TPR_KEY_SPORT_EN)) {
+			seq_printf(m, "    * SPORT: %u\n", tpre->src_port);
+		}
+		if (tpre->tpr_bitmap & (1 << PPE_DRV_TUN_TPR_KEY_DPORT_EN)) {
+			seq_printf(m, "    * DPORT: %u\n", tpre->dest_port);
+		}
+		if (tpre->tpr_bitmap & (1 << PPE_DRV_TUN_TPR_KEY_L4PROTO_EN)) {
+			seq_printf(m, "    * Protocol: %u\n", tpre->protocol);
+		}
+
+		seq_printf(m, "    * Match Bitmap: 0x%02x\n", tpre->tpr_bitmap);
+		if (tpre->ctx_type == PPE_DRV_TUN_TPR_CONTEXT_TUPLE_ID) {
+			seq_printf(m, "    * Context Type: Tuple ID (Value: %u)\n", tpre->tuple_id);
+		} else {
+			seq_printf(m, "    * Context Type: Tunnel Type (Value: %u)\n", tpre->tunnel_type);
+		}
+
+		/*
+		 * Find the linked Program Parser inside snapshot
+		 */
+		for (j = 0; j < PPE_DRV_TUN_PRGM_PRSR_MAX; j++) {
+			struct ppe_drv_tun_prgm_prsr *pgm = &pgm_snapshot[j];
+			if (kref_read(&pgm->ref) &&
+			    pgm->ctx.mode == PPE_DRV_TUN_PROGRAM_MODE_TPR_RPS &&
+			    pgm->ctx.data.rps.tpr != NULL) {
+				/*
+				 * Safe offset-based index check using original base address
+				 */
+				uint8_t original_index = pgm->ctx.data.rps.tpr - p->tun_tpr;
+				if (original_index == tpr->tpr_index) {
+					linked_pgm = pgm;
+					break;
+				}
+			}
+		}
+
+		if (!linked_pgm) {
+			seq_puts(m, "  - Linked Programmable Parser: None\n\n");
+			continue;
+		}
+
+		seq_puts(m, "  - Linked Programmable Parser:\n");
+		seq_printf(m, "    * Parser Index: %u\n", linked_pgm->parser_idx);
+		seq_printf(m, "    * Mode: TPR_RPS (RefCount: %d)\n", kref_read(&linked_pgm->ref));
+		seq_printf(m, "    * Outer IP Version: %u\n", linked_pgm->ctx.prsr_cfg.ip_ver);
+		seq_printf(m, "    * Outer Header Type: %u\n", linked_pgm->ctx.prsr_cfg.outer_hdr);
+		seq_printf(m, "    * Outer Protocol Value: 0x%08x (Mask: 0x%08x)\n",
+			   linked_pgm->ctx.prsr_cfg.protocol, linked_pgm->ctx.prsr_cfg.protocol_mask);
+		seq_printf(m, "    * Inner Mode: %s, Position Mode: %s\n",
+			   (linked_pgm->ctx.prsr_cfg.inner_mode == PPE_DRV_TUN_PRGM_PRSR_INNER_MODE_UDF) ? "UDF" : "FIX",
+			   (linked_pgm->ctx.prsr_cfg.pos_mode == PPE_DRV_TUN_PRGM_PRSR_POS_MODE_START) ? "START" : "END");
+		seq_printf(m, "    * Protocol Position Offset: %u (Valid: %s)\n",
+			   linked_pgm->ctx.prsr_cfg.protocol_pos_offset,
+			   linked_pgm->ctx.prsr_cfg.protocol_pos_valid ? "Yes" : "No");
+
+		if (linked_pgm->ctx.prsr_cfg.inner_mode == PPE_DRV_TUN_PRGM_PRSR_INNER_MODE_UDF) {
+			struct ppe_drv_tun_prgm_prsr_prgm_udf_cfg *udf_cfg = &linked_pgm->ctx.prsr_cfg.conf.udf;
+			seq_printf(m, "    * UDF Header Length: %u bytes (Unit: %u, Mask: 0x%x)\n",
+				   udf_cfg->hdr_len, udf_cfg->len_unit, udf_cfg->len_mask);
+			seq_printf(m, "    * UDF Offsets Configured: [UDF0: %u, UDF1: %u, UDF2: %u]\n",
+				   udf_cfg->udf_offset[0], udf_cfg->udf_offset[1], udf_cfg->udf_offset[2]);
+		} else {
+			struct ppe_drv_tun_prgm_prsr_fixed_cfg *fix_cfg = &linked_pgm->ctx.prsr_cfg.conf.fix;
+			seq_printf(m, "    * Fixed Inner Header Type: %u, Length: %u bytes (Unit: %u)\n",
+				   fix_cfg->inner_hdr, fix_cfg->hdr_len, fix_cfg->len_unit);
+		}
+
+		seq_puts(m, "  - Decap Keygen Table Configuration:\n");
+		seq_printf(m, "    * Decap Key Bitmap: 0x%04x\n", linked_pgm->ctx.key.key_bitmap);
+		seq_printf(m, "    * UDF0 ID: %u (Mask: 0x%04x), UDF1 ID: %u (Mask: 0x%04x)\n",
+			   linked_pgm->ctx.key.udf0_id, linked_pgm->ctx.key.udf0_mask,
+			   linked_pgm->ctx.key.udf1_id, linked_pgm->ctx.key.udf1_mask);
+		seq_printf(m, "    * Tunnel Info Mask: 0x%08x\n", linked_pgm->ctx.key.tunnel_info_mask);
+		seq_puts(m, "    * Miss Actions:\n");
+		seq_printf(m, "      + Decapsulation En Action on Miss: %s\n",
+			   linked_pgm->ctx.key.decap_en_action ? "Enabled" : "Disabled");
+		seq_printf(m, "      + Service Code En on Miss: %s\n",
+			   linked_pgm->ctx.key.service_code_en ? "Enabled" : "Disabled");
+		seq_printf(m, "      + Applied Miss Service Code: 0x%02x (%u)\n",
+			   linked_pgm->ctx.key.service_code, linked_pgm->ctx.key.service_code);
+
+		seq_puts(m, "  - Parser UDF Configurations:\n");
+		if (linked_pgm->ctx.data.rps.ipv4_udf_valid) {
+			struct ppe_drv_tun_prgm_prsr_prgm_udf *v4_udf = &linked_pgm->ctx.data.rps.ipv4_udf;
+			seq_puts(m, "    * IPv4 Decap UDF: Enabled\n");
+			seq_printf(m, "      + UDF0: Match Val: 0x%04x, Mask: 0x%04x\n", v4_udf->udf_val[0], v4_udf->udf_mask[0]);
+			seq_printf(m, "      + UDF1: Match Val: 0x%04x, Mask: 0x%04x\n", v4_udf->udf_val[1], v4_udf->udf_mask[1]);
+			seq_printf(m, "      + UDF2: Match Val: 0x%04x, Mask: 0x%04x\n", v4_udf->udf_val[2], v4_udf->udf_mask[2]);
+		} else {
+			seq_puts(m, "    * IPv4 Decap UDF: Disabled\n");
+		}
+
+		if (linked_pgm->ctx.data.rps.ipv6_udf_valid) {
+			struct ppe_drv_tun_prgm_prsr_prgm_udf *v6_udf = &linked_pgm->ctx.data.rps.ipv6_udf;
+			seq_puts(m, "    * IPv6 Decap UDF: Enabled\n");
+			seq_printf(m, "      + UDF0: Match Val: 0x%04x, Mask: 0x%04x\n", v6_udf->udf_val[0], v6_udf->udf_mask[0]);
+			seq_printf(m, "      + UDF1: Match Val: 0x%04x, Mask: 0x%04x\n", v6_udf->udf_val[1], v6_udf->udf_mask[1]);
+			seq_printf(m, "      + UDF2: Match Val: 0x%04x, Mask: 0x%04x\n", v6_udf->udf_val[2], v6_udf->udf_mask[2]);
+		} else {
+			seq_puts(m, "    * IPv6 Decap UDF: Disabled\n");
+		}
+
+		if (linked_pgm->ctx.data.rps.eth_udf_valid) {
+			struct ppe_drv_tun_prgm_prsr_prgm_udf *eth_udf = &linked_pgm->ctx.data.rps.eth_udf;
+			seq_puts(m, "    * Ethernet Decap UDF: Enabled\n");
+			seq_printf(m, "      + UDF0: Match Val: 0x%04x, Mask: 0x%04x\n", eth_udf->udf_val[0], eth_udf->udf_mask[0]);
+			seq_printf(m, "      + UDF1: Match Val: 0x%04x, Mask: 0x%04x\n", eth_udf->udf_val[1], eth_udf->udf_mask[1]);
+			seq_printf(m, "      + UDF2: Match Val: 0x%04x, Mask: 0x%04x\n", eth_udf->udf_val[2], eth_udf->udf_mask[2]);
+		} else {
+			seq_puts(m, "    * Ethernet Decap UDF: Disabled\n");
+		}
+		seq_puts(m, "\n");
+	}
+
+	seq_puts(m, "======================================================================\n");
+
+	vfree(pgm_snapshot);
+	vfree(tun_tpr_snapshot);
+	return 0;
+}
+
+/*
+ * ppe_drv_stats_tpr_open()
+ *	PPE drv TPR open callback API
+ */
+static int ppe_drv_stats_tpr_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ppe_drv_stats_tpr_show, inode->i_private);
+}
+
+/*
+ * ppe_drv_stats_tpr_file_ops
+ *	File operations for TPR hardware tracking information
+ */
+const struct file_operations ppe_drv_stats_tpr_file_ops = {
+	.open = ppe_drv_stats_tpr_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+#endif
+
 /*
  * ppe_drv_stats_debugfs_init()
  *	Create PPE statistics debug entry.
@@ -1002,6 +1236,14 @@ int ppe_drv_stats_debugfs_init(void)
 		ppe_drv_warn("%p: Unable to create policer_stats file entry in debugfs\n", p);
 		goto debugfs_dir_failed;
 	}
+
+#ifdef NSS_PPE_TUNNEL_TPR_ENABLE
+	if (!debugfs_create_file("tpr_info", S_IRUGO, p->stats_dentry,
+			NULL, &ppe_drv_stats_tpr_file_ops)) {
+		ppe_drv_warn("%p: Unable to create tpr_info file entry in debugfs\n", p);
+		goto debugfs_dir_failed;
+	}
+#endif
 
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
 	if (!debugfs_create_file("loopback_port_info", S_IRUGO, p->stats_dentry,
