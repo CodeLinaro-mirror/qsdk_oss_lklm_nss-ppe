@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/types.h>
@@ -27,12 +16,12 @@
 extern struct ppe_vp_base vp_base;
 
 /*
- * ppe_vp_tx_to_ppe()
- *	Process packet received from ppe vp user.
+ * ppe_vp_tx_to_ppe_by_sc()
+ *	Process packet received from PPE VP user with caller selected service code.
  *	When it returns false, user can Rx the skb to stack.
  *	Expect edma/dp to return false.
  */
-bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
+bool ppe_vp_tx_to_ppe_by_sc(int32_t vp_num, struct sk_buff *skb, ppe_drv_sc_t sc)
 {
 
 	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
@@ -66,7 +55,7 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 	}
 
 	dptxi.svp = vp_num;
-	dptxi.sc = PPE_DRV_SC_SPF_BYPASS;
+	dptxi.sc = sc;
 
 	/*
 	 * FSE metadata at WLAN side stores macid and relays it from WLAN driver through skb->mark
@@ -111,6 +100,18 @@ bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
 	rcu_read_unlock();
 	return true;
 }
+EXPORT_SYMBOL(ppe_vp_tx_to_ppe_by_sc);
+
+/*
+ * ppe_vp_tx_to_ppe()
+ *	Process packet received from ppe vp user.
+ *	When it returns false, user can Rx the skb to stack.
+ *	Expect edma/dp to return false.
+ */
+bool ppe_vp_tx_to_ppe(int32_t vp_num, struct sk_buff *skb)
+{
+	return ppe_vp_tx_to_ppe_by_sc(vp_num, skb, PPE_DRV_SC_SPF_BYPASS);
+}
 EXPORT_SYMBOL(ppe_vp_tx_to_ppe);
 
 /*
@@ -122,7 +123,6 @@ EXPORT_SYMBOL(ppe_vp_tx_to_ppe);
  */
 bool ppe_vp_tx_to_vp(int32_t vp_num, struct sk_buff *skb)
 {
-
 	struct ppe_vp **vpa = &vp_base.vp_table.vp_allocator[0];
 	struct ppe_vp *dvp;
 	struct nss_dp_vp_tx_info dptxi = {};

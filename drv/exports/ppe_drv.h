@@ -822,6 +822,21 @@ extern void ppe_drv_notifier_ops_unregister(struct ppe_drv_notifier_ops *notifie
  * true or false
  */
 bool ppe_drv_is_mht_dev(struct net_device *dev);
+
+/**
+ * ppe_drv_is_veip_dev
+ *	Check if the net device maps to a VEIP PPE interface.
+ *
+ * @datatypes
+ * net_device
+ *
+ * @param[in] dev	netdevice pointer.
+ *
+ * @return
+ * true or false
+ */
+bool ppe_drv_is_veip_dev(struct net_device *dev);
+
 /*
  * ppe_drv_mht_port_from_fdb()
  *	Get the port id corresponding to the destination
