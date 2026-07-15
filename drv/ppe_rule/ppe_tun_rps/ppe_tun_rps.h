@@ -3,7 +3,24 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <linux/list.h>
+#include <ppe_tun_rps.h>
 #include "ppe_tun_rps_stats.h"
+
+#define PPE_TUN_RPS_RULES_MAX 8
+
+/*
+ * ppe_tun_rps_rule_entry
+ *	RPS rule tracking list node entry
+ */
+struct ppe_tun_rps_rule_entry {
+	struct list_head list;
+	uint8_t ip_proto;
+	union {
+		struct ppe_tun_rps_ipv4_rule_create_msg v4;
+		struct ppe_tun_rps_ipv6_rule_create_msg v6;
+	} msg;
+};
 
 /*
  * PPE Tunnel RPS related macros
@@ -53,10 +70,11 @@ struct ppe_tun_rps {
 	spinlock_t lock;                                /* PPE lock */
 	struct ppe_tun_rps_stats stats;                /* PPE tun rps statistics */
 	struct dentry *dentry;				/* Debugfs entry */
+	struct list_head rules_list;			/* Active rules list */
 };
 
 void ppe_tun_rps_deinit(void);
 int ppe_tun_rps_init(struct dentry *dentry);
+void ppe_tun_rps_flush_rules(void);
 
 extern struct ppe_tun_rps gbl_tun_rps;
-

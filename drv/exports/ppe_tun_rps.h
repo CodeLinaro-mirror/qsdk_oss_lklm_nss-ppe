@@ -11,6 +11,7 @@
 #ifndef _PPE_TUN_RPS_H_
 #define _PPE_TUN_RPS_H_
 #include <linux/types.h>
+#include <linux/if.h>
 
 /**
  * ppe_tun_rps_ret
