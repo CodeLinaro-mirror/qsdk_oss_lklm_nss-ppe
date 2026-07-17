@@ -820,7 +820,17 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		break;
 
 	case PPE_DRV_SC_FMAC_BYPASS:
-		sc_cfg.bypass_bitmap[0] = ((1 << FAKE_MAC_HEADER_BYP) | (1 <<  FLOW_LOOKUP_BYP));
+#ifdef PPE_DRV_DDRQ_ENABLE
+		/*
+		 * DDRQ WAR: Bypass packet format checks in the first pass for avoiding
+		 * the PPE DATA incomplete exception.
+		 */
+		sc_cfg.bypass_bitmap[0] = ((1 << WRONG_PKT_FMT_L2_BYP)
+						| (1 << WRONG_PKT_FMT_L3_IPV4_BYP)
+						| (1 << WRONG_PKT_FMT_L3_IPV6_BYP)
+						| (1 << WRONG_PKT_FMT_L4_BYP));
+#endif
+		sc_cfg.bypass_bitmap[0] |= ((1 << FAKE_MAC_HEADER_BYP) | (1 <<  FLOW_LOOKUP_BYP));
 		sc_cfg.bypass_bitmap[1] = ((1 << FAKE_MAC_DROP_BYP) | (1<< BRIDGING_FWD_BYP));
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
