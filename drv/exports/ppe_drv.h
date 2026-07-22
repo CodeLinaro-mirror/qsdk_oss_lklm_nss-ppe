@@ -43,6 +43,7 @@
 #define PPE_DRV_MCAST_QUEUE_CLASS_MAX 4			/**< Maximum multicast queue class (0-3) */
 
 #define PPE_DRV_MHT_SWITCH_ID	1			/**< MHT switch ID */
+#define PPE_DRV_HTT_SWITCH_ID	1			/**< HTT switch ID */
 
 /*
  * PPE Assist feature flags
