@@ -15,6 +15,10 @@
 #include <fal/fal_shaper.h>
 #include <fal/fal_bm.h>
 
+#ifdef NSS_PPE_DSA_QUEUE_SUPPORT
+#include <net/dsa.h>
+#endif
+
 #include "ppe_drv.h"
 
 /*
@@ -2838,6 +2842,98 @@ ppe_drv_ret_t ppe_drv_qos_port_htt_res_get(uint32_t port_id, uint8_t index, stru
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_qos_port_htt_res_get);
+
+/*
+ * ppe_drv_qos_q2q_bp_map_set()
+ *	Program (or clear) HTT->PPE queue-to-queue backpressure for a DSA interface.
+ *
+ * HTT and local PPE own separate queue blocks per port; pairing them 1:1 lets
+ * HTT queue congestion backpressure the matching PPE queue.
+ */
+ppe_drv_ret_t ppe_drv_qos_q2q_bp_map_set(struct ppe_drv_iface *iface, unsigned int swpt_id, bool enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct net_device *base_dev = dsa_port_to_master(dsa_port_from_netdev(iface->dev));
+	fal_portscheduler_resource_t htt = {0};
+	fal_bp_queue_bmp_t bmp = {0};
+	struct ppe_drv_qos_port ppe_port = {0};
+	struct ppe_drv_iface *base_if;
+	uint32_t ppe_base = 0, i = 0, ppe_qid = 0;
+	int32_t pp_id;
+
+	if (!swpt_id) {
+		ppe_drv_warn("%px:invalid swpt_id for iface", iface);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	base_if = ppe_drv_iface_get_by_dev(base_dev);
+	if (!base_if || !ppe_drv_iface_is_htt(base_if)) {
+		return PPE_DRV_RET_SUCCESS;
+	}
+
+	pp_id = ppe_drv_iface_port_idx_get(base_if);
+	if (pp_id < 0) {
+		ppe_drv_warn("%px:invalid HTT port for iface", iface);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (enable) {
+		if (ppe_drv_qos_port_htt_res_get(pp_id, swpt_id - 1, &ppe_port) != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("%px:failed to get PPE queue block (port:%d swpt:%u)", iface, pp_id, swpt_id);
+			return PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL;
+		}
+
+		ppe_base = ppe_port.base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+	}
+
+	spin_lock_bh(&p->lock);
+
+	if (fal_port_scheduler_resource_get(PPE_DRV_HTT_SWITCH_ID, swpt_id, &htt) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:failed to get HTT scheduler resource for port:%u", iface, swpt_id);
+		return PPE_DRV_RET_QOS_SCHEDULER_CFG_FAIL;
+	}
+
+	if (enable && htt.ucastq_num > ppe_port.max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE]) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:HTT queue count:%u exceeds PPE queue count:%u for swpt:%u", iface,
+				htt.ucastq_num, ppe_port.max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE], swpt_id);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (enable && htt.ucastq_num && ((ppe_base + htt.ucastq_num - 1) / 32) >= ARRAY_SIZE(bmp.bmp)) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:ppe_qid range out of bmp bounds for swpt:%u", iface, swpt_id);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	for (i = 0; i < htt.ucastq_num; i++) {
+		memset(&bmp, 0, sizeof(bmp));
+		ppe_qid = ppe_base + i;
+
+		/*
+		 * Disable leaves bmp empty, clearing the same HTT queue.
+		 */
+		if (enable) {
+			bmp.bmp[ppe_qid / 32] = (1U << (ppe_qid % 32));
+		}
+
+		if (fal_qm_crosschip_bp_qmap_set(PPE_DRV_SWITCH_ID, htt.ucastq_start + i, &bmp) != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px:q2q BP map %s failed for htt_qid:%u", iface,
+					enable ? "set" : "clear", htt.ucastq_start + i);
+			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+		}
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("%px:q2q BP map %s htt_q[%u..%u] ppe_q[%u..%u] pport:%d swpt:%u", iface,
+			enable ? "set" : "clear", htt.ucastq_start, htt.ucastq_start + htt.ucastq_num - 1,
+			ppe_base, ppe_base + htt.ucastq_num - 1, pp_id, swpt_id);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_q2q_bp_map_set);
 #endif
 
 /*

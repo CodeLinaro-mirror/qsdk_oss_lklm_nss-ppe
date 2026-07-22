@@ -896,6 +896,23 @@ void ppe_drv_qos_pon_port_alloc_callback_unregister(void);
  */
 ppe_drv_ret_t ppe_drv_qos_port_htt_res_get(uint32_t port_id, uint8_t index, struct ppe_drv_qos_port *port);
 
+/**
+ * ppe_drv_qos_q2q_bp_map_set
+ *	Program (or clear) HTT->PPE queue-to-queue backpressure for a DSA interface.
+ *
+ * @datatypes
+ * struct ppe_drv_iface
+ *
+ * @param[in] iface     PPE interface of the DSA VP.
+ * @param[in] swpt_id   1-based DSA port index (dp->index); used as the HTT-side port
+ *                      ID and, minus one, as the PPE-side queue block index.
+ * @param[in] enable    true to program the q2q map, false to clear it.
+ *
+ * @return
+ * Status of the q2q backpressure map operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_q2q_bp_map_set(struct ppe_drv_iface *iface, unsigned int swpt_id, bool enable);
+
 #ifdef PPE_DRV_QOS_DDRQ_SUPPORT
 /**
  * ppe_drv_qos_ddrq_callback_unregister
