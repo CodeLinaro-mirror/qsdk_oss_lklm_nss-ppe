@@ -43,6 +43,8 @@ struct ppe_drv_gen_stats {
 	atomic64_t v4_flush_fail;			/* No of v4 flush requests fail */
 	atomic64_t v4_flush_conn_not_found;		/* No of v4 connection not found during flush. */
 	atomic64_t v4_flush_skip_conn_rfs;		/* No of rfs v4 connection not found during flush. */
+	atomic64_t v4_tun_flush_req;			/* No of v4 tunnel connection flush requests. */
+	atomic64_t v4_tun_flush_fail;			/* No of v4 tunnel connection flush failures. */
 
 	atomic64_t v6_l3_flows;			/* No of v6 routed flows */
 	atomic64_t v6_l2_flows;			/* No of v6 bridge flows */
@@ -55,6 +57,8 @@ struct ppe_drv_gen_stats {
 	atomic64_t v6_flush_fail;			/* No of v6 flush requests fail */
 	atomic64_t v6_flush_conn_not_found;		/* No of v6 connection not found during flush. */
 	atomic64_t v6_flush_skip_conn_rfs;		/* No of v6 connection not found during flush. */
+	atomic64_t v6_tun_flush_req;			/* No of v6 tunnel connection flush requests. */
+	atomic64_t v6_tun_flush_fail;			/* No of v6 tunnel connection flush failures. */
 
 	atomic64_t fail_vp_full;		/* Create req fail due to VP table full */
 	atomic64_t fail_pp_full;		/* Create req fail due to physical port table full */

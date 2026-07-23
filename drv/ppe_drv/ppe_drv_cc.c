@@ -12,6 +12,132 @@
 #include <fal/fal_qm.h>
 #endif
 #include "ppe_drv.h"
+#ifdef PPE_TUNNEL_ENABLE
+#include "tun/ppe_drv_tun_v4.h"
+#include "tun/ppe_drv_tun_v6.h"
+#endif
+
+/*
+ * ppe_drv_cc_v4_tuple_fill()
+ *	Fill an IPv4 5-tuple from the dissected flow keys.
+ */
+static void ppe_drv_cc_v4_tuple_fill(struct flow_keys *keys, struct ppe_drv_v4_5tuple *tuple)
+{
+	tuple->flow_ip = ntohl(keys->addrs.v4addrs.src);
+	tuple->return_ip = ntohl(keys->addrs.v4addrs.dst);
+	tuple->protocol = keys->basic.ip_proto;
+
+	/*
+	 * PPE support only TCP, UDP or UDP_LITE for 5-tuple
+	 */
+	if ((keys->basic.ip_proto == IPPROTO_TCP)
+			|| (keys->basic.ip_proto == IPPROTO_UDP)
+			|| (keys->basic.ip_proto == IPPROTO_UDPLITE)) {
+
+		tuple->flow_ident = ntohs(keys->ports.src);
+		tuple->return_ident = ntohs(keys->ports.dst);
+	}
+}
+
+/*
+ * ppe_drv_cc_v6_tuple_fill()
+ *	Fill an IPv6 5-tuple from the dissected flow keys.
+ */
+static void ppe_drv_cc_v6_tuple_fill(struct flow_keys *keys, struct ppe_drv_v6_5tuple *tuple)
+{
+	PPE_DRV_IN6_TO_IPV6(tuple->flow_ip, keys->addrs.v6addrs.src);
+	PPE_DRV_IN6_TO_IPV6(tuple->return_ip, keys->addrs.v6addrs.dst);
+	tuple->protocol = keys->basic.ip_proto;
+
+	/*
+	 * PPE support only TCP, UDP or UDP_LITE for 5-tuple
+	 */
+	if ((keys->basic.ip_proto == IPPROTO_TCP)
+			|| (keys->basic.ip_proto == IPPROTO_UDP)
+			|| (keys->basic.ip_proto == IPPROTO_UDPLITE)) {
+
+		tuple->flow_ident = ntohs(keys->ports.src);
+		tuple->return_ident = ntohs(keys->ports.dst);
+	}
+}
+
+#ifdef PPE_TUNNEL_ENABLE
+/*
+ * ppe_drv_cc_tun_process_v4()
+ *	Deactivate and flush the IPv4 tunnel connection matching the given flow keys.
+ */
+static ppe_drv_ret_t ppe_drv_cc_tun_process_v4(struct flow_keys *keys)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_v4_rule_destroy destroy_v4 = {0};
+	bool is_flush = true;
+	ppe_drv_ret_t ret;
+
+	ppe_drv_cc_v4_tuple_fill(keys, &destroy_v4.tuple);
+
+	/*
+	 * Exceptions for regular flows also reach here, so first check quietly if this
+	 * tuple belongs to a tunnel connection. This avoids polluting the tunnel
+	 * statistics and logs for every non tunnel exception.
+	 */
+	spin_lock_bh(&p->lock);
+	if (!ppe_drv_v4_conn_tun_conn_get(&destroy_v4.tuple)) {
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_FAILURE_DESTROY_NO_CONN;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_stats_inc(&p->stats.gen_stats.v4_tun_flush_req);
+
+	/*
+	 * Notify tunnel deletion with reason flush
+	 */
+	ret = ppe_drv_v4_tun_del_ce_notify(&destroy_v4, is_flush);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v4_tun_flush_fail);
+	}
+
+	return ret;
+}
+
+/*
+ * ppe_drv_cc_tun_process_v6()
+ *	Deactivate and flush the IPv6 tunnel connection matching the given flow keys.
+ */
+static ppe_drv_ret_t ppe_drv_cc_tun_process_v6(struct flow_keys *keys)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_v6_rule_destroy destroy_v6 = {0};
+	bool is_flush = true;
+	ppe_drv_ret_t ret;
+
+	ppe_drv_cc_v6_tuple_fill(keys, &destroy_v6.tuple);
+
+	/*
+	 * Exceptions for regular flows also reach here, so first check quietly if this
+	 * tuple belongs to a tunnel connection. This avoids polluting the tunnel
+	 * statistics and logs for every non tunnel exception.
+	 */
+	spin_lock_bh(&p->lock);
+	if (!ppe_drv_v6_conn_tun_conn_get(&destroy_v6.tuple)) {
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_FAILURE_DESTROY_NO_CONN;
+	}
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_stats_inc(&p->stats.gen_stats.v6_tun_flush_req);
+
+	/*
+	 * Notify tunnel deletion with reason flush
+	 */
+	ret = ppe_drv_v6_tun_del_ce_notify(&destroy_v6, is_flush);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v6_tun_flush_fail);
+	}
+
+	return ret;
+}
+#endif
 
 /*
  * ppe_drv_cc_process_v4()
@@ -27,20 +153,7 @@ static void ppe_drv_cc_process_v4(ppe_drv_cc_t cc, struct flow_keys *keys, struc
 	struct ppe_drv_v4_conn_sync *cns;
 	struct ppe_drv_v4_conn *cn = NULL;
 
-	v4_5tuple.flow_ip = ntohl(keys->addrs.v4addrs.src);
-	v4_5tuple.return_ip = ntohl(keys->addrs.v4addrs.dst);
-	v4_5tuple.protocol = keys->basic.ip_proto;
-
-	/*
-	 * PPE support only TCP, UDP or UDP_LITE for 5-tuple
-	 */
-	if ((keys->basic.ip_proto == IPPROTO_TCP)
-			|| (keys->basic.ip_proto == IPPROTO_UDP)
-			|| (keys->basic.ip_proto == IPPROTO_UDPLITE)) {
-
-		v4_5tuple.flow_ident = ntohs(keys->ports.src);
-		v4_5tuple.return_ident = ntohs(keys->ports.dst);
-	}
+	ppe_drv_cc_v4_tuple_fill(keys, &v4_5tuple);
 
 	/*
 	 * Get the flow table entry and try to destroy.
@@ -114,20 +227,7 @@ static void ppe_drv_cc_process_v6(ppe_drv_cc_t cc, struct flow_keys *keys, struc
 	struct ppe_drv_v6_conn_sync *cns;
 	struct ppe_drv_v6_conn *cn = NULL;
 
-	PPE_DRV_IN6_TO_IPV6(v6_5tuple.flow_ip, keys->addrs.v6addrs.src);
-	PPE_DRV_IN6_TO_IPV6(v6_5tuple.return_ip, keys->addrs.v6addrs.dst);
-	v6_5tuple.protocol = keys->basic.ip_proto;
-
-	/*
-	 * PPE support only TCP, UDP or UDP_LITE
-	 */
-	if ((keys->basic.ip_proto == IPPROTO_TCP)
-			|| (keys->basic.ip_proto == IPPROTO_UDP)
-			|| (keys->basic.ip_proto == IPPROTO_UDPLITE)) {
-
-		v6_5tuple.flow_ident = ntohs(keys->ports.src);
-		v6_5tuple.return_ident = ntohs(keys->ports.dst);
-	}
+	ppe_drv_cc_v6_tuple_fill(keys, &v6_5tuple);
 
 	/*
 	 * Get the flow table entry and try to destroy.
@@ -292,16 +392,43 @@ bool ppe_drv_cc_process_skbuff(struct ppe_drv_cc_metadata *cc_info, struct sk_bu
 
 	switch (keys.control.addr_type) {
 		case FLOW_DISSECTOR_KEY_IPV4_ADDRS:
+#ifdef PPE_TUNNEL_ENABLE
+			/*
+			 * Tunnel (outer) connections are tracked in a separate connection list
+			 * and are not present in the flow table. Attempt the tunnel deactivation
+			 * path first, it looks up the tunnel connection for this tuple and returns
+			 * failure if there is none, in which case fall back to the regular flow
+			 * flush below.
+			 */
+			if (ppe_drv_tun_exception_is_flush_required((ppe_drv_cc_t)cc) &&
+					ppe_drv_cc_tun_process_v4(&keys) == PPE_DRV_RET_SUCCESS) {
+				break;
+			}
+#endif
 			ppe_drv_cc_process_v4((ppe_drv_cc_t)cc, &keys, src_dev);
 			break;
 
 		case FLOW_DISSECTOR_KEY_IPV6_ADDRS:
+#ifdef PPE_TUNNEL_ENABLE
+			/*
+			 * Tunnel (outer) connections are tracked in a separate connection list
+			 * and are not present in the flow table. Attempt the tunnel deactivation
+			 * path first, it looks up the tunnel connection for this tuple and returns
+			 * failure if there is none, in which case fall back to the regular flow
+			 * flush below.
+			 */
+			if (ppe_drv_tun_exception_is_flush_required((ppe_drv_cc_t)cc) &&
+					ppe_drv_cc_tun_process_v6(&keys) == PPE_DRV_RET_SUCCESS) {
+				break;
+			}
+#endif
 			ppe_drv_cc_process_v6((ppe_drv_cc_t)cc, &keys, src_dev);
 			break;
 
 		default:
 			ppe_drv_info("%p: dissection failed for skb:%p", p, skb);
 	}
+
 push:
 	skb_push(skb, ETH_HLEN);
 done:
@@ -428,6 +555,19 @@ struct ppe_drv_cc *ppe_drv_cc_entries_alloc(void)
 	 */
 	pcc = &cc[PPE_DRV_CC_L3_FLOW_DE_ACCELEARTE];
 	pcc->flush = true;
+
+#ifdef PPE_TUNNEL_ENABLE
+	/*
+	 * Enable connection flush for tunnel exceptions that require a flush.
+	 */
+	for (i = 0; i < ppe_drv_tun_exception_max(); i++) {
+		if (ppe_drv_tun_exception_list[i].flush_required) {
+			cpu_code = ppe_drv_tun_exception_list[i].code;
+			pcc = &cc[cpu_code];
+			pcc->flush = true;
+		}
+	}
+#endif
 
 	return cc;
 }

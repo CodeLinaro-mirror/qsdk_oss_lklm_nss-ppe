@@ -17,12 +17,6 @@
 #include <fal/fal_init.h>
 
 /*
- * PPE exception invalid
- * 	When the field are not required we can fill them as invalid.
- */
-#define PPE_DRV_EXCEPTION_FIELD_INVALID		0x0
-
-/*
  * PPE exception type.
  */
 #define PPE_DRV_EXCEPTION_FLOW_TYPE_L2_ONLY		0x1
@@ -69,6 +63,12 @@
 #define	PPE_DRV_EXCPN_TUN_PROFILE_ID_3		3
 #define	PPE_DRV_EXCPN_TUN_PROFILE_ID_MAX	4
 
+/*
+ * Maximum number of entries in the tunnel exception command table
+ * (TL_EXCEPTION_CMD) supported by the hardware.
+ */
+#define PPE_DRV_TUN_EXCEPTION_CMD_MAX_ENTRY	88
+
 #endif
 
 /*
@@ -80,12 +80,27 @@ struct ppe_drv_exception {
 	fal_fwd_cmd_t action;
 	uint8_t deaccel_en;
 	uint16_t flow_type;
-#ifdef PPE_TUNNEL_ENABLE
-	fal_fwd_cmd_t tun_action;
-	uint8_t tun_deaccel_en;
-	bool tun_profile[PPE_DRV_EXCPN_TUN_PROFILE_ID_MAX];
-#endif
 };
+
+#ifdef PPE_TUNNEL_ENABLE
+/*
+ * ppe_drv_tun_exception
+ *	ppe per tunnel exception configuration.
+ */
+struct ppe_drv_tun_exception {
+	ppe_drv_cc_t code;
+	fal_fwd_cmd_t action;
+	uint8_t deaccel_en;
+	bool profile_exp_en[PPE_DRV_EXCPN_TUN_PROFILE_ID_MAX];
+	bool flush_required;		/* Flush the tunnel connection on this exception */
+	bool outer_exp_en;		/* Except the outer packet (decap exception mode 0)
+					   instead of the decapsulated inner packet (mode 1) */
+};
+
+extern struct ppe_drv_tun_exception ppe_drv_tun_exception_list[];
+uint8_t ppe_drv_tun_exception_max(void);
+bool ppe_drv_tun_exception_is_flush_required(ppe_drv_cc_t cc);
+#endif
 
 /*
  * ppe_drv_exception_tcpflag

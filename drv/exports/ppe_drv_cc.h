@@ -89,4 +89,3 @@ extern void ppe_drv_cc_register_cb(ppe_drv_cc_t cc, ppe_drv_cc_callback_t cb, vo
 /** @} */ /* end_addtogroup ppe_drv_cc_subsystem */
 
 #endif /* _PPE_DRV_CC_H_ */
-

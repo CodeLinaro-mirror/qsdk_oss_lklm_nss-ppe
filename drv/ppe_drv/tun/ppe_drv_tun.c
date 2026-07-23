@@ -1348,7 +1348,7 @@ void ppe_drv_tun_v4_conn_tun_del(struct ppe_drv_tun *ptun)
  * ppe_drv_tun_deactivate
  *	Deactivate PPE tunnel
  */
-bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
+bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule, bool is_flush)
 {
 	struct ppe_drv_comm_stats *comm_stats;
 	ppe_drv_ret_t ret = PPE_DRV_RET_SUCCESS;
@@ -1362,6 +1362,8 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 	struct ppe_drv_v4_conn *cn_v4 = NULL;
 	bool is_ipv6;
 	struct ppe_drv_v4_conn_flow *pcf, *pcr;
+	enum ppe_drv_stats_sync_reason reason = is_flush ?
+						PPE_DRV_STATS_SYNC_REASON_FLUSH : PPE_DRV_STATS_SYNC_REASON_DESTROY;
 
 	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
 	spin_lock_bh(&p->lock);
@@ -1408,7 +1410,7 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 		/*
 		 * Capture remaining stats.
 		 */
-		ppe_drv_v6_conn_sync_one(cn_v6, cns_v6, PPE_DRV_STATS_SYNC_REASON_DESTROY);
+		ppe_drv_v6_conn_sync_one(cn_v6, cns_v6, reason);
 	} else if (vdestroy_rule) {
 		ret = ppe_drv_v4_tun_del_ce_validate(vdestroy_rule, &cns_v4, &cn_v4);
 		if (ret != PPE_DRV_RET_SUCCESS) {
@@ -1430,7 +1432,7 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 		/*
 		 * Capture remaining stats.
 		 */
-		ppe_drv_v4_conn_sync_one(cn_v4, cns_v4, PPE_DRV_STATS_SYNC_REASON_DESTROY);
+		ppe_drv_v4_conn_sync_one(cn_v4, cns_v4, reason);
 	}
 
 	/*

@@ -414,7 +414,7 @@ ppe_drv_ret_t ppe_drv_v4_tun_del_ce_validate(void *vdestroy_rule, struct ppe_drv
  * ppe_drv_v4_tun_del_ce_notify()
  *	Notify the PPE tunnel driver to delete connection entry
  */
-ppe_drv_ret_t ppe_drv_v4_tun_del_ce_notify(struct ppe_drv_v4_rule_destroy *destroy)
+ppe_drv_ret_t ppe_drv_v4_tun_del_ce_notify(struct ppe_drv_v4_rule_destroy *destroy, bool is_flush)
 {
 	struct ppe_drv_v4_conn_flow *pcf, *pcr;
 	struct ppe_drv_comm_stats *comm_stats;
@@ -448,7 +448,7 @@ ppe_drv_ret_t ppe_drv_v4_tun_del_ce_notify(struct ppe_drv_v4_rule_destroy *destr
 	spin_unlock_bh(&p->lock);
 
 	ppe_drv_stats_inc(&comm_stats->v4_destroy_req);
-	status = del_cb(vp_num, destroy);
+	status = del_cb(vp_num, destroy, is_flush);
 	if (status != true) {
 		ppe_drv_stats_inc(&comm_stats->v4_destroy_fail);
 		return PPE_DRV_RET_FAILURE_TUN_CE_DEL_FAILURE;

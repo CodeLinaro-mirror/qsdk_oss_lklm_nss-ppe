@@ -390,7 +390,7 @@ static struct ppe_tun *ppe_tun_get_tun_by_vp_num_and_ref(ppe_vp_num_t vp_num)
  * function returns. This function only releases the ref taken during this flow's
  * activation (on the success path), since that ref is the one it owns.
  */
-static bool ppe_tun_deactivate_internal(struct ppe_tun *tun, void *vdestroy_rule)
+static bool ppe_tun_deactivate_internal(struct ppe_tun *tun, void *vdestroy_rule, bool is_flush)
 {
 	bool unregister_ops = false;
 
@@ -405,7 +405,7 @@ static bool ppe_tun_deactivate_internal(struct ppe_tun *tun, void *vdestroy_rule
 	}
 	spin_unlock_bh(&ptp->lock);
 
-	if (!ppe_drv_tun_deactivate(tun->vp_num, vdestroy_rule)) {
+	if (!ppe_drv_tun_deactivate(tun->vp_num, vdestroy_rule, is_flush)) {
 		ppe_tun_warn("%p: tunnel could not be deactivated", tun);
 		return false;
 	}
@@ -441,7 +441,7 @@ static bool ppe_tun_deactivate_internal(struct ppe_tun *tun, void *vdestroy_rule
  * ppe_tun_deactivate_with_conn_entry()
  *	Deactivate the ppe tunnel
  */
-static bool ppe_tun_deactivate_with_conn_entry(uint8_t vp_num, void *vdestroy_rule)
+static bool ppe_tun_deactivate_with_conn_entry(uint8_t vp_num, void *vdestroy_rule, bool is_flush)
 {
 	struct ppe_tun *tun = ppe_tun_get_tun_by_vp_num_and_ref(vp_num);
 	bool status;
@@ -450,11 +450,11 @@ static bool ppe_tun_deactivate_with_conn_entry(uint8_t vp_num, void *vdestroy_ru
 		return false;
 	}
 
-	status = ppe_tun_deactivate_internal(tun, vdestroy_rule);
+	status = ppe_tun_deactivate_internal(tun, vdestroy_rule, is_flush);
 	if (!status) {
 		ppe_tun_warn("%p: failed to deactivate tunnel with vp num: %u", tun, vp_num);
 		ppe_tun_deref(tun);
-		return false;
+		return status;
 	}
 
 	ppe_tun_info("%p: VP %u tunnel connection deactivated", tun, vp_num);
@@ -721,6 +721,7 @@ EXPORT_SYMBOL(ppe_tun_get_active_tun_cnt);
 bool ppe_tun_deactivate(struct net_device *dev)
 {
 	struct ppe_tun *tun = ppe_tun_get_tun_by_netdev_and_ref(dev);
+	bool is_flush = false;
 
 	if (!tun) {
 		return false;
@@ -731,7 +732,7 @@ bool ppe_tun_deactivate(struct net_device *dev)
 	 * activated (e.g. ppe_tun_destroy called after a failed ppe_tun_activate,
 	 * or a partially-created tunnel), avoiding an unbalanced deref.
 	 */
-	if (!ppe_tun_deactivate_internal(tun, NULL)) {
+	if (!ppe_tun_deactivate_internal(tun, NULL, is_flush)) {
 		ppe_tun_warn("%p: failed to deactivate tunnel for dev %s", tun, dev->name);
 		ppe_tun_deref(tun);
 		return false;
