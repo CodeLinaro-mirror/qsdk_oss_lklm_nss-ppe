@@ -171,4 +171,15 @@ bool ppe_drv_tun_header_length_get(uint16_t port_num, uint8_t *hdr_len);
  * Note: Tunnel needs to be in active state prior calling this function
  */
 bool ppe_drv_tun_xmit_port_mtu_get(uint16_t port_num, uint32_t *mtu);
+
+/*
+ * ppe_drv_tun_is_active
+ *      Check if the hardware tunnel VP is still in the active state.
+ *
+ * @param[in] port_num tunnel VP port number
+ *
+ * @return
+ * True or false.
+ */
+bool ppe_drv_tun_is_active(uint16_t port_num);
 #endif /* _PPE_DRV_TUN_PUBLIC_H_ */

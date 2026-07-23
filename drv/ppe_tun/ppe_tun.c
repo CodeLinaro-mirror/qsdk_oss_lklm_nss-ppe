@@ -338,19 +338,19 @@ static bool ppe_tun_tx_to_ppe(struct net_device *dev, struct sk_buff *skb)
 		 * Hence no need to free the same here. Just accounting
 		 * for failure count here.
 		 */
-		atomic64_inc(&tun->tun_hybrid_offload_tx_fail_cnt);
-	}
+	       atomic64_inc(&tun->tun_hybrid_offload_tx_fail_cnt);
+       } else {
+	       atomic64_inc(&tun->tun_hybrid_offload_tx_pkt_cnt);
+       }
 
-	atomic64_inc(&tun->tun_hybrid_offload_tx_pkt_cnt);
-
-	ppe_tun_deref(tun);
-	return true;
+       ppe_tun_deref(tun);
+       return true;
 
 err:
-	if (tun) {
-		ppe_tun_deref(tun);
-	}
-	atomic64_inc(&tun->tun_hybrid_offload_tx_fail_cnt);
+       if (tun) {
+               atomic64_inc(&tun->tun_hybrid_offload_tx_fail_cnt);
+               ppe_tun_deref(tun);
+       }
 
 	return false;
 }
@@ -383,32 +383,135 @@ static struct ppe_tun *ppe_tun_get_tun_by_vp_num_and_ref(ppe_vp_num_t vp_num)
 }
 
 /*
+ * ppe_tun_deactivate_internal()
+ *	Common deactivation path shared by netdev-level and conn-entry-level deactivation.
+ *
+ * Caller must hold a lookup ref on tun and is responsible for releasing it once this
+ * function returns. This function only releases the ref taken during this flow's
+ * activation (on the success path), since that ref is the one it owns.
+ */
+static bool ppe_tun_deactivate_internal(struct ppe_tun *tun, void *vdestroy_rule)
+{
+	bool unregister_ops = false;
+
+	/*
+	 * Guard against deactivating a tunnel already deactivated (e.g. by flush).
+	 */
+	spin_lock_bh(&ptp->lock);
+	if (!(tun->state & PPE_TUN_STATE_ACTIVATED)) {
+		spin_unlock_bh(&ptp->lock);
+		ppe_tun_trace("%p: tunnel already deactivated, skipping\n", tun);
+		return true;
+	}
+	spin_unlock_bh(&ptp->lock);
+
+	if (!ppe_drv_tun_deactivate(tun->vp_num, vdestroy_rule)) {
+		ppe_tun_warn("%p: tunnel could not be deactivated", tun);
+		return false;
+	}
+
+	/*
+	 * Other flows are still using the hardware tunnel VP (e.g. MAP-T) - this
+	 * flow's ref is released below, but the wrapper state stays intact until
+	 * the hardware tunnel is actually inactive.
+	 */
+	if (ppe_drv_tun_is_active(tun->vp_num)) {
+		return true;
+	}
+
+	/*
+	 * Core hardware tunnel is now inactive - clear wrapper state and unregister
+	 * offload ops.
+	 */
+	spin_lock_bh(&ptp->lock);
+	if (tun->state & PPE_TUN_STATE_ACTIVATED) {
+		tun->state &= ~PPE_TUN_STATE_ACTIVATED;
+		unregister_ops = true;
+	}
+	spin_unlock_bh(&ptp->lock);
+
+	if (unregister_ops) {
+		ppe_tun_netdev_unregister_ol_ops(tun);
+	}
+
+	return true;
+}
+
+/*
  * ppe_tun_deactivate_with_conn_entry()
  *	Deactivate the ppe tunnel
  */
 static bool ppe_tun_deactivate_with_conn_entry(uint8_t vp_num, void *vdestroy_rule)
 {
 	struct ppe_tun *tun = ppe_tun_get_tun_by_vp_num_and_ref(vp_num);
+	bool status;
+
 	if (!tun) {
 		return false;
 	}
 
-	if (!ppe_drv_tun_deactivate(tun->vp_num, vdestroy_rule)) {
-		ppe_tun_warn("%p: tunnel %p could not be deactivated", ptp, tun);
+	status = ppe_tun_deactivate_internal(tun, vdestroy_rule);
+	if (!status) {
+		ppe_tun_warn("%p: failed to deactivate tunnel with vp num: %u", tun, vp_num);
 		ppe_tun_deref(tun);
 		return false;
 	}
 
-	tun->state &= ~PPE_TUN_STATE_ACTIVATED;
-	ppe_tun_netdev_unregister_ol_ops(tun);
-	ppe_tun_deref(tun);
+	ppe_tun_info("%p: VP %u tunnel connection deactivated", tun, vp_num);
 
 	/*
-	 * deref the ref taken during tunnel activation.
+	 * Release reference taken on tun  at start of this function
 	 */
 	ppe_tun_deref(tun);
 
-	ppe_tun_info("%p: VP %u tunnel deactivated", tun, vp_num);
+	/*
+	 * Release the ref taken during tunnel activation.
+	 */
+	ppe_tun_deref(tun);
+
+	return status;
+}
+
+/*
+ * ppe_tun_activate_internal()
+ *	Common activation path shared by netdev-level and conn-entry-level activation.
+ *
+ * Caller must hold a lookup ref on tun. On success this function keeps that ref
+ * held on behalf of the activated flow (released by the matching deactivate); on
+ * failure the ref is left untouched and the caller must release it.
+ */
+static bool ppe_tun_activate_internal(struct ppe_tun *tun, void *vcreate_rule)
+{
+	bool register_ops = false;
+
+	if (!ppe_drv_tun_activate(tun->vp_num, vcreate_rule)) {
+		ppe_tun_warn("%p: tunnel could not be activated", tun);
+		return false;
+	}
+
+	tun->phys_dev = ppe_drv_port_get_vp_phys_dev(tun->dev);
+
+	spin_lock_bh(&ptp->lock);
+	if (!(tun->state & PPE_TUN_STATE_ACTIVATED)) {
+		tun->state |= PPE_TUN_STATE_ACTIVATED;
+		register_ops = true;
+	}
+	spin_unlock_bh(&ptp->lock);
+
+	if (register_ops && ppe_tun_hybrid_offload_status_enabled(tun->type)) {
+		if (ppe_tun_netdev_register_ol_ops(tun) < 0) {
+			ppe_tun_warn("%p: Could not attach offload ops to tunnel", tun);
+		}
+	}
+
+	if (ppe_drv_tun_header_length_get(tun->vp_num, &tun->tun_header_len)) {
+		ppe_tun_warn("%p: Could not get tunnel header length", tun);
+	}
+
+	if (ppe_drv_tun_xmit_port_mtu_get(tun->vp_num, &tun->tun_xmit_port_mtu)) {
+		ppe_tun_warn("%p: Could not get tunnel xmit port MTU", tun);
+	}
+
 	return true;
 }
 
@@ -423,33 +526,16 @@ static bool ppe_tun_activate_with_conn_entry(uint8_t vp_num, void *create_rule)
 		return false;
 	}
 
-	if (!ppe_drv_tun_activate(tun->vp_num, create_rule)) {
-		ppe_tun_warn("%p: tunnel could not be activated", tun);
+	if (!ppe_tun_activate_internal(tun, create_rule)) {
 		ppe_tun_deref(tun);
 		return false;
 	}
 
-	tun->phys_dev = ppe_drv_port_get_vp_phys_dev(tun->dev);
-	tun->state |= PPE_TUN_STATE_ACTIVATED;
-
-	if (ppe_tun_hybrid_offload_status_enabled(tun->type)) {
-		if (ppe_tun_netdev_register_ol_ops(tun) < 0) {
-			ppe_tun_warn("%p: Could not attach offload ops to tunnel", tun);
-		}
-	}
-
-	if (ppe_drv_tun_header_length_get(tun->vp_num, &tun->tun_header_len)) {
-		ppe_tun_warn("%p: Could not get tunnel header length", tun);
-	}
-
-	if (ppe_drv_tun_xmit_port_mtu_get(tun->vp_num, &tun->tun_xmit_port_mtu)) {
-		ppe_tun_warn("%p: Could not get tunnel xmit port MTU", tun);
-	}
+	ppe_tun_info("%p: VP %u tunnel activated", tun, vp_num);
 
 	/*
 	 * We should not deref tun here. we should hold ref on tun till deactivate.
 	 */
-	ppe_tun_info("%p: VP %u tunnel activated", tun, vp_num);
 	return true;
 }
 
@@ -641,37 +727,28 @@ bool ppe_tun_deactivate(struct net_device *dev)
 	}
 
 	/*
-	 * Guard against deactivating a tunnel that was never activated.
-	 * This can happen when ppe_tun_destroy is called after a failed
-	 * ppe_tun_activate, or when ppe_tun_destroy_custom_tunnel is called
-	 * on a partially-created tunnel. Without this guard the extra
-	 * ppe_tun_deref below (which balances the ref taken in ppe_tun_activate)
-	 * would underrun the reference count.
+	 * ppe_tun_deactivate_internal() guards against a tunnel that was never
+	 * activated (e.g. ppe_tun_destroy called after a failed ppe_tun_activate,
+	 * or a partially-created tunnel), avoiding an unbalanced deref.
 	 */
-	if (!(tun->state & PPE_TUN_STATE_ACTIVATED)) {
-		ppe_tun_trace("%p: tunnel not activated, skipping deactivation for dev %s",
-			      tun, dev->name);
-		ppe_tun_deref(tun);
-		return true;
-	}
-
-	if (!ppe_drv_tun_deactivate(tun->vp_num, NULL)) {
-		ppe_tun_deref(tun);
+	if (!ppe_tun_deactivate_internal(tun, NULL)) {
 		ppe_tun_warn("%p: failed to deactivate tunnel for dev %s", tun, dev->name);
+		ppe_tun_deref(tun);
 		return false;
 	}
 
-	tun->state &= ~PPE_TUN_STATE_ACTIVATED;
-	ppe_tun_netdev_unregister_ol_ops(tun);
-
-	ppe_tun_deref(tun);
+	ppe_tun_info("%p: Tunnel deactivated for dev %s", tun, dev->name);
 
 	/*
-	 * This additional deref is for the activate reference
+	 * release reference on tunnel taken at start of this function
 	 */
 	ppe_tun_deref(tun);
 
-	ppe_tun_info("%p: Tunnel deactivated", tun);
+	/*
+	 * Release the ref taken during tunnel activation.
+	 */
+	ppe_tun_deref(tun);
+
 	return true;
 }
 EXPORT_SYMBOL(ppe_tun_deactivate);
@@ -689,27 +766,13 @@ bool ppe_tun_activate(struct net_device *dev)
 		return false;
 	}
 
-	if (!ppe_drv_tun_activate(tun->vp_num, NULL)) {
-		ppe_tun_warn("%p: tunnel %p activate failed for dev %s", ptp, tun, dev->name);
+	if (!ppe_tun_activate_internal(tun, NULL)) {
+		ppe_tun_warn("%p: tunnel activate failed for dev %s", ptp, dev->name);
 		ppe_tun_deref(tun);
 		return false;
 	}
 
-	tun->phys_dev = ppe_drv_port_get_vp_phys_dev(tun->dev);
-	tun->state |= PPE_TUN_STATE_ACTIVATED;
-
-	if (ppe_tun_hybrid_offload_status_enabled(tun->type)) {
-		ppe_tun_netdev_register_ol_ops(tun);
-	}
-
-	if (ppe_drv_tun_header_length_get(tun->vp_num, &tun->tun_header_len)) {
-		ppe_tun_warn("%p: Could not get tunnel header length", tun);
-	}
-
-	if (ppe_drv_tun_xmit_port_mtu_get(tun->vp_num, &tun->tun_xmit_port_mtu)) {
-		ppe_tun_warn("%p: Could not get tunnel xmit port MTU", tun);
-	}
-	ppe_tun_info("%p: tunnel %p activated for dev %s", ptp, tun, dev->name);
+	ppe_tun_info("%p: tunnel activated for dev %s", tun, dev->name);
 
 	/*
 	 * We should not deref tun here. we should hold ref on tun till deactivate.
