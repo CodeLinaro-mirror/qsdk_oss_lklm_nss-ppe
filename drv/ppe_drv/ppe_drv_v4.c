@@ -4318,9 +4318,9 @@ static ppe_drv_ret_t ppe_drv_v4_unidir_rule_update(struct ppe_drv_v4_conn *conn,
 	if (update_info->valid_flags & PPE_DRV_V4_VALID_FLAG_QOS) {
 		if (ppe_drv_v4_conn_flow_tree_id_type_get(pcf) == PPE_DRV_TREE_ID_TYPE_WIFI_TID) {
 			pcf->fl_mdata.wifi_qos = qos_tag;
-			ppe_drv_v4_conn_flow_int_pri_set(pcf, int_pri);
-			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_QOS_VALID);
 		}
+		ppe_drv_v4_conn_flow_int_pri_set(pcf, int_pri);
+		ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_QOS_VALID);
 	}
 
 	if (update_info->valid_flags & PPE_DRV_V4_VALID_FLAG_DSCP_MARKING) {
