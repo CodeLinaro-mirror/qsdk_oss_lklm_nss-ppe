@@ -2028,6 +2028,30 @@ iface_fail:
 	return status;
 }
 
+#ifdef PPE_DRV_MCAST_ENQ_CTRL
+/*
+ * ppe_drv_mcast_enqueue_ctrl_init()
+ *	Map multicast traffic to port 0 unicast queues to enable EDMA RPS.
+ *
+ * On Hermosa AP variants, multicast packets (e.g. unknown DA) land on
+ * multicast queue 256 by default, Mapping to port 0 unicast queues fixes this.
+ * For PON variants, ppe_drv_dp_gem_enable() later overrides this to
+ * pon port for T-CONT scheduling.
+ */
+static void ppe_drv_mcast_enqueue_ctrl_init(void)
+{
+	sw_error_t sw_err;
+
+	sw_err = fal_qm_mcast_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, PPE_DRV_PORT_CPU, A_TRUE);
+	if (sw_err != SW_OK) {
+		ppe_drv_warn("failed to set mcast enqueue ctrl to port 0, err=%d\n", sw_err);
+		return;
+	}
+
+	ppe_drv_trace("mcast enqueue ctrl set to port 0 unicast queues for EDMA RPS\n");
+}
+#endif
+
 /*
  * ppe_drv_probe()
  *	probe the PPE driver
@@ -2413,6 +2437,16 @@ static int ppe_drv_probe(struct platform_device *pdev)
 
 #ifdef NSS_PPE_FEATURE_DOT1P
 	ppe_drv_dot1p_configure_default_rule();
+#endif
+
+	/*
+	 * On Hermosa, map multicast traffic to port 0 unicast queues to enable
+	 * EDMA RPS on AP variants. For PON variant, ppe_drv_dp_gem_enable()
+	 * overrides this to port 6 for T-CONT scheduling. Other SoCs natively
+	 * use unicast queues for multicast and do not have this register.
+	 */
+#ifdef PPE_DRV_MCAST_ENQ_CTRL
+	ppe_drv_mcast_enqueue_ctrl_init();
 #endif
 
 	return of_platform_populate(np, NULL, NULL, &pdev->dev);
