@@ -1207,3 +1207,31 @@ ppe_drv_ret_t ppe_drv_qos_port_htt_res_get(uint32_t port_id, uint8_t index, stru
 }
 EXPORT_SYMBOL(ppe_drv_qos_port_htt_res_get);
 #endif
+
+/*
+ * ppe_drv_qos_ac_ctrl_cfg()
+ *	API to configure AC control configuration on the given queue
+ */
+bool ppe_drv_qos_ac_ctrl_cfg(uint32_t qid, bool ac_en, bool ac_fc_en)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_ac_obj_t obj = {0};
+	fal_ac_ctrl_t ctrl_cfg = {0};
+
+	obj.obj_id = qid;
+	obj.type = FAL_AC_QUEUE;
+	ctrl_cfg.ac_en = ac_en ? A_TRUE : A_FALSE;
+	ctrl_cfg.ac_fc_en = ac_fc_en ? A_TRUE : A_FALSE;
+
+	spin_lock_bh(&p->lock);
+	ppe_drv_trace("%px:queue flow control set for ucast_qid:%u, enable:%u", p, qid, ctrl_cfg.ac_fc_en);
+	if (fal_ac_ctrl_set(PPE_DRV_SWITCH_ID, &obj, &ctrl_cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue flow control set failed for ucast_qid:%u", p, qid);
+		return false;
+	}
+	spin_unlock_bh(&p->lock);
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_qos_ac_ctrl_cfg);

@@ -283,6 +283,19 @@ int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t handle_id);
 bool ppe_drv_qos_queue_info_get(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info* pq_info);
 
 /**
+ * ppe_drv_qos_ac_ctrl_cfg
+ *	API to configure AC control configuration on the given queue.
+ *
+ * @param[in] qid       Queue ID.
+ * @param[in] ac_en     AC enable.
+ * @param[in] ac_fc_en  AC flow control enable.
+ *
+ * @return
+ * true if configuration is successful; otherwise false.
+ */
+bool ppe_drv_qos_ac_ctrl_cfg(uint32_t qid, bool ac_en, bool ac_fc_en);
+
+/**
  * ppe_drv_qos_queue_stats_get
  *	API to fetch queue statistics from PPE HW.
  *
