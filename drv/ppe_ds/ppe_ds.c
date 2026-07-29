@@ -801,6 +801,7 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi7(struct ppe_ds *node, struct ppe_d
 	ppe_ds_wlan_handle_t *wlan_handle;
 	unsigned int cpu;
 	bool ret;
+	uint32_t rxfill_min, rxfill_def;
 
 	wlan_handle = &node->wlan_handle;
 	if (!wlan_handle) {
@@ -903,9 +904,17 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi7(struct ppe_ds *node, struct ppe_d
 	wifi7_hdl->reo2ppe_num_desc = reg_info->wifi7_cfg.reo2ppe_num_desc;
 	wifi7_hdl->polling_for_idx_update = polling_for_idx_update;
 
-	if ((ppe2tcl_rxfill_num_desc < PPE_DS_RXFILL_NUM_DESC_MIN) ||
+	if (ppe_ds_active_mem_profile == PPE_DS_MEM_PROFILE_DYNAMIC_LOW) {
+		rxfill_min = PPE_DS_RXFILL_NUM_DESC_MIN_LOW;
+		rxfill_def = PPE_DS_RXFILL_NUM_DESC_DEF_LOW;
+	} else {
+		rxfill_min = PPE_DS_RXFILL_NUM_DESC_MIN;
+		rxfill_def = PPE_DS_RXFILL_NUM_DESC_DEF;
+	}
+
+	if ((ppe2tcl_rxfill_num_desc < rxfill_min) ||
 			(ppe2tcl_rxfill_num_desc > PPE_DS_RXFILL_NUM_DESC_MAX)) {
-		wifi7_hdl->ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
+		wifi7_hdl->ppe2tcl_rxfill_num_desc = rxfill_def;
 	} else {
 		wifi7_hdl->ppe2tcl_rxfill_num_desc = ppe2tcl_rxfill_num_desc;
 	}
@@ -1063,6 +1072,7 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi8(struct ppe_ds *node, struct ppe_d
 	struct ppe_ds_wlan_reg_hbm_ring_hptp_cfg *reg_hw_tx_rx;
 	bool ret;
 	int i;
+	uint32_t rxfill_min, rxfill_def;
 
 	wlan_handle = &node->wlan_handle;
 	if (!wlan_handle) {
@@ -1170,9 +1180,17 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi8(struct ppe_ds *node, struct ppe_d
 	hbm_ring_hptp_cfg->wlan_tqm2ppe_tp_addr.vaddr = reg_hw_tx_rx->wlan_tqm2ppe_tp_addr.vaddr;
 	hbm_ring_hptp_cfg->wlan_tqm2ppe_tp_addr.paddr = reg_hw_tx_rx->wlan_tqm2ppe_tp_addr.paddr;
 
-	if ((ppe2tcl_rxfill_num_desc < PPE_DS_RXFILL_NUM_DESC_MIN) ||
+	if (ppe_ds_active_mem_profile == PPE_DS_MEM_PROFILE_DYNAMIC_LOW) {
+		rxfill_min = PPE_DS_RXFILL_NUM_DESC_MIN_LOW;
+		rxfill_def = PPE_DS_RXFILL_NUM_DESC_DEF_LOW;
+	} else {
+		rxfill_min = PPE_DS_RXFILL_NUM_DESC_MIN;
+		rxfill_def = PPE_DS_RXFILL_NUM_DESC_DEF;
+	}
+
+	if ((ppe2tcl_rxfill_num_desc < rxfill_min) ||
 			(ppe2tcl_rxfill_num_desc > PPE_DS_RXFILL_NUM_DESC_MAX)) {
-		edma_wifi8->ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
+		edma_wifi8->ppe2tcl_rxfill_num_desc = rxfill_def;
 	} else {
 		edma_wifi8->ppe2tcl_rxfill_num_desc = ppe2tcl_rxfill_num_desc;
 	}
