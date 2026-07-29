@@ -7,6 +7,7 @@
 #include <fal/fal_fdb.h>
 #include <fal/fal_ip.h>
 #include <fal/fal_mirror.h>
+#include <fal/fal_qm.h>
 #ifdef NSS_PPE_PON_SUPPORT
 #include <fal/fal_port_ctrl.h>
 #include <fal/fal_tunnel.h>
@@ -337,6 +338,19 @@ ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	/*
+	 * When GEM is enabled, map multicast traffic to unicast queues on the
+	 * PON port so T-CONT scheduling works correctly.
+	 */
+	if (enable && (status == PPE_DRV_RET_SUCCESS)) {
+		sw_error_t sw_err;
+		sw_err = fal_qm_mcast_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, pon_port_id, A_TRUE);
+		if (sw_err != SW_OK) {
+			ppe_drv_warn("%p: failed to set mcast enqueue ctrl to PON port %d\n",
+					iface, pon_port_id);
+		}
+	}
 
 	/*
 	 * Invoke the QoS resource allocation callback for the PON port
