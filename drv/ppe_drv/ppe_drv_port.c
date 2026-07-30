@@ -1385,7 +1385,11 @@ bool ppe_drv_port_check_rfs_support(struct net_device *dev)
 		if (dev->ieee80211_ptr) {
 			ppe_drv_trace("%p: Dev is wlan dev\n", dev);
 			return p->rfs.wlan_rfs_enable;
+		} else if (p->rfs.unknown_dst_rfs_enable) {
+			ppe_drv_trace("%p: RFS enabled for dev with unknown PPE destination: %s\n", dev, dev->name);
+			return p->rfs.unknown_dst_rfs_enable;
 		}
+
 		return false;
 	}
 

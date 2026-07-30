@@ -54,6 +54,7 @@
 #define PPE_DRV_ASSIST_FEATURE_RFS_DEFAULT	0x00000010      /* PPE Assist feature to configure RFS */
 #define PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST	0x00000020      /* PPE Assist feature to configure RFS for udp-st flows */
 #define PPE_DRV_ASSIST_FEATURE_RFS_MCAST	0x00000040      /* PPE Assist feature to configure RFS for multicast flows */
+#define PPE_DRV_ASSIST_FEATURE_RFS_UNKNOWN_DST	0x00000080	/* PPE Assist feature to configure RFS for unknown destination */
 
 #define PPE_DRV_SERVICE_CLASS_IS_VALID(sc)	((sc >= PPE_DRV_SAWF_SC_START) && (sc <= PPE_DRV_SAWF_SC_END))
 
@@ -1070,4 +1071,13 @@ int ppe_drv_pon_port_max_pq_get(void);
  * none.
  */
 bool ppe_drv_hw_gro_feature_set(struct net_device *dev, bool enable);
+
+/**
+ * ppe_drv_get_unknown_dst_rfs_enable
+ *	Get the unknown_dst_rfs_enable value
+ *
+ * @return
+ * unknown_dst_rfs_enable
+ */
+int ppe_drv_get_unknown_dst_rfs_enable(void);
 #endif /* _PPE_DRV_H_ */

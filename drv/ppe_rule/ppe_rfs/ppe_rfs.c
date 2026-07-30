@@ -208,6 +208,8 @@ enum ppe_rfs_ret ppe_rfs_ipv6_rule_create(struct ppe_rfs_ipv6_rule_create_msg *c
 		} else if (create_ipv6->rule_flags & PPE_RFS_V6_RULE_UDP_ST) {
 			feature = PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST;
 			pd6rc.qos_rule.flow_qos_tag = create_ipv6->qos_rule.flow_qos_tag;
+		} else if (ppe_drv_get_unknown_dst_rfs_enable()) {
+			feature = PPE_DRV_ASSIST_FEATURE_RFS_UNKNOWN_DST;
 		}
 
 		tx_if = ppe_drv_iface_idx_get_by_dev(tx_dev);
@@ -384,6 +386,8 @@ enum ppe_rfs_ret ppe_rfs_ipv4_rule_create(struct ppe_rfs_ipv4_rule_create_msg *c
 		} else if (create_ipv4->rule_flags & PPE_RFS_V4_RULE_UDP_ST) {
 			feature = PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST;
 			pd4rc.qos_rule.flow_qos_tag = create_ipv4->qos_rule.flow_qos_tag;
+		} else if (ppe_drv_get_unknown_dst_rfs_enable()){
+			feature = PPE_DRV_ASSIST_FEATURE_RFS_UNKNOWN_DST;
 		}
 
 		tx_if = ppe_drv_iface_idx_get_by_dev(tx_dev);

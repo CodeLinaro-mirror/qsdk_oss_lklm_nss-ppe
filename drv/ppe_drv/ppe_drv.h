@@ -66,6 +66,7 @@ extern bool flow_deacclr_dis;
 extern int mac_lrn_exception_en;
 extern uint32_t ppe_drv_jhash_rnd __read_mostly;
 extern int wlan_host_assist_qdisc_en;
+extern int unknown_dst_rfs_enable;
 
 #ifdef PPE_DRV_DDRQ_ENABLE
 extern bool ddrq_lp_sc_set_en;
@@ -366,6 +367,7 @@ typedef enum ppe_drv_rfs_interface_type {
 	PPE_DRV_RFS_INTERFACE_TYPE_DEFAULT,		/* Used for any generic interface other than the above. */
 	PPE_DRV_RFS_INTERFACE_TYPE_UDP_ST,		/* Interface type is for dummy dev created for RFS support at nss_udp_st Rx*/
 	PPE_DRV_RFS_INTERFACE_TYPE_MCAST,		/* Interface type is for multicast RFS flows. */
+	PPE_DRV_RFS_INTERFACE_TYPE_UNKNOWN_DST,	/* Interface type when dest is not known */
 	PPE_DRV_RFS_INTERFACE_TYPE_MAX,			/* Maximun number of interface types. */
 } ppe_drv_rfs_interface_t;
 
@@ -397,6 +399,7 @@ struct ppe_drv_gro_ctx {
 struct ppe_drv_rfs_ctx {
 	bool passive_vp_enable;						/* Enable/Disable Passive VP creation for SFE Flows, can be changed through module params. */
 	bool wlan_rfs_enable;						/* Enable/Disable RFS for wlan flows based on this. */
+	bool unknown_dst_rfs_enable;				/* Enable/Disable RFS for flows whose destination dev is not a recognized PPE port. */
 	uint8_t core2enq_vp[NR_CPUS];					/* Storing the enqueue VP number corresponding to each core. */
 	uint8_t coremask[PPE_DRV_RFS_INTERFACE_TYPE_MAX];		/* Global access value of the coremasks of different interfaces. */
 	uint8_t shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_MAX];	/* Global access value of the coremasks of different interfaces. */
@@ -734,7 +737,8 @@ static inline bool ppe_drv_assist_feature_type_is_rfs(uint32_t feature)
 		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_WLAN) ||
 		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL) ||
 		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST) ||
-		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_MCAST));
+		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_MCAST) ||
+		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_UNKNOWN_DST));
 
 	return ret;
 }
@@ -829,7 +833,8 @@ static inline bool ppe_drv_assist_feature_is_valid(uint32_t feature)
 			     PPE_DRV_ASSIST_FEATURE_PRIORITY |
 			     PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL |
 			     PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST |
-			     PPE_DRV_ASSIST_FEATURE_RFS_MCAST));
+			     PPE_DRV_ASSIST_FEATURE_RFS_MCAST |
+			     PPE_DRV_ASSIST_FEATURE_RFS_UNKNOWN_DST));
 }
 
 /*
