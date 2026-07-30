@@ -6,6 +6,7 @@
 #include <linux/types.h>
 #include <linux/if_ether.h>
 #include <linux/etherdevice.h>
+#include <linux/in.h>
 #include <ppe_drv.h>
 #include <ppe_drv_v4.h>
 #include <ppe_drv_v6.h>
@@ -644,6 +645,76 @@ static enum ppe_tun_rps_ret ppe_tun_rps_validate_inner_ip_config(struct ppe_drv_
 }
 
 /*
+ * ppe_tun_rps_match_single_udf()
+ *	Compare a single UDF match criteria for parity with disabled UDF bypass
+ */
+static inline bool ppe_tun_rps_match_single_udf(struct ppe_tun_rps_udf *create_udf, struct ppe_tun_rps_udf *destroy_udf)
+{
+	if (create_udf->enable != destroy_udf->enable) {
+		return false;
+	}
+
+	if (!create_udf->enable) {
+		/*
+		 * Ignore uninitialized fields
+		 */
+		return true;
+	}
+
+	return (create_udf->offset == destroy_udf->offset &&
+		create_udf->val == destroy_udf->val &&
+		create_udf->mask == destroy_udf->mask);
+}
+
+/*
+ * ppe_tun_rps_match_udf()
+ *	Compare UDF match criteria for rule parity
+ */
+static inline bool ppe_tun_rps_match_udf(struct ppe_tun_rps_user_data *create_ud,
+					 struct ppe_tun_rps_user_data *destroy_ud)
+{
+	return (ppe_tun_rps_match_single_udf(&create_ud->udf[0], &destroy_ud->udf[0]) &&
+		ppe_tun_rps_match_single_udf(&create_ud->udf[1], &destroy_ud->udf[1]) &&
+		ppe_tun_rps_match_single_udf(&create_ud->udf[2], &destroy_ud->udf[2]));
+}
+
+/*
+ * ppe_tun_rps_match_ipv4()
+ *	Check if IPv4 create and destroy rules match exactly (5-tuple + UDFs)
+ */
+static inline bool ppe_tun_rps_match_ipv4(struct ppe_tun_rps_ipv4_rule_create_msg *create,
+					  struct ppe_tun_rps_ipv4_rule_destroy_msg *destroy)
+{
+	return (create->flow_ip == destroy->flow_ip &&
+		create->return_ip == destroy->return_ip &&
+		create->flow_ident == destroy->flow_ident &&
+		create->return_ident == destroy->return_ident &&
+		create->protocol == destroy->protocol &&
+		ppe_tun_rps_match_udf(&create->usr_data, &destroy->usr_data));
+}
+
+/*
+ * ppe_tun_rps_match_ipv6()
+ *	Check if IPv6 create and destroy rules match exactly (5-tuple + UDFs)
+ */
+static inline bool ppe_tun_rps_match_ipv6(struct ppe_tun_rps_ipv6_rule_create_msg *create,
+					  struct ppe_tun_rps_ipv6_rule_destroy_msg *destroy)
+{
+	return (create->flow_ip[0] == destroy->flow_ip[0] &&
+		create->flow_ip[1] == destroy->flow_ip[1] &&
+		create->flow_ip[2] == destroy->flow_ip[2] &&
+		create->flow_ip[3] == destroy->flow_ip[3] &&
+		create->return_ip[0] == destroy->return_ip[0] &&
+		create->return_ip[1] == destroy->return_ip[1] &&
+		create->return_ip[2] == destroy->return_ip[2] &&
+		create->return_ip[3] == destroy->return_ip[3] &&
+		create->flow_ident == destroy->flow_ident &&
+		create->return_ident == destroy->return_ident &&
+		create->protocol == destroy->protocol &&
+		ppe_tun_rps_match_udf(&create->usr_data, &destroy->usr_data));
+}
+
+/*
  * ppe_tun_rps_ipv4_rule_create
  *      Tunnel RPS IPv4 rule create
  */
@@ -746,12 +817,30 @@ enum ppe_tun_rps_ret ppe_tun_rps_ipv4_rule_create(struct ppe_tun_rps_ipv4_rule_c
 
 	ppe_tun_rps_rule_dump(&prpsc, true);
 
-	ret = ppe_drv_tun_rps_rule_create(&prpsc);
-	if (ret != PPE_DRV_RET_SUCCESS) {
-		ppe_tun_rps_warn("Error in pushing RPS rules with error code %d\n", ret);
+	/*
+	 * Allocate rule entry
+	 */
+	struct ppe_tun_rps_rule_entry *entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
+	if (!entry) {
+		ppe_tun_rps_warn("IPv4 rule entry allocation failed\n");
 		atomic64_inc(&g_rps->stats.v4_create_ppe_tun_rps_rule_fail);
 		return PPE_TUN_RPS_RET_FAILURE;
 	}
+
+	entry->ip_proto = IPPROTO_IP;
+	memcpy(&entry->msg.v4, create_ipv4, sizeof(*create_ipv4));
+
+	ret = ppe_drv_tun_rps_rule_create(&prpsc);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_tun_rps_warn("Error in pushing RPS rules with error code %d\n", ret);
+		kfree(entry);
+		atomic64_inc(&g_rps->stats.v4_create_ppe_tun_rps_rule_fail);
+		return PPE_TUN_RPS_RET_FAILURE;
+	}
+
+	spin_lock_bh(&gbl_tun_rps.lock);
+	list_add_tail(&entry->list, &gbl_tun_rps.rules_list);
+	spin_unlock_bh(&gbl_tun_rps.lock);
 
 	return PPE_TUN_RPS_RET_SUCCESS;
 }
@@ -857,12 +946,30 @@ enum ppe_tun_rps_ret ppe_tun_rps_ipv6_rule_create(struct ppe_tun_rps_ipv6_rule_c
 
 	ppe_tun_rps_rule_dump(&prpsc, true);
 
-	ret = ppe_drv_tun_rps_rule_create(&prpsc);
-	if (ret != PPE_DRV_RET_SUCCESS) {
-		ppe_tun_rps_warn("Error in pushing RPS rules with error code %d\n", ret);
+	/*
+	 * Allocate rule entry
+	 */
+	struct ppe_tun_rps_rule_entry *entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
+	if (!entry) {
+		ppe_tun_rps_warn("IPv6 rule entry allocation failed\n");
 		atomic64_inc(&g_rps->stats.v6_create_ppe_tun_rps_rule_fail);
 		return PPE_TUN_RPS_RET_FAILURE;
 	}
+
+	entry->ip_proto = IPPROTO_IPV6;
+	memcpy(&entry->msg.v6, create_ipv6, sizeof(*create_ipv6));
+
+	ret = ppe_drv_tun_rps_rule_create(&prpsc);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_tun_rps_warn("Error in pushing RPS rules with error code %d\n", ret);
+		kfree(entry);
+		atomic64_inc(&g_rps->stats.v6_create_ppe_tun_rps_rule_fail);
+		return PPE_TUN_RPS_RET_FAILURE;
+	}
+
+	spin_lock_bh(&gbl_tun_rps.lock);
+	list_add_tail(&entry->list, &gbl_tun_rps.rules_list);
+	spin_unlock_bh(&gbl_tun_rps.lock);
 
 	return PPE_TUN_RPS_RET_SUCCESS;
 }
@@ -904,6 +1011,25 @@ enum ppe_tun_rps_ret ppe_tun_rps_ipv4_rule_destroy(struct ppe_tun_rps_ipv4_rule_
 		ppe_tun_rps_warn("Error destroying RPS rules with error code %d\n", ret);
 		atomic64_inc(&g_rps->stats.v4_destroy_ppe_tun_rps_rule_fail);
 		return PPE_TUN_RPS_RET_FAILURE;
+	}
+
+	/*
+	 * Remove entry from rules list
+	 */
+	struct ppe_tun_rps_rule_entry *entry, *temp;
+	struct ppe_tun_rps_rule_entry *deleted_entry = NULL;
+	spin_lock_bh(&g_rps->lock);
+	list_for_each_entry_safe(entry, temp, &g_rps->rules_list, list) {
+		if (entry->ip_proto == IPPROTO_IP && ppe_tun_rps_match_ipv4(&entry->msg.v4, destroy_ipv4)) {
+			list_del(&entry->list);
+			deleted_entry = entry;
+			break;
+		}
+	}
+	spin_unlock_bh(&g_rps->lock);
+
+	if (deleted_entry) {
+		kfree(deleted_entry);
 	}
 
 	return PPE_TUN_RPS_RET_SUCCESS;
@@ -948,6 +1074,25 @@ enum ppe_tun_rps_ret ppe_tun_rps_ipv6_rule_destroy(struct ppe_tun_rps_ipv6_rule_
 		return PPE_TUN_RPS_RET_FAILURE;
 	}
 
+	/*
+	 * Remove entry from rules list
+	 */
+	struct ppe_tun_rps_rule_entry *entry, *temp;
+	struct ppe_tun_rps_rule_entry *deleted_entry = NULL;
+	spin_lock_bh(&g_rps->lock);
+	list_for_each_entry_safe(entry, temp, &g_rps->rules_list, list) {
+		if (entry->ip_proto == IPPROTO_IPV6 && ppe_tun_rps_match_ipv6(&entry->msg.v6, destroy_ipv6)) {
+			list_del(&entry->list);
+			deleted_entry = entry;
+			break;
+		}
+	}
+	spin_unlock_bh(&g_rps->lock);
+
+	if (deleted_entry) {
+		kfree(deleted_entry);
+	}
+
 	return PPE_TUN_RPS_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_tun_rps_ipv6_rule_destroy);
@@ -961,6 +1106,7 @@ int ppe_tun_rps_init(struct dentry *root)
 	int ret;
 
 	spin_lock_init(&gbl_tun_rps.lock);
+	INIT_LIST_HEAD(&gbl_tun_rps.rules_list);
 
 	atomic64_set(&gbl_tun_rps.stats.v4_create_ppe_tun_rps_rule, 0);
 	atomic64_set(&gbl_tun_rps.stats.v4_create_ppe_tun_rps_rule_fail, 0);
@@ -987,6 +1133,82 @@ int ppe_tun_rps_init(struct dentry *root)
  */
 void ppe_tun_rps_deinit(void)
 {
+	struct ppe_tun_rps_rule_entry *entry, *temp;
+	struct list_head free_list;
+
+	INIT_LIST_HEAD(&free_list);
+
 	ppe_tun_rps_stats_debugfs_exit();
+
+	/*
+	 * Move all active rule entries to free_list under lock
+	 */
+	spin_lock_bh(&gbl_tun_rps.lock);
+	list_splice_init(&gbl_tun_rps.rules_list, &free_list);
+	spin_unlock_bh(&gbl_tun_rps.lock);
+
+	/*
+	 * Free all entries safely outside of the spinlock
+	 */
+	list_for_each_entry_safe(entry, temp, &free_list, list) {
+		list_del(&entry->list);
+		kfree(entry);
+	}
+
 	ppe_tun_rps_info("PPE Tunnel RPS module exited\n");
+}
+
+/*
+ * ppe_tun_rps_flush_rules()
+ *	Flush all configured rules from hardware and tracked memory list (safe pop-and-destroy)
+ */
+void ppe_tun_rps_flush_rules(void)
+{
+	struct ppe_tun_rps *g_rps = &gbl_tun_rps;
+
+	ppe_tun_rps_info("Flushing all active tunnel RPS rules\n");
+
+	while (1) {
+		struct ppe_tun_rps_rule_entry *entry = NULL;
+
+		spin_lock_bh(&g_rps->lock);
+		if (!list_empty(&g_rps->rules_list)) {
+			entry = list_first_entry(&g_rps->rules_list, struct ppe_tun_rps_rule_entry, list);
+			list_del(&entry->list);
+		}
+		spin_unlock_bh(&g_rps->lock);
+
+		if (!entry) {
+			/*
+			 * No more rules left to flush
+			 */
+			break;
+		}
+
+		if (entry->ip_proto != IPPROTO_IPV6) {
+			struct ppe_drv_tun_rps_rule_destroy prpsd = {0};
+			prpsd.cmn.flow_ip[0] = entry->msg.v4.flow_ip;
+			prpsd.cmn.return_ip[0] = entry->msg.v4.return_ip;
+			prpsd.cmn.flow_ident = entry->msg.v4.flow_ident;
+			prpsd.cmn.return_ident = entry->msg.v4.return_ident;
+			prpsd.cmn.protocol = entry->msg.v4.protocol;
+			prpsd.cmn.rule_type = PPE_DRV_TUN_RPS_RULE_TYPE_IPV4;
+			ppe_tun_rps_destroy_fill_udf_data(&entry->msg.v4.usr_data, &prpsd);
+
+			ppe_drv_tun_rps_rule_destroy(&prpsd);
+		} else {
+			struct ppe_drv_tun_rps_rule_destroy prpsd = {0};
+			memcpy(prpsd.cmn.flow_ip, entry->msg.v6.flow_ip, sizeof(entry->msg.v6.flow_ip));
+			memcpy(prpsd.cmn.return_ip, entry->msg.v6.return_ip, sizeof(entry->msg.v6.return_ip));
+			prpsd.cmn.flow_ident = entry->msg.v6.flow_ident;
+			prpsd.cmn.return_ident = entry->msg.v6.return_ident;
+			prpsd.cmn.protocol = entry->msg.v6.protocol;
+			prpsd.cmn.rule_type = PPE_DRV_TUN_RPS_RULE_TYPE_IPV6;
+			ppe_tun_rps_destroy_fill_udf_data(&entry->msg.v6.usr_data, &prpsd);
+
+			ppe_drv_tun_rps_rule_destroy(&prpsd);
+		}
+
+		kfree(entry);
+	}
 }
