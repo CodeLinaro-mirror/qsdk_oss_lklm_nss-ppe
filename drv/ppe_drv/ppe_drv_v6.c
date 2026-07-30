@@ -484,6 +484,12 @@ ppe_drv_ret_t ppe_drv_v6_rfs_conn_fill(struct ppe_drv_v6_rule_create *create,  s
 		pcf->fl_mdata.tree_id_data.type = PPE_DRV_TREE_ID_TYPE_UDP_ST;
                 pcf->fl_mdata.tree_id_data.info.value = create->qos_rule.flow_qos_tag;
 		break;
+	case PPE_DRV_CONN_TYPE_MCAST:
+		ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_MCAST_RFS_FLOW);
+
+		pcf->fl_mdata.coremask = &p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_MCAST];
+		pcf->fl_mdata.shadow_coremask = &p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_MCAST];
+		break;
 	default:
 		/*
 		 * Note: This case is currently not expected to executed, but in future if we will have some flow for which,
@@ -4783,6 +4789,10 @@ ppe_drv_ret_t ppe_drv_v6_assist_rule_create(struct ppe_drv_v6_rule_create *creat
 			break;
 		case PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST:
 			conn_type = PPE_DRV_CONN_TYPE_UDP_ST;
+			break;
+		case PPE_DRV_ASSIST_FEATURE_RFS_MCAST:
+			conn_type = PPE_DRV_CONN_TYPE_MCAST;
+			ppe_iface_chk_needed = false;
 			break;
 		default:
 			ppe_drv_warn("%p: Invalid feature type, feature: %u\n", create, feature);

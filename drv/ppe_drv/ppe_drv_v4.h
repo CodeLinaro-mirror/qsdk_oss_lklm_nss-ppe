@@ -99,6 +99,8 @@
 					/* Flow has UDP ST enabled */
 #define PPE_DRV_V4_CONN_FLAG_UDP_ST_FLOW	0x800000000ULL
 					/* Flow is UDP Speedtest */
+#define PPE_DRV_V4_CONN_FLAG_MCAST_RFS_FLOW	0x1000000000ULL
+					/* Flow is Multicast RFS */
 
 /*
  * ppe_drv_v4_addr_equal()
@@ -210,6 +212,11 @@ struct ppe_drv_v4_conn_flow {
 	atomic_t tx_bytes;			/* Number of Tx bytes */
 
 	bool no_stats_update;			/* No stats update for the flow */
+
+	/*
+	 * Core information for MCAST RFS flows
+	 */
+	uint8_t rfs_core;			/* CPU core assigned to this RFS flow */
 };
 
 /**

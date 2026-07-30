@@ -100,6 +100,12 @@ MODULE_PARM_DESC(wlan_coremask, "Coremask for Ethernet to WLAN Flows");
 static unsigned int tun_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
 MODULE_PARM_DESC(tun_coremask, "Coremask for Ethernet to Tunnel, etc Flows");
 
+/*
+ * Module parameter to set coremask for multicast RFS flows.
+ */
+static unsigned int mcast_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
+MODULE_PARM_DESC(mcast_coremask, "Coremask for Multicast RFS Flows");
+
 #ifdef NSS_PPE_SIXTH_TUPLE
 /*
  * Module parameter to set 6th tuple mode.
@@ -1571,6 +1577,12 @@ static ppe_drv_ret_t ppe_drv_rfs_map_core_to_enqueue_vp(uint8_t core, uint8_t qu
 	 */
 	p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL] = tun_coremask;
 	p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL] = tun_coremask;
+
+	/*
+	 * Default coremask for multicast RFS flows is set.
+	 */
+	p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_MCAST] = mcast_coremask;
+	p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_MCAST] = mcast_coremask;
 
 	enq_vp = ppe_drv_port_enq_vp_alloc();
 	if (enq_vp == PPE_DRV_PORT_ID_INVALID) {
@@ -4801,6 +4813,39 @@ static const struct kernel_param_ops tun_coremask_ops = {
 };
 
 module_param_cb(tun_coremask, &tun_coremask_ops, &tun_coremask, 0644);
+
+/*
+ * ppe_drv_mcast_coremask_set_handler()
+ *	Handler function to set value of mcast_coremask.
+ */
+static int ppe_drv_mcast_coremask_set_handler(const char *val, const struct kernel_param *kp)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int res = param_set_uint(val, kp);
+
+	if ((mcast_coremask < PPE_DRV_RFS_COREMASK_MIN) || (mcast_coremask > PPE_DRV_RFS_COREMASK_MAX)) {
+		printk("Invalid coremask value, should be between %u to %u. Hence setting to default value : %u \n",
+						PPE_DRV_RFS_COREMASK_MIN, PPE_DRV_RFS_COREMASK_MAX, PPE_DRV_RFS_COREMASK_DEFAULT);
+		mcast_coremask = PPE_DRV_RFS_COREMASK_DEFAULT;
+		res = 0;
+	}
+
+	spin_lock_bh(&p->lock);
+	p->rfs.coremask[PPE_DRV_RFS_INTERFACE_TYPE_MCAST] = mcast_coremask;
+	p->rfs.shadow_coremask[PPE_DRV_RFS_INTERFACE_TYPE_MCAST] = mcast_coremask;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_trace("Multicast coremask value is set to : %u\n", mcast_coremask);
+
+	return res;
+}
+
+static const struct kernel_param_ops mcast_coremask_ops = {
+    .set = ppe_drv_mcast_coremask_set_handler,
+    .get = param_get_uint,
+};
+
+module_param_cb(mcast_coremask, &mcast_coremask_ops, &mcast_coremask, 0644);
 
 /*
  * ppe_drv_module_init()

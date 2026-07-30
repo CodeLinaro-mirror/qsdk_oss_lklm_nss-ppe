@@ -53,6 +53,7 @@
 #define PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL	0x00000008	/* PPE Assist feature to configure RFS for Tunnel flows */
 #define PPE_DRV_ASSIST_FEATURE_RFS_DEFAULT	0x00000010      /* PPE Assist feature to configure RFS */
 #define PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST	0x00000020      /* PPE Assist feature to configure RFS for udp-st flows */
+#define PPE_DRV_ASSIST_FEATURE_RFS_MCAST	0x00000040      /* PPE Assist feature to configure RFS for multicast flows */
 
 #define PPE_DRV_SERVICE_CLASS_IS_VALID(sc)	((sc >= PPE_DRV_SAWF_SC_START) && (sc <= PPE_DRV_SAWF_SC_END))
 
