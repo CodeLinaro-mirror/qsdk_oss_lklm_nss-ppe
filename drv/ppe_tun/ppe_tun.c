@@ -745,6 +745,10 @@ static uint8_t ppe_tun_xcpn_mode_get(struct ppe_tun *tun)
 		action = ptp->xcpn_mode.gretun;
 		break;
 
+	case PPE_DRV_TUN_CMN_CTX_TYPE_VXLAN:
+		action = ptp->xcpn_mode.vxlan;
+		break;
+
 	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L2:
 	case PPE_DRV_TUN_CMN_CTX_TYPE_CUSTOM_L3:
 		action = tun->exp_mode;
@@ -2206,6 +2210,55 @@ const struct file_operations ppe_tun_l2tp_xcpn_file_fops = {
 };
 
 /*
+ * ppe_tun_xcpn_vxlan_read()
+ *	vxlan xcpn read handler
+ */
+static ssize_t ppe_tun_xcpn_vxlan_read(struct file *f, char *buf, size_t count, loff_t *offset)
+{
+	int len;
+	char lbuf[24];
+	uint8_t xcpn_mode = ptp->xcpn_mode.vxlan;
+
+	len = snprintf(lbuf, sizeof(lbuf), "Vxlan xcpn mode %u \n", xcpn_mode);
+
+	return simple_read_from_buffer(buf, count, offset, lbuf, len);
+}
+
+/*
+ * ppe_tun_xcpn_vxlan_write()
+ *	vxlan xcpn write handler
+ */
+static ssize_t ppe_tun_xcpn_vxlan_write(struct file *f, const char *buffer, size_t len, loff_t *offset)
+{
+	ssize_t size;
+	char data[16];
+	bool res;
+	int status;
+
+	size = simple_write_to_buffer(data, sizeof(data), offset, buffer, len);
+	if (size < 0) {
+		ppe_tun_warn("%p: Error reading the input for vxlan configuration", ptp);
+		return size;
+	}
+
+	status = kstrtobool(data, &res);
+	if (status) {
+		ppe_tun_warn("%p: Error reading the input for vxlan configuration", ptp);
+		return status;
+	}
+
+	ptp->xcpn_mode.vxlan = (uint8_t) res;
+
+	return len;
+}
+
+const struct file_operations ppe_tun_vxlan_xcpn_file_fops = {
+	.owner = THIS_MODULE,
+	.write = ppe_tun_xcpn_vxlan_write,
+	.read = ppe_tun_xcpn_vxlan_read,
+};
+
+/*
  * ppe_tun_hybrid_ol_cfg_read()
  *	gretap hybrid offload read handler
  */
@@ -2364,6 +2417,7 @@ static int __init ppe_tun_module_init(void)
 	ptp->xcpn_mode.ipip6 = PPE_TUN_XCPN_MODE_1;
 	ptp->xcpn_mode.l2tp = PPE_TUN_XCPN_MODE_1;
 	ptp->xcpn_mode.gretun = PPE_TUN_XCPN_MODE_1;
+	ptp->xcpn_mode.vxlan = PPE_TUN_XCPN_MODE_1;
 
 	/*
 	 * Tunnel hybrid offload operations.
@@ -2446,6 +2500,10 @@ static int __init ppe_tun_module_init(void)
 
 	if (!debugfs_create_file("gretun", 0644, dir, NULL, &ppe_tun_gretun_xcpn_file_fops)) {
 		ppe_tun_warn("failed to create debugfs entry for gretun");
+	}
+
+	if (!debugfs_create_file("vxlan", 0644, dir, NULL, &ppe_tun_vxlan_xcpn_file_fops)) {
+		ppe_tun_warn("failed to create debugfs entry for vxlan");
 	}
 
 	/*
