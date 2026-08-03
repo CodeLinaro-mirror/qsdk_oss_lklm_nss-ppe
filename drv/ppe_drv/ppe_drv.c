@@ -399,7 +399,7 @@ int ppe_drv_set_ddrq_en_bitmask(uint32_t q_base, uint32_t q_cnt, bool state)
 		if (bit_cnt > bit_pending) {
 			bit_cnt = bit_pending;
 		}
-		mask = (((1u << bit_cnt) - 1u) << bit_off);
+		mask = ((((uint64_t)1 << bit_cnt) - 1u) << bit_off);
 
 		if (state) {
 			ppe_drv_ddrq_en_bitmask[word_idx] |= mask;
