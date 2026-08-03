@@ -2845,7 +2845,7 @@ ppe_drv_ret_t ppe_drv_v4_flush(struct ppe_drv_v4_conn *cn)
 #endif
 
 	/*
-	 * Delete flow table entry.
+	 * Delete flow direction flow entry first; interfaces are released later.
 	 */
 	if (pcf && !ppe_drv_v4_flow_del(pcf)) {
 		ppe_drv_stats_inc(&p->stats.gen_stats.v4_flush_fail);
@@ -2853,8 +2853,24 @@ ppe_drv_ret_t ppe_drv_v4_flush(struct ppe_drv_v4_conn *cn)
 		return PPE_DRV_RET_FAILURE_FLUSH_FAIL;
 	}
 
+#if defined(NSS_PPE_DRV_HW_GRO)
+	if (ppe_drv_v4_conn_flow_flags_check(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
+		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
+		atomic_dec(&p->gro_ctx.num_hw_gro_flows);
+	}
+#endif
+
 	/*
-	 * Release references on interfaces.
+	 * Delete return direction flow entry.
+	 */
+	if (pcr && !ppe_drv_v4_flow_del(pcr)) {
+		ppe_drv_stats_inc(&p->stats.gen_stats.v4_flush_fail);
+		ppe_drv_warn("%p: deletion of return flow failed: %p", p, pcf);
+		return PPE_DRV_RET_FAILURE_FLUSH_FAIL;
+	}
+
+	/*
+	 * Both directions are deleted; release interface references now.
 	 */
 	if (pcf) {
 		ppe_drv_v4_if_walk_release(pcf);
@@ -2866,25 +2882,6 @@ ppe_drv_ret_t ppe_drv_v4_flush(struct ppe_drv_v4_conn *cn)
 
 	}
 
-#if defined(NSS_PPE_DRV_HW_GRO)
-	if (ppe_drv_v4_conn_flow_flags_check(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
-		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
-		atomic_dec(&p->gro_ctx.num_hw_gro_flows);
-	}
-#endif
-
-	/*
-	 * Find the other flow associated with this connection.
-	 */
-	if (pcr && !ppe_drv_v4_flow_del(pcr)) {
-		ppe_drv_stats_inc(&p->stats.gen_stats.v4_flush_fail);
-		ppe_drv_warn("%p: deletion of return flow failed: %p", p, pcf);
-		return PPE_DRV_RET_FAILURE_FLUSH_FAIL;
-	}
-
-	/*
-	 * Release references on interfaces.
-	 */
 	if (pcr) {
 		ppe_drv_v4_if_walk_release(pcr);
 		/*
@@ -3078,7 +3075,11 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 
 	pcf = flow->pcf.v4;
 	cn = ppe_drv_v4_conn_flow_conn_get(pcf);
+	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
 
+	/*
+	 * Delete flow direction entry first; interfaces released after both dirs.
+	 */
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
 		if (!ppe_drv_v4_flow_del(pcf)) {
 			spin_unlock_bh(&p->lock);
@@ -3086,7 +3087,24 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 			ppe_drv_warn("%p: deletion of flow failed: %p", p, pcf);
 			return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
 		}
+	}
 
+	/*
+	 * Delete return direction entry.
+	 */
+	if (pcr && ppe_drv_v4_conn_flow_flags_check(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
+		if (!ppe_drv_v4_flow_del(pcr)) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_stats_inc(&comm_stats->v4_destroy_policer_fail);
+			ppe_drv_warn("%p: deletion of return flow failed: %p", p, pcr);
+			return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
+		}
+	}
+
+	/*
+	 * Both directions are deleted; release interface references now.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
 		if (pcf->eg_port_if) {
 			ppe_drv_iface_deref_internal(pcf->eg_port_if);
 			pcf->eg_port_if = NULL;
@@ -3104,19 +3122,7 @@ ppe_drv_ret_t ppe_drv_v4_policer_flow_destroy(struct ppe_drv_v4_rule_destroy *de
 
 	}
 
-	pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
-
-	/*
-	 * Find the other flow associated with this connection.
-	 */
 	if (pcr && ppe_drv_v4_conn_flow_flags_check(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_PPE_POLICER_ASSIST)) {
-		if (ppe_drv_v4_flow_del(pcr)) {
-			spin_unlock_bh(&p->lock);
-			ppe_drv_stats_inc(&comm_stats->v4_destroy_policer_fail);
-			ppe_drv_warn("%p: deletion of return flow failed: %p", p, pcr);
-			return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
-		}
-
 		if (pcr->eg_port_if) {
 			ppe_drv_iface_deref_internal(pcr->eg_port_if);
 			pcr->eg_port_if = NULL;
@@ -3357,16 +3363,6 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 		return PPE_DRV_RET_FAILURE_DESTROY_FAIL;
 	}
 
-	/*
-	 * Release references on interfaces.
-	 */
-	ppe_drv_v4_if_walk_release(pcf);
-
-	/*
-	 * Delete flow entry from flow hash table.
-	 */
-	hlist_del_init(&pcf->hnode);
-
 #if defined(NSS_PPE_DRV_HW_GRO)
 	if (ppe_drv_v4_conn_flow_flags_check(pcr, PPE_DRV_V4_CONN_FLAG_FLOW_HW_GRO)) {
 		BUG_ON(atomic_read(&p->gro_ctx.num_hw_gro_flows) <= 0);
@@ -3375,7 +3371,7 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 #endif
 
 	/*
-	 * Find the other flow associated with this connection.
+	 * Delete return direction flow entry.
 	 */
 	if (!ppe_drv_v4_flow_del(pcr)) {
 		spin_unlock_bh(&p->lock);
@@ -3385,8 +3381,15 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	}
 
 	/*
-	 * Release references on interfaces.
+	 * Both directions are deleted; release interface references now.
 	 */
+	ppe_drv_v4_if_walk_release(pcf);
+
+	/*
+	 * Delete flow entry from flow hash table.
+	 */
+	hlist_del_init(&pcf->hnode);
+
 	ppe_drv_v4_if_walk_release(pcr);
 
 	/*

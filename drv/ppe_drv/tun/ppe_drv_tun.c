@@ -1449,14 +1449,12 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 	if (ptun->is_veip_tun) {
 		if (ppe_drv_veip_eg_vpgroup_clear(ptun->vp_num) != PPE_DRV_RET_SUCCESS) {
 			ppe_drv_warn("Failed to clear vp_group config for tun: %x\n", ptun->vp_num);
-			spin_unlock_bh(&p->lock);
-			return false;
+			goto error;
 		}
 
 		if (!ppe_drv_port_l2_vp_sc_reset(ptun->pp)) {
 			ppe_drv_warn("Error in reset L2 VP table  %d\n",ptun-> pp->port);
-			spin_unlock_bh(&p->lock);
-			return false;
+			goto error;
 		}
 	}
 #endif
@@ -1466,8 +1464,7 @@ bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule)
 	 */
 	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_MAPT) {
 		if (!ppe_drv_tun_deactivate_mapt(ptun)) {
-			spin_unlock_bh(&p->lock);
-			return false;
+			goto error;
 		}
 
 		goto disable_encap;
@@ -1557,6 +1554,18 @@ disable_encap:
 
 skip_tunnel_deactivation:
 
+	/*
+	 * Release interface/port references held on behalf of pcf/pcr, now
+	 * that all port-dependent operations above are done using them.
+	 */
+	if (is_ipv6 && cn_v6) {
+		ppe_drv_v6_if_walk_release(&cn_v6->pcf);
+		ppe_drv_v6_if_walk_release(&cn_v6->pcr);
+	} else if (cn_v4) {
+		ppe_drv_v4_if_walk_release(&cn_v4->pcf);
+		ppe_drv_v4_if_walk_release(&cn_v4->pcr);
+	}
+
 	if (pth->type == PPE_DRV_TUN_CMN_CTX_TYPE_IPIP6 && ptun->th.tun.mape.is_mape_br && ptun->th.tun.mape.is_mape_activate) {
 		ptun->th.tun.mape.is_mape_activate = A_FALSE;
 		ptun->mape_br_active_tun_count--;
@@ -1602,9 +1611,22 @@ error:
 		ptun->mape_br_active_tun_count--;
 	}
 
+	/*
+	 * Release interface/port references held on behalf of pcf/pcr.
+	 */
+	if (is_ipv6 && cn_v6) {
+		ppe_drv_v6_if_walk_release(&cn_v6->pcf);
+		ppe_drv_v6_if_walk_release(&cn_v6->pcr);
+	} else if (cn_v4) {
+		ppe_drv_v4_if_walk_release(&cn_v4->pcf);
+		ppe_drv_v4_if_walk_release(&cn_v4->pcr);
+	}
+
 	spin_unlock_bh(&p->lock);
 	ppe_drv_v4_conn_stats_free(cns_v4);
 	ppe_drv_v6_conn_stats_free(cns_v6);
+	ppe_drv_v6_conn_free(cn_v6);
+	ppe_drv_v4_conn_free(cn_v4);
 
 	return false;
 }
