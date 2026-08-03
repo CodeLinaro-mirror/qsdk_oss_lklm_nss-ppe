@@ -187,6 +187,7 @@ void ppe_drv_sc_spl_ddrq_config(void)
 
 	sc_cfg.bypass_bitmap[0] = ~((1 << FAKE_MAC_HEADER_BYP)
 			| (1 << SERVICE_CODE_BYP)
+			| (1 << FAKE_L2_PROTO_BYP)
 			| (1 << MY_MAC_CHECK_BYP));
 	sc_cfg.bypass_bitmap[1] = PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL;
 	sc_cfg.bypass_bitmap[3] = PPE_DRV_SC_BYPASS_BITMAP_32BITS_VAL;
