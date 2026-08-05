@@ -33,7 +33,7 @@
 #define PPE_DRV_TUN_DECAP_L2TP_PROTOCOL_MASK 0xffffffff /* Protocol mask for L2TP program entry config */
 
 #define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL 0		/* Common 32 bit data matched for Outer header GRE */
-#define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL_MASK 0 	/* Dont Mask any fixed fields for GRE header as UDF fields would mask them */
+#define PPE_DRV_TUN_DECAP_GRE_CFG_PROTOCOL_MASK 0x20000000 	/* Check if the Key flag is set in the GRE header */
 #define PPE_DRV_TUN_DECAP_GRE_BASIC_HEADER_LEN 4	/* GRE header length without optional fields */
 #define PPE_DRV_TUN_DECAP_GRE_FLAGS_OFFSET 0		/* Offset for flag field within GRE header from start of GRE header */
 #define PPE_DRV_TUN_DECAP_GRE_PROTO_OFFSET 2		/* Offset for Protocol field in GRE header from start of GRE header */
