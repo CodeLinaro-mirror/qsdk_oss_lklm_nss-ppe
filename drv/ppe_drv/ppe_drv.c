@@ -119,6 +119,53 @@ uint32_t gem_port_bitmap;
 int pon_max_pq = 110;
 module_param(pon_max_pq, int, 0644);
 MODULE_PARM_DESC(pon_max_pq, "Max number of PON PQs needed by OMCI");
+
+/*
+ * Module parameter to enable PON mode.
+ */
+static int pon_enable = 1;
+
+static int ppe_drv_pon_enable_set_handler(const char *val, const struct kernel_param *kp)
+{
+	int res = param_set_int(val, kp);
+
+	if (res)
+		return res;
+#ifdef NSS_PPE_FEATURE_DOT1P
+	/*
+	 * ppe_drv_gbl is NULL when this handler is invoked during parse_args()
+	 * at module load time, before probe() has run. Skip HW programming here;
+	 * ppe_drv_probe() applies pon_enable at the correct time.
+	 */
+	if (!ppe_drv_gbl)
+		return 0;
+
+	if (pon_enable) {
+		res = ppe_drv_dot1p_configure_default_rule();
+		if (res != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("Failed to configure dot1p default rule on pon_enable\n");
+			return res;
+		}
+		ppe_drv_trace("dot1p default rule configured\n");
+	} else {
+		res = ppe_drv_dot1p_reset_default_rule();
+		if (res != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("Failed to reset dot1p default rule on pon_enable\n");
+			return res;
+		}
+		ppe_drv_trace("dot1p default rule reset\n");
+	}
+#endif
+	return res;
+}
+
+static const struct kernel_param_ops pon_enable_ops = {
+	.set = ppe_drv_pon_enable_set_handler,
+	.get = param_get_int,
+};
+
+module_param_cb(pon_enable, &pon_enable_ops, &pon_enable, 0644);
+MODULE_PARM_DESC(pon_enable, "Enable PON mode and configure default dot1p rule");
 #endif
 
 #ifdef PPE_DRV_DDRQ_ENABLE
@@ -2436,7 +2483,9 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	nss_ppe_drv_minidump_log(p, sizeof(struct ppe_drv), "ppe_drv");
 
 #ifdef NSS_PPE_FEATURE_DOT1P
-	ppe_drv_dot1p_configure_default_rule();
+	if (pon_enable) {
+		ppe_drv_dot1p_configure_default_rule();
+	}
 #endif
 
 	/*
