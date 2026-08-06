@@ -86,6 +86,7 @@ struct ppe_ds_wlan_reg_info {
 	bool ppe_ds_int_mode_enabled;	/**< Interrupt mode to process PPE2TCL */
 	uint8_t dp_ppeds_node_id;	/**< Node id of ds node */
 	struct ppe_ds_wlan_node_freq freq;	/**< Radio channel frequency range in MHz */
+	uint32_t ppe_ds_wlan_rx_hdr_tlv_sz;	/**< size of TLV header in REO2PPE ring */
 };
 
 struct ppe_ds_reg_addr_info {
@@ -175,6 +176,7 @@ struct ppe_ds_wlan_arch_reg_info {
 	};
 
 	struct ppe_ds_wlan_node_freq freq;	/**< Radio channel frequency range in MHz */
+	uint32_t ppe_ds_wlan_rx_hdr_tlv_sz;	/**< size of TLV header in REO2PPE ring */
 };
 
 struct ppe_vp_ui;
