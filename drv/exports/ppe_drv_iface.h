@@ -396,5 +396,16 @@ ppe_drv_iface_t ppe_drv_iface_get_index(struct ppe_drv_iface *iface);
  */
 int32_t ppe_drv_iface_l3_if_idx_get(struct ppe_drv_iface *iface);
 
+/**
+ * ppe_drv_iface_is_htt
+ *      Check if HTT switch is valid for a given PPE interface.
+ *
+ * @param[in] iface   PPE interface.
+ *
+ * @return
+ * true if HTT switch is valid, false otherwise.
+ */
+bool ppe_drv_iface_is_htt(struct ppe_drv_iface *iface);
+
 /** @} */ /* end_addtogroup ppe_drv_iface_subsystem */
 #endif /* _PPE_DRV_IFACE_H_ */

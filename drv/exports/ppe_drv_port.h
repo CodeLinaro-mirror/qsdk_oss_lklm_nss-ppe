@@ -328,4 +328,16 @@ int32_t ppe_drv_port_num_from_ifname(const char *ifname);
  */
 void ppe_drv_port_vlan_append_set(struct net_device *dev, bool enable);
 
+/**
+ * ppe_drv_port_htt_queue_base_get
+ *      Get HTT queue base for given port and DSA switch port ID.
+ *
+ * @param[in] port       Port number.
+ * @param[in] swpt_id    DSA switch port ID.
+ *
+ * @return
+ * -1 for failure else queue base
+ */
+int32_t ppe_drv_port_htt_queue_base_get(int port, uint8_t swpt_id);
+
 #endif /* _PPE_DRV_PORT_H_ */

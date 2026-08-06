@@ -2831,3 +2831,35 @@ void ppe_drv_port_vlan_append_set(struct net_device *dev, bool enable)
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_port_vlan_append_set);
+
+#ifdef NSS_PPE_DSA_QUEUE_SUPPORT
+/*
+ * ppe_drv_port_htt_queue_base_get()
+ *      Get queue base for Huntington switch port with DSA switch port ID.
+ */
+int32_t ppe_drv_port_htt_queue_base_get(int port, uint8_t swpt_id)
+{
+	struct ppe_drv_qos_port qos_port = {0};
+
+	if (!swpt_id) {
+		ppe_drv_warn("Invalid DSA switch port ID %d for port %d\n", swpt_id, port);
+		return -1;
+	}
+
+	/*
+	 * The HTT queue group is selected by DSA switch port ID, not the
+	 * dynamically allocated PPE VP ID.
+	 */
+	if (ppe_drv_qos_port_htt_res_get(port, swpt_id - 1, &qos_port) != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("Failed to get HTT QoS resources for port %d swpt_id %d\n", port, swpt_id);
+		return -1;
+	}
+
+	ppe_drv_info("HTT: port=%d, swpt_id=%d, queue_base=%u, max_pri=%u\n",
+			port, swpt_id, qos_port.base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE],
+			qos_port.max_pri);
+
+	return qos_port.base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+}
+EXPORT_SYMBOL(ppe_drv_port_htt_queue_base_get);
+#endif

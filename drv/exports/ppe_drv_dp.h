@@ -164,5 +164,24 @@ ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
  */
 void ppe_drv_dp_get_pon_stats(struct ppe_drv_port_hw_stats *stats);
 
+/**
+ * ppe_drv_dp_htt_enable
+ *	Configure the software status of the HTT (High Throughput Transport)
+ *	device associated with the given interface.
+ *
+ * This API updates the internal driver state to indicate whether the
+ * interface is connected to or operating as an HTT device.
+ *
+ * @param[in] iface    Pointer to the PPE driver interface.
+ * @param[in] htt_dev  Boolean flag indicating HTT status:
+ *                    - true  : Interface is an HTT device
+ *                    - false : Interface is not an HTT device
+ *
+ * @return
+ * PPE driver return status:
+ *  - PPE_DRV_RET_SUCCESS on successful update
+ *  - Error code otherwise
+ */
+ppe_drv_ret_t ppe_drv_dp_htt_enable(struct ppe_drv_iface *iface, bool htt_dev);
 /** @} */ /* end_addtogroup ppe_drv_dp_subsystem */
 #endif /* _PPE_DRV_DP_H_ */

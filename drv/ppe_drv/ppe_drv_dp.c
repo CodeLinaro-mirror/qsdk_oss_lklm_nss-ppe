@@ -418,3 +418,30 @@ ppe_drv_ret_t ppe_drv_dp_gem_enable(struct ppe_drv_iface *iface,
 	return PPE_DRV_RET_SUCCESS;
 }
 #endif
+
+#ifdef NSS_PPE_DSA_QUEUE_SUPPORT
+/*
+ * ppe_drv_dp_htt_enable()
+ *      API to set the HTT switch status on PPE port.
+ */
+ppe_drv_ret_t ppe_drv_dp_htt_enable(struct ppe_drv_iface *iface, bool htt_dev)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+
+	/*
+	 * If HTT device is set, configure iface with htt flag.
+	 */
+	if (htt_dev) {
+		iface->flags |= PPE_DRV_IFACE_FLAG_HTT_SWITCH_VALID;
+	} else {
+		iface->flags &= ~PPE_DRV_IFACE_FLAG_HTT_SWITCH_VALID;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_dp_htt_enable);
+#endif

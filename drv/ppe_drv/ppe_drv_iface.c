@@ -291,6 +291,11 @@ void ppe_drv_iface_base_set(struct ppe_drv_iface *iface, struct ppe_drv_iface *b
 #if defined(NSS_VLAN_BASED_DSA_SUPPORT) || defined(NSS_ATH_HDR_BASED_DSA_SUPPORT)
 	if (base_if->flags & PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID)
 		iface->flags |= PPE_DRV_IFACE_FLAG_MHT_SWITCH_VALID;
+
+#ifdef NSS_PPE_DSA_QUEUE_SUPPORT
+	if (base_if->flags & PPE_DRV_IFACE_FLAG_HTT_SWITCH_VALID)
+		iface->flags |= PPE_DRV_IFACE_FLAG_HTT_SWITCH_VALID;
+#endif
 #endif
 
 	iface->base_if = ppe_drv_iface_ref(base_if);
@@ -1631,3 +1636,22 @@ struct ppe_drv_iface *ppe_drv_iface_entries_alloc()
 
 	return iface;
 }
+
+#ifdef NSS_PPE_DSA_QUEUE_SUPPORT
+/*
+ * ppe_drv_iface_is_htt()
+ *      Check if HTT switch is valid for a given PPE interface.
+ */
+bool ppe_drv_iface_is_htt(struct ppe_drv_iface *iface)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	bool is_htt_switch = false;
+
+	spin_lock_bh(&p->lock);
+	is_htt_switch = !!(iface->flags & PPE_DRV_IFACE_FLAG_HTT_SWITCH_VALID);
+	spin_unlock_bh(&p->lock);
+
+	return is_htt_switch;
+}
+EXPORT_SYMBOL(ppe_drv_iface_is_htt);
+#endif
