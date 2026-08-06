@@ -117,6 +117,9 @@ static bool ppe_mirror_test_get_netdev_list(char *name, struct ppe_mirror_phy_po
 
 		netdev = dev_get_by_name(&init_net, dev);
 		if (!netdev) {
+			while (i--)
+				dev_put(port_list[i].dev);
+
 			printk("Error in fetching dev %s\n", dev);
 			return false;
 		}
@@ -124,7 +127,6 @@ static bool ppe_mirror_test_get_netdev_list(char *name, struct ppe_mirror_phy_po
 		port_list[i].dev = netdev;
 		port_list[i].is_valid = true;
 
-		dev_put(netdev);
 		i++;
 
 	} while (dev && i < 6);
