@@ -306,13 +306,17 @@ ppe_drv_ret_t ppe_drv_vlan_as_vp_del_xlate_rules(struct ppe_drv_iface *iface, st
 		}
 	} else if (base_dev && dsa_slave_dev_check(base_dev)) {
 		/*
-		 * VLAN over DSA interface ? eg: lan1.10.
+		 * VLAN over DSA interface, eg: lan1.10.
 		 * base_dev would already been set to lan1. Set base_dev as lan1's CPU port.
+		 * Under NSS_PPE_DSA_QINQ_SUPPORT, keep base_dev = lan1 so ingress rules
+		 * are keyed on lan1's VP, identical to VLAN over VP (e.g. mld0.10).
 		 */
+#ifndef NSS_PPE_DSA_QINQ_SUPPORT
 		dp = dsa_port_from_netdev(base_dev);
 		if (dp) {
 			base_dev = dsa_port_to_master(dp);
 		}
+#endif
 	}
 #endif
 
@@ -432,13 +436,17 @@ ppe_drv_ret_t ppe_drv_vlan_as_vp_add_xlate_rules(struct ppe_drv_iface *iface, st
 		}
 	} else if (base_dev && dsa_slave_dev_check(base_dev)) {
 		/*
-		 * VLAN over DSA interface ? eg: lan1.10.
+		 * VLAN over DSA interface, eg: lan1.10.
 		 * base_dev would already been set to lan1. Set base_dev as lan1's CPU port.
+		 * Under NSS_PPE_DSA_QINQ_SUPPORT, keep base_dev = lan1 so ingress rules
+		 * are keyed on lan1's VP, identical to VLAN over VP (e.g. mld0.10).
 		 */
+#ifndef NSS_PPE_DSA_QINQ_SUPPORT
 		dp = dsa_port_from_netdev(base_dev);
 		if (dp) {
 			base_dev = dsa_port_to_master(dp);
 		}
+#endif
 	}
 #endif
 
@@ -2744,4 +2752,245 @@ ppe_drv_ret_t ppe_drv_vlan_hgu_rule_destroy(struct ppe_drv_vlan_ctx *ctx)
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_vlan_hgu_rule_destroy);
-#endif /* PPE_DRV_VEIP_FEATURE_SUPPORT */
+#endif
+
+
+#ifdef NSS_PPE_DSA_QINQ_SUPPORT
+/*
+ * ppe_drv_vlan_dsa_cfg_set()
+ *      Map VID to VP for ingress and egress; program global private TPID on first DSA interface.
+ */
+ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t vid)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *pp = &p->port[port_id];
+	fal_pvtvlan_rx_cfg_t vlan_port_ctrl_cfg;
+	fal_pvtvlan_tx_cfg_t vlan_tx_cfg;
+	fal_pvtvlan_map_t vlan_port_map_cfg;
+	fal_pvtvlan_map_t vlan_port_map_clr;
+	uint32_t phy_port;
+	sw_error_t ret;
+
+	spin_lock_bh(&p->lock);
+
+	/*
+	 * Global TPID is switch-level state shared across all DSA interfaces.
+	 * Program it only on the first DSA interface creation.
+	 */
+	if (p->dsa_if_count == 0) {
+		phy_port = FAL_PORT_ID(FAL_PORT_TYPE_PPORT, pp->xmit_port);
+
+		vlan_port_ctrl_cfg.map_en = A_TRUE;
+		vlan_port_ctrl_cfg.tpid = tpid;
+
+		ret = fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID, phy_port, &vlan_port_ctrl_cfg);
+		if (ret != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("Failed to set vlan-to-port mapping ctrl for port 0x%x, error: %d\n", port_id, ret);
+			return PPE_DRV_RET_VLAN_TPID_CONFIG_FAIL;
+		}
+
+		/*
+		 * Set egress private TPID (EG_GLOBAL_CTRL_PRIVATE_TAG_TPID).
+		 * Must match ingress TPID so PPE adds the correct DSA tag on egress.
+		 */
+		vlan_tx_cfg.tpid = tpid;
+
+		ret = fal_private_vlan_tx_cfg_set(PPE_DRV_SWITCH_ID, &vlan_tx_cfg);
+		if (ret != SW_OK) {
+			memset(&vlan_port_ctrl_cfg, 0, sizeof(vlan_port_ctrl_cfg));
+			vlan_port_ctrl_cfg.map_en = A_FALSE;
+			fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID, phy_port, &vlan_port_ctrl_cfg);
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("Failed to set private vlan tx TPID for port 0x%x, error: %d\n", port_id, ret);
+			return PPE_DRV_RET_VLAN_TPID_CONFIG_FAIL;
+		}
+	}
+
+	/*
+	 * Per-interface: map this VID to this VP for ingress and egress.
+	 */
+	vlan_port_map_cfg.ptmap_en = A_TRUE;
+	vlan_port_map_cfg.vlan_tci = vid;
+	vlan_port_map_cfg.vlan_tci_mask = 0x0FFF;
+	vlan_port_map_cfg.int_port = port_id;
+
+	ret = fal_private_vlan_mapping_set(PPE_DRV_SWITCH_ID, FAL_DIR_INGRESS, &vlan_port_map_cfg);
+	if (ret != SW_OK) {
+		if (p->dsa_if_count == 0) {
+			memset(&vlan_tx_cfg, 0, sizeof(vlan_tx_cfg));
+			fal_private_vlan_tx_cfg_set(PPE_DRV_SWITCH_ID, &vlan_tx_cfg);
+			memset(&vlan_port_ctrl_cfg, 0, sizeof(vlan_port_ctrl_cfg));
+			vlan_port_ctrl_cfg.map_en = A_FALSE;
+			fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID,
+					FAL_PORT_ID(FAL_PORT_TYPE_PPORT, pp->xmit_port), &vlan_port_ctrl_cfg);
+		}
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to set vlan-to-port ingress mapping for port 0x%x, error: %d\n", port_id, ret);
+		return PPE_DRV_RET_INGRESS_VLAN_MAP_FAIL;
+	}
+
+	ret = fal_private_vlan_mapping_set(PPE_DRV_SWITCH_ID, FAL_DIR_EGRESS, &vlan_port_map_cfg);
+	if (ret != SW_OK) {
+		memset(&vlan_port_map_clr, 0, sizeof(vlan_port_map_clr));
+		vlan_port_map_clr.ptmap_en = A_FALSE;
+		vlan_port_map_clr.vlan_tci = vid;
+		vlan_port_map_clr.vlan_tci_mask = 0x0FFF;
+		vlan_port_map_clr.int_port = port_id;
+		fal_private_vlan_mapping_set(PPE_DRV_SWITCH_ID, FAL_DIR_INGRESS, &vlan_port_map_clr);
+		if (p->dsa_if_count == 0) {
+			memset(&vlan_tx_cfg, 0, sizeof(vlan_tx_cfg));
+			fal_private_vlan_tx_cfg_set(PPE_DRV_SWITCH_ID, &vlan_tx_cfg);
+			memset(&vlan_port_ctrl_cfg, 0, sizeof(vlan_port_ctrl_cfg));
+			vlan_port_ctrl_cfg.map_en = A_FALSE;
+			fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID,
+					FAL_PORT_ID(FAL_PORT_TYPE_PPORT, pp->xmit_port), &vlan_port_ctrl_cfg);
+		}
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to set vlan-to-port egress mapping for port 0x%x, error: %d\n", port_id, ret);
+		return PPE_DRV_RET_EGRESS_VLAN_MAP_FAIL;
+	}
+
+	p->dsa_if_count++;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("DSA QinQ: configured VLAN port mapping for port 0x%x, VID %d, TPID 0x%x\n",
+			port_id, vid, tpid);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_dsa_cfg_set);
+
+/*
+ * ppe_drv_vlan_dsa_cfg_reset()
+ *      Clear VID-to-VP mapping for this interface; clear global private TPID on last DSA interface removal.
+ */
+int ppe_drv_vlan_dsa_cfg_reset(uint32_t port_id, uint32_t vid)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port *pp = &p->port[port_id];
+	fal_pvtvlan_rx_cfg_t vlan_port_ctrl_cfg;
+	fal_pvtvlan_tx_cfg_t vlan_tx_cfg;
+	fal_pvtvlan_map_t vlan_port_map_cfg;
+	sw_error_t ret;
+
+	spin_lock_bh(&p->lock);
+
+	if (p->dsa_if_count == 0) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("dsa_if_count underflow for port 0x%x\n", port_id);
+		return -EINVAL;
+	}
+
+	/*
+	 * Per-interface: clear ingress and egress VID-to-VP mapping.
+	 */
+	memset(&vlan_port_map_cfg, 0, sizeof(vlan_port_map_cfg));
+	vlan_port_map_cfg.ptmap_en = A_FALSE;
+	vlan_port_map_cfg.vlan_tci = vid;
+	vlan_port_map_cfg.vlan_tci_mask = 0x0FFF;
+	vlan_port_map_cfg.int_port = port_id;
+
+	ret = fal_private_vlan_mapping_set(PPE_DRV_SWITCH_ID, FAL_DIR_INGRESS, &vlan_port_map_cfg);
+	if (ret != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to clear vlan-to-port ingress mapping for port 0x%x, error: %d\n", port_id, ret);
+		return -1;
+	}
+
+	ret = fal_private_vlan_mapping_set(PPE_DRV_SWITCH_ID, FAL_DIR_EGRESS, &vlan_port_map_cfg);
+	if (ret != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to clear vlan-to-port egress mapping for port 0x%x, error: %d\n", port_id, ret);
+		return -1;
+	}
+
+	/*
+	 * Global TPID config: clear only when the last DSA interface is removed.
+	 */
+	if (p->dsa_if_count == 1) {
+		memset(&vlan_port_ctrl_cfg, 0, sizeof(vlan_port_ctrl_cfg));
+		vlan_port_ctrl_cfg.map_en = A_FALSE;
+
+		ret = fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID,
+				FAL_PORT_ID(FAL_PORT_TYPE_PPORT, pp->xmit_port), &vlan_port_ctrl_cfg);
+		if (ret != SW_OK) {
+			ppe_drv_warn("Failed to clear vlan-to-port mapping ctrl for port 0x%x, error: %d\n", port_id, ret);
+		}
+
+		memset(&vlan_tx_cfg, 0, sizeof(vlan_tx_cfg));
+
+		ret = fal_private_vlan_tx_cfg_set(PPE_DRV_SWITCH_ID, &vlan_tx_cfg);
+		if (ret != SW_OK) {
+			ppe_drv_warn("Failed to clear private vlan tx TPID for port 0x%x, error: %d\n", port_id, ret);
+		}
+	}
+
+	p->dsa_if_count -= 1;
+	spin_unlock_bh(&p->lock);
+
+	return 0;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_dsa_cfg_reset);
+
+/*
+ * ppe_drv_vlan_dsa_vp_egress_map_set()
+ *      Set egress private VLAN mapping (VP -> VID) for a VLAN-over-DSA VP.
+ */
+ppe_drv_ret_t ppe_drv_vlan_dsa_vp_egress_map_set(uint32_t port_id, uint32_t vid)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_pvtvlan_map_t vlan_port_map_cfg;
+	sw_error_t ret;
+
+	memset(&vlan_port_map_cfg, 0, sizeof(vlan_port_map_cfg));
+	vlan_port_map_cfg.ptmap_en = A_TRUE;
+	vlan_port_map_cfg.vlan_tci = vid;
+	vlan_port_map_cfg.vlan_tci_mask = 0x0FFF;
+	vlan_port_map_cfg.int_port = port_id;
+
+	spin_lock_bh(&p->lock);
+	ret = fal_private_vlan_mapping_set(PPE_DRV_SWITCH_ID, FAL_DIR_EGRESS, &vlan_port_map_cfg);
+	spin_unlock_bh(&p->lock);
+
+	if (ret != SW_OK) {
+		ppe_drv_warn("Failed to set egress VLAN-to-VP mapping for port %u vid %u, error: %d\n",
+				port_id, vid, ret);
+		return PPE_DRV_RET_EGRESS_VLAN_MAP_FAIL;
+	}
+
+	ppe_drv_info("DSA VLAN VP: set egress mapping VP %u -> VID port %u\n", port_id, vid);
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_dsa_vp_egress_map_set);
+
+/*
+ * ppe_drv_vlan_dsa_vp_egress_map_reset()
+ *      Clear egress private VLAN mapping for a VLAN-over-DSA VP.
+ */
+int ppe_drv_vlan_dsa_vp_egress_map_reset(uint32_t port_id, uint32_t vid)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_pvtvlan_map_t vlan_port_map_cfg;
+	sw_error_t ret;
+
+	memset(&vlan_port_map_cfg, 0, sizeof(vlan_port_map_cfg));
+	vlan_port_map_cfg.ptmap_en = A_FALSE;
+	vlan_port_map_cfg.vlan_tci = vid;
+	vlan_port_map_cfg.vlan_tci_mask = 0x0FFF;
+	vlan_port_map_cfg.int_port = port_id;
+
+	spin_lock_bh(&p->lock);
+	ret = fal_private_vlan_mapping_set(PPE_DRV_SWITCH_ID, FAL_DIR_EGRESS, &vlan_port_map_cfg);
+	spin_unlock_bh(&p->lock);
+
+	if (ret != SW_OK) {
+		ppe_drv_warn("Failed to clear egress VLAN-to-VP mapping for port %u vid %u, error: %d\n",
+				port_id, vid, ret);
+		return -1;
+	}
+
+	ppe_drv_info("DSA VLAN VP: cleared egress mapping VID %u -> VP port %u\n", vid, port_id);
+	return 0;
+}
+EXPORT_SYMBOL(ppe_drv_vlan_dsa_vp_egress_map_reset);
+#endif /* NSS_PPE_DSA_QINQ_SUPPORT */

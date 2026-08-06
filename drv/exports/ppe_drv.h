@@ -536,10 +536,13 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_L3_IF_PPPOE_SET_FAIL,		/**< Failed to set PPPOE session information in L3_IF */
 	PPE_DRV_RET_BASE_IFACE_NOT_FOUND,		/**< Base interface not found */
 	PPE_DRV_RET_VLAN_TPID_FAIL,			/**< VLAN TPID not found */
+	PPE_DRV_RET_VLAN_TPID_CONFIG_FAIL,		/**< VLAN TPID configuration failed */
 	PPE_DRV_RET_PORT_ROLE_FAIL,			/**< Port role configuration failed */
 	PPE_DRV_RET_VLAN_RULE_INVALID,			/**< VLAN rule invalid */
 	PPE_DRV_RET_INGRESS_VLAN_FAIL,			/**< Ingress vlan configuration failed */
 	PPE_DRV_RET_EGRESS_VLAN_FAIL,			/**< Egress vlan configuration failed */
+	PPE_DRV_RET_INGRESS_VLAN_MAP_FAIL,		/**< Ingress vlan map configuration failed */
+	PPE_DRV_RET_EGRESS_VLAN_MAP_FAIL,		/**< Egress vlan map configuration failed */
 	PPE_DRV_RET_VLAN_INGRESS_DEL_FAIL,		/**< Ingress vlan deletion configuration failed */
 	PPE_DRV_RET_VLAN_EGRESS_DEL_FAIL,		/**< Egress vlan deletion configuration failed */
 	PPE_DRV_RET_FAILURE_INVALID_HIERARCHY,		/**< Failure due to invalid hierarchy */
