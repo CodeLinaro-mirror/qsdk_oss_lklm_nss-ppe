@@ -506,7 +506,7 @@ struct ppe_drv_loopback_ring_info {
 /*
  * Maximum number of forced ingress→egress pairs in lpbk_buffer_map.
  */
-#define PPE_DRV_LPBK_BUFFER_MAP_MAX		16
+#define PPE_DRV_LPBK_BUFFER_MAP_MAX		64
 
 /*
  * Maximum string length for lpbk_buffer_map sysctl read output (all pairs).
