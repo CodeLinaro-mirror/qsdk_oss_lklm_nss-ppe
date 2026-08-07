@@ -1551,6 +1551,25 @@ struct ppe_drv_iface *ppe_drv_pon_iface_get(void)
 }
 EXPORT_SYMBOL(ppe_drv_pon_iface_get);
 
+/*
+ * ppe_drv_is_pon_enable()
+ *	Returns true if PON is enabled on this RDP.
+ */
+bool ppe_drv_is_pon_enable(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	bool pon_is_enable = false;
+
+	spin_lock_bh(&p->lock);
+	if (p->pon_iface) {
+		pon_is_enable = true;
+	}
+	spin_unlock_bh(&p->lock);
+
+	return pon_is_enable;
+}
+EXPORT_SYMBOL(ppe_drv_is_pon_enable);
+
 int ppe_drv_pon_port_max_pq_get()
 {
 	struct ppe_drv *p = ppe_drv_gbl;

@@ -1064,6 +1064,15 @@ ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp
 struct ppe_drv_iface *ppe_drv_pon_iface_get(void);
 
 /**
+ * ppe_drv_is_pon_enable
+ *	Checks whether PON is enabled on this RDP.
+ *
+ * @return
+ * true if PON interface is set, false otherwise.
+ */
+bool ppe_drv_is_pon_enable(void);
+
+/**
  * ppe_drv_pon_port_max_pq_get
  *	Returns maximum PQs assigned to PON port
  *
