@@ -104,3 +104,4 @@ struct ppe_drv_dot1p_policer *ppe_drv_dot1p_policer_entries_alloc(void);
  * Success or error code.
  */
 ppe_drv_ret_t ppe_drv_dot1p_configure_default_rule(void);
+ppe_drv_ret_t ppe_drv_dot1p_reset_default_rule(void);

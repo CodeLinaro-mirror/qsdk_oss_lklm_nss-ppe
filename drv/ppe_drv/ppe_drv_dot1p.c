@@ -837,3 +837,17 @@ ppe_drv_ret_t ppe_drv_dot1p_configure_default_rule()
 	ppe_drv_trace("Dot1p default rule added succesfully\n");
 	return ret;
 }
+
+/*
+ * ppe_drv_dot1p_reset_default_rule()
+ *	Reset/clear the default dot1p rule configured.
+ *
+ *	Passes a zero-initialized info with no flags set so that
+ *	ppe_drv_dot1p_def_rule_configure() writes zeroed FAL structs to HW.
+ */
+ppe_drv_ret_t ppe_drv_dot1p_reset_default_rule(void)
+{
+	struct ppe_drv_dot1p_rule info = {0};
+
+	return ppe_drv_dot1p_def_rule_configure(&info);
+}
