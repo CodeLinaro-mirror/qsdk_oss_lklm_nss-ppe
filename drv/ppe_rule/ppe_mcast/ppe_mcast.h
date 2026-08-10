@@ -52,13 +52,21 @@
 
 /*
  * ppe_mcast_hash_key
- *	Hash key for multicast entries
+ *	Hash key for multicast entries.
+ *	Key is (is_v4, sip_valid, SIP, GIP, port_id) to correctly distinguish
+ *	SSM entries (sip_valid=true) from ASM entries (sip_valid=false) that
+ *	share the same (GIP, port).
  */
 struct ppe_mcast_hash_key {
 	bool is_v4;                /* IPv4 or IPv6 entry */
+	bool sip_valid;            /* Source IP valid (SSM entry) */
 	union {
-		__be32 v4;             /* IPv4 address */
-		uint32_t v6[4];        /* IPv6 address */
+		__be32 v4;             /* IPv4 source address */
+		uint32_t v6[4];        /* IPv6 source address */
+	} sip;                     /* Source IP address */
+	union {
+		__be32 v4;             /* IPv4 group address */
+		uint32_t v6[4];        /* IPv6 group address */
 	} gip;                     /* Group IP address */
 	int port_id;               /* Port ID */
 };

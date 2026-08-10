@@ -11,7 +11,9 @@ struct ppe_mcast gbl_ppe_mcast = {0};
 
 /*
  * ppe_mcast_hash_key()
- *	Generate hash key for multicast entry
+ *	Generate hash key for multicast entry.
+ *	SIP is included in the hash when sip_valid is set to correctly
+ *	distinguish SSM entries from ASM entries with the same (GIP, port).
  */
 static u32 ppe_mcast_hash_key(struct ppe_mcast_hash_key *key)
 {
@@ -19,8 +21,12 @@ static u32 ppe_mcast_hash_key(struct ppe_mcast_hash_key *key)
 
 	if (key->is_v4) {
 		hash = jhash_1word(key->gip.v4, 0);
+		if (key->sip_valid)
+			hash = jhash_1word(key->sip.v4, hash);
 	} else {
 		hash = jhash2(key->gip.v6, 4, 0);
+		if (key->sip_valid)
+			hash = jhash2(key->sip.v6, 4, hash);
 	}
 
 	return jhash_1word(key->port_id, hash);
@@ -28,7 +34,10 @@ static u32 ppe_mcast_hash_key(struct ppe_mcast_hash_key *key)
 
 /*
  * ppe_mcast_hash_find()
- *	Find multicast entry in hash table
+ *	Find multicast entry in hash table.
+ *	Matches on (port, is_v4, sip_valid, GIP, SIP) so that SSM entries
+ *	(sip_valid=true) and ASM entries (sip_valid=false) for the same
+ *	(GIP, port) are treated as distinct entries.
  */
 static struct ppe_mcast_entry *ppe_mcast_hash_find(struct ppe_mcast_hash_key *key)
 {
@@ -37,17 +46,24 @@ static struct ppe_mcast_entry *ppe_mcast_hash_find(struct ppe_mcast_hash_key *ke
 	u32 hash = ppe_mcast_hash_key(key);
 
 	hash_for_each_possible(g_mcast->mc_hash_table, entry, hash_node, hash) {
-		if (entry->entry.port == key->port_id &&
-			entry->entry.is_v4 == key->is_v4) {
+		if (entry->entry.port != key->port_id ||
+			entry->entry.is_v4 != key->is_v4 ||
+			entry->entry.sip_valid != key->sip_valid)
+			continue;
 
-			if (key->is_v4) {
-				if (entry->entry.gip.v4 == key->gip.v4)
-					return entry;
-			} else {
-				if (ppe_drv_mcast_v6_addr_equal(entry->entry.gip.v6, key->gip.v6))
-					return entry;
-			}
+		if (key->is_v4) {
+			if (entry->entry.gip.v4 != key->gip.v4)
+				continue;
+			if (key->sip_valid && entry->entry.sip.v4 != key->sip.v4)
+				continue;
+		} else {
+			if (!ppe_drv_mcast_v6_addr_equal(entry->entry.gip.v6, key->gip.v6))
+				continue;
+			if (key->sip_valid && !ppe_drv_mcast_v6_addr_equal(entry->entry.sip.v6, key->sip.v6))
+				continue;
 		}
+
+		return entry;
 	}
 
 	return NULL;
@@ -55,7 +71,9 @@ static struct ppe_mcast_entry *ppe_mcast_hash_find(struct ppe_mcast_hash_key *ke
 
 /*
  * ppe_mcast_hash_add()
- *	Add multicast entry to hash table
+ *	Add multicast entry to hash table.
+ *	SIP is included in the key so SSM and ASM entries for the same
+ *	(GIP, port) land in different buckets.
  */
 static void ppe_mcast_hash_add(struct ppe_mcast_entry *entry)
 {
@@ -63,10 +81,13 @@ static void ppe_mcast_hash_add(struct ppe_mcast_entry *entry)
 	struct ppe_mcast_hash_key key;
 
 	key.is_v4 = entry->entry.is_v4;
+	key.sip_valid = entry->entry.sip_valid;
 	if (key.is_v4) {
 		key.gip.v4 = entry->entry.gip.v4;
+		key.sip.v4 = entry->entry.sip.v4;
 	} else {
 		memcpy(key.gip.v6, entry->entry.gip.v6, sizeof(key.gip.v6));
+		memcpy(key.sip.v6, entry->entry.sip.v6, sizeof(key.sip.v6));
 	}
 	key.port_id = entry->entry.port;
 
@@ -120,6 +141,43 @@ static void ppe_mcast_delete_group(struct ppe_mcast_group *mc_grp)
 		list_del(&mc_grp->list);
 		kfree(mc_grp);
 	}
+}
+
+/*
+ * ppe_mcast_ssm_entry_exists()
+ *	Check if any SSM entry (sip_valid=true) exists in the hash table for
+ *	the given (GIP, port) combination.
+ *
+ *	Must be called with g_mcast->lock held.
+ *
+ *	This is used to suppress wildcard ASM hardware programming when SSM
+ *	entries already cover the forwarding for the same (GIP, port).  The
+ *	Linux bridge kernel creates both a per-source SSM entry and a
+ *	group-level "ASM" entry (with source_list) for the same IGMPv3
+ *	INCLUDE(S,G) membership.  Programming the ASM entry as a GIP-only
+ *	hardware entry would incorrectly forward traffic from unintended
+ *	sources.
+ */
+static bool ppe_mcast_ssm_entry_exists(union ppe_mcast_ip *gip, bool is_v4, int port_id)
+{
+	struct ppe_mcast *g_mcast = &gbl_ppe_mcast;
+	struct ppe_mcast_entry *entry;
+	int i;
+
+	hash_for_each(g_mcast->mc_hash_table, i, entry, hash_node) {
+		if (entry->entry.port != port_id ||
+			entry->entry.is_v4 != is_v4 ||
+			!entry->entry.sip_valid)
+			continue;
+
+		if (is_v4 && entry->entry.gip.v4 == gip->v4)
+			return true;
+
+		if (!is_v4 && ppe_drv_mcast_v6_addr_equal(entry->entry.gip.v6, gip->v6))
+			return true;
+	}
+
+	return false;
 }
 
 /*
@@ -177,14 +235,19 @@ ppe_mcast_ret_t ppe_mcast_delete_entry(struct ppe_mcast_entry_info *info)
 	ppe_drv_port_mgmt_omci_port_deref(node);
 
 	/*
-	 * Find entry using hash table
+	 * Find entry using hash table.
+	 * Key includes SIP so that SSM and ASM entries for the same (GIP, port)
+	 * are looked up independently.
 	 */
 	struct ppe_mcast_hash_key key;
 	key.is_v4 = info->is_v4;
+	key.sip_valid = info->sip_enabled;
 	if (key.is_v4) {
 		key.gip.v4 = info->gip.v4;
+		key.sip.v4 = info->sip.v4;
 	} else {
 		memcpy(key.gip.v6, info->gip.v6, sizeof(key.gip.v6));
+		memcpy(key.sip.v6, info->sip.v6, sizeof(key.sip.v6));
 	}
 	key.port_id = port_id;
 
@@ -319,14 +382,77 @@ ppe_mcast_ret_t ppe_mcast_create_entry(struct ppe_mcast_entry_info *info)
 	}
 
 	/*
-	 * Check if entry already exists using hash table
+	 * If this is an ASM (no SIP) entry and SSM entries already exist for
+	 * the same (GIP, port), do not program a wildcard hardware entry.
+	 *
+	 * The Linux bridge kernel creates both a per-source SSM entry and a
+	 * group-level "ASM" entry (filter_mode include, source_list) for the
+	 * same IGMPv3 INCLUDE(S,G) membership.  The ASM entry is NOT a true
+	 * wildcard — it represents the same source-specific membership.
+	 * Programming it as a GIP-only hardware entry would incorrectly
+	 * forward traffic from unintended sources.
+	 */
+	if (!info->sip_enabled && ppe_mcast_ssm_entry_exists(&info->gip, info->is_v4, port_id)) {
+		ppe_drv_port_mgmt_omci_port_deref(node);
+		dev_put(dev);
+		ppe_mcast_delete_group(mc_grp);
+		spin_unlock_bh(&g_mcast->lock);
+		ppe_mcast_info("Skipping ASM entry for dev %s port %d - SSM entries exist for group",
+			info->dev, port_id);
+		return PPE_MCAST_SUCCESS;
+	}
+
+	/*
+	 * If this is an SSM (SIP) entry and an ASM (wildcard) entry already
+	 * exists in hardware for the same (GIP, port), evict the ASM entry
+	 * from both hardware and the hash table.  A wildcard GIP entry must
+	 * not coexist with an SSM entry for the same (GIP, port) as it would
+	 * incorrectly forward traffic from unintended sources.
+	 */
+	if (info->sip_enabled) {
+		struct ppe_mcast_hash_key asm_key;
+		struct ppe_mcast_entry *asm_entry;
+
+		asm_key.is_v4 = info->is_v4;
+		asm_key.sip_valid = false;
+		asm_key.port_id = port_id;
+		if (asm_key.is_v4) {
+			asm_key.gip.v4 = info->gip.v4;
+			asm_key.sip.v4 = 0;
+		} else {
+			memcpy(asm_key.gip.v6, info->gip.v6, sizeof(asm_key.gip.v6));
+			memset(asm_key.sip.v6, 0, sizeof(asm_key.sip.v6));
+		}
+
+		asm_entry = ppe_mcast_hash_find(&asm_key);
+		if (asm_entry) {
+			ppe_mcast_info("Evicting ASM entry for dev %s port %d - SSM entry being added",
+				info->dev, port_id);
+			ppe_drv_mcast_entry_delete(&asm_entry->entry);
+			if (asm_entry->node) {
+				ppe_drv_port_mgmt_omci_port_deref(asm_entry->node);
+				asm_entry->node = NULL;
+			}
+			mc_grp->supported_dst_cnt--;
+			ppe_mcast_hash_del(asm_entry);
+			kfree(asm_entry);
+		}
+	}
+
+	/*
+	 * Check if entry already exists using hash table.
+	 * Key includes SIP so that SSM and ASM entries for the same (GIP, port)
+	 * are looked up independently.
 	 */
 	struct ppe_mcast_hash_key key;
 	key.is_v4 = info->is_v4;
+	key.sip_valid = info->sip_enabled;
 	if (key.is_v4) {
 		key.gip.v4 = info->gip.v4;
+		key.sip.v4 = info->sip.v4;
 	} else {
 		memcpy(key.gip.v6, info->gip.v6, sizeof(key.gip.v6));
+		memcpy(key.sip.v6, info->sip.v6, sizeof(key.sip.v6));
 	}
 	key.port_id = port_id;
 
