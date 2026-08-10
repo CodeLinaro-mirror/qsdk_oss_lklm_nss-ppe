@@ -479,6 +479,7 @@ static bool ppe_drv_flow_v6_flow_cookie48b_get(struct ppe_drv_v6_conn_flow *pcf,
 			break;
 
 		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+		case PPE_DRV_TREE_ID_TYPE_UDP_ST:
 		case PPE_DRV_TREE_ID_TYPE_SCS:
 			low_bit = (tree_id_data->info.value >> 16) & 0xFF;
 			tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, tree_id_data->info.value & 0xFFFF);
@@ -2228,6 +2229,7 @@ static bool ppe_drv_flow_v4_flow_cookie48b_get(struct ppe_drv_v4_conn_flow *pcf,
 			break;
 
 		case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
+		case PPE_DRV_TREE_ID_TYPE_UDP_ST:
 		case PPE_DRV_TREE_ID_TYPE_SCS:
                         low_bit = (tree_id_data->info.value >> 16) & 0xFF;
                         tmp |= FIELD_PREP(FAL_FLOW_COOKIE_48BIT_HIGH_16BIT_L, tree_id_data->info.value & 0xFFFF);
