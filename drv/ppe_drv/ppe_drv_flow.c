@@ -1067,6 +1067,7 @@ bool ppe_drv_flow_v6_pri_profile_get(struct ppe_drv_v6_conn_flow *pcf, struct pp
 			ppe_drv_warn("%p: Enqueue vport pri profile invalid:%d core:%d", pcf, evp_pri_profile, next_core);
 			return false;
 		}
+		pcf->rfs_core = next_core;
 		*pri_profile = evp_pri_profile;
 		return true;
 	}
@@ -1266,6 +1267,41 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_NOEDIT_PRIORITY_SET)) {
 			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
 						pcf, service_code, PPE_DRV_SC_NOEDIT_PRIORITY_SET);
+			return false;
+		}
+
+		*scp = service_code;
+		return true;
+	}
+
+	/*
+	 * Multicast RFS flows are redirected to the CPU core assigned.
+	 */
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST) &&
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_MCAST_RFS_FLOW)) {
+		ppe_drv_sc_t core_sc;
+
+		switch (pcf->rfs_core) {
+		case 0:
+			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE0;
+			break;
+		case 1:
+			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE1;
+			break;
+		case 2:
+			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE2;
+			break;
+		case 3:
+			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE3;
+			break;
+		default:
+			ppe_drv_warn("%p: invalid core %u for mcast RFS flow", pcf, pcf->rfs_core);
+			return false;
+		}
+
+		if (!ppe_drv_sc_check_and_set(&service_code, core_sc)) {
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+					pcf, service_code, core_sc);
 			return false;
 		}
 
@@ -2636,6 +2672,7 @@ bool ppe_drv_flow_v4_pri_profile_get(struct ppe_drv_v4_conn_flow *pcf, struct pp
 			ppe_drv_warn("%p: Enqueue vport pri profile invalid:%d core:%d", pcf, evp_pri_profile, next_core);
 			return false;
 		}
+		pcf->rfs_core = next_core;
 		*pri_profile = evp_pri_profile;
 		ppe_drv_trace("pcf %p: Pri profile: %u enq_vp: %u next_core = %u\n", pcf, evp_pri_profile, enq_vp, next_core);
 		return true;
@@ -2838,6 +2875,41 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 		if (!ppe_drv_sc_check_and_set(&service_code, PPE_DRV_SC_NOEDIT_PRIORITY_SET)) {
 			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
 						pcf, service_code, PPE_DRV_SC_NOEDIT_PRIORITY_SET);
+			return false;
+		}
+
+		*scp = service_code;
+		return true;
+	}
+
+	/*
+	 * Multicast RFS flows are redirected to the CPU core assigned.
+	 */
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST) &&
+			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_MCAST_RFS_FLOW)) {
+		ppe_drv_sc_t core_sc;
+
+		switch (pcf->rfs_core) {
+		case 0:
+			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE0;
+			break;
+		case 1:
+			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE1;
+			break;
+		case 2:
+			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE2;
+			break;
+		case 3:
+			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE3;
+			break;
+		default:
+			ppe_drv_warn("%p: invalid core %u for mcast RFS flow", pcf, pcf->rfs_core);
+			return false;
+		}
+
+		if (!ppe_drv_sc_check_and_set(&service_code, core_sc)) {
+			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+					pcf, service_code, core_sc);
 			return false;
 		}
 

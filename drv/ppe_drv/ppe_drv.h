@@ -365,6 +365,7 @@ typedef enum ppe_drv_rfs_interface_type {
 	PPE_DRV_RFS_INTERFACE_TYPE_TUNNEL,		/* Interface type used for Tunnel Devices. */
 	PPE_DRV_RFS_INTERFACE_TYPE_DEFAULT,		/* Used for any generic interface other than the above. */
 	PPE_DRV_RFS_INTERFACE_TYPE_UDP_ST,		/* Interface type is for dummy dev created for RFS support at nss_udp_st Rx*/
+	PPE_DRV_RFS_INTERFACE_TYPE_MCAST,		/* Interface type is for multicast RFS flows. */
 	PPE_DRV_RFS_INTERFACE_TYPE_MAX,			/* Maximun number of interface types. */
 } ppe_drv_rfs_interface_t;
 
@@ -735,7 +736,8 @@ static inline bool ppe_drv_assist_feature_type_is_rfs(uint32_t feature)
 	bool ret = ((feature & PPE_DRV_ASSIST_FEATURE_RFS_ETH) ||
 		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_WLAN) ||
 		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL) ||
-		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST));
+		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST) ||
+		    (feature & PPE_DRV_ASSIST_FEATURE_RFS_MCAST));
 
 	return ret;
 }
@@ -829,7 +831,8 @@ static inline bool ppe_drv_assist_feature_is_valid(uint32_t feature)
 			     PPE_DRV_ASSIST_FEATURE_RFS_WLAN |
 			     PPE_DRV_ASSIST_FEATURE_PRIORITY |
 			     PPE_DRV_ASSIST_FEATURE_RFS_TUNNEL |
-			     PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST));
+			     PPE_DRV_ASSIST_FEATURE_RFS_UDP_ST |
+			     PPE_DRV_ASSIST_FEATURE_RFS_MCAST));
 }
 
 /*

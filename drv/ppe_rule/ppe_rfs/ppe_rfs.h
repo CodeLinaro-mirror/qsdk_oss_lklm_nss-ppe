@@ -64,6 +64,7 @@ struct ppe_rfs {
 	spinlock_t lock;                                /* PPE lock */
 	struct ppe_rfs_stats stats;                     /* PPE RFS statistics */
 	struct dentry *dentry;				/* Debugfs entry */
+	struct ctl_table_header *rfs_hdr;		/* RFS sysctl header, dir: /proc/sys/ppe/ppe_rfs */
 };
 
 void ppe_rfs_deinit(void);
