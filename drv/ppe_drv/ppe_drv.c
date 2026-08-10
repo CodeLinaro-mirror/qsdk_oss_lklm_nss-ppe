@@ -210,6 +210,7 @@ int l4_checksum_exception_enable = false;
 int mac_lrn_exception_en = true;
 uint32_t ppe_drv_jhash_rnd __read_mostly;
 int wlan_host_assist_qdisc_en = 0;
+int unknown_dst_rfs_enable = 0;
 
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 int ppe_drv_ipsec_passth_en = 0;
@@ -3278,6 +3279,51 @@ static int ppe_drv_wlan_host_assist_qdisc_en_handler(struct ctl_table *table, in
 	return 0;
 }
 
+/*
+ * ppe_drv_get_unknown_dst_rfs_enable()
+ *	Get the value of unknown_dst_rfs_enable.
+ */
+int ppe_drv_get_unknown_dst_rfs_enable(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	return p->rfs.unknown_dst_rfs_enable;
+}
+EXPORT_SYMBOL(ppe_drv_get_unknown_dst_rfs_enable);
+
+/*
+ * ppe_drv_unknown_dst_rfs_enable_handler()
+ *	Handler for unknown_dst_rfs_enable sysctl
+ */
+static int ppe_drv_unknown_dst_rfs_enable_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (!write) {
+		return ret;
+	}
+
+	/*
+	 * Validate the input value (should be 0 or 1)
+	 */
+	if (unknown_dst_rfs_enable != 0 && unknown_dst_rfs_enable != 1) {
+		ppe_drv_warn("Invalid value for unknown_dst_rfs_enable. Must be 0 or 1\n");
+		unknown_dst_rfs_enable = 0;
+		return -EINVAL;
+	}
+
+	spin_lock_bh(&p->lock);
+	p->rfs.unknown_dst_rfs_enable = unknown_dst_rfs_enable;
+	spin_unlock_bh(&p->lock);
+
+	ppe_drv_info("PPE RFS support for unknown destination devices is set to %d\n", unknown_dst_rfs_enable);
+
+	return 0;
+}
+
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 /*
  * ppe_drv_ipsec_pass_through_en_handler()
@@ -4707,6 +4753,13 @@ static struct ctl_table ppe_drv_sub[] = {
 		.maxlen		=	sizeof(int),
 		.mode		=	0644,
 		.proc_handler	=	ppe_drv_wlan_host_assist_qdisc_en_handler
+	},
+	{
+		.procname	=	"unknown_dst_rfs_enable",
+		.data		=	&unknown_dst_rfs_enable,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_unknown_dst_rfs_enable_handler
 	},
 	{}
 };

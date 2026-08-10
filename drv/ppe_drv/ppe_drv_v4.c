@@ -3795,6 +3795,10 @@ ppe_drv_ret_t ppe_drv_v4_assist_rule_create(struct ppe_drv_v4_rule_create *creat
 			conn_type = PPE_DRV_CONN_TYPE_MCAST;
 			ppe_iface_chk_needed = false;
 			break;
+		case PPE_DRV_ASSIST_FEATURE_RFS_UNKNOWN_DST:
+			conn_type = PPE_DRV_CONN_TYPE_UNKNOWN_DST;
+			ppe_iface_chk_needed = false;
+			break;
 		default:
 			ppe_drv_warn("%p: Invalid feature type, feature: %u\n", create, feature);
 			goto fail;
