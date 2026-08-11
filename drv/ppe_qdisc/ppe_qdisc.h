@@ -92,6 +92,9 @@ struct ppe_qdisc_stats_wq {
 	struct timer_list stats_get_timer;	/* Timer used to start fresh iteration */
 	bool stats_polling_stopped;		/* True when polling is stopped due to qdisc delete */
 	struct list_head q_list_head;		/* List head to manage leaf node stats */
+	spinlock_t q_list_lock;			/* Protects q_list_head against concurrent iteration
+						   (stats workqueue) and modification (attach/detach).
+						   Lock order: q_list_lock -> cursor->lock -> p->lock */
 };
 
 /*
