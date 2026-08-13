@@ -46,6 +46,21 @@ void ppe_drv_qos_int_pri_callback_unregister()
 EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_unregister);
 
 /*
+ * ppe_drv_qos_int_pri_by_skb_mark_callback_unregister()
+ *	API to unregister SKB INT-PRI resolver callback.
+ */
+void ppe_drv_qos_int_pri_by_skb_mark_callback_unregister(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	rcu_assign_pointer(p->int_pri_get_by_mark_cb, NULL);
+	spin_unlock_bh(&p->lock);
+	synchronize_rcu();
+}
+EXPORT_SYMBOL(ppe_drv_qos_int_pri_by_skb_mark_callback_unregister);
+
+/*
  * ppe_drv_qos_queue_info_callback_unregister()
  *	API to unregister PPE-QUEUE fetch callback.
  */
@@ -94,6 +109,20 @@ void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb)
 }
 EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_register);
 
+
+/*
+ * ppe_drv_qos_int_pri_by_skb_mark_callback_register()
+ *	API to register SKB INT-PRI resolver callback.
+ */
+void ppe_drv_qos_int_pri_by_skb_mark_callback_register(ppe_drv_qos_int_pri_by_skb_mark_callback_t cb)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	rcu_assign_pointer(p->int_pri_get_by_mark_cb, cb);
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_qos_int_pri_by_skb_mark_callback_register);
 
 /*
  * ppe_drv_qos_queue_info_get()
@@ -153,6 +182,31 @@ int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t handle_id)
 	return int_pri;
 }
 EXPORT_SYMBOL(ppe_drv_qos_int_pri_get);
+
+/*
+ * ppe_drv_qos_int_pri_get_by_skb_mark()
+ *	Resolves an SKB to a configured egress qdisc INT-PRI value.
+ */
+bool ppe_drv_qos_int_pri_get_by_skb_mark(struct net_device *dev, struct sk_buff *skb, uint8_t *int_pri)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	ppe_drv_qos_int_pri_by_skb_mark_callback_t cb;
+	bool ret = false;
+
+	if (!dev || !skb || !int_pri) {
+		return false;
+	}
+
+	rcu_read_lock_bh();
+	cb = rcu_dereference_bh(p->int_pri_get_by_mark_cb);
+	if (cb) {
+		ret = cb(dev, skb, int_pri);
+	}
+	rcu_read_unlock_bh();
+
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_qos_int_pri_get_by_skb_mark);
 
 /*
  * ppe_drv_qos_queue_stats_get()
