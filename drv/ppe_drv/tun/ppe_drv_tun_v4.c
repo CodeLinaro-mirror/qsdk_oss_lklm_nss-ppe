@@ -400,14 +400,9 @@ ppe_drv_ret_t ppe_drv_v4_tun_del_ce_validate(void *vdestroy_rule, struct ppe_drv
 	pcr = &cn->pcr;
 
 	/*
-	 * Release references on interfaces.
+	 * Interface/port references are released by the caller
+	 * (ppe_drv_tun_deactivate()) once it is done using pcf/pcr.
 	 */
-	ppe_drv_v4_if_walk_release(pcf);
-
-	/*
-	 * Release references on interfaces.
-	 */
-	ppe_drv_v4_if_walk_release(pcr);
 
 	*cns_v4 = cns;
 	*cn_v4 = cn;
