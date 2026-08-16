@@ -1128,7 +1128,13 @@ static inline bool ppe_drv_phydev_speed_compare(struct ppe_drv_port *rx_port, st
 static inline bool ppe_drv_flow_v6_check_hierarchy_speed_mismatch(struct ppe_drv *p, struct ppe_drv_v6_conn_flow *pcf, struct ppe_drv_port *pp)
 {
 	struct ppe_drv_lpbk_buffer_map_entry *map_entry;
+	struct ppe_drv_v6_conn *cn = ppe_drv_v6_conn_flow_conn_get(pcf);
+	struct ppe_drv_v6_conn_flow *pcr = NULL;
 	bool is_speed_mismatch = false;
+
+	if (cn) {
+		pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
+	}
 
 	if (!list_empty(&p->lpbk_buffer_map) && pcf->rx_port && pcf->rx_port->dev) {
 		list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
@@ -1143,7 +1149,13 @@ static inline bool ppe_drv_flow_v6_check_hierarchy_speed_mismatch(struct ppe_drv
 			/*
 			 * PPPoE check
 			 */
-			if (map_entry->is_pppoe) {
+			if (map_entry->ingress_pppoe) {
+				if (!pcr || !ppe_drv_v6_conn_flow_flags_check(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_PPPOE_FLOW) ||
+						pcr->pppoe_session_id != map_entry->pppoe_session_id ||
+						memcmp(pcr->pppoe_server_mac, map_entry->pppoe_server_mac, ETH_ALEN)) {
+					continue;
+				}
+			} else if (map_entry->egress_pppoe) {
 				if (!ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_PPPOE_FLOW) ||
 						pcf->pppoe_session_id != map_entry->pppoe_session_id ||
 						memcmp(pcf->pppoe_server_mac, map_entry->pppoe_server_mac, ETH_ALEN)) {
@@ -2721,7 +2733,13 @@ bool ppe_drv_flow_v4_pri_profile_get(struct ppe_drv_v4_conn_flow *pcf, struct pp
 static inline bool ppe_drv_flow_v4_check_hierarchy_speed_mismatch(struct ppe_drv *p, struct ppe_drv_v4_conn_flow *pcf, struct ppe_drv_port *pp)
 {
 	struct ppe_drv_lpbk_buffer_map_entry *map_entry;
+	struct ppe_drv_v4_conn *cn = ppe_drv_v4_conn_flow_conn_get(pcf);
+	struct ppe_drv_v4_conn_flow *pcr = NULL;
 	bool is_speed_mismatch = false;
+
+	if (cn) {
+		pcr = (pcf == &cn->pcf) ? &cn->pcr : &cn->pcf;
+	}
 
 	if (!list_empty(&p->lpbk_buffer_map) && pcf->rx_port && pcf->rx_port->dev) {
 		list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
@@ -2736,7 +2754,13 @@ static inline bool ppe_drv_flow_v4_check_hierarchy_speed_mismatch(struct ppe_drv
 			/*
 			 * PPPoE check
 			 */
-			if (map_entry->is_pppoe) {
+			if (map_entry->ingress_pppoe) {
+				if (!pcr || !ppe_drv_v4_conn_flow_flags_check(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_PPPOE_FLOW) ||
+						pcr->pppoe_session_id != map_entry->pppoe_session_id ||
+						memcmp(pcr->pppoe_server_mac, map_entry->pppoe_server_mac, ETH_ALEN)) {
+					continue;
+				}
+			} else if (map_entry->egress_pppoe) {
 				if (!ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_PPPOE_FLOW) ||
 						pcf->pppoe_session_id != map_entry->pppoe_session_id ||
 						memcmp(pcf->pppoe_server_mac, map_entry->pppoe_server_mac, ETH_ALEN)) {

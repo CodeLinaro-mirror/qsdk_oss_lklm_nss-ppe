@@ -2968,8 +2968,7 @@ static void ppe_drv_netdev_unregister_handler(struct net_device *dev)
 	spin_lock_bh(&p->lock);
 
 	list_for_each_entry_safe(map_entry, tmp, &p->lpbk_buffer_map, list) {
-		if (strcmp(map_entry->ingress_dev->name, dev->name) == 0 ||
-				strcmp(map_entry->egress_dev->name, dev->name) == 0) {
+		if ((map_entry->ingress_dev == dev) || (map_entry->egress_dev == dev)) {
 			ppe_drv_trace("%p: lpbk_buffer_map removing entry for dev %s : pair %s->%s\n",
 					p, dev->name,
 					map_entry->ingress_dev->name,
@@ -4183,7 +4182,11 @@ static int ppe_drv_ddr_buffer_resolve_dev(struct ppe_drv *p,
 			return -ENODEV;
 		}
 
-		map_entry->is_pppoe = true;
+		if (is_ingress)
+			map_entry->ingress_pppoe = true;
+		else
+			map_entry->egress_pppoe = true;
+
 		map_entry->pppoe_session_id = pppoe->session_id;
 		memcpy(map_entry->pppoe_server_mac, pppoe->server_mac, ETH_ALEN);
 
@@ -4196,7 +4199,7 @@ static int ppe_drv_ddr_buffer_resolve_dev(struct ppe_drv *p,
 	 * VLAN
 	 */
 	if (is_vlan_dev(cur)) {
-		struct net_device *real_dev = vlan_dev_real_dev(cur);
+		struct net_device *real_dev = vlan_dev_priv(cur)->real_dev;
 		uint16_t first_vlan_id = vlan_dev_vlan_id(cur);
 		dev_hold(real_dev);
 		dev_put(cur);
@@ -4207,7 +4210,7 @@ static int ppe_drv_ddr_buffer_resolve_dev(struct ppe_drv *p,
 			/*
 			 * Q-in-Q
 			 */
-			real_dev = vlan_dev_real_dev(cur);
+			real_dev = vlan_dev_priv(cur)->real_dev;
 			vlan_id[0] = vlan_dev_vlan_id(cur);   /* outer */
 			vlan_id[1] = first_vlan_id;            /* inner */
 			*vlan_cnt = 2;
@@ -4228,12 +4231,40 @@ static int ppe_drv_ddr_buffer_resolve_dev(struct ppe_drv *p,
 }
 
 /*
+ * ppe_drv_lpbk_buffer_map_entry_match()
+ * 	Return true if both entries describe the same resolved map rule.
+ */
+static inline bool ppe_drv_lpbk_buffer_map_entry_match(struct ppe_drv_lpbk_buffer_map_entry *entry, struct ppe_drv_lpbk_buffer_map_entry *key)
+{
+	if (entry->ingress_dev != key->ingress_dev ||
+			entry->egress_dev != key->egress_dev ||
+			entry->ingress_vlan_cnt != key->ingress_vlan_cnt ||
+			entry->egress_vlan_cnt != key->egress_vlan_cnt ||
+			entry->ingress_pppoe != key->ingress_pppoe ||
+			entry->egress_pppoe != key->egress_pppoe) {
+		return false;
+	}
+
+	if (memcmp(entry->ingress_vlan_id, key->ingress_vlan_id, sizeof(key->ingress_vlan_id)) ||
+			memcmp(entry->egress_vlan_id, key->egress_vlan_id, sizeof(key->egress_vlan_id))) {
+		return false;
+	}
+
+	if (!entry->ingress_pppoe && !entry->egress_pppoe) {
+		return true;
+	}
+
+	return entry->pppoe_session_id == key->pppoe_session_id &&
+		!memcmp(entry->pppoe_server_mac, key->pppoe_server_mac, ETH_ALEN);
+}
+
+/*
  * ppe_drv_lpbk_buffer_map_rule_add()
  * 	Add entry in lpbk_buffer_map.
  */
 static inline int ppe_drv_lpbk_buffer_map_rule_add(struct net_device *ingress_dev, struct net_device *egress_dev) {
 	struct ppe_drv *p = ppe_drv_gbl;
-	struct ppe_drv_lpbk_buffer_map_entry *map_entry;
+	struct ppe_drv_lpbk_buffer_map_entry *map_entry, *entry;
 	int ret;
 
 	spin_lock_bh(&p->lock);
@@ -4247,21 +4278,6 @@ static inline int ppe_drv_lpbk_buffer_map_rule_add(struct net_device *ingress_de
 		return -ENOSPC;
 	}
 
-	/*
-	 * Reject duplicates.
-	 */
-	list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
-		if (strcmp(map_entry->ingress_dev->name, ingress_dev->name) == 0 &&
-				strcmp(map_entry->egress_dev->name, egress_dev->name) == 0) {
-			dev_put(ingress_dev);
-			dev_put(egress_dev);
-			spin_unlock_bh(&p->lock);
-			pr_err("%p: lpbk_buffer_map: pair %s->%s already exists\n",
-					p, ingress_dev->name, egress_dev->name);
-			return -EEXIST;
-		}
-	}
-
 	map_entry = kzalloc(sizeof(*map_entry), GFP_ATOMIC);
 	if (!map_entry) {
 		dev_put(ingress_dev);
@@ -4271,6 +4287,8 @@ static inline int ppe_drv_lpbk_buffer_map_rule_add(struct net_device *ingress_de
 	}
 
 	INIT_LIST_HEAD(&map_entry->list);
+	strlcpy(map_entry->ingress_name, ingress_dev->name, IFNAMSIZ);
+	strlcpy(map_entry->egress_name, egress_dev->name, IFNAMSIZ);
 
 	ret = ppe_drv_ddr_buffer_resolve_dev(p, &ingress_dev,
 			map_entry->ingress_vlan_id, &map_entry->ingress_vlan_cnt,
@@ -4298,6 +4316,21 @@ static inline int ppe_drv_lpbk_buffer_map_rule_add(struct net_device *ingress_de
 	}
 
 	map_entry->egress_dev = egress_dev;
+
+	/*
+	 * Reject duplicates.
+	 */
+	list_for_each_entry(entry, &p->lpbk_buffer_map, list) {
+		if (ppe_drv_lpbk_buffer_map_entry_match(entry, map_entry)) {
+			pr_err("%p: lpbk_buffer_map: pair %s->%s already exists\n",
+					p, map_entry->ingress_name, map_entry->egress_name);
+			dev_put(map_entry->ingress_dev);
+			dev_put(map_entry->egress_dev);
+			kfree(map_entry);
+			spin_unlock_bh(&p->lock);
+			return -EEXIST;
+		}
+	}
 
 	list_add_tail(&map_entry->list, &p->lpbk_buffer_map);
 	p->lpbk_buffer_map_count++;
@@ -4339,15 +4372,11 @@ static inline int ppe_drv_lpbk_buffer_map_flush_pair(struct net_device *ingress_
 		return ret;
 	}
 
+	key.ingress_dev = ingress_dev;
+	key.egress_dev = egress_dev;
+
 	list_for_each_entry_safe(map_entry, tmp, &p->lpbk_buffer_map, list) {
-		if (map_entry->ingress_dev == ingress_dev &&
-				map_entry->egress_dev == egress_dev &&
-				map_entry->ingress_vlan_cnt == key.ingress_vlan_cnt &&
-				map_entry->egress_vlan_cnt == key.egress_vlan_cnt &&
-				memcmp(map_entry->ingress_vlan_id, key.ingress_vlan_id,
-						sizeof(key.ingress_vlan_id)) == 0 &&
-				memcmp(map_entry->egress_vlan_id, key.egress_vlan_id,
-						sizeof(key.egress_vlan_id)) == 0) {
+		if (ppe_drv_lpbk_buffer_map_entry_match(map_entry, &key)) {
 			list_del(&map_entry->list);
 			dev_put(map_entry->ingress_dev);
 			dev_put(map_entry->egress_dev);
@@ -4397,23 +4426,6 @@ static inline void ppe_drv_lpbk_buffer_map_delete(void)
 }
 
 /*
- * ppe_drv_lpbk_iface_name_fmt()
- *	Format an interface name from a resolved physical device and its VLAN info.
- */
-static void ppe_drv_lpbk_iface_name_fmt(char *buf, size_t len,
-		const struct net_device *dev,
-		const uint16_t *vlan_id, uint8_t vlan_cnt)
-{
-	if (vlan_cnt == 2) {
-		scnprintf(buf, len, "%s.%u.%u", dev->name, vlan_id[0], vlan_id[1]);
-	} else if (vlan_cnt == 1) {
-		scnprintf(buf, len, "%s.%u", dev->name, vlan_id[0]);
-	} else {
-		scnprintf(buf, len, "%s", dev->name);
-	}
-}
-
-/*
  * ppe_drv_lpbk_buffer_map_handler()
  * 	sysctl handler for the pairwise DDR-buffer ingress→egress map.
  * 	echo '<ingress_dev> <egress_dev>' : Add a pair
@@ -4444,19 +4456,10 @@ static int ppe_drv_lpbk_buffer_map_handler(struct ctl_table *table,
 					sizeof(lpbk_buffer_map_str) - off,
 					"Total rules: %u\n", p->lpbk_buffer_map_count);
 			list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
-				char ingress_str[IFNAMSIZ + 12];
-				char egress_str[IFNAMSIZ + 12];
-
-				ppe_drv_lpbk_iface_name_fmt(ingress_str, sizeof(ingress_str),
-						map_entry->ingress_dev,
-						map_entry->ingress_vlan_id, map_entry->ingress_vlan_cnt);
-				ppe_drv_lpbk_iface_name_fmt(egress_str, sizeof(egress_str),
-						map_entry->egress_dev,
-						map_entry->egress_vlan_id, map_entry->egress_vlan_cnt);
-
 				off += scnprintf(lpbk_buffer_map_str + off,
 						sizeof(lpbk_buffer_map_str) - off,
-						"%s %s\n", ingress_str, egress_str);
+						"%s %s\n",
+						map_entry->ingress_name, map_entry->egress_name);
 			}
 			spin_unlock_bh(&p->lock);
 		}

@@ -527,13 +527,16 @@ struct ppe_drv_lpbk_buffer_map_entry {
 	struct list_head	list;				/* Linked list node */
 	struct net_device	*ingress_dev;			/* Physical ingress net_device (holds refcount) */
 	struct net_device	*egress_dev;			/* Physical egress net_device (holds refcount) */
+	char			ingress_name[IFNAMSIZ];		/* User configured ingress interface name */
+	char			egress_name[IFNAMSIZ];		/* User configured egress interface name */
 	uint16_t		ingress_vlan_id[PPE_DRV_MAX_VLAN];	/* Outer [0], inner [1] VLAN IDs */
 	uint16_t		egress_vlan_id[PPE_DRV_MAX_VLAN];	/* Outer [0], inner [1] VLAN IDs */
 	uint8_t			ingress_vlan_cnt;		/* Number of ingress VLAN levels (0, 1, or 2) */
 	uint8_t			egress_vlan_cnt;		/* Number of egress VLAN levels (0, 1, or 2) */
-	bool			is_pppoe;			/* Entry was configured via a PPPoE interface */
-	uint16_t		pppoe_session_id;		/* PPPoE session ID; valid only when is_pppoe is true */
-	uint8_t			pppoe_server_mac[ETH_ALEN];	/* PPPoE server MAC; valid only when is_pppoe is true */
+	bool			ingress_pppoe;			/* Ingress interface is PPPoE interface */
+	bool			egress_pppoe;			/* Egress interface is PPPoE interface */
+	uint16_t		pppoe_session_id;		/* PPPoE session ID; valid when a PPPoE side is true */
+	uint8_t			pppoe_server_mac[ETH_ALEN];	/* PPPoE server MAC; valid when a PPPoE side is true */
 };
 
 /*
