@@ -983,9 +983,10 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1 << SERVICE_CODE_BYP)
 				| (1 << FAKE_L2_PROTO_BYP));
 
-		sc_cfg.bypass_bitmap[1] = ~((1 << ACL_POST_ROUTING_CHECK_BYP)
-				| (1 << DOT1P_MAPPER_BYP)
+		sc_cfg.bypass_bitmap[1] = ~((1ULL << ACL_POST_ROUTING_CHECK_BYP)
+				| (1ULL << DOT1P_MAPPER_BYP)
 				| (1ULL << DOT1P_DST_LOOKUP_BYPASS)
+				| (1ULL << DOT1P_UNI_LOOKUP_REVERSE)
 				| (1ULL << QM_DDRQ_ID_GEN_BYPASS)
 				| (1ULL << QM_PASSTHROUGH_CPU_CODE_0_SEL)
 				| (1ULL << QM_PASSTHROUGH_CPU_CODE_1_SEL)
