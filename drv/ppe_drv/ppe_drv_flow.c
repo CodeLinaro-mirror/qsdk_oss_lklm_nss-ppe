@@ -1054,6 +1054,7 @@ bool ppe_drv_flow_v6_pri_profile_get(struct ppe_drv_v6_conn_flow *pcf, struct pp
 		reverse_flow = ppe_drv_flow_v6_get(&reverse_tuple);
 		if (reverse_flow) {
 			*pri_profile = reverse_flow->pri_profile;
+			pcf->rfs_core = reverse_flow->pcf.v6->rfs_core;
 			ppe_drv_trace("pcf %p: Pri profile same as reverse flow: %u\n", pcf, evp_pri_profile);
 			return true;
 		}
@@ -1290,8 +1291,13 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	/*
 	 * Multicast RFS flows are redirected to the CPU core assigned.
 	 */
-	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST) &&
-			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_MCAST_RFS_FLOW)) {
+	if ((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST) &&
+			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_MCAST_RFS_FLOW))
+#ifdef NSS_PPE_PON_SUPPORT
+			|| (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) &&
+			ppe_drv_is_pon_enable_internal())
+#endif
+			) {
 		ppe_drv_sc_t core_sc;
 
 		switch (pcf->rfs_core) {
@@ -2672,6 +2678,7 @@ bool ppe_drv_flow_v4_pri_profile_get(struct ppe_drv_v4_conn_flow *pcf, struct pp
 		reverse_flow = ppe_drv_flow_v4_get(&reverse_tuple);
 		if (reverse_flow) {
 			*pri_profile = reverse_flow->pri_profile;
+			pcf->rfs_core = reverse_flow->pcf.v4->rfs_core;
 			ppe_drv_trace("pcf %p: Pri profile same as reverse flow: %u\n", pcf, evp_pri_profile);
 			return true;
 		}
@@ -2911,8 +2918,13 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	/*
 	 * Multicast RFS flows are redirected to the CPU core assigned.
 	 */
-	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST) &&
-			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_MCAST_RFS_FLOW)) {
+	if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST) &&
+			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_MCAST_RFS_FLOW))
+#ifdef NSS_PPE_PON_SUPPORT
+			|| (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) &&
+			ppe_drv_is_pon_enable_internal())
+#endif
+			) {
 		ppe_drv_sc_t core_sc;
 
 		switch (pcf->rfs_core) {

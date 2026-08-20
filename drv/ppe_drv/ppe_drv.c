@@ -1329,6 +1329,7 @@ static ppe_drv_ret_t ppe_drv_gro_map_core_to_enqueue_vp(uint8_t core, uint8_t qu
 	return status;
 }
 #endif
+
 #ifdef NSS_PPE_PON_SUPPORT
 /*
  * ppe_drv_pon_map_enqueue_vp_to_pq()
@@ -1606,21 +1607,30 @@ struct ppe_drv_iface *ppe_drv_pon_iface_get(void)
 EXPORT_SYMBOL(ppe_drv_pon_iface_get);
 
 /*
+ * ppe_drv_is_pon_enable_internal()
+ *      Returns true if PON is enabled on this RDP.
+ */
+bool ppe_drv_is_pon_enable_internal(void)
+{
+        struct ppe_drv *p = ppe_drv_gbl;
+
+        return !!p->pon_iface;
+}
+
+/*
  * ppe_drv_is_pon_enable()
  *	Returns true if PON is enabled on this RDP.
  */
 bool ppe_drv_is_pon_enable(void)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
-	bool pon_is_enable = false;
+	bool is_pon_en = false;
 
 	spin_lock_bh(&p->lock);
-	if (p->pon_iface) {
-		pon_is_enable = true;
-	}
+	is_pon_en = ppe_drv_is_pon_enable_internal();
 	spin_unlock_bh(&p->lock);
 
-	return pon_is_enable;
+	return is_pon_en;
 }
 EXPORT_SYMBOL(ppe_drv_is_pon_enable);
 
