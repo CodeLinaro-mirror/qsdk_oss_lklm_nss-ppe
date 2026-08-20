@@ -912,6 +912,9 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi7(struct ppe_ds *node, struct ppe_d
 		rxfill_def = PPE_DS_RXFILL_NUM_DESC_DEF;
 	}
 
+	node_cfg->freq.low_freq = reg_info->freq.low_freq;
+	node_cfg->freq.high_freq = reg_info->freq.high_freq;
+
 	if ((ppe2tcl_rxfill_num_desc < rxfill_min) ||
 			(ppe2tcl_rxfill_num_desc > PPE_DS_RXFILL_NUM_DESC_MAX)) {
 		wifi7_hdl->ppe2tcl_rxfill_num_desc = rxfill_def;
@@ -1291,6 +1294,9 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi8(struct ppe_ds *node, struct ppe_d
 	reg_hw_tx_rx->edma_rxfill_prod_addr.vaddr = hbm_ring_hptp_cfg->edma_rxfill_prod_addr.vaddr;
 	reg_hw_tx_rx->edma_rxfill_prod_addr.paddr = hbm_ring_hptp_cfg->edma_rxfill_prod_addr.paddr;
 
+	node_cfg->freq.low_freq = reg_info->freq.low_freq;
+	node_cfg->freq.high_freq = reg_info->freq.high_freq;
+
 	write_lock_bh(&node_cfg->lock);
 	node_cfg->node_state = PPE_DS_NODE_STATE_REG_DONE;
 	write_unlock_bh(&node_cfg->lock);
@@ -1614,3 +1620,35 @@ uint32_t ppe_ds_get_node_id(struct ppe_ds *node)
 	return -1;
 };
 EXPORT_SYMBOL(ppe_ds_get_node_id);
+
+/*
+ * ppe_ds_get_wlan_node_freq()
+ *	Update the radio channel frequency range for a PPE-DS node.
+ *
+ * Called when regulatory/channel information becomes available or changes
+ * after the node was initially registered (at which point chan_info may
+ * have been zero).
+ */
+void ppe_ds_get_wlan_node_freq(int node_id, struct ppe_ds_wlan_node_freq *freq)
+{
+	struct ppe_ds_node_config *node_cfg;
+
+	if (!freq) {
+		ppe_ds_err("NULL freq pointer for node_id %d", node_id);
+		return;
+	}
+
+	if (node_id < 0 || node_id >= PPE_DS_MAX_NODE) {
+		ppe_ds_err("Invalid node_id %d for freq update", node_id);
+		return;
+	}
+
+	node_cfg = &ppe_ds_node_cfg[node_id];
+
+	write_lock_bh(&node_cfg->lock);
+	node_cfg->freq = *freq;
+	write_unlock_bh(&node_cfg->lock);
+
+	ppe_ds_info("node %d freq updated: low=%u MHz high=%u MHz", node_id, freq->low_freq, freq->high_freq);
+}
+EXPORT_SYMBOL(ppe_ds_get_wlan_node_freq);

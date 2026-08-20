@@ -86,7 +86,9 @@ static int ppe_ds_node_info_show(struct seq_file *m,
 	for (i = 0; i < PPE_DS_MAX_NODE; i++) {
 		seq_printf(m, "Node: %d\n", i);
 		seq_printf(m, "Node_Enqueue_VP: %d\n", ppe_drv_port_metadata_to_enq_vp(i));
-		seq_printf(m, "Node_pri_profile: %d\n\n", ppe_drv_port_metadata_to_pri_prof(i));
+		seq_printf(m, "Node_pri_profile: %d\n", ppe_drv_port_metadata_to_pri_prof(i));
+		seq_printf(m, "Node_low_freq: %u MHz\n", ppe_ds_node_cfg[i].freq.low_freq);
+		seq_printf(m, "Node_high_freq: %u MHz\n\n", ppe_ds_node_cfg[i].freq.high_freq);
 	}
 	return 0;
 }

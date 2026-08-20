@@ -134,6 +134,7 @@ typedef enum {
 struct ppe_ds_node_config {
 	ppe_ds_node_state_t node_state;		/* PPE-DS node state information */
 	rwlock_t lock;				/* Lock for accessing node configuration */
+	struct ppe_ds_wlan_node_freq freq;		/* Radio channel frequency range in MHz */
 };
 
 /*

@@ -271,4 +271,16 @@ int ppe_ds_wlan_plugins_cb_register(struct ppe_ds_wlan_ops *wlan_ops);
  */
 void ppe_ds_wlan_plugins_cb_unregister(void);
 
+/**
+ * ppe_ds_get_wlan_node_freq
+ *	Update the radio channel frequency range for a PPE-DS node.
+ *
+ * Called when regulatory/channel information becomes available or changes
+ * after the node was initially registered with zero freq values.
+ *
+ * @param[in] node_id    PPE-DS node index
+ * @param[in] freq       Pointer to radio channel frequency range in MHz
+ */
+void ppe_ds_get_wlan_node_freq(int node_id, struct ppe_ds_wlan_node_freq *freq);
+
 #endif	/* _PPE_DS_WLAN_H_ */

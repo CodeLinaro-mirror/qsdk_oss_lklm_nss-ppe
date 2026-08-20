@@ -15,6 +15,15 @@
 #define PPE_DS_WIFI_ARCH_MODE_WIFI8	8
 
 /**
+ * ppe_ds_wlan_node_freq
+ *	Radio channel frequency range for a PPE-DS node.
+ */
+struct ppe_ds_wlan_node_freq {
+	uint32_t low_freq;	/**< Radio channel low frequency in MHz */
+	uint32_t high_freq;	/**< Radio channel high frequency in MHz */
+};
+
+/**
  * ppe_ds_wlan_node_type_t
  *	PPE-DS node type
  */
@@ -76,6 +85,7 @@ struct ppe_ds_wlan_reg_info {
 	uint32_t reo2ppe_start_idx;		/**< REO2PPE ring index */
 	bool ppe_ds_int_mode_enabled;	/**< Interrupt mode to process PPE2TCL */
 	uint8_t dp_ppeds_node_id;	/**< Node id of ds node */
+	struct ppe_ds_wlan_node_freq freq;	/**< Radio channel frequency range in MHz */
 };
 
 struct ppe_ds_reg_addr_info {
@@ -163,6 +173,8 @@ struct ppe_ds_wlan_arch_reg_info {
 			} hw_buf_mgmt;
 		} wifi8_cfg;
 	};
+
+	struct ppe_ds_wlan_node_freq freq;	/**< Radio channel frequency range in MHz */
 };
 
 struct ppe_vp_ui;
@@ -407,6 +419,15 @@ typedef ppe_vp_status_t (*update_vp_config_func_t)(struct net_device *ath_dev, s
 typedef void (*get_rxfill_ring_info_func_t)(int ppeds_node_id,
 		struct ppe_ds_wlan_rxfill_ring_info *info);
 
+/*
+ * ds_node_freq_get_func_t
+ *	Callback to get the radio channel frequency range for a PPE-DS node.
+ *
+ * @param[in] node_id    PPE-DS node index
+ * @param[in] freq       Radio channel frequency range in MHz
+ */
+typedef void (*ds_node_freq_get_func_t)(int node_id, struct ppe_ds_wlan_node_freq *freq);
+
 /**
  * nss_plugins_ops
  * 	Data structure for NSS Plugin ops
@@ -426,6 +447,7 @@ struct nss_plugins_ops {
 	service_status_update_func_t service_status_update;		/**< Callback to get status update */
 	update_vp_config_func_t vp_cfg_update; 		/**< Callback to update VP config */
 	get_rxfill_ring_info_func_t get_rxfill_ring_info;	/**< Callback to get RxFill ring filled-count info */
+	ds_node_freq_get_func_t get_ds_node_freq;	/**< Callback to get WiFi SoC node radio channel frequency range */
 };
 
 /*
