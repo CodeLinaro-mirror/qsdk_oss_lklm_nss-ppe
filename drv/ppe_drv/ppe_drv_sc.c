@@ -342,8 +342,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		 */
 		sc_cfg.bypass_bitmap[0] = ((1 << WRONG_PKT_FMT_L2_BYP)
 						| (1 << WRONG_PKT_FMT_L3_IPV4_BYP)
-						| (1 << WRONG_PKT_FMT_L3_IPV6_BYP)
-						| (1 << WRONG_PKT_FMT_L4_BYP));
+						| (1 << WRONG_PKT_FMT_L3_IPV6_BYP));
 #endif
 		/*
 		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
