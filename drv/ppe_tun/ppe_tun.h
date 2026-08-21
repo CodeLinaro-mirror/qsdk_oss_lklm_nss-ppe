@@ -99,6 +99,7 @@ struct ppe_tun_xcpn_mode {
 	uint8_t ipip6;	/* Controls ipip6 exception mode */
 	uint8_t l2tp;	/* Controls l2tp exception mode */
 	uint8_t gretun; /* Controls gretun exception mode */
+	uint8_t vxlan;	/* Controls vxlan exception mode */
 };
 
 /*
