@@ -1291,41 +1291,42 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	/*
 	 * Multicast RFS flows are redirected to the CPU core assigned.
 	 */
-	if ((ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST) &&
-			ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_MCAST_RFS_FLOW))
+	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST)) {
+		if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_MCAST_RFS_FLOW)
 #ifdef NSS_PPE_PON_SUPPORT
-			|| (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) &&
-			ppe_drv_is_pon_enable_internal())
+				|| (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) &&
+					ppe_drv_is_pon_enable_internal())
 #endif
-			) {
-		ppe_drv_sc_t core_sc;
+		  ) {
+			ppe_drv_sc_t core_sc;
 
-		switch (pcf->rfs_core) {
-		case 0:
-			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE0;
-			break;
-		case 1:
-			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE1;
-			break;
-		case 2:
-			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE2;
-			break;
-		case 3:
-			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE3;
-			break;
-		default:
-			ppe_drv_warn("%p: invalid core %u for mcast RFS flow", pcf, pcf->rfs_core);
-			return false;
+			switch (pcf->rfs_core) {
+				case 0:
+					core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE0;
+					break;
+				case 1:
+					core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE1;
+					break;
+				case 2:
+					core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE2;
+					break;
+				case 3:
+					core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE3;
+					break;
+				default:
+					ppe_drv_warn("%p: invalid core %u for mcast RFS flow", pcf, pcf->rfs_core);
+					return false;
+			}
+
+			if (!ppe_drv_sc_check_and_set(&service_code, core_sc)) {
+				ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+						pcf, service_code, core_sc);
+				return false;
+			}
+
+			*scp = service_code;
+			return true;
 		}
-
-		if (!ppe_drv_sc_check_and_set(&service_code, core_sc)) {
-			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
-					pcf, service_code, core_sc);
-			return false;
-		}
-
-		*scp = service_code;
-		return true;
 	}
 
 	if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_RFS_PPE_ASSIST)) {
@@ -2918,41 +2919,42 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	/*
 	 * Multicast RFS flows are redirected to the CPU core assigned.
 	 */
-	if ((ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST) &&
-			ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_MCAST_RFS_FLOW))
+	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST)) {
+		if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_MCAST_RFS_FLOW)
 #ifdef NSS_PPE_PON_SUPPORT
-			|| (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) &&
-			ppe_drv_is_pon_enable_internal())
+				|| (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) &&
+					ppe_drv_is_pon_enable_internal())
 #endif
-			) {
-		ppe_drv_sc_t core_sc;
+		  ) {
+			ppe_drv_sc_t core_sc;
 
-		switch (pcf->rfs_core) {
-		case 0:
-			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE0;
-			break;
-		case 1:
-			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE1;
-			break;
-		case 2:
-			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE2;
-			break;
-		case 3:
-			core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE3;
-			break;
-		default:
-			ppe_drv_warn("%p: invalid core %u for mcast RFS flow", pcf, pcf->rfs_core);
-			return false;
+			switch (pcf->rfs_core) {
+				case 0:
+					core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE0;
+					break;
+				case 1:
+					core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE1;
+					break;
+				case 2:
+					core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE2;
+					break;
+				case 3:
+					core_sc = PPE_DRV_SC_NOEDIT_REDIR_CORE3;
+					break;
+				default:
+					ppe_drv_warn("%p: invalid core %u for mcast RFS flow", pcf, pcf->rfs_core);
+					return false;
+			}
+
+			if (!ppe_drv_sc_check_and_set(&service_code, core_sc)) {
+				ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
+						pcf, service_code, core_sc);
+				return false;
+			}
+
+			*scp = service_code;
+			return true;
 		}
-
-		if (!ppe_drv_sc_check_and_set(&service_code, core_sc)) {
-			ppe_drv_warn("%p: flow requires multiple service code, existing:%u new:%u",
-					pcf, service_code, core_sc);
-			return false;
-		}
-
-		*scp = service_code;
-		return true;
 	}
 
 	if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_RFS_PPE_ASSIST)) {
