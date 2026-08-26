@@ -22,7 +22,7 @@
 #ifndef _PPE_DRV_VP_H_
 #define _PPE_DRV_VP_H_
 
-enum ppe_port_user_type;
+enum ppe_drv_port_user_type;
 
 /**
  * @addtogroup ppe_drv_vp_subsystem
