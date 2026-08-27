@@ -179,6 +179,15 @@ bool ppe_vp_tx_to_vp(int32_t vp_num, struct ppe_vp_tx_info *tx_info, struct sk_b
 		dptxi.sc = PPE_DRV_SC_IPSEC_EDMA_VP_DECAP;
 		break;
 
+	case PPE_VP_TX_TYPE_IPSEC_3_TUPLE_ENCAP:
+		/*
+		 * Send IPsec packet to EIP for encapsulation using EIP's 3 tuple lookup.
+		 */
+		dptxi.flags |= NSS_DP_VP_TX_FLAG_PKT_MODE;
+		dptxi.pkt_mode = NSS_DP_VP_FULL_PKT_MODE;
+		dptxi.sc = PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP;
+		break;
+
 	default:
 		break;
 	}
