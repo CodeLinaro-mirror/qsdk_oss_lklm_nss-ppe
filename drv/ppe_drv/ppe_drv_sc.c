@@ -279,7 +279,8 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 					);
 		break;
 
-	case PPE_DRV_SC_IPSEC_EIP2PPE:
+	case PPE_DRV_SC_IPSEC_EIP2PPE_ENCAP:
+	case PPE_DRV_SC_IPSEC_EIP2PPE_DECAP:
 		/*
 		 * This is used as a tag while handling exception from PPE post EIP processing.
 		 */
@@ -1084,6 +1085,44 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 #endif /* PPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG */
 					);
 		break;
+
+	case PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP:
+		sc_cfg.offset_sel = PPE_DRV_SC_IN_L2_OFF_L3;
+		sc_cfg.hw_services = PPE_DRV_EIP_HWSERVICE_IPSEC_AIIP;
+
+		/*
+		 * PPE2EIP encap specific bypass bits - avoid L3 packet editing
+		 * and source security check.
+		 */
+		sc_cfg.bypass_bitmap[1] = ((1 << L3_PKT_EDIT_BYP)
+				| (1 << L2_SOURCE_SEC_BYP));
+
+		/*
+		 * PPE2EIP encap base field update bits.
+		 */
+		sc_cfg.field_update_bitmap[0] = ((1 << FLD_UPDATE_DEST_INFO)
+				| (1 << FLD_UPDATE_HASH_FLOW_INDEX)
+				| (1 << FLD_UPDATE_FAKE_L2_PROT_EN));
+
+#ifdef PPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG
+		/*
+		 * Full inline IPsec path - combine LP_NEXT(96XX) bypass and field update bits
+		 * with PPE2EIP encap bits:
+		 * - Bypass flow service code lookup to avoid re-classification on second pass.
+		 * - Bypass VLAN member check, bridging, VP service code enqueue and
+		 *   DOT1P/VLAN loopback processing.
+		 * - Update source with destination for second pass.
+		 */
+		sc_cfg.bypass_bitmap[0] = (1 << FLOW_LOOKUP_BYP);
+		sc_cfg.bypass_bitmap[1] |= ((1 << EG_VLAN_MEMBER_CHECK_BYP)
+				| (1 << BRIDGING_FWD_BYP)
+				| (1 << SOURCE_FLTR_BYP)
+				| (1 << L2_VP_SERVICE_CODE_ENQ_BYP)
+				| (1 << DOT1P_VLAN_FROM_LOOPBACK)
+				| (1 << FAKE_MAC_DROP_BYP));
+		sc_cfg.field_update_bitmap[0] |= (1ULL << FLD_UP_SRC_WITH_DST);
+#endif /* PPE_DRV_IPSEC_FULL_INLINE_SC_CONFIG */
+		break;
 #endif
 
 	default:
@@ -1380,6 +1419,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH, PPE_DRV_SC_NOEDIT_REDIR_CORE0, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_EDMA_VP_ENCAP, PPE_DRV_SC_IPSEC_EIP2PPE_ENCAP, PPE_DRV_PORT_EIP197);
 	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_EDMA_VP_DECAP, PPE_DRV_SC_IPSEC_EIP2PPE_DECAP, PPE_DRV_PORT_EIP197);
+	ppe_drv_sc_config(PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP, PPE_DRV_SC_IPSEC_EIP2PPE_ENCAP, PPE_DRV_PORT_EIP197);
 
 	/*
 	 * Initialize FLOW ACL service code
