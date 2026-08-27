@@ -48,6 +48,12 @@ void ppe_drv_eip_sc_queue_config_set(void)
 			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
 
 	/*
+	 * set ucast queue for VP 3-tuple encap direction.
+	 */
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP, queue_id,
+			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+
+	/*
 	 * Set ucast for VP decap direction
 	 */
 	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_DECAP, queue_id,
