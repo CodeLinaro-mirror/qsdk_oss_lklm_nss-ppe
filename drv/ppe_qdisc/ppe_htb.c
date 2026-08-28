@@ -326,6 +326,29 @@ configure:
 	 * If class with a given classid is not found, we allocate a new one
 	 */
 	if (!cl) {
+		/*
+		 * PPE hardware does not provide independent scheduler resources for more
+		 * than one class attached directly at the HTB root/port level -- this
+		 * holds regardless of the requested priority (including same-priority
+		 * siblings). Reject a second root-level class outright instead of
+		 * relying on the per-port priority ceiling to catch it incidentally.
+		 */
+		if (!parent) {
+			unsigned int i;
+			struct ppe_htb_class_data *existing;
+
+			for (i = 0; i < q->clhash.hashsize; i++) {
+				hlist_for_each_entry(existing, &q->clhash.hash[i], sch_common.hnode) {
+					if (!existing->parent) {
+						ppe_qdisc_warning("%x: ppehtb only one class may be attached "
+							"at root; classid %x already present, rejecting %x",
+							sch->handle, existing->sch_common.classid, classid);
+						return -EINVAL;
+					}
+				}
+			}
+		}
+
 		cl = ppe_htb_class_alloc(sch, parent, classid);
 
 		if (!cl) {
