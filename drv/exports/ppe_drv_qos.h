@@ -12,6 +12,8 @@
 #ifndef _PPE_DRV_QOS_H_
 #define _PPE_DRV_QOS_H_
 
+#include <linux/list.h>
+
 /**
  * @addtogroup ppe_drv_qos_subsystem
  * @{
@@ -225,6 +227,58 @@ struct ppe_drv_qos_port {
 };
 
 /**
+ * ppe_drv_qos_shaper_cfg
+ *	Complete shaper configuration for shadow state.
+ */
+struct ppe_drv_qos_shaper_cfg {
+	bool c_shaper_en;	/**< Committed shaper enable. */
+	bool e_shaper_en;	/**< Excess shaper enable. */
+	uint32_t cir;		/**< Committed information rate (kbits/sec). */
+	uint32_t cbs;		/**< Committed burst size (bytes). */
+	uint32_t eir;		/**< Excess information rate (kbits/sec). */
+	uint32_t ebs;		/**< Excess burst size (bytes). */
+	bool couple_en;		/**< Couple enable. */
+	uint8_t meter_unit;	/**< Meter unit. */
+	uint8_t frame_mode;	/**< Frame mode. */
+};
+
+/**
+ * ppe_drv_qos_flow_shaper_state
+ *	Live shadow of the flow shaper for one flow entry.
+ */
+struct ppe_drv_qos_flow_shaper_state {
+	struct ppe_drv_qos_shaper_cfg cfg;	/**< Shaper configuration. */
+	bool valid;				/**< True when a shaper is configured. */
+};
+
+/**
+ * ppe_drv_qos_queue_shaper_state
+ *	Live shadow of the queue shaper for one queue entry.
+ */
+struct ppe_drv_qos_queue_shaper_state {
+	struct ppe_drv_qos_shaper_cfg cfg;	/**< Shaper configuration. */
+	bool valid;				/**< True when a shaper is configured. */
+};
+
+/**
+ * ppe_drv_qos_port_state
+ *	Live software shadow of all shaper configurations for a PPE port.
+ */
+struct ppe_drv_qos_port_state {
+	struct list_head list;				/**< Linkage in port state list. */
+	uint32_t refcnt;				/**< Number of active owners. */
+	uint32_t port_id;				/**< PPE port ID. */
+	struct ppe_drv_qos_port port;			/**< Resource base/max info. */
+	struct ppe_drv_qos_shaper_cfg port_shaper;	/**< Port-level shaper shadow. */
+	bool port_shaper_valid;			/**< Port shaper shadow valid flag. */
+	struct ppe_drv_qos_flow_shaper_state *flows;	/**< Flow shaper shadow array. */
+	struct ppe_drv_qos_queue_shaper_state *ucast_queues;
+						/**< Unicast queue shaper shadow array. */
+	struct ppe_drv_qos_queue_shaper_state *mcast_queues;
+						/**< Multicast queue shaper shadow array. */
+};
+
+/**
  * Callback function for getting INT-PRI value.
  *
  * @datatypes
@@ -281,6 +335,7 @@ typedef int (*ppe_drv_qos_ddrq_limit_set_callback_t)(struct ppe_drv_qos_ddrq_lim
 typedef int (*ppe_drv_qos_ddrq_enq_deq_ctrl_callback_t)(uint32_t ddrq_id, bool enable);
 typedef int (*ppe_drv_qos_ddrq_stats_get_callback_t)(uint32_t ddrq_id, struct ppe_drv_qos_q_stat *stats);
 typedef int (*ppe_drv_qos_ddrq_accu_stats_callback_t)(void);
+typedef int (*ppe_drv_qos_ddrq_pon_drainout_callback_t)(void);
 
 /**
  * ppe_drv_qos_ddrq_ops
@@ -297,6 +352,7 @@ struct ppe_drv_qos_ddrq_ops {
 	ppe_drv_qos_ddrq_callback_t ddrq_cfg_reset;	/**< DDRQ default configuration reset callback. */
 	ppe_drv_qos_ddrq_accu_stats_callback_t ddrq_accu_stats_start;	/**< DDRQ accumulate statistics start callback. */
 	ppe_drv_qos_ddrq_accu_stats_callback_t ddrq_accu_stats_stop;	/**< DDRQ accumulate statistics stop callback. */
+	ppe_drv_qos_ddrq_pon_drainout_callback_t ddrq_pon_drainout;	/**< PON T-CONT drainout callback. */
 };
 
 /**
@@ -493,6 +549,26 @@ ppe_drv_ret_t ppe_drv_qos_queue_dequeue_drop_ctrl(uint32_t qid, bool enable);
  * Status of the QoS queue disable operation.
  */
 ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid);
+
+/**
+ * ppe_drv_qos_pon_drainout
+ *	Drain all PON T-CONTs through the registered DDRQ callback.
+ *
+ * @return
+ * Status of the PON drainout operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_pon_drainout(void);
+
+/**
+ * ppe_drv_qos_port_is_pon
+ *	Checks whether a port is the configured PON port.
+ *
+ * @param[in] port_id  Port ID of the port.
+ *
+ * @return
+ * True when the port is the configured PON port.
+ */
+bool ppe_drv_qos_port_is_pon(uint32_t port_id);
 
 /**
  * ppe_drv_qos_queue_enable
@@ -746,6 +822,51 @@ ppe_drv_ret_t ppe_drv_qos_queue_cfg_set(uint32_t qid, struct ppe_drv_qos_queue *
  * Status of the QoS queue limit set operation.
  */
 ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res);
+
+/**
+ * ppe_drv_qos_port_state_alloc
+ *	Allocate shaper shadow state arrays for a port.
+ *
+ * @param[in] port_id  Port ID of the port.
+ * @param[in] port     Pointer to QoS resource information.
+ *
+ * @return
+ * Status of the allocation operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_state_alloc(uint32_t port_id, struct ppe_drv_qos_port *port);
+
+/**
+ * ppe_drv_qos_port_state_free
+ *	Free shaper shadow state arrays for a port.
+ *
+ * @param[in] port_id  Port ID of the port.
+ *
+ * @return
+ * None.
+ */
+void ppe_drv_qos_port_state_free(uint32_t port_id);
+
+/**
+ * ppe_drv_qos_port_shapers_unlimited
+ *	Set all shapers for a port to unlimited rate.
+ *
+ * @param[in] port_id  Port ID of the port.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_shapers_unlimited(uint32_t port_id);
+
+/**
+ * ppe_drv_qos_port_shapers_restore
+ *	Restore all shapers for a port from shadow state.
+ *
+ * @param[in] port_id  Port ID of the port.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_shapers_restore(uint32_t port_id);
 
 /**
  * ppe_drv_qos_default_conf_set
