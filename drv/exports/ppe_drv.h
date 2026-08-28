@@ -585,6 +585,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_QOS_PORT_CFG_FAIL,			/**< QoS port configuration failed. */
 	PPE_DRV_RET_QOS_TCONT_CFG_FAIL,			/**< QoS tcont configuration failed. */
 	PPE_DRV_RET_QOS_TCONT_STATS_FAIL,		/**< QoS tcont statistics get failed. */
+	PPE_DRV_RET_QOS_HIERARCHY_NOT_FOUND,		/**< No QoS hierarchy is attached to the port. */
 	PPE_DRV_RET_PORT_NO_OFFLOAD,			/**< Offload is disabled on the PPE port */
 	PPE_DRV_RET_ACL_RULE_INVALID,			/**< ACL rule invalid */
 	PPE_DRV_RET_ACL_RULE_ADD_FAIL,			/**< Failed to add ACL rule */

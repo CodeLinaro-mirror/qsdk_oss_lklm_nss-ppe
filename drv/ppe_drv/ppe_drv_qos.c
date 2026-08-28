@@ -33,6 +33,132 @@ enum ppe_drv_qos_frame_mode {
 typedef enum ppe_drv_qos_frame_mode ppe_drv_qos_frame_mode_t;
 
 /*
+ * Dynamic list of per-port shaper shadow state entries.
+ */
+static LIST_HEAD(ppe_drv_qos_port_state_list);
+static DEFINE_SPINLOCK(ppe_drv_qos_port_state_lock);
+
+/*
+ * ppe_drv_qos_shaper_cfg_from_fal()
+ *	Convert FAL shaper configuration to shadow shaper configuration.
+ */
+static inline void ppe_drv_qos_shaper_cfg_from_fal(struct ppe_drv_qos_shaper_cfg *dst,
+						    const fal_shaper_config_t *src)
+{
+	if (!dst || !src) {
+		return;
+	}
+
+	dst->c_shaper_en = src->c_shaper_en;
+	dst->e_shaper_en = src->e_shaper_en;
+	dst->cir = src->cir;
+	dst->cbs = src->cbs;
+	dst->eir = src->eir;
+	dst->ebs = src->ebs;
+	dst->couple_en = src->couple_en;
+	dst->meter_unit = src->meter_unit;
+	dst->frame_mode = src->shaper_frame_mode;
+}
+
+/*
+ * ppe_drv_qos_shaper_cfg_to_fal()
+ *	Convert shadow shaper configuration to FAL shaper configuration.
+ */
+static inline void ppe_drv_qos_shaper_cfg_to_fal(const struct ppe_drv_qos_shaper_cfg *src,
+						  fal_shaper_config_t *dst)
+{
+	if (!dst) {
+		return;
+	}
+
+	memset(dst, 0, sizeof(*dst));
+	if (!src) {
+		return;
+	}
+
+	dst->c_shaper_en = src->c_shaper_en;
+	dst->e_shaper_en = src->e_shaper_en;
+	dst->cir = src->cir;
+	dst->cbs = src->cbs;
+	dst->eir = src->eir;
+	dst->ebs = src->ebs;
+	dst->couple_en = src->couple_en;
+	dst->meter_unit = src->meter_unit;
+	dst->shaper_frame_mode = (fal_shaper_frame_mode_t)src->frame_mode;
+}
+
+/*
+ * ppe_drv_qos_port_state_find()
+ *	Find the state entry for a given port_id.
+ *
+ * Caller must hold ppe_drv_qos_port_state_lock.
+ */
+static struct ppe_drv_qos_port_state *ppe_drv_qos_port_state_find(uint32_t port_id)
+{
+	struct ppe_drv_qos_port_state *state;
+
+	list_for_each_entry(state, &ppe_drv_qos_port_state_list, list) {
+		if (state->port_id == port_id) {
+			return state;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * ppe_drv_qos_state_find_by_l0sp()
+ *	Find state entry that owns the given l0sp id.
+ *
+ * Caller must hold ppe_drv_qos_port_state_lock.
+ */
+static struct ppe_drv_qos_port_state *ppe_drv_qos_state_find_by_l0sp(uint32_t l0sp_id)
+{
+	struct ppe_drv_qos_port_state *state;
+	uint32_t base;
+	uint32_t max;
+
+	list_for_each_entry(state, &ppe_drv_qos_port_state_list, list) {
+		base = state->port.base[PPE_DRV_QOS_RES_TYPE_L0_SP];
+		max = state->port.max[PPE_DRV_QOS_RES_TYPE_L0_SP];
+		if ((l0sp_id >= base) && (l0sp_id < (base + max))) {
+			return state;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * ppe_drv_qos_state_find_by_qid()
+ *	Find state entry that owns the given queue id.
+ *
+ * Caller must hold ppe_drv_qos_port_state_lock.
+ */
+static struct ppe_drv_qos_port_state *ppe_drv_qos_state_find_by_qid(uint32_t qid)
+{
+	struct ppe_drv_qos_port_state *state;
+	uint32_t base;
+	uint32_t max;
+
+	list_for_each_entry(state, &ppe_drv_qos_port_state_list, list) {
+		base = state->port.base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+		max = state->port.max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+		if ((qid >= base) && (qid < (base + max))) {
+			return state;
+		}
+
+		base = state->port.base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+		max = state->port.max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+		if ((qid >= base) && (qid < (base + max))) {
+			return state;
+		}
+	}
+
+	return NULL;
+}
+
+/*
  * ppe_drv_qos_int_pri_callback_unregister()
  *	API to unregister INT-PRI fetch callback.
  */
@@ -113,6 +239,7 @@ void ppe_drv_qos_ddrq_callback_unregister(void)
 	rcu_assign_pointer(p->ddrq_ops.ddrq_cfg_reset, NULL);
 	rcu_assign_pointer(p->ddrq_ops.ddrq_accu_stats_start, NULL);
 	rcu_assign_pointer(p->ddrq_ops.ddrq_accu_stats_stop, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_pon_drainout, NULL);
 	spin_unlock_bh(&p->lock);
 
 	/*
@@ -147,6 +274,7 @@ void ppe_drv_qos_ddrq_callback_register(const struct ppe_drv_qos_ddrq_ops *ops)
 	rcu_assign_pointer(p->ddrq_ops.ddrq_cfg_reset, ops->ddrq_cfg_reset);
 	rcu_assign_pointer(p->ddrq_ops.ddrq_accu_stats_start, ops->ddrq_accu_stats_start);
 	rcu_assign_pointer(p->ddrq_ops.ddrq_accu_stats_stop, ops->ddrq_accu_stats_stop);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_pon_drainout, ops->ddrq_pon_drainout);
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_qos_ddrq_callback_register);
@@ -156,8 +284,8 @@ EXPORT_SYMBOL(ppe_drv_qos_ddrq_callback_register);
  *	Invoke registered DDRQ accumulate-stats callback.
  */
 static inline bool ppe_drv_qos_ddrq_accu_stats_cb_invoke(struct ppe_drv *p,
-							  ppe_drv_qos_ddrq_accu_stats_callback_t cb,
-							  const char *op)
+						  ppe_drv_qos_ddrq_accu_stats_callback_t cb,
+						  const char *op)
 {
 	const char *op_name = op ? op : "unknown";
 
@@ -168,6 +296,25 @@ static inline bool ppe_drv_qos_ddrq_accu_stats_cb_invoke(struct ppe_drv *p,
 
 	if (cb()) {
 		ppe_drv_warn("%px:ddrq %s callback failed", p, op_name);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * ppe_drv_qos_ddrq_pon_drainout_cb_invoke()
+ *	Invoke registered PON T-CONT drainout callback.
+ */
+static inline bool ppe_drv_qos_ddrq_pon_drainout_cb_invoke(struct ppe_drv *p,
+							    ppe_drv_qos_ddrq_pon_drainout_callback_t cb)
+{
+	if (!cb) {
+		return true;
+	}
+
+	if (cb()) {
+		ppe_drv_warn("%px:ddrq PON drainout callback failed", p);
 		return false;
 	}
 
@@ -231,7 +378,7 @@ static inline bool ppe_drv_qos_ddrq_cb_invoke(struct ppe_drv *p,
 	}
 
 	if (cb(qid)) {
-		ppe_drv_warn("%px:ddrq %s callback failed for qid:%u", p, op, qid);
+		ppe_drv_warn("%px:ddrq %s callback failed for qid:%u", p, op_name, qid);
 		return false;
 	}
 	return true;
@@ -323,7 +470,7 @@ static inline bool ppe_drv_qos_ddrq_enq_deq_ctrl_cb_invoke(struct ppe_drv *p,
 
 	if (cb(qid, enable)) {
 		ppe_drv_warn("%px:ddrq %s configuration  callback failed for qid:%u enable: %d",
-			     p, op, qid, enable);
+			     p, op_name, qid, enable);
 		return false;
 	}
 	return true;
@@ -499,7 +646,7 @@ static int ppe_drv_qos_get_ddrq_state(uint32_t qid)
 	 */
 	if (fal_ucast_queue_ddrq_en_get(PPE_DRV_SWITCH_ID, qid, &ddrq_en_cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px: Error in getting the DDRQ state of qid:%d\n", p, qid);
+		ppe_drv_warn("%px: Error in getting the DDRQ state of qid:%u\n", p, qid);
 		return -EINVAL;
 	}
 	spin_unlock_bh(&p->lock);
@@ -530,7 +677,7 @@ static bool ppe_drv_qos_ddrq_state_get(uint32_t qid, bool *is_ddrq_en)
 
 	status = ppe_drv_qos_get_ddrq_state(qid);
 	if (status < 0) {
-		ppe_drv_warn("%px: Error in getting the DDRQ state of qid:%d\n", p, qid);
+		ppe_drv_warn("%px: Error in getting the DDRQ state of qid:%u\n", p, qid);
 		return false;
 	}
 
@@ -659,7 +806,7 @@ void ppe_drv_qos_queue_stats_get(uint32_t qid, bool is_red, struct ppe_drv_qos_q
 	bool is_ddrq_en;
 
 	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
-		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%u state\n", p, qid);
 		return;
 	}
 
@@ -700,7 +847,7 @@ void ppe_drv_qos_queue_stats_reset(uint32_t qid)
 	bool ddrq_cb_ok;
 
 	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
-		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%u state\n", p, qid);
 		return;
 	}
 
@@ -733,7 +880,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_enqueue_ctrl(uint32_t qid, bool enable)
 	bool ddrq_cb_ok;
 
 	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
-		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%u state\n", p, qid);
 		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
 	}
 
@@ -792,7 +939,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_dequeue_drop_ctrl(uint32_t qid, bool enable)
 	bool ddrq_cb_ok;
 
 	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
-		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%u state\n", p, qid);
 		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
 	}
 
@@ -827,22 +974,48 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_dequeue_drop_ctrl);
 ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
-	bool is_ddrq_en;
+	bool is_ddrq_en = false;
 	bool ddrq_cb_ok;
 	bool ddrq_unmapped = false;
 	bool enqueue_disabled = false;
 	bool dequeue_disabled = false;
 	bool ddrq_disable_done = false;
+	a_bool_t is_enq_en = A_FALSE;
 	fal_ucast_queue_ddrq_en_t ddrq_en = {0};
 
-	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
-		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
-		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	spin_lock_bh(&p->lock);
+
+	if (fal_qm_enqueue_ctrl_get(PPE_DRV_SWITCH_ID, qid, &is_enq_en) != SW_OK) {
+		ppe_drv_warn("%px:queue enqueue get failed for port:%u qid:%u", p, port_id, qid);
+		goto queue_disable_fail_locked;
 	}
 
 	/*
-	 * Disable queue enqueue, dequeue and flush the queue.
+	 * Return if the queue is already in the disabled state
 	 */
+	if (!is_enq_en) {
+		spin_unlock_bh(&p->lock);
+		return PPE_DRV_RET_SUCCESS;
+	}
+
+	spin_unlock_bh(&p->lock);
+
+	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%u state\n", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (is_ddrq_en) {
+		rcu_read_lock();
+		ddrq_cb_ok = ppe_drv_qos_ddrq_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_disable), qid, "disable");
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			ppe_drv_warn("%px:ddrq disable callback failed for qid:%u", p, qid);
+			goto queue_disable_fail;
+		}
+		ddrq_disable_done = true;
+	}
+
 	spin_lock_bh(&p->lock);
 
 	/*
@@ -860,6 +1033,9 @@ ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 		ddrq_unmapped = true;
 	}
 
+	/*
+	 * Disable queue enqueue, dequeue and flush the queue.
+	 */
 	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_FALSE) != SW_OK) {
 		ppe_drv_warn("%px:queue enqueue failed for port:%u qid:%u", p, port_id, qid);
 		goto queue_disable_fail_locked;
@@ -871,20 +1047,6 @@ ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 		goto queue_disable_fail_locked;
 	}
 	dequeue_disabled = true;
-	spin_unlock_bh(&p->lock);
-
-	if (is_ddrq_en) {
-		rcu_read_lock();
-		ddrq_cb_ok = ppe_drv_qos_ddrq_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_disable), qid, "disable");
-		rcu_read_unlock();
-		if (!ddrq_cb_ok) {
-			ppe_drv_warn("%px:ddrq disable callback failed for qid:%u", p, qid);
-			goto queue_disable_fail;
-		}
-		ddrq_disable_done = true;
-	}
-
-	spin_lock_bh(&p->lock);
 
 	if (fal_queue_flush(PPE_DRV_SWITCH_ID, port_id, qid) != SW_OK) {
 		spin_unlock_bh(&p->lock);
@@ -907,15 +1069,6 @@ ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 	return PPE_DRV_RET_SUCCESS;
 
 queue_disable_fail:
-	if (is_ddrq_en && ddrq_disable_done) {
-		rcu_read_lock();
-		ddrq_cb_ok = ppe_drv_qos_ddrq_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_enable), qid, "enable");
-		rcu_read_unlock();
-		if (!ddrq_cb_ok) {
-			ppe_drv_warn("%px:ddrq enable callback rollback failed for qid:%u", p, qid);
-		}
-	}
-
 	spin_lock_bh(&p->lock);
 queue_disable_fail_locked:
 	if (dequeue_disabled) {
@@ -938,6 +1091,16 @@ queue_disable_fail_locked:
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	if (is_ddrq_en && ddrq_disable_done) {
+		rcu_read_lock();
+		ddrq_cb_ok = ppe_drv_qos_ddrq_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_enable), qid, "enable");
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			ppe_drv_warn("%px:ddrq enable callback rollback failed for qid:%u", p, qid);
+		}
+	}
+
 	return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 }
 EXPORT_SYMBOL(ppe_drv_qos_queue_disable);
@@ -953,7 +1116,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid)
 	bool ddrq_cb_ok;
 
 	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
-		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%u state\n", p, qid);
 		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
 	}
 
@@ -967,21 +1130,20 @@ ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid)
 	}
 
 	/*
-	 * Enable queue enqueue and dequeue.
+	 * Enable queue dequeue and enqueue.
 	 */
 	spin_lock_bh(&p->lock);
-	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_TRUE) != SW_OK) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px:queue enqueue failed for qid:%u", p, qid);
-		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
-	}
-
 	if (fal_scheduler_dequeue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_TRUE) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue dequeue failed for qid:%u", p, qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	}
 
+	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_TRUE) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue enqueue failed for qid:%u", p, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
 	spin_unlock_bh(&p->lock);
 
 	ppe_drv_info("%px:enable SSDK level0 queue scheduler successful for qid:%u", p, qid);
@@ -1239,12 +1401,380 @@ ppe_drv_ret_t ppe_drv_qos_l0_scheduler_set(struct ppe_drv_qos_res *res, uint32_t
 EXPORT_SYMBOL(ppe_drv_qos_l0_scheduler_set);
 
 /*
+ * ppe_drv_qos_port_state_alloc()
+ *	Allocate shaper shadow state arrays for a port.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_state_alloc(uint32_t port_id, struct ppe_drv_qos_port *port)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	struct ppe_drv_qos_port_state *state_existing = NULL;
+	uint32_t flow_max;
+	uint32_t ucast_max;
+	uint32_t mcast_max;
+
+	if (!port) {
+		ppe_drv_warn("%px:port state alloc failed for port:%u due to NULL port cfg", p, port_id);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	flow_max = port->max[PPE_DRV_QOS_RES_TYPE_L0_SP];
+	ucast_max = port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+	mcast_max = port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state_existing = ppe_drv_qos_port_state_find(port_id);
+	if (state_existing) {
+		state_existing->refcnt++;
+		spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+		return PPE_DRV_RET_SUCCESS;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
+	state = kzalloc(sizeof(*state), GFP_ATOMIC);
+	if (!state) {
+		ppe_drv_warn("%px:port state alloc failed, kzalloc failed for port:%u", p, port_id);
+		return PPE_DRV_RET_FAILURE_NO_RESOURCE;
+	}
+
+	state->port_id = port_id;
+	state->refcnt = 1;
+	state->port = *port;
+
+	if (flow_max) {
+		state->flows = kcalloc(flow_max, sizeof(*state->flows), GFP_ATOMIC);
+		if (!state->flows) {
+			ppe_drv_warn("%px:port state alloc failed for port:%u flow state alloc failed max:%u",
+					p, port_id, flow_max);
+			goto fail;
+		}
+	}
+
+	if (ucast_max) {
+		state->ucast_queues = kcalloc(ucast_max, sizeof(*state->ucast_queues), GFP_ATOMIC);
+		if (!state->ucast_queues) {
+			ppe_drv_warn("%px:port state alloc failed for port:%u ucast state alloc failed max:%u",
+					p, port_id, ucast_max);
+			goto fail;
+		}
+	}
+
+	if (mcast_max) {
+		state->mcast_queues = kcalloc(mcast_max, sizeof(*state->mcast_queues), GFP_ATOMIC);
+		if (!state->mcast_queues) {
+			ppe_drv_warn("%px:port state alloc failed for port:%u mcast state alloc failed max:%u",
+					p, port_id, mcast_max);
+			goto fail;
+		}
+	}
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state_existing = ppe_drv_qos_port_state_find(port_id);
+	if (state_existing) {
+		state_existing->refcnt++;
+		spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+		goto duplicate;
+	}
+
+	list_add_tail(&state->list, &ppe_drv_qos_port_state_list);
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
+	return PPE_DRV_RET_SUCCESS;
+
+duplicate:
+	kfree(state->flows);
+	kfree(state->ucast_queues);
+	kfree(state->mcast_queues);
+	kfree(state);
+	return PPE_DRV_RET_SUCCESS;
+
+fail:
+	kfree(state->flows);
+	kfree(state->ucast_queues);
+	kfree(state->mcast_queues);
+	kfree(state);
+	return PPE_DRV_RET_FAILURE_NO_RESOURCE;
+}
+EXPORT_SYMBOL(ppe_drv_qos_port_state_alloc);
+
+/*
+ * ppe_drv_qos_port_state_free()
+ *	Free shaper shadow state arrays for a port.
+ */
+void ppe_drv_qos_port_state_free(uint32_t port_id)
+{
+	struct ppe_drv_qos_port_state *state;
+	struct ppe_drv_qos_port_state *tmp;
+	struct ppe_drv_qos_port_state *to_free = NULL;
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	list_for_each_entry_safe(state, tmp, &ppe_drv_qos_port_state_list, list) {
+		if (state->port_id != port_id) {
+			continue;
+		}
+
+		if (state->refcnt > 1) {
+			state->refcnt--;
+			spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+			return;
+		}
+
+		list_del(&state->list);
+		to_free = state;
+		break;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
+	if (!to_free) {
+		return;
+	}
+
+	kfree(to_free->flows);
+	kfree(to_free->ucast_queues);
+	kfree(to_free->mcast_queues);
+	kfree(to_free);
+}
+EXPORT_SYMBOL(ppe_drv_qos_port_state_free);
+
+/*
+ * ppe_drv_qos_port_shapers_unlimited()
+ *	Set all shapers (port, flow, and queues) to unlimited rate.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_shapers_unlimited(uint32_t port_id)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	fal_shaper_config_t cfg = {
+		.c_shaper_en = A_TRUE,
+		.e_shaper_en = A_TRUE,
+		/*
+		 * TODO: Current max rate configured is that for 10G link.
+		 * Add the logic to configure max rate (10G/25G) depending
+		 * on the link speed.
+		 */
+		.cir = FAL_BYTE_SHAPER_MAX_RATE,
+		.eir = FAL_BYTE_SHAPER_MAX_RATE,
+	};
+	ppe_drv_ret_t ret = PPE_DRV_RET_SUCCESS;
+	const char *fail_stage = "none";
+	uint32_t i;
+	uint32_t id = port_id;
+	uint32_t flow_set = 0;
+	uint32_t ucast_set = 0;
+	uint32_t mcast_set = 0;
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_port_state_find(port_id);
+	if (!state) {
+		spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+		ppe_drv_info("%px:no QoS hierarchy found for port:%u", p, port_id);
+		return PPE_DRV_RET_QOS_HIERARCHY_NOT_FOUND;
+	}
+
+	spin_lock_bh(&p->lock);
+
+	fail_stage = "port_shaper_disable";
+	if (fal_port_shaper_set(PPE_DRV_SWITCH_ID, port_id, &cfg) != SW_OK) {
+		ret = PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
+		goto fail;
+	}
+
+	for (i = 0; i < state->port.max[PPE_DRV_QOS_RES_TYPE_L0_SP]; i++) {
+		id = state->port.base[PPE_DRV_QOS_RES_TYPE_L0_SP] + i;
+		fail_stage = "flow_shaper_disable";
+		if (fal_flow_shaper_set(PPE_DRV_SWITCH_ID, id, &cfg) != SW_OK) {
+			ret = PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
+			goto fail;
+		}
+		flow_set++;
+	}
+
+	for (i = 0; i < state->port.max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE]; i++) {
+		id = state->port.base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] + i;
+		fail_stage = "ucast_queue_shaper_disable";
+		if (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, id, &cfg) != SW_OK) {
+			ret = PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
+			goto fail;
+		}
+		ucast_set++;
+	}
+
+	for (i = 0; i < state->port.max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE]; i++) {
+		id = state->port.base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] + i;
+		fail_stage = "mcast_queue_shaper_disable";
+		if (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, id, &cfg) != SW_OK) {
+			ret = PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
+			goto fail;
+		}
+		mcast_set++;
+	}
+
+	spin_unlock_bh(&p->lock);
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
+	return PPE_DRV_RET_SUCCESS;
+
+fail:
+	spin_unlock_bh(&p->lock);
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+	ppe_drv_warn("%px:port:%u shapers unlimited failed stage:%s resource_id:%u flow_done:%u ucast_done:%u mcast_done:%u",
+			p, port_id, fail_stage, id, flow_set, ucast_set, mcast_set);
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_qos_port_shapers_unlimited);
+
+/*
+ * ppe_drv_qos_port_shapers_restore()
+ *	Restore all shapers (port, flow, and queues) from shadow state.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_shapers_restore(uint32_t port_id)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	fal_shaper_token_number_t token = {
+		.c_token_number = PPE_DRV_QOS_TOKEN_MAX,
+		.e_token_number = PPE_DRV_QOS_TOKEN_MAX,
+	};
+	fal_shaper_config_t cfg = {0};
+	ppe_drv_ret_t ret = PPE_DRV_RET_SUCCESS;
+	const char *fail_stage = "none";
+	uint32_t i;
+	uint32_t id = port_id;
+	uint32_t flow_restore = 0;
+	uint32_t ucast_restore = 0;
+	uint32_t mcast_restore = 0;
+	bool port_restore = false;
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_port_state_find(port_id);
+	if (!state) {
+		spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+		ppe_drv_info("%px:no QoS hierarchy found for port:%u", p, port_id);
+		return PPE_DRV_RET_QOS_HIERARCHY_NOT_FOUND;
+	}
+
+	spin_lock_bh(&p->lock);
+
+	if (state->port_shaper_valid) {
+		ppe_drv_qos_shaper_cfg_to_fal(&state->port_shaper, &cfg);
+		fail_stage = "port_shaper_restore";
+		id = port_id;
+		if ((fal_port_shaper_token_number_set(PPE_DRV_SWITCH_ID, port_id, &token) != SW_OK) ||
+		    (fal_port_shaper_set(PPE_DRV_SWITCH_ID, port_id, &cfg) != SW_OK)) {
+			ret = PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
+			goto fail;
+		}
+		port_restore = true;
+	}
+
+	for (i = 0; i < state->port.max[PPE_DRV_QOS_RES_TYPE_L0_SP]; i++) {
+		if (!state->flows[i].valid) {
+			continue;
+		}
+
+		id = state->port.base[PPE_DRV_QOS_RES_TYPE_L0_SP] + i;
+		ppe_drv_qos_shaper_cfg_to_fal(&state->flows[i].cfg, &cfg);
+		fail_stage = "flow_shaper_restore";
+		if ((fal_flow_shaper_token_number_set(PPE_DRV_SWITCH_ID, id, &token) != SW_OK) ||
+		    (fal_flow_shaper_set(PPE_DRV_SWITCH_ID, id, &cfg) != SW_OK)) {
+			ret = PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
+			goto fail;
+		}
+		flow_restore++;
+	}
+
+	for (i = 0; i < state->port.max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE]; i++) {
+		if (!state->ucast_queues[i].valid) {
+			continue;
+		}
+
+		id = state->port.base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE] + i;
+		ppe_drv_qos_shaper_cfg_to_fal(&state->ucast_queues[i].cfg, &cfg);
+		fail_stage = "ucast_queue_shaper_restore";
+		if ((fal_queue_shaper_token_number_set(PPE_DRV_SWITCH_ID, id, &token) != SW_OK) ||
+		    (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, id, &cfg) != SW_OK)) {
+			ret = PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
+			goto fail;
+		}
+		ucast_restore++;
+	}
+
+	for (i = 0; i < state->port.max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE]; i++) {
+		if (!state->mcast_queues[i].valid) {
+			continue;
+		}
+
+		id = state->port.base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE] + i;
+		ppe_drv_qos_shaper_cfg_to_fal(&state->mcast_queues[i].cfg, &cfg);
+		fail_stage = "mcast_queue_shaper_restore";
+		if ((fal_queue_shaper_token_number_set(PPE_DRV_SWITCH_ID, id, &token) != SW_OK) ||
+		    (fal_queue_shaper_set(PPE_DRV_SWITCH_ID, id, &cfg) != SW_OK)) {
+			ret = PPE_DRV_RET_QOS_SHAPER_CFG_FAIL;
+			goto fail;
+		}
+		mcast_restore++;
+	}
+
+	spin_unlock_bh(&p->lock);
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
+	return PPE_DRV_RET_SUCCESS;
+
+fail:
+	spin_unlock_bh(&p->lock);
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+	ppe_drv_warn("%px:port:%u shapers restore failed stage:%s resource_id:%u port_restored:%u flow_done:%u ucast_done:%u mcast_done:%u",
+			p, port_id, fail_stage, id, port_restore, flow_restore, ucast_restore, mcast_restore);
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_qos_port_shapers_restore);
+
+/*
+ * ppe_drv_qos_pon_drainout()
+ *	Drain all PON T-CONTs through the registered DDRQ callback.
+ */
+ppe_drv_ret_t ppe_drv_qos_pon_drainout(void)
+{
+#if defined(NSS_PPE_PON_SUPPORT) && defined(CONFIG_IPQ_PON)
+	struct ppe_drv *p = ppe_drv_gbl;
+	bool ddrq_cb_ok;
+
+	rcu_read_lock();
+	ddrq_cb_ok = ppe_drv_qos_ddrq_pon_drainout_cb_invoke(p,
+							      rcu_dereference(p->ddrq_ops.ddrq_pon_drainout));
+	rcu_read_unlock();
+	if (!ddrq_cb_ok)
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+#endif
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_pon_drainout);
+
+/*
+ * ppe_drv_qos_port_is_pon()
+ *	Check whether a port is the configured PON port.
+ */
+bool ppe_drv_qos_port_is_pon(uint32_t port_id)
+{
+#if defined(NSS_PPE_PON_SUPPORT) && defined(CONFIG_IPQ_PON)
+	uint32_t pon_port_id = ppe_drv_qos_pon_port_get();
+
+	return pon_port_id && (port_id == pon_port_id);
+#else
+	return false;
+#endif
+}
+EXPORT_SYMBOL(ppe_drv_qos_port_is_pon);
+
+/*
  * ppe_drv_qos_port_shaper_reset()
  *	Resets a port shaper in PPE.
  */
 ppe_drv_ret_t ppe_drv_qos_port_shaper_reset(struct ppe_drv_qos_res *res, uint32_t port_id)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
 	fal_shaper_config_t cfg = {0};
 
 	spin_lock_bh(&p->lock);
@@ -1257,6 +1787,15 @@ ppe_drv_ret_t ppe_drv_qos_port_shaper_reset(struct ppe_drv_qos_res *res, uint32_
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_port_state_find(port_id);
+	if (state) {
+		memset(&state->port_shaper, 0, sizeof(state->port_shaper));
+		state->port_shaper_valid = false;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
 	ppe_drv_info("%px: port shaper configuration successful for port:%u", p, port_id);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1269,6 +1808,7 @@ EXPORT_SYMBOL(ppe_drv_qos_port_shaper_reset);
 ppe_drv_ret_t ppe_drv_qos_port_shaper_set(struct ppe_drv_qos_res *res, uint32_t port_id)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
 	fal_shaper_token_number_t token = {0};
 	fal_shaper_config_t cfg = {0};
 
@@ -1308,6 +1848,15 @@ ppe_drv_ret_t ppe_drv_qos_port_shaper_set(struct ppe_drv_qos_res *res, uint32_t 
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_port_state_find(port_id);
+	if (state) {
+		ppe_drv_qos_shaper_cfg_from_fal(&state->port_shaper, &cfg);
+		state->port_shaper_valid = true;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
 	ppe_drv_info("%px:port shaper configuration successful for port:%u", p, port_id);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1320,6 +1869,8 @@ EXPORT_SYMBOL(ppe_drv_qos_port_shaper_set);
 ppe_drv_ret_t ppe_drv_qos_flow_shaper_reset(struct ppe_drv_qos_res *res)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	uint32_t offset;
 	fal_shaper_config_t cfg = {0};
 
 	/*
@@ -1335,6 +1886,16 @@ ppe_drv_ret_t ppe_drv_qos_flow_shaper_reset(struct ppe_drv_qos_res *res)
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_state_find_by_l0sp(res->l0spid);
+	if (state) {
+		offset = res->l0spid - state->port.base[PPE_DRV_QOS_RES_TYPE_L0_SP];
+		memset(&state->flows[offset].cfg, 0, sizeof(state->flows[offset].cfg));
+		state->flows[offset].valid = false;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
 	ppe_drv_info("%px:flow shaper configuration successful for l0spid:%u", p, res->l0spid);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1347,6 +1908,8 @@ EXPORT_SYMBOL(ppe_drv_qos_flow_shaper_reset);
 ppe_drv_ret_t ppe_drv_qos_flow_shaper_set(struct ppe_drv_qos_res *res)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	uint32_t offset;
 	fal_shaper_token_number_t token = {0};
 	fal_shaper_config_t cfg = {0};
 
@@ -1389,6 +1952,16 @@ ppe_drv_ret_t ppe_drv_qos_flow_shaper_set(struct ppe_drv_qos_res *res)
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_state_find_by_l0sp(res->l0spid);
+	if (state) {
+		offset = res->l0spid - state->port.base[PPE_DRV_QOS_RES_TYPE_L0_SP];
+		ppe_drv_qos_shaper_cfg_from_fal(&state->flows[offset].cfg, &cfg);
+		state->flows[offset].valid = true;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
 	ppe_drv_info("%px:flow shaper configuration successful for l0spid:%u", p, res->l0spid);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1401,6 +1974,8 @@ EXPORT_SYMBOL(ppe_drv_qos_flow_shaper_set);
 ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_reset(struct ppe_drv_qos_res *res)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	uint32_t offset;
 	fal_shaper_config_t cfg = {0};
 
 	spin_lock_bh(&p->lock);
@@ -1413,6 +1988,16 @@ ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_reset(struct ppe_drv_qos_res *res)
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_state_find_by_qid(res->q.mcast_qid);
+	if (state) {
+		offset = res->q.mcast_qid - state->port.base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+		memset(&state->mcast_queues[offset].cfg, 0, sizeof(state->mcast_queues[offset].cfg));
+		state->mcast_queues[offset].valid = false;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
 	ppe_drv_info("%px:multicast queue reset successful for mcast_qid:%u", p, res->q.mcast_qid);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1425,6 +2010,8 @@ EXPORT_SYMBOL(ppe_drv_qos_mcast_queue_shaper_reset);
 ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_set(struct ppe_drv_qos_res *res)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	uint32_t offset;
 	fal_shaper_token_number_t token = {0};
 	fal_shaper_config_t cfg = {0};
 
@@ -1455,6 +2042,16 @@ ppe_drv_ret_t ppe_drv_qos_mcast_queue_shaper_set(struct ppe_drv_qos_res *res)
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_state_find_by_qid(res->q.mcast_qid);
+	if (state) {
+		offset = res->q.mcast_qid - state->port.base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+		ppe_drv_qos_shaper_cfg_from_fal(&state->mcast_queues[offset].cfg, &cfg);
+		state->mcast_queues[offset].valid = true;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
 	ppe_drv_info("%px:queue shaper configuration successful for mcast_qid:%u", p, res->q.mcast_qid);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1467,6 +2064,8 @@ EXPORT_SYMBOL(ppe_drv_qos_mcast_queue_shaper_set);
 ppe_drv_ret_t ppe_drv_qos_queue_shaper_reset(struct ppe_drv_qos_res *res)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	uint32_t offset;
 	fal_shaper_config_t cfg = {0};
 
 	/*
@@ -1483,6 +2082,16 @@ ppe_drv_ret_t ppe_drv_qos_queue_shaper_reset(struct ppe_drv_qos_res *res)
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+	state = ppe_drv_qos_state_find_by_qid(res->q.ucast_qid);
+	if (state) {
+		offset = res->q.ucast_qid - state->port.base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+		memset(&state->ucast_queues[offset].cfg, 0, sizeof(state->ucast_queues[offset].cfg));
+		state->ucast_queues[offset].valid = false;
+	}
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
 	ppe_drv_info("%px:queue shaper configuration successful for ucast_qid:%u", p, res->q.ucast_qid);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1495,6 +2104,8 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_shaper_reset);
 ppe_drv_ret_t ppe_drv_qos_queue_shaper_set(struct ppe_drv_qos_res *res)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_qos_port_state *state = NULL;
+	uint32_t offset;
 	fal_shaper_token_number_t token = {0};
 	fal_shaper_config_t cfg = {0};
 
@@ -1552,6 +2163,27 @@ ppe_drv_ret_t ppe_drv_qos_queue_shaper_set(struct ppe_drv_qos_res *res)
 	}
 
 	spin_unlock_bh(&p->lock);
+
+	spin_lock_bh(&ppe_drv_qos_port_state_lock);
+
+	state = ppe_drv_qos_state_find_by_qid(res->q.ucast_qid);
+	if (state) {
+		offset = res->q.ucast_qid - state->port.base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+		ppe_drv_qos_shaper_cfg_from_fal(&state->ucast_queues[offset].cfg, &cfg);
+		state->ucast_queues[offset].valid = true;
+	}
+
+	if (res->q.mcast_qid) {
+		state = ppe_drv_qos_state_find_by_qid(res->q.mcast_qid);
+		if (state) {
+			offset = res->q.mcast_qid - state->port.base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+			ppe_drv_qos_shaper_cfg_from_fal(&state->mcast_queues[offset].cfg, &cfg);
+			state->mcast_queues[offset].valid = true;
+		}
+	}
+
+	spin_unlock_bh(&ppe_drv_qos_port_state_lock);
+
 	ppe_drv_info("%px:queue shaper configuration successful for mcast_qid:%u", p, res->q.mcast_qid);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1606,7 +2238,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 	struct ppe_drv_qos_ddrq_limit_set_cfg ddrq_limit_set_cfg;
 
 	if (!ppe_drv_qos_ddrq_state_get(res->q.ucast_qid, &is_ddrq_en)) {
-		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, res->q.ucast_qid);
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%u state\n", p, res->q.ucast_qid);
 		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
 	}
 

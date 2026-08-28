@@ -487,6 +487,7 @@ void ppe_qdisc_destroy(struct ppe_qdisc *pq)
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
 		ppe_qdisc_port_res_all_drr_map_free(pq->port_id);
 		ppe_qdisc_port_default_conf_set(pq->port_id);
+		ppe_drv_qos_port_state_free(pq->port_id);
 		ppe_qdisc_stats_stop_polling(pq);
 	}
 
@@ -506,9 +507,11 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 		struct netlink_ext_ack *extack)
 {
 	int err;
+	bool qos_state_allocated = false;
 	struct Qdisc *root;
 	u32 parent;
 	struct net_device *dev;
+	struct ppe_drv_qos_port port = {0};
 
 	/*
 	 * Initialize locks
@@ -612,7 +615,26 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 		return -1;
 	}
 
+	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
+		if (ppe_drv_qos_port_res_get(pq->port_id, &port) != PPE_DRV_RET_SUCCESS) {
+			ppe_qdisc_warning("Qdisc %px (type %d) port resources fetch failed for port:%d",
+					pq->qdisc, pq->type, pq->port_id);
+			return -1;
+		}
+
+		if (ppe_drv_qos_port_state_alloc(pq->port_id, &port) != PPE_DRV_RET_SUCCESS) {
+			ppe_qdisc_warning("Qdisc %px (type %d) shaper shadow allocation failed for port:%d",
+					pq->qdisc, pq->type, pq->port_id);
+			return -1;
+		}
+
+		qos_state_allocated = true;
+	}
+
 	if (ppe_qdisc_res_init(pq) < 0) {
+		if (qos_state_allocated) {
+			ppe_drv_qos_port_state_free(pq->port_id);
+		}
 		ppe_qdisc_warning("Qdisc %px (type %d) init failed", pq->qdisc, pq->type);
 		memset(&pq->res, 0, sizeof(struct ppe_drv_qos_res));
 		return -1;

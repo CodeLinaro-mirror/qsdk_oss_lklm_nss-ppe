@@ -453,6 +453,7 @@ struct ppe_drv_qos_ddrq_rcu_ops {
 	ppe_drv_qos_ddrq_callback_t __rcu ddrq_cfg_reset;
 	ppe_drv_qos_ddrq_accu_stats_callback_t __rcu ddrq_accu_stats_start;
 	ppe_drv_qos_ddrq_accu_stats_callback_t __rcu ddrq_accu_stats_stop;
+	ppe_drv_qos_ddrq_pon_drainout_callback_t __rcu ddrq_pon_drainout;
 };
 
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)

@@ -120,16 +120,35 @@ void ppe_qdisc_port_disable_all_queue(uint32_t port_id)
 	uint32_t qid = ppe_qdisc_port_res_base_get(port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
 	uint32_t mcast_qid = ppe_qdisc_port_res_base_get(port_id, PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE);
 	uint32_t offset;
+	uint32_t ucast_max = ppe_qdisc_port_res_max_get(port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
+	uint32_t mcast_max = ppe_qdisc_port_res_max_get(port_id, PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE);
+
+	if (ppe_drv_qos_port_shapers_unlimited(port_id) != PPE_DRV_RET_SUCCESS) {
+		ppe_qdisc_warning("Port:%u shapers disable to unlimited failed", port_id);
+	}
 
 	/*
 	 * Disable queue enqueue, dequeue and flush the queue.
 	 */
-	for (offset = 0; offset < ppe_qdisc_port_res_max_get(port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE); offset++) {
-		ppe_drv_qos_queue_disable(port_id, qid + offset);
+	for (offset = 0; offset < ucast_max; offset++) {
+		if (ppe_drv_qos_queue_disable(port_id, qid + offset) != PPE_DRV_RET_SUCCESS) {
+			ppe_qdisc_warning("Port:%u ucast queue disable failed for qid:%u", port_id, qid + offset);
+		}
 	}
 
-	for (offset = 0; offset < ppe_qdisc_port_res_max_get(port_id, PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE); offset++) {
-		ppe_drv_qos_queue_disable(port_id, mcast_qid + offset);
+	for (offset = 0; offset < mcast_max; offset++) {
+		if (ppe_drv_qos_queue_disable(port_id, mcast_qid + offset) != PPE_DRV_RET_SUCCESS) {
+			ppe_qdisc_warning("Port:%u mcast queue disable failed for qid:%u", port_id, mcast_qid + offset);
+		}
+	}
+
+	if (ppe_drv_qos_port_is_pon(port_id) &&
+		(ppe_drv_qos_pon_drainout() != PPE_DRV_RET_SUCCESS)) {
+		ppe_qdisc_warning("PON T-CONT drainout failed for port:%u", port_id);
+	}
+
+	if (ppe_drv_qos_port_shapers_restore(port_id) != PPE_DRV_RET_SUCCESS) {
+		ppe_qdisc_warning("Port:%u shapers restore failed", port_id);
 	}
 
 	ppe_qdisc_info("Port:%d all queues disabled", port_id);
