@@ -184,13 +184,43 @@ static bool ppe_drv_tun_activate_mapt(struct ppe_drv_tun *ptun, struct ppe_drv_t
 	struct ppe_drv_tun_decap *ptdc;
 	struct ppe_drv_tun_cmn_ctx *th = &ptun->th;
 	uint32_t tl_l3_if_idx = ppe_drv_tun_l3_if_get_index(ptun->pt_l3_if);
+	uint16_t src_info_val = ptun->vp_num;
+	uint8_t src_info_type = PPE_DRV_TUN_TL_TBL_SRC_INFO_TYPE_VP;
+	struct ppe_drv *p __maybe_unused = ppe_drv_gbl;
+#if defined(PPE_DRV_DDR_BUFFER_SPEED_MISMATCH)
+	struct ppe_drv_l3_if *port_l3_if;
 
+	/*
+	 * In the 2nd pass of loopback ring, src info should be L3 type
+	 * else VP.
+	 */
+	if (p->loopback_ring_info.enabled && (p->loopback_ring_info.ft_type & PPE_DRV_LOOPBACK_FEATURE_TYPE_DDR_BUFFER)) {
+		struct net_device *tun_dev = ppe_drv_port_to_dev(ptun->pp);
+		struct ppe_drv_lpbk_buffer_map_entry *map_entry;
+
+		list_for_each_entry(map_entry, &p->lpbk_buffer_map, list) {
+			if (map_entry->ingress_dev != tun_dev)
+				continue;
+
+			port_l3_if = ppe_drv_port_find_port_l3_if(ptun->pp);
+			if (!port_l3_if) {
+				ppe_drv_warn("%p: failed to obtain routing L3_IF for map VP port %u", ptun, ptun->vp_num);
+				return false;
+			}
+
+			src_info_val = port_l3_if->l3_if_index;
+			src_info_type = PPE_DRV_TUN_TL_TBL_SRC_INFO_TYPE_L3;
+			break;
+		}
+	}
+#endif
 	ptun->ptdcm[PPE_DRV_TUN_DECAP_REMOTE_ENTRY]->tl_l3_if_idx = tl_l3_if_idx;
 	ptun->ptdcm[PPE_DRV_TUN_DECAP_LOCAL_ENTRY]->tl_l3_if_idx = tl_l3_if_idx;
 
+	ppe_drv_trace("%p: mapt src_info_type:%d src_info_val: %d", ptun, src_info_type, src_info_val);
 	rule_id = ppe_drv_tun_decap_xlate_rule_get_index(ptun->ptdcxr[PPE_DRV_TUN_DECAP_REMOTE_ENTRY]);
 	status = ppe_drv_tun_decap_map_configure(ptun->ptdcm[PPE_DRV_TUN_DECAP_REMOTE_ENTRY], &th->l3.daddr[0],
-			th->tun.mapt.remote.ipv6_prefix_len, l2_hdr, true, ptun->vp_num, rule_id, false);
+			th->tun.mapt.remote.ipv6_prefix_len, l2_hdr, true, src_info_type, src_info_val, rule_id, false);
 	if (!status) {
 		ppe_drv_warn("%p: Failed to configure decap map table for rule index %d", ptun, rule_id);
 		return status;
@@ -199,7 +229,7 @@ static bool ppe_drv_tun_activate_mapt(struct ppe_drv_tun *ptun, struct ppe_drv_t
 
 	rule_id = ppe_drv_tun_decap_xlate_rule_get_index(ptun->ptdcxr[PPE_DRV_TUN_DECAP_LOCAL_ENTRY]);
 	status = ppe_drv_tun_decap_map_configure(ptun->ptdcm[PPE_DRV_TUN_DECAP_LOCAL_ENTRY], &th->l3.saddr[0],
-			th->tun.mapt.local.ipv6_prefix_len, NULL, false, 0, rule_id, true);
+			th->tun.mapt.local.ipv6_prefix_len, NULL, false, src_info_type, 0, rule_id, true);
 	if (!status) {
 		ppe_drv_warn("%p: decap map configure failed for rule_id %d", ptun, rule_id);
 		return status;

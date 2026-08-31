@@ -86,7 +86,7 @@ struct ppe_drv_tun_decap *ppe_drv_tun_decap_entries_alloc(struct ppe_drv *p);
  * MAP decap APIs
  */
 bool ppe_drv_tun_decap_map_configure(struct ppe_drv_tun_decap *ptdcm, uint32_t *ipv6_prefix, uint8_t prefix_len, struct ppe_drv_tun_cmn_ctx_l2 *l2_hdr,
-				bool src_info_update, uint16_t port_num, uint16_t rule_id, uint8_t ip_to_me);
+				bool src_info_update, uint8_t src_info_type, uint16_t port_num, uint16_t rule_id, uint8_t ip_to_me);
 void ppe_drv_tun_decap_map_deconfigure(struct kref *kref);
 bool ppe_drv_tun_decap_map_entry_deref(struct ppe_drv_tun_decap *ptdcm);
 void ppe_drv_tun_decap_map_set_rule_id(struct ppe_drv_tun_decap *ptdcm, uint16_t rule_idx);
