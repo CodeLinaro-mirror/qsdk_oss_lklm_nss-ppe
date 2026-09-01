@@ -140,17 +140,23 @@ static void ppe_ds_set_default_params(void)
 {
 	switch (ppe_ds_active_mem_profile) {
 	case PPE_DS_MEM_PROFILE_DYNAMIC_LOW:
-		ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF_LOW;
-		rxfill_low_threshold = 256;
+		if (!ppe2tcl_rxfill_num_desc)
+			ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF_LOW;
+		if (!rxfill_low_threshold)
+			rxfill_low_threshold = 256;
 		break;
 	case PPE_DS_MEM_PROFILE_DYNAMIC_MEDIUM:
-		ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
-		rxfill_low_threshold = 1024;
+		if (!ppe2tcl_rxfill_num_desc)
+			ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
+		if (!rxfill_low_threshold)
+			rxfill_low_threshold = 1024;
 		break;
 	case PPE_DS_MEM_PROFILE_DYNAMIC_DEFAULT:
 	default:
-		ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
-		rxfill_low_threshold = 1024;
+		if (!ppe2tcl_rxfill_num_desc)
+			ppe2tcl_rxfill_num_desc = PPE_DS_RXFILL_NUM_DESC_DEF;
+		if (!rxfill_low_threshold)
+			rxfill_low_threshold = 1024;
 		break;
 	}
 
