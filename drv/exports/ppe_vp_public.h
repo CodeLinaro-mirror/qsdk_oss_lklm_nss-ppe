@@ -272,6 +272,19 @@ struct ppe_vp_ai {
 };
 
 /*
+ * ppe_vp_get_port_num_by_netdev()
+ *	Get the port number for netdevice.
+ *
+ * Note: Caller must hold vp_dev.
+ *
+ * @param[in] net_device   VP net device.
+ *
+ * @return
+ * Port number for vp netdevice.
+ */
+ppe_vp_num_t ppe_vp_get_port_num_by_netdev(struct net_device *dev);
+
+/*
  * ppe_vp_get_netdev_by_port_num()
  *	Get the netdevice for port number.
  *

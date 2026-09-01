@@ -35,6 +35,36 @@ static const struct net_device_ops vp_netdev_ops = {
 };
 
 /*
+ * ppe_vp_get_port_num_by_netdev()
+ *	Get port number from net_device.
+ */
+ppe_vp_num_t ppe_vp_get_port_num_by_netdev(struct net_device *vp_dev)
+{
+	struct ppe_vp_priv *vp_priv;
+	ppe_vp_num_t port_num = -1;
+	struct ppe_vp *vp;
+
+	if (!vp_dev) {
+		return -1;
+	}
+
+	vp_priv = netdev_priv(vp_dev);
+	vp = vp_priv->vp;
+	if (!vp) {
+		return -1;
+	}
+
+	spin_lock_bh(&vp->lock);
+	if (vp->flags & PPE_VP_FLAG_VP_ACTIVE) {
+		port_num = vp->port_num;
+	}
+	spin_unlock_bh(&vp->lock);
+
+	return port_num;
+}
+EXPORT_SYMBOL(ppe_vp_get_port_num_by_netdev);
+
+/*
  * ppe_vp_get_netdev_by_port_num()
  *	Get netdevice form port number.
  */
