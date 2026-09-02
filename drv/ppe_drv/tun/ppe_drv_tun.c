@@ -2628,6 +2628,30 @@ err_fail:
 EXPORT_SYMBOL(ppe_drv_tun_header_length_get);
 
 /*
+ * ppe_drv_tun_is_active()
+ *	Check if the hardware tunnel VP is still in the active state.
+ */
+bool ppe_drv_tun_is_active(uint16_t port_num)
+{
+	struct ppe_drv_port *pp;
+	struct ppe_drv_tun *ptun;
+	struct ppe_drv *p = ppe_drv_gbl;
+	bool active = false;
+
+	spin_lock_bh(&p->lock);
+	pp = ppe_drv_port_from_port_num(port_num);
+	if (pp) {
+		ptun = ppe_drv_port_tun_get(pp);
+		if (ptun) {
+			active = (ptun->tun_state == PPE_DRV_TUN_STATE_ACTIVE);
+		}
+	}
+	spin_unlock_bh(&p->lock);
+	return active;
+}
+EXPORT_SYMBOL(ppe_drv_tun_is_active);
+
+/*
  * ppe_drv_tun_global_init
  *	Initialize tables with values that does not require changes
  */
