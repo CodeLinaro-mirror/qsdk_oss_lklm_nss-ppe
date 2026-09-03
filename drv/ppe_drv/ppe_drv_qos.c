@@ -439,13 +439,11 @@ EXPORT_SYMBOL(ppe_drv_qos_pon_port_alloc_callback_register);
  */
 uint32_t ppe_drv_qos_pon_port_get(void)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p __maybe_unused = ppe_drv_gbl;
 	struct ppe_drv_iface *pon_iface = NULL;
 	struct ppe_drv_port *pon_port = NULL;
 
-	spin_lock_bh(&p->lock);
 	pon_iface = ppe_drv_pon_iface_get();
-	spin_unlock_bh(&p->lock);
 
 	if (!pon_iface) {
 		ppe_drv_trace("%px:PON interface not present", p);
