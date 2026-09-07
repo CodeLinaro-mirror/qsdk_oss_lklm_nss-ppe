@@ -3311,9 +3311,10 @@ ppe_drv_ret_t ppe_drv_v4_destroy(struct ppe_drv_v4_rule_destroy *destroy)
 	struct ppe_drv_v4_conn *cn;
 
 #ifdef PPE_TUNNEL_ENABLE
+	bool is_flush = false;
 	int ret;
 
-	ret = ppe_drv_v4_tun_del_ce_notify(destroy);
+	ret = ppe_drv_v4_tun_del_ce_notify(destroy, is_flush);
 	if (ret != PPE_DRV_RET_FAILURE_DESTROY_NO_CONN) {
 		if (ret != PPE_DRV_RET_SUCCESS) {
 			ppe_drv_warn("%p: Tunnel destroy failed with error %d", destroy, ret);

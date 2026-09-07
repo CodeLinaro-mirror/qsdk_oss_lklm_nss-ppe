@@ -915,7 +915,7 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi7(struct ppe_ds *node, struct ppe_d
 	node_cfg->freq.low_freq = reg_info->freq.low_freq;
 	node_cfg->freq.high_freq = reg_info->freq.high_freq;
 
-	if ((ppe2tcl_rxfill_num_desc < rxfill_min) ||
+	if ((ppe2tcl_rxfill_num_desc < ppe_ds_rxfill_num_desc_min()) ||
 			(ppe2tcl_rxfill_num_desc > PPE_DS_RXFILL_NUM_DESC_MAX)) {
 		wifi7_hdl->ppe2tcl_rxfill_num_desc = rxfill_def;
 	} else {
@@ -1191,7 +1191,7 @@ bool ppe_ds_wlan_inst_register_arch_mode_wifi8(struct ppe_ds *node, struct ppe_d
 		rxfill_def = PPE_DS_RXFILL_NUM_DESC_DEF;
 	}
 
-	if ((ppe2tcl_rxfill_num_desc < rxfill_min) ||
+	if ((ppe2tcl_rxfill_num_desc < ppe_ds_rxfill_num_desc_min()) ||
 			(ppe2tcl_rxfill_num_desc > PPE_DS_RXFILL_NUM_DESC_MAX)) {
 		edma_wifi8->ppe2tcl_rxfill_num_desc = rxfill_def;
 	} else {

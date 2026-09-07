@@ -1076,6 +1076,7 @@ struct ppe_drv_iface *ppe_drv_pon_iface_get(void);
  * true if PON interface is set, false otherwise.
  */
 bool ppe_drv_is_pon_enable(void);
+#endif
 
 /**
  * ppe_drv_pon_port_max_pq_get
@@ -1085,7 +1086,15 @@ bool ppe_drv_is_pon_enable(void);
  * Number of PQs.
  */
 int ppe_drv_pon_port_max_pq_get(void);
-#endif
+
+/**
+ * ppe_drv_pon_port_start_pq_get
+ *	Returns start (base) queue number assigned to PON port
+ *
+ * @return
+ * Start PQ number.
+ */
+int ppe_drv_pon_port_start_pq_get(void);
 
 /**
  * ppe_drv_hw_gro_feature_set

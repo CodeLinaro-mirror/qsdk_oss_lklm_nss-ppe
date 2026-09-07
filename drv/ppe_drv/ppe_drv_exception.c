@@ -160,20 +160,6 @@ struct ppe_drv_exception ppe_drv_exception_list[] = {
 		PPE_DRV_EXCEPTION_DEACCEL_EN,
 		PPE_DRV_EXCEPTION_FLOW_TYPE_L2_FLOW_HIT
 		| PPE_DRV_EXCEPTION_FLOW_TYPE_L3_FLOW_HIT
-		| PPE_DRV_EXCEPTION_FLOW_TYPE_TUNNEL_FLOW,
-#ifdef PPE_TUNNEL_ENABLE
-	/*
-	 * Allow IPV6 Fragmentation packets to exception.
-	 */
-		FAL_MAC_RDT_TO_CPU,
-		PPE_DRV_EXCEPTION_DEACCEL_EN,
-		{
-			PPE_DRV_EXCPN_TUN_PROFILE_EN,
-			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
-			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
-			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
-		}
-#endif
 	},
 	{
 		PPE_DRV_CC_IPV6_ESP_HDR_INCOMPLETE,
@@ -231,26 +217,137 @@ struct ppe_drv_exception ppe_drv_exception_list[] = {
 		PPE_DRV_EXCEPTION_FLOW_TYPE_L2_FLOW_HIT
 		| PPE_DRV_EXCEPTION_FLOW_TYPE_L3_FLOW_HIT
 	},
+};
+
 #ifdef PPE_TUNNEL_ENABLE
+/*
+ * ppe_drv_tun_exception_list
+ *        PPE tunnel exception list to be enabled.
+ */
+struct ppe_drv_tun_exception ppe_drv_tun_exception_list[] = {
 	/*
-	 * Enable GRE Checksum exception.
+	 * For fragmented packets we only need the outer packet excepted to the host
+	 * (decap exception mode 0) so that the networking stack can reassemble it.
+	 * There is no need to de-accelerate the entire flow for these packets, hence
+	 * deacceleration is disabled.
 	 */
 	{
-		PPE_DRV_CC_GRE_CSUM,
-		PPE_DRV_EXCEPTION_FIELD_INVALID,
-		PPE_DRV_EXCEPTION_FIELD_INVALID,
-		PPE_DRV_EXCEPTION_FLOW_TYPE_TUNNEL_FLOW,
-		FAL_MAC_RDT_TO_CPU,
-		PPE_DRV_EXCEPTION_DEACCEL_DIS,
-		{
+		.code = PPE_DRV_CC_IPV4_FRAG,
+		.action = FAL_MAC_RDT_TO_CPU,
+		.deaccel_en = PPE_DRV_EXCEPTION_DEACCEL_DIS,
+		.profile_exp_en = {
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
+			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
+			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
+		},
+		.flush_required = false,
+		.outer_exp_en = true,
+	},
+	{
+		.code = PPE_DRV_CC_IPV6_FRAG,
+		.action = FAL_MAC_RDT_TO_CPU,
+		.deaccel_en = PPE_DRV_EXCEPTION_DEACCEL_DIS,
+		.profile_exp_en = {
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
+			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
+			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
+		},
+		.flush_required = false,
+		.outer_exp_en = true,
+	},
+	/*
+	 * Configure the GRE checksum error CPU code(220) exception mode to 0.
+	 * We want the csum exception packets to be processed by linux GRE
+	 * handler which will eventually drop it.
+	 *
+	 * We cannot use mode 1 here, as the inner packets will be sent to the linux networking stack
+	 * and the packets with csum error will eventually be forwarded instead since networking stack
+	 * has no information on the outer header.
+	 */
+	{
+		.code = PPE_DRV_CC_GRE_CSUM,
+		.action = FAL_MAC_RDT_TO_CPU,
+		.deaccel_en = PPE_DRV_EXCEPTION_DEACCEL_DIS,
+		.profile_exp_en = {
 			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
 			PPE_DRV_EXCPN_TUN_PROFILE_EN,
 			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
 			PPE_DRV_EXCPN_TUN_PROFILE_DIS,
-		}
+		},
+		.flush_required = false,
+		.outer_exp_en = true,
 	},
-#endif
+	/*
+	 * The inner TCP flags are parsed for tunnel flows, so these exceptions
+	 * require the decapsulated inner packet (decap exception mode 1) in order to
+	 * identify the connection that needs to be flushed.
+	 */
+	{
+		.code = PPE_DRV_CC_TCP_FLAGS_0,
+		.action = FAL_MAC_RDT_TO_CPU,
+		.deaccel_en = PPE_DRV_EXCEPTION_DEACCEL_EN,
+		.profile_exp_en = {
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+		},
+		.flush_required = true,
+	},
+	{
+		.code = PPE_DRV_CC_TCP_FLAGS_1,
+		.action = FAL_MAC_RDT_TO_CPU,
+		.deaccel_en = PPE_DRV_EXCEPTION_DEACCEL_EN,
+		.profile_exp_en = {
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+		},
+		.flush_required = true,
+	},
+	{
+		.code = PPE_DRV_CC_TCP_FLAGS_2,
+		.action = FAL_MAC_RDT_TO_CPU,
+		.deaccel_en = PPE_DRV_EXCEPTION_DEACCEL_EN,
+		.profile_exp_en = {
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+			PPE_DRV_EXCPN_TUN_PROFILE_EN,
+		},
+		.flush_required = true,
+	},
 };
+
+/*
+ * ppe_drv_tun_exception_max()
+ *	Returns number of tunnel exceptions configured.
+ */
+uint8_t ppe_drv_tun_exception_max(void)
+{
+	return ARRAY_SIZE(ppe_drv_tun_exception_list);
+}
+
+/*
+ * ppe_drv_tun_exception_is_flush_required()
+ *	Check if connection flush is required for the tunnel exception.
+ */
+bool ppe_drv_tun_exception_is_flush_required(ppe_drv_cc_t cc)
+{
+	uint32_t i;
+
+	for (i = 0; i < ppe_drv_tun_exception_max(); i++) {
+		if (ppe_drv_tun_exception_list[i].code == cc) {
+			return ppe_drv_tun_exception_list[i].flush_required;
+		}
+	}
+
+	return false;
+}
+#endif
 
 /*
  * ppe_drv_exception_tcpflag_list
@@ -304,25 +401,71 @@ static inline uint8_t ppe_drv_exception_cc2exp(uint8_t cpu_code)
 
 #ifdef PPE_TUNNEL_ENABLE
 /*
- * ppe_drv_exception_tun_init
- *	Initialize tunnel specific exception
+ * ppe_drv_exception_tun_config()
+ *	Initialize tunnel specific exception configuration, TCP flag parsers, and command tables.
  */
-static void ppe_drv_exception_tun_init(struct ppe_drv *p)
+static void ppe_drv_exception_tun_config(struct ppe_drv *p)
 {
+	fal_l4_excep_parser_ctrl tun_l4_ctrl = {0};
 	sw_error_t err;
+	uint8_t exp_code;
+	uint32_t i, j;
 
 	/*
-	 * Configure the GRE checksum error CPU code(220) exception mode to 0.
-	 * We want the csum exception packets to be processed by linux GRE
-	 * handler which will eventually drop it.
-	 *
-	 * We cannot use mode 1 here, as the inner packets will be sent to the linux networking stack
-	 * and the packets with csum error will eventually be forwarded instead since networking stack
-	 * has no information on the outer header.
+	 * Configure the Tunnel L4 TCP flags parser for SYN, FIN, and RST.
+	 * This ensures that inner TCP flags are parsed correctly for tunnel flows.
 	 */
-	err = fal_mgmtctrl_tunnel_decap_set(PPE_DRV_SWITCH_ID, PPE_DRV_CC_GRE_CSUM, A_FALSE);
+	tun_l4_ctrl.tcp_flags[0] = PPE_DRV_TCP_FLAG_FIN;
+	tun_l4_ctrl.tcp_flags_mask[0] = PPE_DRV_TCP_FLAG_FIN;
+
+	tun_l4_ctrl.tcp_flags[1] = PPE_DRV_TCP_FLAG_SYN;
+	tun_l4_ctrl.tcp_flags_mask[1] = PPE_DRV_TCP_FLAG_SYN;
+
+	tun_l4_ctrl.tcp_flags[2] = PPE_DRV_TCP_FLAG_RST;
+	tun_l4_ctrl.tcp_flags_mask[2] = PPE_DRV_TCP_FLAG_RST;
+
+	err = fal_sec_tunnel_l4_excep_parser_ctrl_set(PPE_DRV_SWITCH_ID, &tun_l4_ctrl);
 	if (err != SW_OK) {
-		ppe_drv_warn("%p: Faile to set exception mode for GRE CSUM error CPU Code(220) to 0\n", p);
+		ppe_drv_warn("%p: failed to configure Tunnel L4 TCP flags parser: %d", p, err);
+	}
+
+	/*
+	 * Traverse through the tunnel exception list and configure each tunnel exception in SSDK.
+	 */
+	for (i = 0; i < ppe_drv_tun_exception_max(); i++) {
+		struct ppe_drv_tun_exception *te = &ppe_drv_tun_exception_list[i];
+		fal_tunnel_excep_ctrl_t tun_except_ctrl = {0};
+
+		exp_code = ppe_drv_exception_cc2exp(te->code);
+		if (exp_code >= PPE_DRV_TUN_EXCEPTION_CMD_MAX_ENTRY) {
+			ppe_drv_warn("%p: tunnel exception code %u is out of bounds (max %u)", p, exp_code,
+					PPE_DRV_TUN_EXCEPTION_CMD_MAX_ENTRY - 1);
+			continue;
+		}
+
+		ppe_drv_trace("%p: configuring tunnel exception code: %u", p, exp_code);
+
+		tun_except_ctrl.cmd = te->action;
+		tun_except_ctrl.deacclr_en = te->deaccel_en;
+		for (j = 0; j < PPE_DRV_EXCPN_TUN_PROFILE_ID_MAX; j++) {
+			tun_except_ctrl.profile_exp_en[j] = te->profile_exp_en[j];
+		}
+
+		err = fal_sec_tunnel_excep_ctrl_set(PPE_DRV_SWITCH_ID, exp_code, &tun_except_ctrl);
+		if (err != SW_OK) {
+			ppe_drv_warn("%p: Failed to configure for tunnel exception code %u", p, exp_code);
+		}
+
+		/*
+		 * Configure the decap exception mode. When outer_exp_en is set, the outer
+		 * (still encapsulated) packet is excepted to the host (mode 0); otherwise the
+		 * decapsulated inner packet is excepted (mode 1).
+		 */
+		err = fal_mgmtctrl_tunnel_decap_set(PPE_DRV_SWITCH_ID, te->code, !te->outer_exp_en);
+		if (err != SW_OK) {
+			ppe_drv_warn("%p: failed to set outer exception %u for tunnel exception code %u",
+					p, te->outer_exp_en, te->code);
+		}
 	}
 }
 #endif
@@ -460,9 +603,6 @@ void ppe_drv_exception_init(void)
 	fal_l4_excep_parser_ctrl tcp_except_ctrl = {0};
 	struct ppe_drv_exception_tcpflag *tcpflag;
 	fal_l3_excep_ctrl_t except_ctrl = {0};
-#ifdef PPE_TUNNEL_ENABLE
-	fal_tunnel_excep_ctrl_t tun_except_ctrl = {0};
-#endif
 	sw_error_t err;
 	uint32_t i;
 	uint8_t exp_code;
@@ -477,21 +617,6 @@ void ppe_drv_exception_init(void)
 		ppe_drv_trace("%p: configuring exception code: %u flow_type: 0x%x",
 				p, exp_code, pe->flow_type);
 
-#ifdef PPE_TUNNEL_ENABLE
-		if ((pe->flow_type & PPE_DRV_EXCEPTION_FLOW_TYPE_TUNNEL_FLOW) == PPE_DRV_EXCEPTION_FLOW_TYPE_TUNNEL_FLOW) {
-			tun_except_ctrl.cmd = pe->tun_action;
-			tun_except_ctrl.deacclr_en = pe->tun_deaccel_en;
-			tun_except_ctrl.profile_exp_en[PPE_DRV_EXCPN_TUN_PROFILE_ID_0] = pe->tun_profile[PPE_DRV_EXCPN_TUN_PROFILE_ID_0];
-			tun_except_ctrl.profile_exp_en[PPE_DRV_EXCPN_TUN_PROFILE_ID_1] = pe->tun_profile[PPE_DRV_EXCPN_TUN_PROFILE_ID_1];
-			tun_except_ctrl.profile_exp_en[PPE_DRV_EXCPN_TUN_PROFILE_ID_2] = pe->tun_profile[PPE_DRV_EXCPN_TUN_PROFILE_ID_2];
-			tun_except_ctrl.profile_exp_en[PPE_DRV_EXCPN_TUN_PROFILE_ID_3] = pe->tun_profile[PPE_DRV_EXCPN_TUN_PROFILE_ID_3];
-
-			err = fal_sec_tunnel_excep_ctrl_set(PPE_DRV_SWITCH_ID, exp_code, &tun_except_ctrl);
-			if (err != SW_OK) {
-				ppe_drv_warn("%p: Failed to configure for tunnel exception code %u", p, exp_code);
-			}
-		}
-#endif
 		/*
 		 * Since our exception list is now defined using CPU code, we need to
 		 * Convert CPU code into exception code for exception configuration.
@@ -515,11 +640,9 @@ void ppe_drv_exception_init(void)
 		/*
 		 * Configure specific exception in PPE through SSDK.
 		 */
-		if ((pe->flow_type != PPE_DRV_EXCEPTION_FLOW_TYPE_TUNNEL_FLOW)) {
-			err = fal_sec_l3_excep_ctrl_set(PPE_DRV_SWITCH_ID, exp_code, &except_ctrl);
-			if (err != SW_OK) {
-				ppe_drv_warn("%p: failed to configure L3 exception: %d", p, exp_code);
-			}
+		err = fal_sec_l3_excep_ctrl_set(PPE_DRV_SWITCH_ID, exp_code, &except_ctrl);
+		if (err != SW_OK) {
+			ppe_drv_warn("%p: failed to configure L3 exception: %d", p, exp_code);
 		}
 
 		memset(&except_ctrl, 0, sizeof(except_ctrl));
@@ -544,7 +667,7 @@ void ppe_drv_exception_init(void)
 	}
 
 #ifdef PPE_TUNNEL_ENABLE
-	ppe_drv_exception_tun_init(p);
+	ppe_drv_exception_tun_config(p);
 #endif
 }
 
@@ -577,11 +700,9 @@ ppe_drv_cc_usr_ret_t ppe_drv_cc_exception_configure(struct ppe_drv_cc_usr_except
 	pcc = &p->cc[cpu_code];
 
 	/*
-	 * Enable Flush
+	 * Enable/disable flush for this CPU code as requested.
 	 */
-	if (info->flush_en) {
-		pcc->flush = true;
-	}
+	pcc->flush = info->flush_en;
 
 	/*
 	 * Exception edit enable for PPE pkt edits with specific CPU code.
@@ -597,6 +718,8 @@ ppe_drv_cc_usr_ret_t ppe_drv_cc_exception_configure(struct ppe_drv_cc_usr_except
 
 #ifdef PPE_TUNNEL_ENABLE
 	if ((info->flow_type & PPE_DRV_EXCEPTION_FLOW_TYPE_TUNNEL_FLOW) == PPE_DRV_EXCEPTION_FLOW_TYPE_TUNNEL_FLOW) {
+		uint32_t j;
+
 		tun_except_ctrl.cmd = (fal_fwd_cmd_t)info->action;
 		tun_except_ctrl.deacclr_en = info->deaccel_en;
 		profile = info->tun_profile;
@@ -615,6 +738,26 @@ ppe_drv_cc_usr_ret_t ppe_drv_cc_exception_configure(struct ppe_drv_cc_usr_except
 			ppe_drv_warn("%p: Failed to configure for tunnel exception code %u", p, exp_code);
 			ret = PPE_DRV_CC_USR_RET_TUNNEL_CONFIG_FAILED;
 			return ret;
+		}
+
+		/*
+		 * Synchronize the tunnel list entry's flush_required flag with the
+		 * Netlink setting.
+		 *
+		 * Note: the decap exception mode is a static property of the tunnel
+		 * exception and is configured only during initialization.
+		 */
+		for (j = 0; j < ppe_drv_tun_exception_max(); j++) {
+			if (ppe_drv_tun_exception_list[j].code == info->code) {
+				ppe_drv_tun_exception_list[j].flush_required = info->flush_en;
+				break;
+			}
+		}
+
+		if (j == ppe_drv_tun_exception_max()) {
+			ppe_drv_info("%p: cpu code %u is not a handled tunnel exception, "
+					"tunnel connection flush would not be attempted for it",
+					p, info->code);
 		}
 	}
 #else

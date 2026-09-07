@@ -100,6 +100,8 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"v4_flush_fail",			/* No of v4 flush requests fail */
 	"v4_flush_conn_not_found",		/* No of v4 connection not found during flush. */
 	"v4_flush_skip_conn_rfs",		/* No of v4 rfs connection not found during flush. */
+	"v4_tun_flush_req",			/* No of v4 tunnel connection flush requests. */
+	"v4_tun_flush_fail",			/* No of v4 tunnel connection flush failures. */
 
 	"v6_l3_flows",				/* No of v6 routed flows */
 	"v6_l2_flows",				/* No of v6 bridge flows */
@@ -112,6 +114,8 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"v6_flush_fail",			/* No of v6 flush requests fail */
 	"v6_flush_conn_not_found",		/* No of v6 connection not found during flush. */
 	"v6_flush_skip_conn_rfs",		/* No of v6 rfs connection not found during flush. */
+	"v6_tun_flush_req",			/* No of v6 tunnel connection flush requests. */
+	"v6_tun_flush_fail",			/* No of v6 tunnel connection flush failures. */
 
 	"fail_vp_full",					/* Create req fail due to virtual port table full */
 	"fail_pp_full",					/* create req fail due to physical port table full */

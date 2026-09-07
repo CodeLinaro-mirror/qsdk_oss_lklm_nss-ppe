@@ -65,6 +65,7 @@ struct ppe_drv_port_mgmt *ppe_drv_port_mgmt_entries_alloc(void)
 	spin_lock_init(&port_mgmt->lock);
 	INIT_LIST_HEAD(&port_mgmt->active_rules);
 	INIT_LIST_HEAD(&port_mgmt->omci_port_list);
+	INIT_LIST_HEAD(&port_mgmt->mac_filter_cache);
 	ppe_drv_port_mgmt_entries_init(port_mgmt);
 	return port_mgmt;
 }
@@ -80,6 +81,15 @@ void ppe_drv_port_mgmt_entries_free(struct ppe_drv_port_mgmt *port_mgmt)
 		return;
 
 	ppe_drv_port_mgmt_omci_port_flush();
+
+	/*
+	 * Free all cached MAC filter nodes.
+	 */
+	struct ppe_drv_mac_filter_node *node, *tmp;
+	list_for_each_entry_safe(node, tmp, &port_mgmt->mac_filter_cache, list) {
+		list_del(&node->list);
+		kfree(node);
+	}
 	kfree(port_mgmt);
 }
 EXPORT_SYMBOL(ppe_drv_port_mgmt_entries_free);
@@ -238,6 +248,69 @@ ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_flush(void)
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_port_mgmt_omci_port_flush);
+
+/*
+ * ppe_drv_port_mgmt_isol_dump()
+ *	Dump port isolation state grouped by OMCI ID.
+ *	For each active OMCI index, prints the omci_id, port_cnt, and
+ *	the dev_name + port_id of every port mapped to that OMCI index.
+ */
+void ppe_drv_port_mgmt_isol_dump(struct seq_file *m)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt;
+	uint16_t omci_idx;
+	uint32_t port_id;
+	bool found_any = false;
+
+	if (!p || !p->port_mgmt) {
+		seq_puts(m, "PPE driver not initialized\n");
+		return;
+	}
+
+	port_mgmt = p->port_mgmt;
+
+	seq_puts(m, "  [Port Isolation State]\n");
+	seq_puts(m, "  ----------------------------------------\n");
+
+	spin_lock_bh(&port_mgmt->lock);
+
+	for (omci_idx = 0; omci_idx < PPE_DRV_OMCI_INDEX_MAX; omci_idx++) {
+		if (!port_mgmt->omci_index_info[omci_idx].in_use)
+			continue;
+
+		found_any = true;
+		seq_printf(m, "\nomci_id: %u  omci_index: %u  port_cnt: %u\n",
+			   port_mgmt->omci_index_info[omci_idx].omci_id,
+			   omci_idx,
+			   port_mgmt->omci_index_info[omci_idx].port_cnt);
+		seq_printf(m, "  %-16s  %-10s  %-6s\n", "dev_name", "port_id", "type");
+		seq_puts(m, "  ----------------------------------------\n");
+
+		for (port_id = 0; port_id < PPE_DRV_PORTS_MAX; port_id++) {
+			if (port_mgmt->port_omci_index_map[port_id] != omci_idx)
+				continue;
+
+			if (PPE_DRV_PHY_PORT_CHK(port_id)) {
+				struct net_device *dev = ppe_drv_port_num_to_dev(port_id);
+				seq_printf(m, "  %-16s  %-10u  %-6s\n",
+					   dev ? dev->name : "<unknown>",
+					   port_id, "PHY");
+			} else if (PPE_DRV_VIRTUAL_PORT_CHK(port_id)) {
+				struct net_device *dev = ppe_drv_port_num_to_dev(port_id);
+				seq_printf(m, "  %-16s  %-10u  %-6s\n",
+					   dev ? dev->name : "<unknown>",
+					   port_id, "VP");
+			}
+		}
+	}
+
+	if (!found_any)
+		seq_puts(m, "(no active isolation entries)\n");
+
+	spin_unlock_bh(&port_mgmt->lock);
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_isol_dump);
 
 /*
  * ppe_drv_port_mgmt_omci_port_list_show()
@@ -974,6 +1047,18 @@ ppe_drv_ret_t ppe_drv_port_mgmt_mac_lrn_limit_set(struct ppe_drv_port_mac_lrn_li
 		}
 	}
 
+	/*
+	 * Cache the applied configuration so the debugfs dump can read it
+	 * back without querying the hardware.
+	 */
+	if (mac_lrn_limit->port_id < PPE_DRV_PORTS_MAX) {
+		struct ppe_drv_port_mgmt *port_mgmt = p->port_mgmt;
+		if (port_mgmt) {
+			port_mgmt->mac_lrn_limit_cache[mac_lrn_limit->port_id] = *mac_lrn_limit;
+			port_mgmt->mac_lrn_limit_valid[mac_lrn_limit->port_id] = true;
+		}
+	}
+
 	ppe_drv_info("port mac learn limit is enabled:%d for port_id: %d and limit: %d\n", mac_lrn_limit->port_learn_limit_en, mac_lrn_limit->port_id, mac_lrn_limit->port_learn_limit);
 	spin_unlock_bh(&p->lock);
 	return PPE_DRV_RET_SUCCESS;
@@ -990,7 +1075,9 @@ ppe_drv_ret_t ppe_drv_port_mgmt_fid_get(struct net_device *dev, uint8_t* fid_ind
 	struct ppe_drv_iface *iface;
 	struct ppe_drv_vsi *vsi;
 
-	/* Resolve iface by FID name when available, else via upstream GEM bitmap */
+	/*
+	 * Resolve iface by FID name when available, else via upstream GEM bitmap.
+	 */
 	if (dev) {
 		iface = ppe_drv_iface_get_by_dev(dev);
 		if (!iface) {
@@ -1001,7 +1088,8 @@ ppe_drv_ret_t ppe_drv_port_mgmt_fid_get(struct net_device *dev, uint8_t* fid_ind
 	} else {
 #ifdef NSS_PPE_PON_SUPPORT
 		/*
-		 * If no VSI, then derive from gem port.
+		 * No explicit device given; derive the iface from the upstream
+		 * GEM port bitmap.
 		 */
 		if (!gem_port_bitmap) {
 			ppe_drv_warn("No upstream port (gem_port_bitmap=0) and no FID name\n");
@@ -1020,7 +1108,9 @@ ppe_drv_ret_t ppe_drv_port_mgmt_fid_get(struct net_device *dev, uint8_t* fid_ind
 #endif
 	}
 
-	/* Get VSI info */
+	/*
+	 * Retrieve the VSI associated with the resolved iface.
+	 */
 	vsi = ppe_drv_iface_vsi_get(iface);
 	if (!vsi) {
 		ppe_drv_warn("Invalid VSI for given iface\n");
@@ -1054,7 +1144,10 @@ ppe_drv_ret_t ppe_drv_port_mgmt_mac_filter_clear(struct ppe_drv_port_mac_filter 
 
 	spin_lock_bh(&p->lock);
 
-	/* Look up existing entry; clear only if present and currently DROPPING */
+	/*
+	 * Look up the existing FDB entry; only clear it if it is currently
+	 * in the DROP state installed by mac_filter_set().
+	 */
 	err = fal_fdb_entry_search(PPE_DRV_SWITCH_ID, &entry);
 	if (err != SW_OK) {
 		ppe_drv_warn("FDB entry not found for MAC %pM (fid=%u), err=%d\n",
@@ -1078,24 +1171,158 @@ ppe_drv_ret_t ppe_drv_port_mgmt_mac_filter_clear(struct ppe_drv_port_mac_filter 
 		ppe_drv_info("RDT-to-CPU applied for MAC %pM (fid=%u)\n",
 				mac_filter->mac, entry.fid);
 	} else {
-		/* Not a DROP entry; treat as no-op */
+		/*
+		 * Entry exists but is not in DROP state; treat as a no-op.
+		 */
 		ppe_drv_info("No-op: FDB for MAC %pM (fid=%u) not in DROP state (dacmd=%u sacmd=%u)\n",
 				mac_filter->mac, entry.fid, entry.dacmd, entry.sacmd);
 	}
 
 out_unlock:
 	spin_unlock_bh(&p->lock);
+
+	if (ret == PPE_DRV_RET_SUCCESS) {
+		/*
+		 * Remove the corresponding node from the MAC filter cache.
+		 */
+		struct ppe_drv_port_mgmt *port_mgmt = p->port_mgmt;
+		if (port_mgmt) {
+			struct ppe_drv_mac_filter_node *node, *tmp;
+			spin_lock_bh(&port_mgmt->lock);
+			list_for_each_entry_safe(node, tmp, &port_mgmt->mac_filter_cache, list) {
+				if (!memcmp(node->mac, mac_filter->mac, ETH_ALEN) &&
+				    node->fid_index == mac_filter->fid_index) {
+					list_del(&node->list);
+					kfree(node);
+					break;
+				}
+			}
+			spin_unlock_bh(&port_mgmt->lock);
+		}
+	}
+
 	return ret;
 }
 EXPORT_SYMBOL(ppe_drv_port_mgmt_mac_filter_clear);
 
 /*
+ * ppe_drv_port_mgmt_mac_lrn_limit_dump()
+ *	Print the cached MAC learn-limit configuration for every port that has
+ *	had ppe_drv_port_mgmt_mac_lrn_limit_set() called on it.  The cache is
+ *	updated on every successful FAL call so it always reflects the last
+ *	applied configuration.
+ *
+ *	Output columns:
+ *	  port_id         - PPE port number
+ *	  enabled         - whether the learn limit is active (yes/no)
+ *	  learn_limit     - maximum number of MACs the port may learn
+ *	  exceed_action_en- whether an exceed action is configured (yes/no)
+ *	  exceed_action   - action taken when the limit is exceeded
+ */
+void ppe_drv_port_mgmt_mac_lrn_limit_dump(struct seq_file *m)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt;
+	struct ppe_drv_port_mac_lrn_limit *cfg;
+	uint32_t port_id;
+	bool found_any = false;
+
+	/*
+	 * String table for the exceed-action enum; indexed by
+	 * ppe_drv_port_mgmt_fwd_cmd_t.
+	 */
+	static const char * const action_str[] = {
+		[PPE_DRV_PORT_MGMT_FWD_CMD_FWD]   = "forward",
+		[PPE_DRV_PORT_MGMT_FWD_CMD_DROP]  = "drop",
+		[PPE_DRV_PORT_MGMT_FWD_CMD_COPY]  = "copy-to-cpu",
+		[PPE_DRV_PORT_MGMT_FWD_CMD_REDIR] = "redir-to-cpu",
+	};
+
+	if (!p || !p->port_mgmt) {
+		seq_puts(m, "  PPE driver not initialized\n");
+		return;
+	}
+
+	port_mgmt = p->port_mgmt;
+
+	seq_printf(m, "  %-10s  %-8s  %-12s  %-18s  %-14s\n",
+		   "port_id", "enabled", "learn_limit", "exceed_action_en", "exceed_action");
+	seq_puts(m, "  -----------------------------------------------------------------------\n");
+
+	spin_lock_bh(&port_mgmt->lock);
+	for (port_id = 0; port_id < PPE_DRV_PORTS_MAX; port_id++) {
+		if (!port_mgmt->mac_lrn_limit_valid[port_id])
+			continue;
+
+		found_any = true;
+		cfg = &port_mgmt->mac_lrn_limit_cache[port_id];
+
+		seq_printf(m, "  %-10u  %-8s  %-12u  %-18s  %-14s\n",
+			   port_id,
+			   cfg->port_learn_limit_en ? "yes" : "no",
+			   cfg->port_learn_limit,
+			   cfg->lrn_exceed_action_en ? "yes" : "no",
+			   cfg->lrn_exceed_action_en ?
+				action_str[cfg->lrn_exceed_action] : "n/a");
+	}
+	spin_unlock_bh(&port_mgmt->lock);
+
+	if (!found_any)
+		seq_puts(m, "  (no MAC learn-limit entries configured)\n");
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_mac_lrn_limit_dump);
+
+/*
+ * ppe_drv_port_mgmt_mac_filter_dump()
+ *	Print all MAC filter entries from the cache maintained by
+ *	ppe_drv_port_mgmt_mac_filter_set() / ppe_drv_port_mgmt_mac_filter_clear().
+ *	No FAL or hardware query is performed.
+ *
+ *	Output columns:
+ *	  mac_addr  - filtered MAC address
+ *	  fid_valid - whether a FID is associated
+ *	  fid       - forwarding/filter domain ID
+ */
+void ppe_drv_port_mgmt_mac_filter_dump(struct seq_file *m)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt;
+	struct ppe_drv_mac_filter_node *node;
+	bool found_any = false;
+
+	if (!p || !p->port_mgmt) {
+		seq_puts(m, "  PPE driver not initialized\n");
+		return;
+	}
+
+	port_mgmt = p->port_mgmt;
+
+	seq_printf(m, "  %-20s  %-6s\n", "mac_addr", "fid");
+	seq_puts(m, "  ----------------------------\n");
+
+	spin_lock_bh(&port_mgmt->lock);
+	list_for_each_entry(node, &port_mgmt->mac_filter_cache, list) {
+		found_any = true;
+		seq_printf(m, "  %pM  %-6u\n",
+			   node->mac,
+			   node->fid_index);
+	}
+	spin_unlock_bh(&port_mgmt->lock);
+
+	if (!found_any)
+		seq_puts(m, "  (no MAC filter entries)\n");
+}
+EXPORT_SYMBOL(ppe_drv_port_mgmt_mac_filter_dump);
+
+/*
  * ppe_drv_port_mgmt_mac_filter_set()
- *	Sets the MAC filter configuration.
+ *	Sets the MAC filter configuration and caches the entry.
  */
 ppe_drv_ret_t ppe_drv_port_mgmt_mac_filter_set(struct ppe_drv_port_mac_filter *mac_filter)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_port_mgmt *port_mgmt;
+	struct ppe_drv_mac_filter_node *node;
 	fal_fdb_entry_t entry;
 	sw_error_t err;
 
@@ -1110,10 +1337,15 @@ ppe_drv_ret_t ppe_drv_port_mgmt_mac_filter_set(struct ppe_drv_port_mac_filter *m
 
 	spin_lock_bh(&p->lock);
 
-	/* Find the existing FDB entry. */
+	/*
+	 * Search for an existing FDB entry so we can update it in-place
+	 * rather than creating a duplicate.
+	 */
 	fal_fdb_entry_search(PPE_DRV_SWITCH_ID, &entry);
 
-	/* Update or Add in FDB */
+	/*
+	 * Set both DA and SA commands to DROP and write the entry back.
+	 */
 	entry.dacmd = FAL_MAC_DROP;
 	entry.sacmd = FAL_MAC_DROP;
 	err = fal_fdb_entry_add(PPE_DRV_SWITCH_ID, &entry);
@@ -1126,6 +1358,37 @@ ppe_drv_ret_t ppe_drv_port_mgmt_mac_filter_set(struct ppe_drv_port_mac_filter *m
 		return PPE_DRV_RET_PORT_MGMT_MAC_FILTER_SET_FAIL;
 	}
 
+	/*
+	 * Cache the entry so the debugfs dump can read it back without
+	 * querying the FDB via FAL.  If an entry for the same MAC+fid
+	 * already exists in the cache, reuse it; otherwise allocate a new node.
+	 */
+	port_mgmt = p->port_mgmt;
+	if (port_mgmt) {
+		spin_lock_bh(&port_mgmt->lock);
+		list_for_each_entry(node, &port_mgmt->mac_filter_cache, list) {
+			if (!memcmp(node->mac, mac_filter->mac, ETH_ALEN) &&
+			    node->fid_index == mac_filter->fid_index) {
+				spin_unlock_bh(&port_mgmt->lock);
+				goto done;
+			}
+		}
+		spin_unlock_bh(&port_mgmt->lock);
+
+		node = kzalloc(sizeof(*node), GFP_ATOMIC);
+		if (node) {
+			memcpy(node->mac, mac_filter->mac, ETH_ALEN);
+			node->fid_index = mac_filter->fid_index;
+			spin_lock_bh(&port_mgmt->lock);
+			list_add_tail(&node->list, &port_mgmt->mac_filter_cache);
+			spin_unlock_bh(&port_mgmt->lock);
+		} else {
+			ppe_drv_warn("Failed to allocate MAC filter cache node for %pM\n",
+				     mac_filter->mac);
+		}
+	}
+
+done:
 	ppe_drv_info("Drop FDB entry applied for MAC %pM (fid=%u)\n",
 			mac_filter->mac, entry.fid);
 	return PPE_DRV_RET_SUCCESS;

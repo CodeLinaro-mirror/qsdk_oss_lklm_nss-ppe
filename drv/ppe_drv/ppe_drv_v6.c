@@ -4458,10 +4458,12 @@ ppe_drv_ret_t ppe_drv_v6_destroy(struct ppe_drv_v6_rule_destroy *destroy)
 #endif
 
 #ifdef PPE_TUNNEL_ENABLE
+	bool is_flush = false;
+
 	/*
 	 * Check if the destroy rule is for tunnel (outer rule)
 	 */
-	ret = ppe_drv_v6_tun_del_ce_notify(destroy);
+	ret = ppe_drv_v6_tun_del_ce_notify(destroy, is_flush);
 	if (ret != PPE_DRV_RET_FAILURE_DESTROY_NO_CONN) {
 		if (ret != PPE_DRV_RET_SUCCESS) {
 			ppe_drv_warn("%p: Tunnel destroy failed with error %d", destroy, ret);

@@ -18,7 +18,7 @@
 #define _PPE_DRV_TUN_V6_H_
 
 ppe_drv_ret_t ppe_drv_v6_tun_add_ce_notify(struct ppe_drv_v6_rule_create *create);
-ppe_drv_ret_t ppe_drv_v6_tun_del_ce_notify(struct ppe_drv_v6_rule_destroy *destroy);
+ppe_drv_ret_t ppe_drv_v6_tun_del_ce_notify(struct ppe_drv_v6_rule_destroy *destroy, bool is_flush);
 struct ppe_drv_v6_conn *ppe_drv_v6_conn_tun_conn_get(struct ppe_drv_v6_5tuple *tuple);
 void ppe_drv_tun_v6_parse_l2_hdr(struct ppe_drv_v6_rule_create *create, struct ppe_drv_v6_conn *cn,
 				 struct ppe_drv_tun_cmn_ctx_l2 *l2);

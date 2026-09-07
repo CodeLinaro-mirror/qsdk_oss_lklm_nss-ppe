@@ -111,6 +111,17 @@ enum ppe_ds_mem_profile {
 extern enum ppe_ds_mem_profile ppe_ds_active_mem_profile;
 
 /*
+ * ppe_ds_rxfill_num_desc_min()
+ *	Return the minimum valid rxfill descriptor count for the active profile.
+ */
+static inline unsigned int ppe_ds_rxfill_num_desc_min(void)
+{
+	if (ppe_ds_active_mem_profile == PPE_DS_MEM_PROFILE_DYNAMIC_LOW)
+		return PPE_DS_RXFILL_NUM_DESC_MIN_LOW;
+	return PPE_DS_RXFILL_NUM_DESC_MIN;
+}
+
+/*
  * ppe_ds_node_state_t
  *	PPE-DS node states
  */

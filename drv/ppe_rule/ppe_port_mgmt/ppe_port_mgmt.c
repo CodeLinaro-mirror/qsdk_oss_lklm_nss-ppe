@@ -22,6 +22,7 @@ struct ppe_port_mgmt_base ppe_port_mgmt_gbl = {0};
  */
 ppe_port_mgmt_ret_t ppe_port_mgmt_isol_config(struct ppe_port_mgmt_isol *isol_info)
 {
+	struct ppe_port_mgmt_base *g = &ppe_port_mgmt_gbl;
 	int ppe_ret = PPE_PORT_MGMT_RET_SUCCESS;
 	struct net_device *dev;
 	struct ppe_drv_iface *iface;
@@ -54,13 +55,15 @@ ppe_port_mgmt_ret_t ppe_port_mgmt_isol_config(struct ppe_port_mgmt_isol *isol_in
 	drv_isol_info.port_id = isol_info->port_id;
 	drv_isol_info.omci_id = isol_info->omci_id;
 
+	ppe_port_mgmt_stats_inc(&g->stats.port_isol_req);
 	ppe_port_mgmt_info("Enable isolation for port %d, OMCI ID: %d\n", isol_info->port_id, isol_info->omci_id);
 	ppe_ret = ppe_drv_port_mgmt_isol_configure(&drv_isol_info);
 	if (ppe_ret != PPE_PORT_MGMT_RET_SUCCESS) {
 		ppe_port_mgmt_warn("Failed to set port isolation for port %d, err: %d\n", isol_info->port_id, ppe_ret);
+		ppe_port_mgmt_stats_inc(&g->stats.port_isol_fail);
 		return PPE_PORT_MGMT_RET_FAILURE;
 	}
-
+	ppe_port_mgmt_stats_inc(&g->stats.port_isol_success);
 	return PPE_PORT_MGMT_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_port_mgmt_isol_config);
@@ -133,6 +136,7 @@ EXPORT_SYMBOL(ppe_port_mgmt_default_isol_set);
  */
 ppe_port_mgmt_ret_t ppe_port_mgmt_mac_lrn_limit_set(struct ppe_port_mac_lrn_limit *mac_lrn_limit)
 {
+	struct ppe_port_mgmt_base *g = &ppe_port_mgmt_gbl;
 	uint8_t ppe_ret;
 	struct net_device *dev;
 	struct ppe_drv_iface *iface;
@@ -168,12 +172,44 @@ ppe_port_mgmt_ret_t ppe_port_mgmt_mac_lrn_limit_set(struct ppe_port_mac_lrn_limi
 	drv_mac_lrn_limit.lrn_exceed_action_en = mac_lrn_limit->lrn_exceed_action_en;
 	drv_mac_lrn_limit.lrn_exceed_action = (ppe_drv_port_mgmt_fwd_cmd_t)mac_lrn_limit->lrn_exceed_action;
 
-	ppe_port_mgmt_info("Mac learn limit for port %d, mac learn limit: %d\n", mac_lrn_limit->port_id, mac_lrn_limit->port_learn_limit);
+	/*
+	 * Increment aggregate request counter, then the per-direction counter
+	 * based on whether the caller is enabling or disabling the limit.
+	 */
+	ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_req);
+	if (mac_lrn_limit->port_learn_limit_en)
+		ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_en_req);
+	else
+		ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_dis_req);
+
+	ppe_port_mgmt_info("Mac learn limit for port %d, mac learn limit: %d\n",
+			   mac_lrn_limit->port_id, mac_lrn_limit->port_learn_limit);
+
 	ppe_ret = ppe_drv_port_mgmt_mac_lrn_limit_set(&drv_mac_lrn_limit);
 	if (ppe_ret != PPE_PORT_MGMT_RET_SUCCESS) {
 		ppe_port_mgmt_warn("Failed to set mac learn limit, err: %d\n", ppe_ret);
+
+		/*
+		 * Increment aggregate failure counter and the per-direction
+		 * failure counter.
+		 */
+		ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_fail);
+		if (mac_lrn_limit->port_learn_limit_en)
+			ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_en_fail);
+		else
+			ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_dis_fail);
 		return PPE_PORT_MGMT_RET_FAILURE;
 	}
+
+	/*
+	 * Increment aggregate success counter and the per-direction
+	 * success counter.
+	 */
+	ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_success);
+	if (mac_lrn_limit->port_learn_limit_en)
+		ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_en_success);
+	else
+		ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_dis_success);
 	return PPE_PORT_MGMT_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_port_mgmt_mac_lrn_limit_set);
@@ -184,6 +220,7 @@ EXPORT_SYMBOL(ppe_port_mgmt_mac_lrn_limit_set);
  */
 ppe_port_mgmt_ret_t ppe_port_mgmt_mac_filter_clear(struct ppe_port_mac_filter *mac_filter)
 {
+	struct ppe_port_mgmt_base *g = &ppe_port_mgmt_gbl;
 	uint8_t ret;
 	struct ppe_drv_port_mac_filter drv_mac_filter = {0};
 	struct net_device *dev = NULL;
@@ -217,12 +254,14 @@ ppe_port_mgmt_ret_t ppe_port_mgmt_mac_filter_clear(struct ppe_port_mac_filter *m
 	drv_mac_filter.fid_valid = mac_filter->fid_valid;
 	drv_mac_filter.fid_index = mac_filter->fid_index;
 
+	ppe_port_mgmt_stats_inc(&g->stats.mac_filter_clr_req);
 	ret = ppe_drv_port_mgmt_mac_filter_clear(&drv_mac_filter);
 	if (ret != PPE_PORT_MGMT_RET_SUCCESS) {
 		ppe_port_mgmt_warn("Failed to clear MAC filter (err=%d)\n", ret);
+		ppe_port_mgmt_stats_inc(&g->stats.mac_filter_clr_fail);
 		return PPE_PORT_MGMT_RET_FAILURE;
 	}
-
+	ppe_port_mgmt_stats_inc(&g->stats.mac_filter_clr_success);
 	return PPE_PORT_MGMT_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_port_mgmt_mac_filter_clear);
@@ -233,6 +272,7 @@ EXPORT_SYMBOL(ppe_port_mgmt_mac_filter_clear);
  */
 ppe_port_mgmt_ret_t ppe_port_mgmt_mac_filter_set(struct ppe_port_mac_filter *mac_filter)
 {
+	struct ppe_port_mgmt_base *g = &ppe_port_mgmt_gbl;
 	uint8_t ret;
 	struct ppe_drv_port_mac_filter drv_mac_filter = {0};
 	struct net_device *dev = NULL;
@@ -266,12 +306,14 @@ ppe_port_mgmt_ret_t ppe_port_mgmt_mac_filter_set(struct ppe_port_mac_filter *mac
 	drv_mac_filter.fid_valid = mac_filter->fid_valid;
 	drv_mac_filter.fid_index = mac_filter->fid_index;
 
+	ppe_port_mgmt_stats_inc(&g->stats.mac_filter_set_req);
 	ret = ppe_drv_port_mgmt_mac_filter_set(&drv_mac_filter);
 	if (ret != PPE_PORT_MGMT_RET_SUCCESS) {
 		ppe_port_mgmt_warn("Failed to set MAC filter (err=%d)\n", ret);
+		ppe_port_mgmt_stats_inc(&g->stats.mac_filter_set_fail);
 		return PPE_PORT_MGMT_RET_FAILURE;
 	}
-
+	ppe_port_mgmt_stats_inc(&g->stats.mac_filter_set_success);
 	return PPE_PORT_MGMT_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_port_mgmt_mac_filter_set);

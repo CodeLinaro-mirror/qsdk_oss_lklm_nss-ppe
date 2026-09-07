@@ -25,6 +25,8 @@ static const char *ppe_acl_dump_src_type_str[] = {
 	"SRC_TYPE_DEV",			/* Source type device. */
 	"SRC_TYPE_SC",			/* Source type service code. */
 	"SRC_TYPE_FLOW",		/* Source type flow. */
+	"DST_TYPE_L2",			/* L2 Destination type. */
+	"DST_TYPE_L3",			/* L3 Destination type. */
 };
 
 /*
@@ -95,6 +97,7 @@ static const char *ppe_acl_dump_src_info_type_str[] = {
 };
 
 static const char *ppe_acl_dump_mc_type_str[] = {
+	"INVALID_MC_RULE"	/* ACL invalid mcast rule. */
 	"NO_MC_RULE",		/* ACL no multicast rule. */
 	"IP_MC_RULE",		/* ACL IP multicast rule. */
 	"IP NO_MC RULE",	/* ACL IP_MC and NO_MC rule. */
@@ -105,6 +108,7 @@ static const char *ppe_acl_dump_mc_type_str[] = {
 };
 
 static const char *ppe_acl_dump_dhcp_type_str[] = {
+	"INVALID_DHCP_RULE"	/* ACL invalid DHCP field. */
 	"NO_DHCP_RULE",		/* ACL no DHCP rule. */
 	"V4_DHCP_RULE",		/* ACL v4 DHCP rule. */
 	"V4 NO_DHCP RULE",	/* ACL v4 No DHCP rule. */

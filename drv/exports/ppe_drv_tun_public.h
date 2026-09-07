@@ -24,11 +24,12 @@ typedef bool (*ppe_drv_tun_add_ce_callback_t)(uint8_t vp_num, void *vcreate_rule
  *
  * @param[in] vp_num Virtual port number
  * @param[in] vdestroy_rule pointer to destroy_rule
+ * @param[in] is_flush true if trigger is from exception/flush
  *
  * @return
  * Success or failure.
  */
-typedef bool (*ppe_drv_tun_del_ce_callback_t)(uint8_t vp_num, void *vdestroy_rule);
+typedef bool (*ppe_drv_tun_del_ce_callback_t)(uint8_t vp_num, void *vdestroy_rule, bool is_flush);
 
 /**
  * ppe_drv_tun_configure
@@ -71,11 +72,12 @@ bool ppe_drv_tun_configure_vxlan_gpe_and_dport(uint16_t dport);
  *
  * @param[in] port_num VP port number
  * @param[in] vdestroy_rule pointer to connection entry
+ * @param[in] is_flush true if trigger is from exception/flush
  *
  * @return
  * Success or failure.
  */
-bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule);
+bool ppe_drv_tun_deactivate(uint16_t port_num, void *vdestroy_rule, bool is_flush);
 
 /**
  * ppe_drv_tun_activate
@@ -171,4 +173,15 @@ bool ppe_drv_tun_header_length_get(uint16_t port_num, uint8_t *hdr_len);
  * Note: Tunnel needs to be in active state prior calling this function
  */
 bool ppe_drv_tun_xmit_port_mtu_get(uint16_t port_num, uint32_t *mtu);
+
+/*
+ * ppe_drv_tun_is_active
+ *      Check if the hardware tunnel VP is still in the active state.
+ *
+ * @param[in] port_num tunnel VP port number
+ *
+ * @return
+ * True or false.
+ */
+bool ppe_drv_tun_is_active(uint16_t port_num);
 #endif /* _PPE_DRV_TUN_PUBLIC_H_ */
