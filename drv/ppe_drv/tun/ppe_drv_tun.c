@@ -1783,6 +1783,8 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 #ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
 	struct ppe_drv_iface *if_tx, *if_rx = NULL;
 	struct ppe_drv_iface *veip_if = NULL;
+	struct ppe_drv_port *xmit_pp;
+	struct ppe_drv_iface *xmit_iface;
 #endif
 	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_TUNNEL];
 	spin_lock_bh(&p->lock);
@@ -1885,6 +1887,26 @@ bool ppe_drv_tun_activate(uint16_t port_num, void *vcreate_rule)
 
 	l2_hdr = &pth->l2;
 	is_ipv6 = ppe_drv_tun_cmn_ctx_tun_is_ipv6(pth);
+
+#ifdef PPE_DRV_VEIP_FEATURE_SUPPORT
+	/*
+	 * For non-ECM callers (e.g. nss-udp-st), vcreate_rule is NULL, so veip_if
+	 * cannot be resolved from conn_rule.tx_if/rx_if below. Derive it instead
+	 * from the tunnel's configured xmit_port, so that the VEIP PON VP-group
+	 * mapping further below is still applied for these tunnels.
+	 */
+	if (!vcreate_rule) {
+		xmit_pp = ppe_drv_port_from_port_num(l2_hdr->xmit_port);
+		if (xmit_pp && xmit_pp->dev) {
+			xmit_iface = ppe_drv_iface_get_by_dev_internal(xmit_pp->dev);
+			if (xmit_iface && xmit_iface->type == PPE_DRV_IFACE_TYPE_VEIP) {
+				veip_if = xmit_iface;
+				ppe_drv_info("%p: veip_if resolved from xmit_port %u for non-ECM tunnel\n",
+						ptun, l2_hdr->xmit_port);
+			}
+		}
+	}
+#endif
 
 	/*
 	 * there are two ways tunnel can be configured.
