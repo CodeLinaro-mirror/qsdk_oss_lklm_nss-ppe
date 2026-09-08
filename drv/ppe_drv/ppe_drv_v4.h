@@ -86,7 +86,6 @@
 #define PPE_DRV_V4_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS		0x20000000
 					/* Flow has the mapped DDRQ disabled */
 #endif
-
 #define PPE_DRV_V4_CONN_FLAG_WIFI_STREAM_ID_VALID	0x40000000
 					/* Flow has valid wifi stream ID */
 #define PPE_DRV_V4_CONN_FLAG_WIFI_AST_VALID	0x80000000
@@ -101,9 +100,13 @@
 					/* Flow is UDP Speedtest */
 #define PPE_DRV_V4_CONN_FLAG_MCAST_RFS_FLOW	0x1000000000ULL
 					/* Flow is Multicast RFS */
-
 #define PPE_DRV_V4_CONN_FLOW_FLAG_INLINE_DTLS 0x2000000000ULL
 					/* Inline DTLS flow */
+#ifdef PPE_DRV_DDRQ_ENABLE
+#define PPE_DRV_V4_CONN_FLAG_FLOW_DDRQ_VLAN_IF	0x4000000000ULL
+						/* Flow had Rx/Tx VLAN interface for DDRQ checks */
+#endif
+
 /*
  * ppe_drv_v4_addr_equal()
  *	compare ipv4 address
@@ -997,4 +1000,3 @@ struct ppe_drv_flow *ppe_drv_v4_flow_hash_tuple_find(struct ppe_drv_v4_5tuple *t
 		struct hlist_head *head_tbl, bool ignore_rule_id);
 struct ppe_drv_flow *ppe_drv_v4_flow_hash_tuple_find_by_dev(struct ppe_drv_v4_5tuple *tuple,
 		struct hlist_head *head_tbl, struct net_device *dev);
-
