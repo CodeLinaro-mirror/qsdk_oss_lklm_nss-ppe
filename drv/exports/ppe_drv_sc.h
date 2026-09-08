@@ -33,7 +33,7 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_BNC_0 = 4,			/* QoS bounce */
 	PPE_DRV_SC_BNC_CMPL_0 = 5,		/* QoS bounce complete */
 	PPE_DRV_SC_ADV_QOS_ROUTED = 6,		/* Adv QoS redirection for routed flow */
-	PPE_DRV_SC_IPSEC_PPE2EIP_DECAP = 7,		/* Inline IPsec redirection from PPE TO EIP */
+	PPE_DRV_SC_IPSEC_PPE2EIP_DECAP = 7,		/* Inline IPsec redirection from PPE TO EIP post decap */
 	PPE_DRV_SC_IPSEC_EIP2PPE_DECAP = 8,		/* Inline IPsec redirection from EIP to PPE decap */
 	PPE_DRV_SC_PTP = 9,			/* Service Code for PTP packets */
 	PPE_DRV_SC_VLAN_FILTER_BYPASS = 10,	/* VLAN filter bypass for bridge flows between 2 different VSIs */
@@ -106,19 +106,14 @@ typedef enum ppe_drv_sc_type {
 #endif
 	PPE_DRV_SC_IPSEC_EDMA_VP_ENCAP = 71,				/* Inline IPsec redirection from VP TO EIP for encap direction */
 	PPE_DRV_SC_IPSEC_EDMA_VP_DECAP = 72,				/* Inline IPsec redirection from VP TO EIP for decap direction */
-	PPE_DRV_SC_IPSEC_EIP2PPE_ENCAP = 73,		/* Inline IPsec redirection from EIP to PPE for  decap */
+	PPE_DRV_SC_IPSEC_EIP2PPE_ENCAP = 73,		/* Inline IPsec redirection from EIP to PPE for post encap */
+	PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP = 74,		/* Inline IPsec redirection from VP TO EIP for encap direction using 3-tuple EIP lookup */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 					/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,
 					/* Last service code for combining flow and ACL rule */
 	PPE_DRV_SC_MAX = 256,		/* Max service code */
 } ppe_drv_sc_t;
-
-/*
- * TODO: Remove this once EIP ipsec client change is done.
- */
-#define PPE_DRV_SC_IPSEC_EIP2PPE PPE_DRV_SC_IPSEC_EIP2PPE_DECAP
-
 
 /*
  * ppe_drv_sc_metadata
