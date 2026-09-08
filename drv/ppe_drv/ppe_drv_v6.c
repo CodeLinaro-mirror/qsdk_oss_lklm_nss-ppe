@@ -721,17 +721,70 @@ static bool ppe_drv_v6_conn_flow_igmac_del(struct ppe_drv_v6_conn_flow *pcf)
  * ppe_drv_v6_is_egress_ddrq_disabled()
  *	API to check whether the ESQ has any of the DDRQs disabled or not
  */
-static bool ppe_drv_v6_is_egress_ddrq_disabled(struct ppe_drv_iface *if_rx, struct ppe_drv_iface *if_tx)
+static bool ppe_drv_v6_is_egress_ddrq_disabled(struct ppe_drv_iface *if_rx, struct ppe_drv_iface *if_tx,
+		bool *vlan_if)
 {
 	uint8_t q_base, q_cnt;
 	uint16_t port_num;
 	uint32_t word_idx = 0, bit_idx = 0, i;
 	sw_error_t err;
 	struct ppe_drv_port *pp_tx, *pp_rx;
+	bool is_rx_vlan_as_vp = false, is_tx_vlan_as_vp = false;
+
+	if (vlan_if) {
+		*vlan_if = false;
+	}
 
 	if (!if_rx || !if_tx) {
 		ppe_drv_warn("Incomplete Rx iface: %px or Tx iface: %px information available\n", if_rx, if_tx);
 		return false;
+	}
+
+	is_rx_vlan_as_vp = (if_rx->dev && is_vlan_dev(if_rx->dev) &&
+			    ((if_rx->type == PPE_DRV_IFACE_TYPE_VIRTUAL) ||
+			     (if_rx->type == PPE_DRV_IFACE_TYPE_VP_L2_TUN)));
+
+	is_tx_vlan_as_vp = (if_tx->dev && is_vlan_dev(if_tx->dev) &&
+			    ((if_tx->type == PPE_DRV_IFACE_TYPE_VIRTUAL) ||
+			     (if_tx->type == PPE_DRV_IFACE_TYPE_VP_L2_TUN)));
+	if (vlan_if) {
+		*vlan_if = is_rx_vlan_as_vp || is_tx_vlan_as_vp;
+	}
+
+	/*
+	 * If either Rx/Tx netdevice is VLAN, continue DDRQ checks on the real device iface.
+	 * Current support is limited to double VLAN.
+	 */
+	if (is_rx_vlan_as_vp) {
+		if_rx = ppe_drv_iface_base_get(if_rx);
+		if (!if_rx) {
+			ppe_drv_warn("Unable to resolve real iface for Rx VLAN netdevice\n");
+			return false;
+		}
+
+		if (if_rx->dev && is_vlan_dev(if_rx->dev)) {
+			if_rx = ppe_drv_iface_base_get(if_rx);
+			if (!if_rx) {
+				ppe_drv_warn("Unable to resolve real iface for Rx double VLAN netdevice\n");
+				return false;
+			}
+		}
+	}
+
+	if (is_tx_vlan_as_vp) {
+		if_tx = ppe_drv_iface_base_get(if_tx);
+		if (!if_tx) {
+			ppe_drv_warn("Unable to resolve real iface for Tx VLAN netdevice\n");
+			return false;
+		}
+
+		if (if_tx->dev && is_vlan_dev(if_tx->dev)) {
+			if_tx = ppe_drv_iface_base_get(if_tx);
+			if (!if_tx) {
+				ppe_drv_warn("Unable to resolve real iface for Tx double VLAN netdevice\n");
+				return false;
+			}
+		}
 	}
 
 	if (if_rx->type != PPE_DRV_IFACE_TYPE_VIRTUAL) {
@@ -742,7 +795,8 @@ static bool ppe_drv_v6_is_egress_ddrq_disabled(struct ppe_drv_iface *if_rx, stru
 	if ((if_tx->type != PPE_DRV_IFACE_TYPE_PHYSICAL) &&
 			(if_tx->type != PPE_DRV_IFACE_TYPE_VIRTUAL) &&
 			(if_tx->type != PPE_DRV_IFACE_TYPE_VP_L2_TUN) &&
-			(if_tx->type != PPE_DRV_IFACE_TYPE_VP_L3_TUN)) {
+			(if_tx->type != PPE_DRV_IFACE_TYPE_VP_L3_TUN) &&
+			(if_tx->type != PPE_DRV_IFACE_TYPE_VEIP)) {
 		ppe_drv_warn("Tx type condition (%d) not suitable for DDRQ PT disable check\n", if_tx->type);
 		return false;
 	}
@@ -771,7 +825,15 @@ static bool ppe_drv_v6_is_egress_ddrq_disabled(struct ppe_drv_iface *if_rx, stru
 	}
 
 	ppe_drv_warn("Rx type is %d, Tx type is %d\n", if_rx->type, if_tx->type);
+#ifdef NSS_PPE_PON_SUPPORT
+	if (if_tx->type == PPE_DRV_IFACE_TYPE_VEIP) {
+		port_num = ppe_drv_qos_pon_port_get();
+	} else {
+		port_num = ppe_drv_port_num_get(pp_tx);
+	}
+#else
 	port_num = ppe_drv_port_num_get(pp_tx);
+#endif
 	if (port_num <= PPE_DRV_PHYSICAL_MAX) {
 		fal_portscheduler_resource_t cfg = {0};
 		err = fal_port_scheduler_resource_get(PPE_DRV_SWITCH_ID, port_num, &cfg);
@@ -1714,11 +1776,15 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
 		}
 #ifdef PPE_DRV_DDRQ_ENABLE
-		if (ddrq_lp_sc_set_en) {
-			if (ppe_drv_v6_is_egress_ddrq_disabled(if_rx, if_tx)) {
-				ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS);
+			if (ddrq_lp_sc_set_en) {
+				bool ddrq_vlan_if = false;
+				if (ppe_drv_v6_is_egress_ddrq_disabled(if_rx, if_tx, &ddrq_vlan_if)) {
+					ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS);
+					if (ddrq_vlan_if) {
+						ppe_drv_v6_conn_flow_flags_set(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_VLAN_IF);
+					}
+				}
 			}
-		}
 #endif
 		/*
 		 * VLAN over brige case
@@ -2073,11 +2139,15 @@ ppe_drv_ret_t ppe_drv_v6_conn_fill(struct ppe_drv_v6_rule_create *create, struct
 			ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLOW_FLAG_DSCP_MARKING);
 		}
 #ifdef PPE_DRV_DDRQ_ENABLE
-		if (ddrq_lp_sc_set_en) {
-			if (ppe_drv_v6_is_egress_ddrq_disabled(if_tx, if_rx)) {
-				ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS);
+			if (ddrq_lp_sc_set_en) {
+				bool ddrq_vlan_if = false;
+				if (ppe_drv_v6_is_egress_ddrq_disabled(if_tx, if_rx, &ddrq_vlan_if)) {
+					ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS);
+					if (ddrq_vlan_if) {
+						ppe_drv_v6_conn_flow_flags_set(pcr, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_VLAN_IF);
+					}
+				}
 			}
-		}
 #endif
 
 		/*

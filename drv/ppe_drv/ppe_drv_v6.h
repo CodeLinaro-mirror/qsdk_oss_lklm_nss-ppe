@@ -84,7 +84,6 @@
 #define PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_PASSTHROUGH_DIS		0x10000000
 					/* Flow has the mapped DDRQ disabled */
 #endif
-
 #define PPE_DRV_V6_CONN_FLAG_WIFI_STREAM_ID_VALID	0x20000000
 					/* Flow has valid wifi stream ID */
 #define PPE_DRV_V6_CONN_FLAG_WIFI_AST_VALID	0x40000000
@@ -99,6 +98,10 @@
 					/* Flow is UDP Speedtest */
 #define PPE_DRV_V6_CONN_FLAG_MCAST_RFS_FLOW	0x800000000ULL
 					/* Flow is Multicast RFS */
+#ifdef PPE_DRV_DDRQ_ENABLE
+#define PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_VLAN_IF	0x1000000000ULL
+						/* Flow had Rx/Tx VLAN interface for DDRQ checks */
+#endif
 
 #ifdef PPE_DRV_NPTV6_HW_SUPPORT
 /*

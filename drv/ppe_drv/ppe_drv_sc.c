@@ -997,6 +997,7 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		break;
 
 	case PPE_DRV_SC_DDRQ_LP_SC:
+	case PPE_DRV_SC_DDRQ_LP_SC_BRIDGE:
 	case PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP:
 	case PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP:
 		sc_cfg.field_update_bitmap[0] = ((1ULL << EPE_LOOPBACK_VLAN_START)
@@ -1007,8 +1008,10 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 						| (1 << L2_SOURCE_SEC_BYP)
 						| (1 << BRIDGING_FWD_BYP)
 						| (1 << SOURCE_FLTR_BYP)
-						| (1 << L2_PKT_EDIT_BYP)
 						| (1 << L3_PKT_EDIT_BYP));
+		if (sc != PPE_DRV_SC_DDRQ_LP_SC_BRIDGE) {
+			sc_cfg.bypass_bitmap[1] |= (1 << L2_PKT_EDIT_BYP);
+		}
 		sc_cfg.dest_port_valid = A_TRUE;
 		break;
 
@@ -1420,6 +1423,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_PON_PT_MODE, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_spl_ddrq_config();
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC, PPE_DRV_SC_DDRQ_LP_SC_NEXT, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC_BRIDGE, PPE_DRV_SC_DDRQ_LP_SC_NEXT, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP, PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP, PPE_DRV_SC_IPSEC_PPE2EIP_ACL_MATCH, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_DDRQ_LP_SC_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);

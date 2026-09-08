@@ -107,8 +107,9 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_IPSEC_EDMA_VP_ENCAP = 71,				/* Inline IPsec redirection from VP TO EIP for encap direction */
 	PPE_DRV_SC_IPSEC_EDMA_VP_DECAP = 72,				/* Inline IPsec redirection from VP TO EIP for decap direction */
 	PPE_DRV_SC_IPSEC_EIP2PPE_ENCAP = 73,		/* Inline IPsec redirection from EIP to PPE for  decap */
+	PPE_DRV_SC_DDRQ_LP_SC_BRIDGE = 74,			/* DDRQ loopback ring service code for bridged flows */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
-					/* First service code for combining flow and ACL rule */
+						/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,
 					/* Last service code for combining flow and ACL rule */
 	PPE_DRV_SC_MAX = 256,		/* Max service code */
