@@ -930,6 +930,7 @@ ppe_drv_ret_t ppe_drv_pon_map_enqueue_vp_to_pq(struct ppe_drv_port *port);
  * @param[in] p  Global PPE driver context.
  */
 void ppe_drv_dp_pon_stats_update(struct ppe_drv *p);
+#endif
 
 /**
  * ppe_drv_is_pon_enable_internal
@@ -939,7 +940,6 @@ void ppe_drv_dp_pon_stats_update(struct ppe_drv *p);
  * true if PON interface is set, false otherwise.
  */
 bool ppe_drv_is_pon_enable_internal(void);
-#endif
 
 #ifdef PPE_DRV_DDRQ_ENABLE
 extern uint32_t ppe_drv_ddrq_en_bitmask[PPE_DRV_DDRQ_MAX_CNT_WORD];

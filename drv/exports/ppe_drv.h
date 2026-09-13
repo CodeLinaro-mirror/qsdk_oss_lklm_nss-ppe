@@ -1067,15 +1067,6 @@ ppe_drv_ret_t ppe_drv_pon_map_enq_vp_to_base_pq(uint8_t base_pq, uint8_t *enq_vp
  * Pointer to PON interface.
  */
 struct ppe_drv_iface *ppe_drv_pon_iface_get(void);
-
-/**
- * ppe_drv_is_pon_enable
- *	Checks whether PON is enabled on this RDP.
- *
- * @return
- * true if PON interface is set, false otherwise.
- */
-bool ppe_drv_is_pon_enable(void);
 #endif
 
 /**
@@ -1097,6 +1088,15 @@ int ppe_drv_pon_port_max_pq_get(void);
 int ppe_drv_pon_port_start_pq_get(void);
 
 /**
+ * ppe_drv_is_pon_enable
+ *      Checks whether PON is enabled on this RDP.
+ *
+ * @return
+ * true if PON interface is set, false otherwise.
+ */
+bool ppe_drv_is_pon_enable(void);
+
+/**
  * ppe_drv_hw_gro_feature_set
  *	Set HW GRO feature state
  *
@@ -1116,4 +1116,5 @@ bool ppe_drv_hw_gro_feature_set(struct net_device *dev, bool enable);
  * unknown_dst_rfs_enable
  */
 int ppe_drv_get_unknown_dst_rfs_enable(void);
+
 #endif /* _PPE_DRV_H_ */

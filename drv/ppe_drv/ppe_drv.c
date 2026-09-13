@@ -1611,15 +1611,42 @@ struct ppe_drv_iface *ppe_drv_pon_iface_get(void)
 }
 EXPORT_SYMBOL(ppe_drv_pon_iface_get);
 
+int ppe_drv_pon_port_max_pq_get()
+{
+        struct ppe_drv *p = ppe_drv_gbl;
+        uint32_t pon_port_max_pq = 0;
+
+        spin_lock_bh(&p->lock);
+        pon_port_max_pq = p->ppe_drv_pon_port_max_pq ? p->ppe_drv_pon_port_max_pq : pon_max_pq;
+        spin_unlock_bh(&p->lock);
+
+        return pon_port_max_pq;
+}
+EXPORT_SYMBOL(ppe_drv_pon_port_max_pq_get);
+
+int ppe_drv_pon_port_start_pq_get()
+{
+        struct ppe_drv *p = ppe_drv_gbl;
+        uint8_t pon_start_pq = 0;
+
+        spin_lock_bh(&p->lock);
+        pon_start_pq = p->ppe_drv_pon_port_start_pq;
+        spin_unlock_bh(&p->lock);
+
+        return pon_start_pq;
+}
+EXPORT_SYMBOL(ppe_drv_pon_port_start_pq_get);
+#endif
+
 /*
  * ppe_drv_is_pon_enable_internal()
  *      Returns true if PON is enabled on this RDP.
  */
 bool ppe_drv_is_pon_enable_internal(void)
 {
-        struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv *p = ppe_drv_gbl;
 
-        return !!p->pon_iface;
+	return !!p->pon_iface;
 }
 
 /*
@@ -1638,33 +1665,6 @@ bool ppe_drv_is_pon_enable(void)
 	return is_pon_en;
 }
 EXPORT_SYMBOL(ppe_drv_is_pon_enable);
-
-int ppe_drv_pon_port_max_pq_get()
-{
-	struct ppe_drv *p = ppe_drv_gbl;
-	uint32_t pon_port_max_pq = 0;
-
-	spin_lock_bh(&p->lock);
-	pon_port_max_pq = p->ppe_drv_pon_port_max_pq ? p->ppe_drv_pon_port_max_pq : pon_max_pq;
-	spin_unlock_bh(&p->lock);
-
-	return pon_port_max_pq;
-}
-EXPORT_SYMBOL(ppe_drv_pon_port_max_pq_get);
-
-int ppe_drv_pon_port_start_pq_get()
-{
-	struct ppe_drv *p = ppe_drv_gbl;
-	uint8_t pon_start_pq = 0;
-
-	spin_lock_bh(&p->lock);
-	pon_start_pq = p->ppe_drv_pon_port_start_pq;
-	spin_unlock_bh(&p->lock);
-
-	return pon_start_pq;
-}
-EXPORT_SYMBOL(ppe_drv_pon_port_start_pq_get);
-#endif
 
 /*
  * ppe_drv_rfs_map_core_to_enqueue_vp()
