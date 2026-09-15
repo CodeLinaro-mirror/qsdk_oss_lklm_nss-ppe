@@ -136,14 +136,14 @@ ccflags-y += -DNSS_PPE_MCAST_FEATURE_SUPPORT
 endif
 endif
 
-ifndef PPE_LOWMEM_PROFILE_16M
-ifndef PPE_LOWMEM_PROFILE_256M
 ifeq ($(PPE_MIRROR_ENABLED), y)
 qca-nss-ppe-rule-objs += ppe_mirror/ppe_mirror.o
 qca-nss-ppe-rule-objs += ppe_mirror/ppe_mirror_stats.o
 ccflags-y += -DPPE_MIRROR_DEBUG_LEVEL=3
 endif
 
+ifndef PPE_LOWMEM_PROFILE_16M
+ifndef PPE_LOWMEM_PROFILE_256M
 ifeq ($(PPE_PRIORITY_ENABLED), y)
 qca-nss-ppe-rule-objs += ppe_priority/ppe_priority.o
 qca-nss-ppe-rule-objs += ppe_priority/ppe_priority_stats.o

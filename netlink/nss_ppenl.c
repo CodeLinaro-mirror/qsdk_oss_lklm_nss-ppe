@@ -60,6 +60,10 @@
 #include "nss_ppenl_tun_rps.h"
 #include "nss_ppenl_tun_rps_if.h"
 #endif
+#ifdef NSS_PPE_PORT_MIRROR_FEATURE_SUPPORT
+#include "nss_ppenl_port_mirror.h"
+#include <nss_ppenl_port_mirror_if.h>
+#endif
 
 /*
  * nss_ppenl.c
@@ -222,6 +226,17 @@ static struct nss_ppenl_family family_handlers[] = {
 		.entry = NSS_PPENL_MCAST_INIT,        	/* Init */
 		.exit = NSS_PPENL_MCAST_EXIT,		/* exit */
 		.valid = CONFIG_NSS_PPENL_MCAST       	/* 1 or 0 */
+	},
+#endif
+#ifdef NSS_PPE_PORT_MIRROR_FEATURE_SUPPORT
+	{
+		/*
+		 * NSS_PPENL_PORT_MIRROR
+		 */
+		.name = NSS_PPENL_PORT_MIRROR_FAMILY,		/* Port-mirror Family */
+		.entry = NSS_PPENL_PORT_MIRROR_INIT,		/* Init */
+		.exit = NSS_PPENL_PORT_MIRROR_EXIT,		/* exit */
+		.valid = CONFIG_NSS_PPENL_PORT_MIRROR		/* 1 or 0 */
 	},
 #endif
 };

@@ -21,6 +21,7 @@
 #include <fal/fal_servcode.h>
 #include <fal/fal_fdb.h>
 #include <fal/fal_portvlan.h>
+#include <fal/fal_mirror.h>
 #ifdef NSS_PPE_PON_SUPPORT
 #include <fal/fal_pon.h>
 #endif
@@ -118,6 +119,7 @@ MODULE_PARM_DESC(sixth_tuple_mode, "Sixth tuple mode");
 uint32_t if_bm_to_offload;
 #ifdef NSS_PPE_PON_SUPPORT
 uint32_t gem_port_bitmap;
+int dot1p_dest_vp_en = 1;
 
 /*
  * Module parameter to set max number of PQ needed for PON flows.
@@ -3375,6 +3377,28 @@ static int ppe_drv_unknown_dst_rfs_enable_handler(struct ctl_table *table, int w
 	return 0;
 }
 
+#ifdef NSS_PPE_PON_SUPPORT
+/*
+ * ppe_drv_dot1p_dest_vp_en_handler()
+ *	API to configure the default gemport dest_vp in Dot1p mapper table.
+ */
+static int ppe_drv_dot1p_dest_vp_en_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	ppe_drv_trace("dest vp in dot1p mapper table  %d\n", dot1p_dest_vp_en);
+
+        return 0;
+}
+#endif
+
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 /*
  * ppe_drv_ipsec_pass_through_en_handler()
@@ -3919,6 +3943,65 @@ bool ppe_drv_l2vp_sc_rmv(uint32_t dest_port_id)
 	return true;
 }
 #endif
+
+/*
+ * ppe_drv_l2vp_mirror_sc_add()
+ *      Add the mirror sc configs in L2_VP port tbl.
+ */
+bool ppe_drv_l2vp_mirror_sc_add(uint32_t dest_port_id)
+{
+	struct ppe_drv_port *pp = NULL;
+	ppe_drv_sc_t sc;
+
+	pp = ppe_drv_port_from_port_num(dest_port_id);
+	if (!pp) {
+		ppe_drv_warn("No PPE port for given netdevice %u\n", dest_port_id);
+		return false;
+	}
+
+	sc = ppe_drv_port_is_gem((uint16_t)dest_port_id)
+		? PPE_DRV_SC_DDRQ_PON_PT_MODE
+		: PPE_DRV_SC_DDRQ_ETH_PT_MODE;
+
+	/*
+	 * Configure L2_VP port table for UNI port with mirror service code
+	 */
+	if (!ppe_drv_port_l2_vp_mirror_sc_config(pp, sc, dest_port_id)) {
+		ppe_drv_warn("Failed to configure L2 VP mirror for port %u\n",
+				dest_port_id);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_l2vp_mirror_sc_add);
+
+/*
+ * ppe_drv_l2vp_mirror_sc_rmv()
+ *      Remove the mirror sc configs in L2_VP port tbl.
+ */
+bool ppe_drv_l2vp_mirror_sc_rmv(uint32_t dest_port_id)
+{
+	struct ppe_drv_port *pp = NULL;
+
+	pp = ppe_drv_port_from_port_num(dest_port_id);
+	if (!pp) {
+		ppe_drv_warn("No PPE port for given netdevice %u\n", dest_port_id);
+		return false;
+	}
+
+	/*
+	 * Configure L2_VP port table for UNI port with mirror service code
+	 */
+	if (!ppe_drv_port_l2_vp_mirror_sc_reset(pp)) {
+		ppe_drv_warn("Failed to reset L2 VP mirror for port %u\n",
+				dest_port_id);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_l2vp_mirror_sc_rmv);
 
 /*
  * ppe_drv_src2uni_handler()
@@ -4809,6 +4892,7 @@ static struct ctl_table ppe_drv_sub[] = {
 		.mode		=	0644,
 		.proc_handler	=	ppe_drv_wlan_host_assist_qdisc_en_handler
 	},
+
 	{
 		.procname	=	"unknown_dst_rfs_enable",
 		.data		=	&unknown_dst_rfs_enable,
@@ -4816,6 +4900,17 @@ static struct ctl_table ppe_drv_sub[] = {
 		.mode		=	0644,
 		.proc_handler	=	ppe_drv_unknown_dst_rfs_enable_handler
 	},
+
+#ifdef NSS_PPE_PON_SUPPORT
+	{
+		.procname	=	"dot1p_dest_vp_en",
+		.data		=	&dot1p_dest_vp_en,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_dot1p_dest_vp_en_handler
+	},
+#endif
+
 	{}
 };
 

@@ -54,6 +54,9 @@ static const char *ppe_mirror_stats_cmn_str[] = {
 	"mirror_acl_process_group_invalid",		/* ACL group info not found for mirrored packets. */
 	"mirror_acl_mapping_invalid_capture_core",	/* ACL mapppng invalid capture core selection. */
 	"mirror_acl_mapping_fail_en_capture_core",	/* ACL mapping failed to enable capture core. */
+	"mirror_port_mirror_set_req",			/* Port mirror set request count. */
+	"mirror_port_mirror_set_success",		/* Port mirror set success count. */
+	"mirror_port_mirror_set_fail",			/* Port mirror set failure count. */
 };
 
 /*

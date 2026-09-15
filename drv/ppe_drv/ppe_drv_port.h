@@ -227,6 +227,9 @@ bool ppe_drv_port_l2_vp_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint
 bool ppe_drv_port_loopback_port_get_info(void);
 bool ppe_drv_port_l2_vp_sc_reset(struct ppe_drv_port *pp);
 bool ppe_drv_port_is_gem(uint16_t port_num);
+bool ppe_drv_port_l2_vp_mirror_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint32_t phy_port);
+bool ppe_drv_port_l2_vp_mirror_sc_reset(struct ppe_drv_port *pp);
+
 
 /*
  * ppe_drv_port_flags_check()
