@@ -32,6 +32,15 @@
 typedef void (*ppe_mirror_capture_callback_t)(void *app_data, struct sk_buff *skb, struct net_device *dev);
 
 /**
+ * ppe_mirror_port_dir
+ *	Direction for L2 VP port mirroring.
+ */
+enum ppe_mirror_port_dir {
+	PPE_MIRROR_PORT_DIR_INGRESS = 0,	/**< Ingress mirroring */
+	PPE_MIRROR_PORT_DIR_EGRESS,		/**< Egress mirroring */
+};
+
+/**
  * ppe_mirror_ret
  *      PPE mirror return codes.
  */
@@ -155,5 +164,21 @@ ppe_mirror_ret_t ppe_mirror_phy_port_mapping_delete(struct ppe_mirror_port_mappi
  * Return error code for enabling capture core.
  */
 ppe_mirror_ret_t ppe_mirror_enable_capture_core(uint8_t core_id);
+
+
+/**
+ * ppe_mirror_port_mirror_set()
+ *	Configure L2 VP mirroring on a VP/physical port.
+ *
+ * @param[in] port_name		Null-terminated net device name.
+ * @param[in] dir		Mirror direction (INGRESS / EGRESS).
+ * @param[in] mirror_en		true to enable port mirroring, false to disable.
+ *
+ * @return
+ * PPE_MIRROR_RET_SUCCESS or a PPE_MIRROR_RET_* error code.
+ */
+ppe_mirror_ret_t ppe_mirror_port_mirror_set(const char *port_name,
+					      enum ppe_mirror_port_dir dir,
+					      bool mirror_en);
 
 #endif /* _PPE_MIRROR_H_ */

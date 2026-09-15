@@ -2401,6 +2401,73 @@ bool ppe_drv_port_l2_vp_sc_reset(struct ppe_drv_port *pp)
 }
 
 /*
+ * ppe_drv_port_l2_vp_mirror_sc_config()
+ * 	L2_VP service code config
+ */
+bool ppe_drv_port_l2_vp_mirror_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint32_t phy_port)
+{
+	fal_enqueue_cfg_t enq_cfg = {0};
+	sw_error_t err;
+
+	enq_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_SERVCODE;
+	enq_cfg.rule_entry.dst_port = pp->port;
+
+	err = fal_qm_enqueue_config_get(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to reset service code config for port: %d", pp->port);
+		return false;
+	}
+
+	enq_cfg.index_entry.enqueue_servcode.service_code = sc;
+	enq_cfg.index_entry.enqueue_en = A_TRUE;
+	enq_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_SERVCODE;
+	enq_cfg.rule_entry.dst_port = pp->port;
+	enq_cfg.index_entry.enqueue_servcode.queue_select_en = A_FALSE;
+
+	err = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to set service code config for port: %d", pp->port);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_port_l2_vp_mirror_sc_config);
+
+/*
+ * ppe_drv_port_l2_vp_mirror_sc_reset()
+ *	Reset service code in L2_VP.
+ */
+bool ppe_drv_port_l2_vp_mirror_sc_reset(struct ppe_drv_port *pp)
+{
+	fal_enqueue_cfg_t enq_cfg = {0};
+	sw_error_t err;
+
+	enq_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_SERVCODE;
+	enq_cfg.rule_entry.dst_port = pp->port;
+
+	err = fal_qm_enqueue_config_get(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to reset service code config for port: %d", pp->port);
+		return false;
+	}
+
+	enq_cfg.index_entry.enqueue_servcode.service_code = 0;
+	enq_cfg.index_entry.enqueue_en = A_FALSE;
+	enq_cfg.rule_entry.dst_port = pp->port;
+	enq_cfg.index_entry.enqueue_servcode.queue_select_en = A_TRUE;
+
+	err = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to set service code config for port: %d", pp->port);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(ppe_drv_port_l2_vp_mirror_sc_reset);
+
+/*
  * ppe_drv_port_is_gem()
  *	Check if a port is a GEM port.
  */
