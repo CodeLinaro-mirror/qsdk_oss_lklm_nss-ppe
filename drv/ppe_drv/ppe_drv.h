@@ -438,6 +438,23 @@ struct ppe_drv_tun_gbl {
 	struct ppe_drv_tun_gre_acl *gre;				/* GREtap ACL rules for checksum handling */
 };
 
+/*
+ * ppe_drv_qos_ddrq_rcu_ops
+ *	RCU-protected DDRQ callback operations registered by NSS-DP.
+ */
+struct ppe_drv_qos_ddrq_rcu_ops {
+	ppe_drv_qos_ddrq_callback_t __rcu ddrq_disable;
+	ppe_drv_qos_ddrq_callback_t __rcu ddrq_enable;
+	ppe_drv_qos_ddrq_limit_set_callback_t __rcu ddrq_limit_set;
+	ppe_drv_qos_ddrq_enq_deq_ctrl_callback_t __rcu ddrq_enqueue_ctrl;
+	ppe_drv_qos_ddrq_enq_deq_ctrl_callback_t __rcu ddrq_dequeue_drop_ctrl;
+	ppe_drv_qos_ddrq_stats_get_callback_t __rcu ddrq_stats_get;
+	ppe_drv_qos_ddrq_callback_t __rcu ddrq_stats_reset;
+	ppe_drv_qos_ddrq_callback_t __rcu ddrq_cfg_reset;
+	ppe_drv_qos_ddrq_accu_stats_callback_t __rcu ddrq_accu_stats_start;
+	ppe_drv_qos_ddrq_accu_stats_callback_t __rcu ddrq_accu_stats_stop;
+};
+
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
 /*
  * ppe_drv_loopback_port_feature_type
@@ -639,6 +656,7 @@ struct ppe_drv {
 	void *ipv6_stats_sync_data;				/* Argument for above callback: ipv6_stats_sync_cb */
 	ppe_drv_qos_int_pri_callback_t int_pri_get_cb;		/* Callback to call to get INT-PRI value */
 	ppe_drv_qos_queue_info_callback_t queue_info_get_cb;		/* Callback to call to get PPE PORT-ID */
+	struct ppe_drv_qos_ddrq_rcu_ops ddrq_ops;		/* RCU-protected NSS-DP DDRQ callback operations */
 	struct list_head nh_active;			/* List of active nexthops */
 	struct list_head nh_free;			/* List of free nexthops */
 	struct kref ref;				/* Reference count */

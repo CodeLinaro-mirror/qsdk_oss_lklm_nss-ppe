@@ -2,18 +2,6 @@
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * SPDX-License-Identifier: ISC
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include "ppe_qdisc.h"
@@ -36,6 +24,22 @@
  * Error codes
  */
 #define PPE_QDISC_PARENT_NOT_EXISTING -1
+
+/*
+ * ppe_qdisc_port_mtu_get()
+ *	Returns the MTU configured on the given PPE port's net device.
+ */
+static uint32_t ppe_qdisc_port_mtu_get(uint8_t port_id)
+{
+	struct net_device *dev;
+
+	dev = ppe_drv_port_num_to_dev(port_id);
+	if (!dev) {
+		return 0;
+	}
+
+	return dev->mtu;
+}
 
 /*
  * ppe_qdisc_def_node_int_pri_get()
@@ -403,6 +407,7 @@ int ppe_qdisc_configure(struct ppe_qdisc *pq, struct ppe_qdisc *prev_pq)
 	 * Program PPE queue parameters
 	 */
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_UCAST_QUEUE_VALID)) {
+		rp->port_mtu = ppe_qdisc_port_mtu_get((uint8_t)pq->port_id);
 		if (ppe_drv_qos_queue_limit_set(&pq->res) != PPE_DRV_RET_SUCCESS) {
 			ppe_qdisc_warning("Qdisc:%px queue configuration failed", pq->qdisc);
 			goto fail;
@@ -443,6 +448,7 @@ fail:
 	}
 
 	memcpy(rp, prev_rp, sizeof(struct ppe_drv_qos_res));
+	rp->port_mtu = ppe_qdisc_port_mtu_get((uint8_t)pq->port_id);
 	ppe_drv_qos_queue_limit_set(&pq->res);
 	ppe_qdisc_res_mcast_queue_set(pq);
 

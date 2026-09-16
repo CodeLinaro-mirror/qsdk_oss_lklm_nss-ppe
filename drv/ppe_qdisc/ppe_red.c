@@ -1,18 +1,7 @@
 /*
  * Copyright (c) 2014-2017, 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include "ppe_qdisc.h"
@@ -137,6 +126,7 @@ static int ppe_red_change(struct Qdisc *sch, struct nlattr *opt,
 
 	res->q.red_en = true;
 	res->q.color_en = false;
+	res->q.q_ceiling_unit = PPE_DRV_QOS_QUEUE_CEILING_UNIT_BYTES;
 
 	/*
 	 * PPE operates in terms of memory blocks, and each block
@@ -263,5 +253,3 @@ struct Qdisc_ops ppe_red_qdisc_ops __read_mostly = {
 	.dump		=	ppe_red_dump,
 	.owner		=	THIS_MODULE,
 };
-
-

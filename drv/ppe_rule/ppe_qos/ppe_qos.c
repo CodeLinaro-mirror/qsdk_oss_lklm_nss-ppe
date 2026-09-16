@@ -910,6 +910,8 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	struct ppe_drv_qos_res res = {0};
 	struct ppe_qos_interface_queue *queue = NULL;
 	struct list_head *queue_list = NULL;
+	struct net_device *dev = NULL;
+	uint32_t port_id;
 	ppe_qos_queue_type_t queue_type;
 	uint32_t queue_base;
 	bool found = false;
@@ -1044,6 +1046,7 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	res.q.qlimit = info->ceiling / PPE_DRV_QOS_MEM_BLOCK_SIZE;
 	res.q.color_en = info->color_en;
 	res.q.red_en = info->wred_en;
+	res.q.q_ceiling_unit = PPE_DRV_QOS_QUEUE_CEILING_UNIT_BYTES;
 
 	/*
 	 * PPE operates in terms of memory blocks, and each block
@@ -1069,6 +1072,18 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	res.q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_GREEN] = info->green_resume_off / PPE_DRV_QOS_MEM_BLOCK_SIZE;
 	res.q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_YELLOW] = info->yellow_resume_off / PPE_DRV_QOS_MEM_BLOCK_SIZE;
 	res.q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_RED] = info->red_resume_off / PPE_DRV_QOS_MEM_BLOCK_SIZE;
+
+	port_id = (uint32_t)id;
+#ifdef NSS_PPE_PON_SUPPORT
+	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_TCONT) {
+		port_id = g_qos->pon_port;
+	}
+#endif
+
+	dev = ppe_drv_port_num_to_dev((uint8_t)port_id);
+	if (dev) {
+		res.port_mtu = dev->mtu;
+	}
 
 	if (ppe_drv_qos_queue_limit_set(&res) != PPE_DRV_RET_SUCCESS) {
 		ppe_qos_stats_inc(failed_stats);
