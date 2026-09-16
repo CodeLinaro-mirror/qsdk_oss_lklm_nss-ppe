@@ -5,6 +5,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/rcupdate.h>
 
 #include <fal/fal_pon.h>
 #include <fal/fal_qm.h>
@@ -93,6 +94,451 @@ void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb)
 	spin_unlock_bh(&p->lock);
 }
 EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_register);
+/*
+ * ppe_drv_qos_ddrq_callback_unregister()
+ *	API to unregister DDRQ callbacks.
+ */
+void ppe_drv_qos_ddrq_callback_unregister(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_disable, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_enable, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_limit_set, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_enqueue_ctrl, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_dequeue_drop_ctrl, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_stats_get, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_stats_reset, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_cfg_reset, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_accu_stats_start, NULL);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_accu_stats_stop, NULL);
+	spin_unlock_bh(&p->lock);
+
+	/*
+	 * Ensure all readers that may have observed previous callbacks
+	 * have exited before callback provider teardown continues.
+	 */
+	synchronize_rcu();
+}
+EXPORT_SYMBOL(ppe_drv_qos_ddrq_callback_unregister);
+
+/*
+ * ppe_drv_qos_ddrq_callback_register()
+ *	API to register DDRQ callbacks.
+ */
+void ppe_drv_qos_ddrq_callback_register(const struct ppe_drv_qos_ddrq_ops *ops)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	if (!ops) {
+		ppe_drv_qos_ddrq_callback_unregister();
+		return;
+	}
+
+	spin_lock_bh(&p->lock);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_disable, ops->ddrq_disable);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_enable, ops->ddrq_enable);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_limit_set, ops->ddrq_limit_set);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_enqueue_ctrl, ops->ddrq_enqueue_ctrl);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_dequeue_drop_ctrl, ops->ddrq_dequeue_drop_ctrl);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_stats_get, ops->ddrq_stats_get);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_stats_reset, ops->ddrq_stats_reset);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_cfg_reset, ops->ddrq_cfg_reset);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_accu_stats_start, ops->ddrq_accu_stats_start);
+	rcu_assign_pointer(p->ddrq_ops.ddrq_accu_stats_stop, ops->ddrq_accu_stats_stop);
+	spin_unlock_bh(&p->lock);
+}
+EXPORT_SYMBOL(ppe_drv_qos_ddrq_callback_register);
+
+/*
+ * ppe_drv_qos_ddrq_accu_stats_cb_invoke()
+ *	Invoke registered DDRQ accumulate-stats callback.
+ */
+static inline bool ppe_drv_qos_ddrq_accu_stats_cb_invoke(struct ppe_drv *p,
+							  ppe_drv_qos_ddrq_accu_stats_callback_t cb,
+							  const char *op)
+{
+	const char *op_name = op ? op : "unknown";
+
+	ppe_drv_trace("enter p:%px cb:%px op:%s\n", p, cb, op_name);
+	if (!cb) {
+		return true;
+	}
+
+	if (cb()) {
+		ppe_drv_warn("%px:ddrq %s callback failed", p, op_name);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * ppe_drv_qos_ddrq_accu_stats_start()
+ *	API to invoke DDRQ accumulate-stats start callback.
+ */
+void ppe_drv_qos_ddrq_accu_stats_start(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	bool ddrq_cb_ok;
+
+	rcu_read_lock();
+	ddrq_cb_ok = ppe_drv_qos_ddrq_accu_stats_cb_invoke(p,
+							    rcu_dereference(p->ddrq_ops.ddrq_accu_stats_start),
+							    "accu stats start");
+	rcu_read_unlock();
+	if (!ddrq_cb_ok) {
+		ppe_drv_warn("%px:ddrq accu stats start callback failed", p);
+	}
+}
+EXPORT_SYMBOL(ppe_drv_qos_ddrq_accu_stats_start);
+
+/*
+ * ppe_drv_qos_ddrq_accu_stats_stop()
+ *	API to invoke DDRQ accumulate-stats stop callback.
+ */
+void ppe_drv_qos_ddrq_accu_stats_stop(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	bool ddrq_cb_ok;
+
+	rcu_read_lock();
+	ddrq_cb_ok = ppe_drv_qos_ddrq_accu_stats_cb_invoke(p,
+							    rcu_dereference(p->ddrq_ops.ddrq_accu_stats_stop),
+							    "accu stats stop");
+	rcu_read_unlock();
+	if (!ddrq_cb_ok) {
+		ppe_drv_warn("%px:ddrq accu stats stop callback failed", p);
+	}
+}
+EXPORT_SYMBOL(ppe_drv_qos_ddrq_accu_stats_stop);
+
+/*
+ * ppe_drv_qos_ddrq_cb_invoke()
+ *	Invoke registered DDRQ callback for DDRQ queue IDs.
+ */
+static inline bool ppe_drv_qos_ddrq_cb_invoke(struct ppe_drv *p,
+					      ppe_drv_qos_ddrq_callback_t cb,
+					      uint32_t qid, const char *op)
+{
+	const char *op_name = op ? op : "unknown";
+
+	ppe_drv_trace("enter p:%px cb:%px qid:%u op:%s\n",
+				 p, cb, qid, op_name);
+	if ((qid >= PPE_DRV_DDRQ_MAX_CNT) || !cb) {
+		return true;
+	}
+
+	if (cb(qid)) {
+		ppe_drv_warn("%px:ddrq %s callback failed for qid:%u", p, op, qid);
+		return false;
+	}
+	return true;
+}
+
+/*
+ * ppe_drv_qos_ddrq_port_cb_invoke()
+ *	Invoke registered DDRQ callback for port IDs.
+ */
+static inline bool ppe_drv_qos_ddrq_port_cb_invoke(struct ppe_drv *p,
+						   ppe_drv_qos_ddrq_callback_t cb,
+						   uint32_t port_id, const char *op)
+{
+	const char *op_name = op ? op : "unknown";
+
+	ppe_drv_trace("enter p:%px cb:%px port_id:%u op:%s\n",
+				 p, cb, port_id, op_name);
+	if (!cb) {
+		return true;
+	}
+
+	if (cb(port_id)) {
+		ppe_drv_warn("%px:ddrq %s callback failed for port:%u", p, op_name, port_id);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * ppe_drv_qos_ddrq_limit_set_cb_invoke()
+ *	Invoke registered DDRQ limit-set callback with queue configuration.
+ */
+static inline bool ppe_drv_qos_ddrq_limit_set_cb_invoke(struct ppe_drv *p,
+								ppe_drv_qos_ddrq_limit_set_callback_t cb,
+								struct ppe_drv_qos_ddrq_limit_set_cfg *cfg)
+{
+	struct ppe_drv_qos_queue *q_cfg;
+
+	if (!cb || !cfg || !cfg->qos_queue) {
+		return true;
+	}
+
+	q_cfg = cfg->qos_queue;
+	if (q_cfg->ucast_qid >= PPE_DRV_DDRQ_MAX_CNT) {
+		return true;
+	}
+
+	if (cb(cfg)) {
+		ppe_drv_warn("%px:ddrq limit set callback failed for ucast_qid:%u mcast_qid:%u qdisc_ceiling_unit:%u port_mtu:%u",
+			     p, q_cfg->ucast_qid, q_cfg->mcast_qid, cfg->qdisc_ceiling_unit, cfg->port_mtu);
+		return false;
+	}
+	return true;
+}
+
+/*
+ * ppe_drv_qos_ddrq_stats_get_cb_invoke()
+ *	Invoke registered DDRQ stats-get callback.
+ */
+static inline void ppe_drv_qos_ddrq_stats_get_cb_invoke(struct ppe_drv *p,
+							ppe_drv_qos_ddrq_stats_get_callback_t cb,
+							uint32_t qid, struct ppe_drv_qos_q_stat *stats)
+{
+	int ret;
+
+	if (!cb || !stats || (qid >= PPE_DRV_DDRQ_MAX_CNT)) {
+		return;
+	}
+
+	ret = cb(qid, stats);
+	if (ret) {
+		ppe_drv_trace("%px:ddrq stats get callback failed for qid:%u", p, qid);
+	}
+
+}
+
+static inline bool ppe_drv_qos_ddrq_enq_deq_ctrl_cb_invoke(struct ppe_drv *p,
+							   ppe_drv_qos_ddrq_enq_deq_ctrl_callback_t cb,
+							   uint32_t qid, bool enable, const char *op)
+{
+	const char *op_name = op ? op : "unknown";
+
+	ppe_drv_trace("enter p:%px cb:%px qid:%u enable:%u op:%s\n",
+				 p, cb, qid, enable, op_name);
+	if (!cb || (qid >= PPE_DRV_DDRQ_MAX_CNT)) {
+		return true;
+	}
+
+	if (cb(qid, enable)) {
+		ppe_drv_warn("%px:ddrq %s configuration  callback failed for qid:%u enable: %d",
+			     p, op, qid, enable);
+		return false;
+	}
+	return true;
+}
+
+/*
+ * ppe_drv_qos_queue_cfg_fill()
+ *	Convert unicast queue configuration to dynamic threshold configuration.
+ */
+static void ppe_drv_qos_queue_cfg_fill(struct ppe_drv_qos_queue *q_cfg,
+				       fal_ac_dynamic_threshold_t *dynamic_cfg)
+{
+	dynamic_cfg->color_enable = q_cfg->color_en;
+	dynamic_cfg->wred_enable = q_cfg->red_en;
+	dynamic_cfg->ceiling = q_cfg->qlimit;
+	dynamic_cfg->green_min_off = q_cfg->min_th[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
+	dynamic_cfg->yel_min_off = q_cfg->min_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+	dynamic_cfg->yel_max_off = q_cfg->max_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+	dynamic_cfg->red_min_off = q_cfg->min_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+	dynamic_cfg->red_max_off = q_cfg->max_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+
+	/*
+	 * Set resume offsets for all three colors.
+	 * Resume offsets control when the queue resumes accepting packets after dropping,
+	 * which helps prevent buffer oscillation.
+	 */
+	dynamic_cfg->green_resume_off = q_cfg->resume_off[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
+	dynamic_cfg->yel_resume_off = q_cfg->resume_off[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+	dynamic_cfg->red_resume_off = q_cfg->resume_off[PPE_DRV_QOS_QUEUE_COLOR_RED];
+}
+
+/*
+ * ppe_drv_qos_queue_cfg_extract()
+ *	Convert dynamic threshold configuration to unicast queue configuration.
+ */
+static void ppe_drv_qos_queue_cfg_extract(uint32_t qid,
+					  fal_ac_dynamic_threshold_t *dynamic_cfg,
+					  struct ppe_drv_qos_queue *q_cfg)
+{
+	q_cfg->ucast_qid = qid;
+	q_cfg->qlimit = dynamic_cfg->ceiling;
+	q_cfg->color_en = dynamic_cfg->color_enable;
+	q_cfg->red_en = dynamic_cfg->wred_enable;
+	q_cfg->min_th[PPE_DRV_QOS_QUEUE_COLOR_GREEN] = dynamic_cfg->green_min_off;
+	q_cfg->min_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW] = dynamic_cfg->yel_min_off;
+	q_cfg->max_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW] = dynamic_cfg->yel_max_off;
+	q_cfg->min_th[PPE_DRV_QOS_QUEUE_COLOR_RED] = dynamic_cfg->red_min_off;
+	q_cfg->max_th[PPE_DRV_QOS_QUEUE_COLOR_RED] = dynamic_cfg->red_max_off;
+	q_cfg->resume_off[PPE_DRV_QOS_QUEUE_COLOR_GREEN] = dynamic_cfg->green_resume_off;
+	q_cfg->resume_off[PPE_DRV_QOS_QUEUE_COLOR_YELLOW] = dynamic_cfg->yel_resume_off;
+	q_cfg->resume_off[PPE_DRV_QOS_QUEUE_COLOR_RED] = dynamic_cfg->red_resume_off;
+}
+
+/*
+ * ppe_drv_qos_queue_cfg_get_nolock()
+ *	Gets queue dynamic threshold configuration in PPE.
+ *
+ * NOTE: Caller must hold p->lock.
+ */
+static ppe_drv_ret_t ppe_drv_qos_queue_cfg_get_nolock(struct ppe_drv *p,
+						      uint32_t qid,
+						      struct ppe_drv_qos_queue *q_cfg)
+{
+	fal_ac_dynamic_threshold_t dynamic_cfg = {0};
+
+	if (fal_ac_dynamic_threshold_get(PPE_DRV_SWITCH_ID, qid, &dynamic_cfg) != SW_OK) {
+		ppe_drv_warn("%px:queue dynamic threshold get failed for ucast_qid:%u", p, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+
+	ppe_drv_qos_queue_cfg_extract(qid, &dynamic_cfg, q_cfg);
+	ppe_drv_trace("%px:queue ac dynamic threshold get for ucast_qid:%u, color_en:%u, wred_enable:%u, ceiling:%u, green_min_off:%u, yel_min_off:%u, yel_max_off:%u, red_min_off:%u, red_max_off:%u, green_resume_off:%u, yel_resume_off:%u, red_resume_off:%u",
+			p, qid, dynamic_cfg.color_enable, dynamic_cfg.wred_enable, dynamic_cfg.ceiling,
+			dynamic_cfg.green_min_off, dynamic_cfg.yel_min_off, dynamic_cfg.yel_max_off,
+			dynamic_cfg.red_min_off, dynamic_cfg.red_max_off,
+			dynamic_cfg.green_resume_off, dynamic_cfg.yel_resume_off, dynamic_cfg.red_resume_off);
+
+	return PPE_DRV_RET_SUCCESS;
+}
+
+/*
+ * ppe_drv_qos_queue_cfg_set_nolock()
+ *	Sets queue dynamic threshold configuration in PPE.
+ *
+ * NOTE: Caller must hold p->lock.
+ */
+static ppe_drv_ret_t ppe_drv_qos_queue_cfg_set_nolock(struct ppe_drv *p,
+						      uint32_t qid,
+						      struct ppe_drv_qos_queue *q_cfg)
+{
+	fal_ac_dynamic_threshold_t dynamic_cfg = {0};
+
+	if (fal_ac_dynamic_threshold_get(PPE_DRV_SWITCH_ID, qid, &dynamic_cfg) != SW_OK) {
+		ppe_drv_warn("%px:queue dynamic threshold get failed for ucast_qid:%u", p, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+
+	ppe_drv_qos_queue_cfg_fill(q_cfg, &dynamic_cfg);
+
+	ppe_drv_trace("%px:queue ac dynamic threshold set for ucast_qid:%u, color_en:%u, wred_enable:%u, ceiling:%u, green_min_off:%u, yel_min_off:%u, yel_max_off:%u, red_min_off:%u, red_max_off:%u, green_resume_off:%u, yel_resume_off:%u, red_resume_off:%u",
+			p, qid, dynamic_cfg.color_enable, dynamic_cfg.wred_enable, dynamic_cfg.ceiling,
+			dynamic_cfg.green_min_off, dynamic_cfg.yel_min_off, dynamic_cfg.yel_max_off,
+			dynamic_cfg.red_min_off, dynamic_cfg.red_max_off,
+			dynamic_cfg.green_resume_off, dynamic_cfg.yel_resume_off, dynamic_cfg.red_resume_off);
+	if (fal_ac_dynamic_threshold_set(PPE_DRV_SWITCH_ID, qid, &dynamic_cfg) != SW_OK) {
+		ppe_drv_warn("%px:queue dynamic threshold set failed for ucast_qid:%u", p, qid);
+		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+}
+
+/*
+ * ppe_drv_qos_queue_cfg_get()
+ *	Gets queue dynamic threshold configuration in PPE.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_cfg_get(uint32_t qid, struct ppe_drv_qos_queue *q_cfg)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	ppe_drv_ret_t ret;
+
+	if (!q_cfg) {
+		ppe_drv_warn("%px:invalid queue configuration for ucast_qid:%u", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	spin_lock_bh(&p->lock);
+	ret = ppe_drv_qos_queue_cfg_get_nolock(p, qid, q_cfg);
+	spin_unlock_bh(&p->lock);
+
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("%px:queue configuration get failed for qid:%u", p, qid);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_cfg_get);
+
+/*
+ * ppe_drv_qos_queue_cfg_set()
+ *	Sets queue dynamic threshold configuration in PPE.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_cfg_set(uint32_t qid, struct ppe_drv_qos_queue *q_cfg)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	ppe_drv_ret_t ret;
+
+	if (!q_cfg) {
+		ppe_drv_warn("%px:invalid queue configuration for ucast_qid:%u", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	spin_lock_bh(&p->lock);
+	ret = ppe_drv_qos_queue_cfg_set_nolock(p, qid, q_cfg);
+	spin_unlock_bh(&p->lock);
+
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("%px:queue configuration set failed for qid:%u", p, qid);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_qos_queue_cfg_set);
+
+static int ppe_drv_qos_get_ddrq_state(uint32_t qid)
+{
+	fal_ucast_queue_ddrq_en_t ddrq_en_cfg = {0};
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	spin_lock_bh(&p->lock);
+	/*
+	 * Check whether the mapped DDRQ is enabled or not
+	 */
+	if (fal_ucast_queue_ddrq_en_get(PPE_DRV_SWITCH_ID, qid, &ddrq_en_cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px: Error in getting the DDRQ state of qid:%d\n", p, qid);
+		return -EINVAL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	return ((ddrq_en_cfg.ddrq_en) ? 1 : 0);
+}
+
+/*
+ * ppe_drv_qos_ddrq_state_get()
+ *	Fetches DDRQ enable state for a queue.
+ *	For non-DDRQ queue ids, return success with disabled DDRQ state.
+ */
+static bool ppe_drv_qos_ddrq_state_get(uint32_t qid, bool *is_ddrq_en)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int status;
+
+	if (!is_ddrq_en) {
+		ppe_drv_trace("%px: Invalid parameter received in DDRQ:%d state get configuration\n", p, qid);
+		return false;
+	}
+
+	*is_ddrq_en = false;
+	if (qid >= PPE_DRV_DDRQ_MAX_CNT) {
+		ppe_drv_trace("%px: DDRQ:%d is more than maximum DDRQ count\n", p, qid);
+		return true;
+	}
+
+	status = ppe_drv_qos_get_ddrq_state(qid);
+	if (status < 0) {
+		ppe_drv_warn("%px: Error in getting the DDRQ state of qid:%d\n", p, qid);
+		return false;
+	}
+
+	*is_ddrq_en = !!status;
+	ppe_drv_trace("%px: DDRQ:%d current configured state is %d\n", p, qid, *is_ddrq_en);
+	return true;
+}
+
 
 /*
  * ppe_drv_qos_ac_ctrl_set()
@@ -209,7 +655,13 @@ EXPORT_SYMBOL(ppe_drv_qos_int_pri_get);
 void ppe_drv_qos_queue_stats_get(uint32_t qid, bool is_red, struct ppe_drv_qos_q_stat *stats)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
-	fal_queue_stats_t info;
+	fal_queue_stats_t info = {0};
+	bool is_ddrq_en;
+
+	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		return;
+	}
 
 	spin_lock_bh(&p->lock);
 	fal_queue_counter_get(PPE_DRV_SWITCH_ID, qid, &info);
@@ -226,6 +678,13 @@ void ppe_drv_qos_queue_stats_get(uint32_t qid, bool is_red, struct ppe_drv_qos_q
 		stats->drop_bytes += info.drop_bytes[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
 	}
 
+	if (is_ddrq_en) {
+		rcu_read_lock();
+		ppe_drv_qos_ddrq_stats_get_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_stats_get), qid,
+						     stats);
+		rcu_read_unlock();
+	}
+
 	ppe_drv_info("%px:get queue stats successful for qid:%u", p, qid);
 }
 EXPORT_SYMBOL(ppe_drv_qos_queue_stats_get);
@@ -237,10 +696,27 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_stats_get);
 void ppe_drv_qos_queue_stats_reset(uint32_t qid)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	bool is_ddrq_en;
+	bool ddrq_cb_ok;
+
+	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		return;
+	}
 
 	spin_lock_bh(&p->lock);
 	fal_queue_counter_cleanup(PPE_DRV_SWITCH_ID, qid);
 	spin_unlock_bh(&p->lock);
+
+	if (is_ddrq_en) {
+		rcu_read_lock();
+		ddrq_cb_ok = ppe_drv_qos_ddrq_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_stats_reset),
+							qid, "stats reset");
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			ppe_drv_warn("%px:ddrq stats reset callback failed for qid:%u", p, qid);
+		}
+	}
 
 	ppe_drv_info("%px:reset queue stats successful for qid:%u", p, qid);
 }
@@ -253,6 +729,23 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_stats_reset);
 ppe_drv_ret_t ppe_drv_qos_queue_enqueue_ctrl(uint32_t qid, bool enable)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	bool is_ddrq_en;
+	bool ddrq_cb_ok;
+
+	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (is_ddrq_en) {
+		rcu_read_lock();
+		ddrq_cb_ok = ppe_drv_qos_ddrq_enq_deq_ctrl_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_enqueue_ctrl),
+								      qid, enable, "enqueue control");
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+		}
+	}
 
 	spin_lock_bh(&p->lock);
 	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, enable ? A_TRUE : A_FALSE) != SW_OK) {
@@ -295,6 +788,23 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_dequeue_ctrl);
 ppe_drv_ret_t ppe_drv_qos_queue_dequeue_drop_ctrl(uint32_t qid, bool enable)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	bool is_ddrq_en;
+	bool ddrq_cb_ok;
+
+	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (is_ddrq_en) {
+		rcu_read_lock();
+		ddrq_cb_ok = ppe_drv_qos_ddrq_enq_deq_ctrl_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_dequeue_drop_ctrl),
+								      qid, enable, "dequeue drop control");
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+		}
+	}
 
 	spin_lock_bh(&p->lock);
 
@@ -317,33 +827,118 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_dequeue_drop_ctrl);
 ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	bool is_ddrq_en;
+	bool ddrq_cb_ok;
+	bool ddrq_unmapped = false;
+	bool enqueue_disabled = false;
+	bool dequeue_disabled = false;
+	bool ddrq_disable_done = false;
+	fal_ucast_queue_ddrq_en_t ddrq_en = {0};
+
+	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
 
 	/*
 	 * Disable queue enqueue, dequeue and flush the queue.
 	 */
 	spin_lock_bh(&p->lock);
-	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_FALSE) != SW_OK) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px:queue enqueue failed for port:%u qid:%u", p, port_id, qid);
-		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+
+	/*
+	 * It is recommended to disable the DDRQ_EN flag for the SRAM
+	 * queue, before calling that queue's flush operation. Otherwise we were
+	 * always observing FLUSH_BUSY=1 in the flush configuration register,
+	 * leading to the failure in the respective queue's flush operation
+	 */
+	if (is_ddrq_en) {
+		ddrq_en.ddrq_en = A_FALSE;
+		if (fal_ucast_queue_ddrq_en_set(PPE_DRV_SWITCH_ID, qid, &ddrq_en) != SW_OK) {
+			ppe_drv_warn("%px:ddrq_en unmap failed for qid:%u", p, qid);
+			goto queue_disable_fail_locked;
+		}
+		ddrq_unmapped = true;
 	}
 
-	if (fal_scheduler_dequeue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_FALSE) != SW_OK) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px:queue dequeue failed for port:%u qid:%u", p, port_id, qid);
-		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_FALSE) != SW_OK) {
+		ppe_drv_warn("%px:queue enqueue failed for port:%u qid:%u", p, port_id, qid);
+		goto queue_disable_fail_locked;
 	}
+	enqueue_disabled = true;
+
+	if (fal_scheduler_dequeue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_FALSE) != SW_OK) {
+		ppe_drv_warn("%px:queue dequeue failed for port:%u qid:%u", p, port_id, qid);
+		goto queue_disable_fail_locked;
+	}
+	dequeue_disabled = true;
+	spin_unlock_bh(&p->lock);
+
+	if (is_ddrq_en) {
+		rcu_read_lock();
+		ddrq_cb_ok = ppe_drv_qos_ddrq_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_disable), qid, "disable");
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			ppe_drv_warn("%px:ddrq disable callback failed for qid:%u", p, qid);
+			goto queue_disable_fail;
+		}
+		ddrq_disable_done = true;
+	}
+
+	spin_lock_bh(&p->lock);
 
 	if (fal_queue_flush(PPE_DRV_SWITCH_ID, port_id, qid) != SW_OK) {
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("%px:queue flush failed for port:%u qid:%u", p, port_id, qid);
-		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+		goto queue_disable_fail;
 	}
 
+	if (is_ddrq_en) {
+		ddrq_en.ddrq_en = A_TRUE;
+		if (fal_ucast_queue_ddrq_en_set(PPE_DRV_SWITCH_ID, qid, &ddrq_en) != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px:ddrq_en remap failed for qid:%u", p, qid);
+			goto queue_disable_fail;
+		}
+		ddrq_unmapped = false;
+	}
 	spin_unlock_bh(&p->lock);
 
 	ppe_drv_info("%px:disable level0 queue scheduler successful for port:%u qid:%u", p, port_id, qid);
 	return PPE_DRV_RET_SUCCESS;
+
+queue_disable_fail:
+	if (is_ddrq_en && ddrq_disable_done) {
+		rcu_read_lock();
+		ddrq_cb_ok = ppe_drv_qos_ddrq_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_enable), qid, "enable");
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			ppe_drv_warn("%px:ddrq enable callback rollback failed for qid:%u", p, qid);
+		}
+	}
+
+	spin_lock_bh(&p->lock);
+queue_disable_fail_locked:
+	if (dequeue_disabled) {
+		if (fal_scheduler_dequeue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_TRUE) != SW_OK) {
+			ppe_drv_warn("%px:queue dequeue rollback failed for port:%u qid:%u", p, port_id, qid);
+		}
+	}
+
+	if (enqueue_disabled) {
+		if (fal_qm_enqueue_ctrl_set(PPE_DRV_SWITCH_ID, qid, A_TRUE) != SW_OK) {
+			ppe_drv_warn("%px:queue enqueue rollback failed for port:%u qid:%u", p, port_id, qid);
+		}
+	}
+
+	if (is_ddrq_en && ddrq_unmapped) {
+		ddrq_en.ddrq_en = A_TRUE;
+		if (fal_ucast_queue_ddrq_en_set(PPE_DRV_SWITCH_ID, qid, &ddrq_en) != SW_OK) {
+			ppe_drv_warn("%px:ddrq_en rollback remap failed for qid:%u", p, qid);
+		}
+	}
+
+	spin_unlock_bh(&p->lock);
+	return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 }
 EXPORT_SYMBOL(ppe_drv_qos_queue_disable);
 
@@ -354,6 +949,22 @@ EXPORT_SYMBOL(ppe_drv_qos_queue_disable);
 ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	bool is_ddrq_en;
+	bool ddrq_cb_ok;
+
+	if (!ppe_drv_qos_ddrq_state_get(qid, &is_ddrq_en)) {
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (is_ddrq_en) {
+		rcu_read_lock();
+		ddrq_cb_ok = ppe_drv_qos_ddrq_cb_invoke(p, rcu_dereference(p->ddrq_ops.ddrq_enable), qid, "enable");
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+		}
+	}
 
 	/*
 	 * Enable queue enqueue and dequeue.
@@ -370,6 +981,7 @@ ppe_drv_ret_t ppe_drv_qos_queue_enable(uint32_t qid)
 		ppe_drv_warn("%px:queue dequeue failed for qid:%u", p, qid);
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	}
+
 	spin_unlock_bh(&p->lock);
 
 	ppe_drv_info("%px:enable SSDK level0 queue scheduler successful for qid:%u", p, qid);
@@ -984,9 +1596,19 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
 	fal_ac_obj_t obj = {0};
-	fal_ac_dynamic_threshold_t dynamic_cfg;
 	fal_ac_static_threshold_t static_cfg;
 	fal_ac_ctrl_t ctrl_cfg = {0};
+	struct ppe_drv_qos_queue q_cfg = {0};
+	ppe_drv_ret_t ret;
+	bool ddrq_cb_ok;
+	bool is_ddrq_en;
+	ppe_drv_qos_ddrq_limit_set_callback_t ddrq_limit_set_cb = NULL;
+	struct ppe_drv_qos_ddrq_limit_set_cfg ddrq_limit_set_cfg;
+
+	if (!ppe_drv_qos_ddrq_state_get(res->q.ucast_qid, &is_ddrq_en)) {
+		ppe_drv_warn("%px: Error in fetching the mapped DDRQ:%d state\n", p, res->q.ucast_qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
 
 	/*
 	 * Unicast queue configuration.
@@ -1013,41 +1635,50 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
 	}
 
-	if (fal_ac_dynamic_threshold_get(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &dynamic_cfg) != SW_OK) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px:queue dynamic threshold get failed for ucast_qid:%u", p, res->q.ucast_qid);
-		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+	if (!is_ddrq_en) {
+		ret = ppe_drv_qos_queue_cfg_set_nolock(p, res->q.ucast_qid, &res->q);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px:queue configuration set failed for ucast_qid:%u", p, res->q.ucast_qid);
+			return ret;
+		}
 	} else {
-		dynamic_cfg.color_enable = res->q.color_en;
-		dynamic_cfg.wred_enable = res->q.red_en;
-		dynamic_cfg.ceiling = res->q.qlimit;
-		dynamic_cfg.green_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
-		dynamic_cfg.yel_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
-		dynamic_cfg.yel_max_off = res->q.max_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
-		dynamic_cfg.red_min_off = res->q.min_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
-		dynamic_cfg.red_max_off = res->q.max_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+		spin_unlock_bh(&p->lock);
+
+		ddrq_limit_set_cfg.qos_queue = &res->q;
+		ddrq_limit_set_cfg.qdisc_ceiling_unit = res->q.q_ceiling_unit;
+		ddrq_limit_set_cfg.port_mtu = res->port_mtu;
+
+		rcu_read_lock();
+		ddrq_limit_set_cb = rcu_dereference(p->ddrq_ops.ddrq_limit_set);
+		ddrq_cb_ok = ppe_drv_qos_ddrq_limit_set_cb_invoke(p, ddrq_limit_set_cb,
+								  &ddrq_limit_set_cfg);
+		rcu_read_unlock();
+		if (!ddrq_cb_ok) {
+			ppe_drv_warn("%px:ddrq queue limit callback failed for ucast_qid:%u", p, res->q.ucast_qid);
+			return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+		}
+		spin_lock_bh(&p->lock);
 
 		/*
-		 * Set resume offsets for all three colors.
-		 * Resume offsets control when the queue resumes accepting packets after dropping,
-		 * which helps prevent buffer oscillation.
+		 * For mapped DDRQ queues, fetch current dynamic threshold config
+		 * and only override ceiling with DDRQ-specific value.
 		 */
-		dynamic_cfg.green_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
-		dynamic_cfg.yel_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
-		dynamic_cfg.red_resume_off = res->q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_RED];
-	}
+		ret = ppe_drv_qos_queue_cfg_get_nolock(p, res->q.ucast_qid, &q_cfg);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px:queue configuration get failed for ucast_qid:%u", p, res->q.ucast_qid);
+			return ret;
+		}
 
-	ppe_drv_trace("%px:queue ac dynamic threshold set for ucast_qid:%u, color_en:%u, wred_enable:%u, ceiling:%u, green_min_off:%u, yel_min_off:%u, yel_max_off:%u, red_min_off:%u, red_max_off:%u, green_resume_off:%u, yel_resume_off:%u, red_resume_off:%u",
-		p, res->q.ucast_qid, dynamic_cfg.color_enable, dynamic_cfg.wred_enable, dynamic_cfg.ceiling,
-		dynamic_cfg.green_min_off, dynamic_cfg.yel_min_off, dynamic_cfg.yel_max_off,
-		dynamic_cfg.red_min_off, dynamic_cfg.red_max_off,
-		dynamic_cfg.green_resume_off, dynamic_cfg.yel_resume_off, dynamic_cfg.red_resume_off);
-	if (fal_ac_dynamic_threshold_set(PPE_DRV_SWITCH_ID, res->q.ucast_qid, &dynamic_cfg) != SW_OK) {
-		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px:queue dynamic threshold failed for ucast_qid:%u", p, res->q.ucast_qid);
-		return PPE_DRV_RET_QOS_QUEUE_CFG_FAIL;
+		q_cfg.qlimit = PPE_DRV_QOS_DDRQ_CFG_CEILING_VAL;
+		ret = ppe_drv_qos_queue_cfg_set_nolock(p, res->q.ucast_qid, &q_cfg);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px:ddrq ceiling set failed for ucast_qid:%u", p, res->q.ucast_qid);
+			return ret;
+		}
 	}
-
 config_mcast:
 	/*
 	 * Multicast queue configuration.
@@ -1094,6 +1725,7 @@ config_mcast:
 	}
 
 	spin_unlock_bh(&p->lock);
+
 	ppe_drv_info("%px:queue configuration successful for ucast_qid:%u", p, res->q.ucast_qid);
 	return PPE_DRV_RET_SUCCESS;
 }
@@ -1123,6 +1755,12 @@ EXPORT_SYMBOL(ppe_drv_qos_port_bm_control_enable);
 ppe_drv_ret_t ppe_drv_qos_default_conf_set(uint32_t port_id)
 {
 	struct ppe_drv *p = ppe_drv_gbl;
+	fal_portscheduler_resource_t cfg = {0};
+	fal_ucast_queue_ddrq_en_t ddrq_en_cfg = {0};
+	struct ppe_drv_qos_queue q_cfg = {0};
+	uint32_t qid;
+	ppe_drv_ret_t ret;
+	bool ddrq_cb_ok;
 
 	/*
 	 * Invoke SSDK API to reset the default configuration for a given port.
@@ -1134,7 +1772,54 @@ ppe_drv_ret_t ppe_drv_qos_default_conf_set(uint32_t port_id)
 		return PPE_DRV_RET_QOS_PORT_CFG_FAIL;
 	}
 
+	if (fal_port_scheduler_resource_get(PPE_DRV_SWITCH_ID, port_id, &cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:port QoS resources info failed for port:%u", p, port_id);
+		return PPE_DRV_RET_QOS_PORT_CFG_FAIL;
+	}
+
+	for (qid = cfg.ucastq_start; qid < (cfg.ucastq_start + cfg.ucastq_num); qid++) {
+		if (fal_ucast_queue_ddrq_en_get(PPE_DRV_SWITCH_ID, qid, &ddrq_en_cfg) != SW_OK) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px:failed to fetch DDRQ state for ucast_qid:%u", p, qid);
+			return PPE_DRV_RET_QOS_PORT_CFG_FAIL;
+		}
+
+		if (!ddrq_en_cfg.ddrq_en) {
+			continue;
+		}
+
+		/*
+		 * Fetch current dynamic threshold config and only restore ceiling.
+		 */
+		ret = ppe_drv_qos_queue_cfg_get_nolock(p, qid, &q_cfg);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px:queue configuration get failed for qid:%u", p, qid);
+			return ret;
+		}
+
+		q_cfg.qlimit = PPE_DRV_QOS_DEF_CFG_CEILING_VAL;
+		ret = ppe_drv_qos_queue_cfg_set_nolock(p, qid, &q_cfg);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			spin_unlock_bh(&p->lock);
+			ppe_drv_warn("%px:default ceiling reset failed for qid:%u", p, qid);
+			return ret;
+		}
+	}
+
 	spin_unlock_bh(&p->lock);
+
+	rcu_read_lock();
+	ddrq_cb_ok = ppe_drv_qos_ddrq_port_cb_invoke(p,
+				rcu_dereference(p->ddrq_ops.ddrq_cfg_reset),
+				port_id, "default config reset");
+	rcu_read_unlock();
+	if (!ddrq_cb_ok) {
+		ppe_drv_warn("%px:reset default DDRQ configuration failed for port:%u", p, port_id);
+		return PPE_DRV_RET_QOS_PORT_CFG_FAIL;
+	}
+
 	ppe_drv_qos_port_bm_control_enable(port_id, true);
 	ppe_drv_info("%px:queue configuration successful for port:%u", p, port_id);
 	return PPE_DRV_RET_SUCCESS;

@@ -30,6 +30,9 @@
  */
 #define PPE_DRV_QOS_MEM_BLOCK_SIZE 256
 
+#define PPE_DRV_QOS_DEF_CFG_CEILING_VAL	0x960
+#define PPE_DRV_QOS_DDRQ_CFG_CEILING_VAL	0x50
+
 /**
  * Queue drop state which needs to be configured during the DDRQ bypass
  * configuration and its reset state
@@ -90,6 +93,17 @@ enum ppe_drv_qos_drr_unit {
 typedef enum ppe_drv_qos_drr_unit ppe_drv_qos_drr_unit_t;
 
 /**
+ * ppe_drv_qos_queue_ceiling_unit
+ *	Queue qdisc ceiling unit.
+ */
+enum ppe_drv_qos_queue_ceiling_unit {
+	PPE_DRV_QOS_QUEUE_CEILING_UNIT_BYTES,	/**< Queue ceiling is in bytes. */
+	PPE_DRV_QOS_QUEUE_CEILING_UNIT_PACKETS,	/**< Queue ceiling is in packets. */
+	PPE_DRV_QOS_QUEUE_CEILING_UNIT_MAX	/**< Maximum ceiling unit. */
+};
+typedef enum ppe_drv_qos_queue_ceiling_unit ppe_drv_qos_queue_ceiling_unit_t;
+
+/**
  * ppe_drv_qos_q_stat
  *	Information for QoS queue statistics.
  */
@@ -127,6 +141,8 @@ struct ppe_drv_qos_queue {
 	bool red_en;		/**< Enable RED algorithm. */
 	bool backpressure_en;	/**< Enable backpressure. */
 	bool mcast_valid;	/**<Multicast queue is valid. */
+	ppe_drv_qos_queue_ceiling_unit_t q_ceiling_unit;
+				/**< Queue qdisc ceiling unit. */
 };
 
 /**
@@ -182,6 +198,7 @@ struct ppe_drv_qos_res {
 	struct ppe_drv_qos_scheduler scheduler;	/**< PPE HW scheduler parameters. */
 	uint32_t l0spid;			/**< Level 0 SP Id. */
 	uint32_t l1spid;			/**< Level 1 SP Id. */
+	uint32_t port_mtu;			/**< MTU configured on the associated port netdev. */
 };
 
 /*
@@ -229,6 +246,96 @@ typedef uint8_t (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32
  * @param[out] pq_info          PPE queue information.
  */
 typedef bool (*ppe_drv_qos_queue_info_callback_t)(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info *pq_info);
+
+/**
+ * Callback function type for DDRQ queue operation.
+ *
+ * @param[in] ddrq_id	DDRQ queue identifier.
+ *
+ * @return
+ * 0 on success, else non-zero.
+ */
+typedef int (*ppe_drv_qos_ddrq_callback_t)(uint32_t ddrq_id);
+
+/**
+ * ppe_drv_qos_ddrq_limit_set_cfg
+ *	Context passed to the DDRQ queue limit-set callback.
+ */
+struct ppe_drv_qos_ddrq_limit_set_cfg {
+	struct ppe_drv_qos_queue *qos_queue;		/**< Pointer to PPE queue configuration information. */
+	ppe_drv_qos_queue_ceiling_unit_t qdisc_ceiling_unit;
+						/**< Queue qdisc ceiling unit. */
+	uint32_t port_mtu;				/**< Port netdev MTU used when queue limit is in packets. */
+};
+
+/**
+ * Callback function type for DDRQ queue limit-set operation.
+ *
+ * @param[in] cfg	Pointer to DDRQ queue limit-set callback context.
+ *
+ * @return
+ * 0 on success, else non-zero.
+ */
+typedef int (*ppe_drv_qos_ddrq_limit_set_callback_t)(struct ppe_drv_qos_ddrq_limit_set_cfg *cfg);
+
+typedef int (*ppe_drv_qos_ddrq_enq_deq_ctrl_callback_t)(uint32_t ddrq_id, bool enable);
+typedef int (*ppe_drv_qos_ddrq_stats_get_callback_t)(uint32_t ddrq_id, struct ppe_drv_qos_q_stat *stats);
+typedef int (*ppe_drv_qos_ddrq_accu_stats_callback_t)(void);
+
+/**
+ * ppe_drv_qos_ddrq_ops
+ *	DDRQ callbacks registered by NSS-DP.
+ */
+struct ppe_drv_qos_ddrq_ops {
+	ppe_drv_qos_ddrq_callback_t ddrq_disable;		/**< Disable callback. */
+	ppe_drv_qos_ddrq_callback_t ddrq_enable;		/**< Enable callback. */
+	ppe_drv_qos_ddrq_limit_set_callback_t ddrq_limit_set;	/**< Limit set callback. */
+	ppe_drv_qos_ddrq_enq_deq_ctrl_callback_t ddrq_enqueue_ctrl;		/**< Enqueue control callback. */
+	ppe_drv_qos_ddrq_enq_deq_ctrl_callback_t ddrq_dequeue_drop_ctrl;	/**< Dequeue drop control callback. */
+	ppe_drv_qos_ddrq_stats_get_callback_t ddrq_stats_get;	/**< DDRQ statistics callback. */
+	ppe_drv_qos_ddrq_callback_t ddrq_stats_reset;	/**< DDRQ statistics reset callback. */
+	ppe_drv_qos_ddrq_callback_t ddrq_cfg_reset;	/**< DDRQ default configuration reset callback. */
+	ppe_drv_qos_ddrq_accu_stats_callback_t ddrq_accu_stats_start;	/**< DDRQ accumulate statistics start callback. */
+	ppe_drv_qos_ddrq_accu_stats_callback_t ddrq_accu_stats_stop;	/**< DDRQ accumulate statistics stop callback. */
+};
+
+/**
+ * ppe_drv_qos_ddrq_callback_unregister
+ *	API to unregister DDRQ callbacks.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_ddrq_callback_unregister(void);
+
+/**
+ * ppe_drv_qos_ddrq_callback_register
+ *	API to register DDRQ callbacks.
+ *
+ * @param[in] ops	Pointer to DDRQ callback operations.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_ddrq_callback_register(const struct ppe_drv_qos_ddrq_ops *ops);
+
+/**
+ * ppe_drv_qos_ddrq_accu_stats_start
+ *	API to trigger registered DDRQ accumulate statistics start callback.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_ddrq_accu_stats_start(void);
+
+/**
+ * ppe_drv_qos_ddrq_accu_stats_stop
+ *	API to trigger registered DDRQ accumulate statistics stop callback.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_ddrq_accu_stats_stop(void);
 
 /**
  * ppe_drv_qos_int_pri_callback_unregister
@@ -595,6 +702,36 @@ ppe_drv_ret_t ppe_drv_qos_queue_shaper_set(struct ppe_drv_qos_res *res);
  * Status of the QoS port shaper reset operation.
  */
 ppe_drv_ret_t ppe_drv_qos_mcast_queue_set(struct ppe_drv_qos_res *res, uint32_t port_id);
+
+/**
+ * ppe_drv_qos_queue_cfg_get
+ *	Gets queue dynamic threshold configuration in PPE.
+ *
+ * @datatypes
+ * ppe_drv_qos_queue
+ *
+ * @param[in]  qid    Queue ID.
+ * @param[out] q_cfg  Pointer to the queue configuration.
+ *
+ * @return
+ * Status of the queue configuration get operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_cfg_get(uint32_t qid, struct ppe_drv_qos_queue *q_cfg);
+
+/**
+ * ppe_drv_qos_queue_cfg_set
+ *	Sets queue dynamic threshold configuration in PPE.
+ *
+ * @datatypes
+ * ppe_drv_qos_queue
+ *
+ * @param[in] qid    Queue ID.
+ * @param[in] q_cfg  Pointer to the queue configuration.
+ *
+ * @return
+ * Status of the queue configuration set operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_cfg_set(uint32_t qid, struct ppe_drv_qos_queue *q_cfg);
 
 /**
  * ppe_drv_qos_queue_limit_set
