@@ -467,7 +467,8 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 					| (1 << WRONG_PKT_FMT_L3_IPV6_BYP)
 					| (1 << WRONG_PKT_FMT_L4_BYP));
 #endif
-		sc_cfg.bypass_bitmap[0] |= (1 << FLOW_SERVICE_CODE_BYP);
+		sc_cfg.bypass_bitmap[0] |= (1 << FLOW_SERVICE_CODE_BYP)
+							| (1 << MY_MAC_CHECK_BYP);
 
 		/*
 		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
@@ -487,7 +488,8 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		break;
 
 	case PPE_DRV_SC_UDP_ST_SFU_NEXT:
-		sc_cfg.bypass_bitmap[0] = (1 << FLOW_SERVICE_CODE_BYP);
+		sc_cfg.bypass_bitmap[0] = (1 << FLOW_SERVICE_CODE_BYP)
+							| (1 << MY_MAC_CHECK_BYP);
 		sc_cfg.bypass_bitmap[1] = ((1 << FLOW_POLICER_BYP)
 					| (1 << L2_PKT_EDIT_BYP)
 					| (1 << L3_PKT_EDIT_BYP));
