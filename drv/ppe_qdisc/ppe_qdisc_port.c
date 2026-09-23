@@ -266,7 +266,7 @@ free_map:
 
 	ppe_qdisc_port_res_free(port_id, offset, res_type);
 
-	ppe_qdisc_info("port:%d, type:%d id:%d drr_id:%d priority:%d ref:%d DRR unmapping successful", port_id, type, spid, drr_id, map->priority, map->ref_cnt);
+	ppe_qdisc_info("port:%d, type:%d id:%d drr_id:%d priority:%d DRR unmapping successful", port_id, type, spid, drr_id, res->scheduler.priority);
 	return 0;
 }
 
