@@ -1226,6 +1226,9 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP;
 		} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP)) {
 			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP;
+		} else if (ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW) &&
+				ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLAG_FLOW_DDRQ_VLAN_IF)) {
+			*scp = PPE_DRV_SC_DDRQ_LP_SC_BRIDGE;
 		} else {
 			*scp = PPE_DRV_SC_DDRQ_LP_SC;
 		}
@@ -2839,6 +2842,9 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP;
 		} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_FULL_INLINE_IPSEC_DECAP)) {
 			*scp = PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP;
+		} else if (ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW) &&
+				ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLAG_FLOW_DDRQ_VLAN_IF)) {
+			*scp = PPE_DRV_SC_DDRQ_LP_SC_BRIDGE;
 		} else {
 			*scp = PPE_DRV_SC_DDRQ_LP_SC;
 		}
