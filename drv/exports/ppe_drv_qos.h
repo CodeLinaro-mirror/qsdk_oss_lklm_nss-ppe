@@ -642,7 +642,6 @@ void ppe_drv_qos_port_bm_control_enable(uint32_t port_id, bool set);
  */
 ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port *port);
 
-#ifdef NSS_PPE_PON_SUPPORT
 /**
  * ppe_drv_qos_pon_port_get
  *	Gets the PON port ID.
@@ -655,6 +654,7 @@ ppe_drv_ret_t ppe_drv_qos_port_res_get(uint32_t port_id, struct ppe_drv_qos_port
  */
 uint32_t ppe_drv_qos_pon_port_get(void);
 
+#ifdef NSS_PPE_PON_SUPPORT
 /**
  * Callback function for allocating QoS resources for the PON port.
  * Invoked from ppe_drv_dp_gem_enable() after the PON port is configured in HW.
