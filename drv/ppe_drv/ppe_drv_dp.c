@@ -24,6 +24,7 @@ ppe_drv_ret_t ppe_drv_dp_set_mirror_if(struct ppe_drv_iface *iface,
 	struct ppe_drv *p = ppe_drv_gbl;
 	struct ppe_drv_port *port;
 	sw_error_t err;
+	fal_port_t fal_port;
 
 	spin_lock_bh(&p->lock);
 	port = ppe_drv_iface_port_get(iface);
@@ -33,9 +34,22 @@ ppe_drv_ret_t ppe_drv_dp_set_mirror_if(struct ppe_drv_iface *iface,
 		return PPE_DRV_RET_PORT_NOT_FOUND;
 	}
 
+#if defined(NSS_PPE_IPQ96XX) || defined(NSS_PPE_IPQ52XX)
+	/*
+	 * Force L2_VP for phy and virtual ports.
+	 */
+	fal_port = ((port->type == PPE_DRV_PORT_VIRTUAL) ||
+			(port->type == PPE_DRV_PORT_PHYSICAL)) ?
+		FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port->port) :
+		FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port->port);
+#else
+	fal_port = (port->type == PPE_DRV_PORT_VIRTUAL) ?
+		FAL_PORT_ID(FAL_PORT_TYPE_VPORT, port->port) :
+		FAL_PORT_ID(FAL_PORT_TYPE_PPORT, port->port);
+#endif
 	switch (direction) {
 	case PPE_DRV_DP_MIRR_DI_IN:
-		err = fal_mirr_port_in_set(PPE_DRV_SWITCH_ID, port->port, enable);
+		err = fal_mirr_port_in_set(PPE_DRV_SWITCH_ID, fal_port, enable);
 		if (err != SW_OK) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("Failed to %s ingress mirror for port %u\n",
@@ -46,7 +60,7 @@ ppe_drv_ret_t ppe_drv_dp_set_mirror_if(struct ppe_drv_iface *iface,
 		break;
 
 	case PPE_DRV_DP_MIRR_DI_EG:
-		err = fal_mirr_port_eg_set(PPE_DRV_SWITCH_ID, port->port, enable);
+		err = fal_mirr_port_eg_set(PPE_DRV_SWITCH_ID, fal_port, enable);
 		if (err != SW_OK) {
 			spin_unlock_bh(&p->lock);
 			ppe_drv_warn("Failed to set %s egress mirror for port %u\n",

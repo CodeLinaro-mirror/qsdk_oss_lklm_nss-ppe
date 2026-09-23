@@ -60,6 +60,13 @@ struct ppe_mirror_cmn_stats {
 	 */
 	atomic64_t acl_mapping_invalid_capture_core;	/* ACL mapping invalid capture core received. */
 	atomic64_t acl_mapping_fail_en_capture_core;	/* ACL capture core en failed. */
+
+	/*
+	 * VP L2 mirror set counts.
+	 */
+	atomic64_t port_mirror_set_req;		/* Port mirror set request count */
+	atomic64_t port_mirror_set_success;		/* Port mirror set success count */
+	atomic64_t port_mirror_set_fail;		/* Port mirror set failure count */
 };
 
 /*

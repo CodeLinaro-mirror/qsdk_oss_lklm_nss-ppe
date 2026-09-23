@@ -20,6 +20,10 @@ ccflags-y += -DCONFIG_NSS_PPENL_PORT_MGMT=1
 ccflags-y += -DNSS_PPE_PPENL_PORT_MGMT_SUPPORT
 ccflags-y += -DCONFIG_NSS_PPENL_EDMA_DDRQ=1
 ccflags-y += -DNSS_PPE_EDMA_DDRQ_FEATURE_SUPPORT
+ifeq ($(PPE_MIRROR_ENABLED), y)
+ccflags-y += -DNSS_PPE_PORT_MIRROR_FEATURE_SUPPORT
+ccflags-y += -DCONFIG_NSS_PPENL_PORT_MIRROR=1
+endif
 endif
 
 qca-nss-ppe-netlink-objs := nss_ppenl.o
@@ -35,6 +39,9 @@ qca-nss-ppe-netlink-objs += nss_ppenl_pm.o
 qca-nss-ppe-netlink-objs += nss_ppenl_port_mgmt.o
 qca-nss-ppe-netlink-objs += nss_ppenl_vlan.o
 qca-nss-ppe-netlink-objs += nss_ppenl_edma_ddrq.o
+ifeq ($(PPE_MIRROR_ENABLED), y)
+qca-nss-ppe-netlink-objs += nss_ppenl_port_mirror.o
+endif
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq52xx))

@@ -235,8 +235,12 @@ static bool ppe_drv_dot1p_action_fill(struct ppe_drv_dot1p_ctx *ctx, struct ppe_
 		fal_cfg_rule->enq_vp = action->enq_vp;
 	}
 
-	if (action->action_flags & PPE_DRV_DOT1P_ACTION_FLAG_DST_INFO) {
+	if (action->action_flags & PPE_DRV_DOT1P_ACTION_FLAG_DST_INFO || dot1p_dest_vp_en) {
 		fal_cfg_rule->dest_en = (a_bool_t)true;
+		if (dot1p_dest_vp_en) {
+			action->dst_port = __builtin_ffs(gem_port_bitmap) - 1;
+			fal_cfg_rule->dest_vp = action->dst_port;
+		}
 		if (PPE_DRV_VIRTUAL_PORT_CHK(action->dst_port)) {
 			fal_cfg_rule->dest_vp = action->dst_port;
 		} else {

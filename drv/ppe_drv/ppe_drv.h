@@ -910,6 +910,7 @@ extern bool ppe_drv_lpbk_port_info_ctx_fill(enum ppe_drv_loopback_port_feature_t
 #endif
 #ifdef NSS_PPE_PON_SUPPORT
 extern uint32_t gem_port_bitmap;
+extern int dot1p_dest_vp_en;
 /**
  * ppe_drv_pon_map_enqueue_vp_to_pq
  *	Provides mapping of enqueue_vp to queue
