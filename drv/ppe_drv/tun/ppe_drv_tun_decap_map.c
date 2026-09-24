@@ -130,7 +130,7 @@ void ppe_drv_tun_decap_map_set_rule_id(struct ppe_drv_tun_decap *ptdcm, uint16_t
  *	Configure map decap tunnel entry
  */
 bool ppe_drv_tun_decap_map_configure(struct ppe_drv_tun_decap *ptdcm, uint32_t *ipv6_prefix, uint8_t prefix_len,
-					struct ppe_drv_tun_cmn_ctx_l2 *l2_hdr, bool src_info_update, uint16_t port_num,
+					struct ppe_drv_tun_cmn_ctx_l2 *l2_hdr, bool src_info_update, uint8_t src_info_type, uint16_t port_num,
 					uint16_t rule_id,uint8_t ip_to_me)
 {
 	sw_error_t err;
@@ -143,7 +143,7 @@ bool ppe_drv_tun_decap_map_configure(struct ppe_drv_tun_decap *ptdcm, uint32_t *
 	 */
 	if (src_info_update) {
 		fmde.src_info = port_num;
-		fmde.src_info_type = PPE_DRV_TUN_TL_TBL_SRC_INFO_TYPE_VP;
+		fmde.src_info_type = src_info_type;
 		fmde.src_info_enable = A_TRUE;
 	}
 
