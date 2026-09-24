@@ -17,6 +17,7 @@
 #include <fal/fal_tunnel.h>
 #include <fal/fal_api.h>
 #include <fal/fal_vsi.h>
+#include <fal/fal_qm.h>
 #include <ref/ref_vsi.h>
 #include <fal/fal_portvlan.h>
 #include "ppe_drv.h"
@@ -2756,11 +2757,63 @@ ppe_drv_ret_t ppe_drv_vlan_hgu_rule_destroy(struct ppe_drv_vlan_ctx *ctx)
 EXPORT_SYMBOL(ppe_drv_vlan_hgu_rule_destroy);
 #endif
 
-
 #ifdef NSS_PPE_DSA_QINQ_SUPPORT
 /*
+ * ppe_drv_port_l2_vp_sc_config()
+ *	L2_VP service code config
+ */
+static bool ppe_drv_vlan_dsa_sc_config(struct ppe_drv_port *pp, ppe_drv_sc_t sc, uint32_t phy_port)
+{
+	fal_enqueue_cfg_t enq_cfg = {0};
+	sw_error_t err;
+
+	enq_cfg.index_entry.enqueue_servcode.service_code = sc;
+	enq_cfg.index_entry.enqueue_en = A_TRUE;
+	enq_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_SERVCODE;
+	enq_cfg.rule_entry.dst_port = pp->port;
+	enq_cfg.index_entry.enqueue_servcode.queue_select_en = A_FALSE;
+
+	err = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to set service code config for port: %d", pp->port);
+		return false;
+	}
+	return true;
+}
+
+/*
+ * ppe_drv_vlan_dsa_sc_reset()
+ *	Reset service code in L2_VP.
+ */
+static bool ppe_drv_vlan_dsa_sc_reset(struct ppe_drv_port *pp)
+{
+	fal_enqueue_cfg_t enq_cfg = {0};
+	sw_error_t err;
+
+	enq_cfg.rule_entry.enqueue_type = FAL_ENQUEUE_SERVCODE;
+	enq_cfg.rule_entry.dst_port = pp->port;
+
+	err = fal_qm_enqueue_config_get(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to reset service code config for port: %d", pp->port);
+		return false;
+	}
+
+	enq_cfg.index_entry.enqueue_en = A_FALSE;
+	enq_cfg.index_entry.enqueue_servcode.queue_select_en = A_FALSE;
+
+	err = fal_qm_enqueue_config_set(PPE_DRV_SWITCH_ID, &enq_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Failed to reset service code config for port: %d", pp->port);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_vlan_dsa_cfg_set()
- *      Map VID to VP for ingress and egress; program global private TPID on first DSA interface.
+ *	Map VID to VP for ingress and egress; program global private TPID on first DSA interface.
  */
 ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t vid)
 {
@@ -2770,10 +2823,20 @@ ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t
 	fal_pvtvlan_tx_cfg_t vlan_tx_cfg;
 	fal_pvtvlan_map_t vlan_port_map_cfg;
 	fal_pvtvlan_map_t vlan_port_map_clr;
+	ppe_drv_ret_t status = PPE_DRV_RET_SUCCESS;
 	uint32_t phy_port;
 	sw_error_t ret;
 
 	spin_lock_bh(&p->lock);
+
+	/*
+	 * Configure L2_VP port table for this DSA VP.
+	 */
+	if (!ppe_drv_vlan_dsa_sc_config(pp, PPE_DRV_SC_DSA_VP, pp->xmit_port)) {
+		ppe_drv_warn("Failed to set L2_VP service code config for port 0x%x\n", port_id);
+		status = PPE_DRV_RET_VLAN_DSA_SC_CONFIG_FAIL;
+		goto fail;
+	}
 
 	/*
 	 * Global TPID is switch-level state shared across all DSA interfaces.
@@ -2787,9 +2850,10 @@ ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t
 
 		ret = fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID, phy_port, &vlan_port_ctrl_cfg);
 		if (ret != SW_OK) {
-			spin_unlock_bh(&p->lock);
+			ppe_drv_vlan_dsa_sc_reset(pp);
 			ppe_drv_warn("Failed to set vlan-to-port mapping ctrl for port 0x%x, error: %d\n", port_id, ret);
-			return PPE_DRV_RET_VLAN_TPID_CONFIG_FAIL;
+			status = PPE_DRV_RET_VLAN_TPID_CONFIG_FAIL;
+			goto fail;
 		}
 
 		/*
@@ -2803,9 +2867,10 @@ ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t
 			memset(&vlan_port_ctrl_cfg, 0, sizeof(vlan_port_ctrl_cfg));
 			vlan_port_ctrl_cfg.map_en = A_FALSE;
 			fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID, phy_port, &vlan_port_ctrl_cfg);
-			spin_unlock_bh(&p->lock);
+			ppe_drv_vlan_dsa_sc_reset(pp);
 			ppe_drv_warn("Failed to set private vlan tx TPID for port 0x%x, error: %d\n", port_id, ret);
-			return PPE_DRV_RET_VLAN_TPID_CONFIG_FAIL;
+			status = PPE_DRV_RET_VLAN_TPID_CONFIG_FAIL;
+			goto fail;
 		}
 	}
 
@@ -2827,9 +2892,10 @@ ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t
 			fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID,
 					FAL_PORT_ID(FAL_PORT_TYPE_PPORT, pp->xmit_port), &vlan_port_ctrl_cfg);
 		}
-		spin_unlock_bh(&p->lock);
+		ppe_drv_vlan_dsa_sc_reset(pp);
 		ppe_drv_warn("Failed to set vlan-to-port ingress mapping for port 0x%x, error: %d\n", port_id, ret);
-		return PPE_DRV_RET_INGRESS_VLAN_MAP_FAIL;
+		status = PPE_DRV_RET_INGRESS_VLAN_MAP_FAIL;
+		goto fail;
 	}
 
 	ret = fal_private_vlan_mapping_set(PPE_DRV_SWITCH_ID, FAL_DIR_EGRESS, &vlan_port_map_cfg);
@@ -2848,9 +2914,10 @@ ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t
 			fal_private_vlan_rx_cfg_set(PPE_DRV_SWITCH_ID,
 					FAL_PORT_ID(FAL_PORT_TYPE_PPORT, pp->xmit_port), &vlan_port_ctrl_cfg);
 		}
-		spin_unlock_bh(&p->lock);
+		ppe_drv_vlan_dsa_sc_reset(pp);
 		ppe_drv_warn("Failed to set vlan-to-port egress mapping for port 0x%x, error: %d\n", port_id, ret);
-		return PPE_DRV_RET_EGRESS_VLAN_MAP_FAIL;
+		status = PPE_DRV_RET_EGRESS_VLAN_MAP_FAIL;
+		goto fail;
 	}
 
 	p->dsa_if_count++;
@@ -2859,12 +2926,17 @@ ppe_drv_ret_t ppe_drv_vlan_dsa_cfg_set(uint32_t port_id, uint32_t tpid, uint32_t
 	ppe_drv_info("DSA QinQ: configured VLAN port mapping for port 0x%x, VID %d, TPID 0x%x\n",
 			port_id, vid, tpid);
 	return PPE_DRV_RET_SUCCESS;
+
+fail:
+	ppe_drv_stats_inc(&p->stats.gen_stats.fail_dsa_vp_config);
+	spin_unlock_bh(&p->lock);
+	return status;
 }
 EXPORT_SYMBOL(ppe_drv_vlan_dsa_cfg_set);
 
 /*
  * ppe_drv_vlan_dsa_cfg_reset()
- *      Clear VID-to-VP mapping for this interface; clear global private TPID on last DSA interface removal.
+ *	Clear VID-to-VP mapping for this interface; clear global private TPID on last DSA interface removal.
  */
 int ppe_drv_vlan_dsa_cfg_reset(uint32_t port_id, uint32_t vid)
 {
@@ -2881,6 +2953,15 @@ int ppe_drv_vlan_dsa_cfg_reset(uint32_t port_id, uint32_t vid)
 		spin_unlock_bh(&p->lock);
 		ppe_drv_warn("dsa_if_count underflow for port 0x%x\n", port_id);
 		return -EINVAL;
+	}
+
+	/*
+	 * Clear the L2_VP service code configuration programmed for this DSA VP.
+	 */
+	if (!ppe_drv_vlan_dsa_sc_reset(pp)) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("Failed to reset L2_VP service code config for port 0x%x\n", port_id);
+		return -1;
 	}
 
 	/*
