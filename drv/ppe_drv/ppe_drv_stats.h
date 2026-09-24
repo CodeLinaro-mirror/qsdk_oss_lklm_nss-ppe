@@ -91,6 +91,7 @@ struct ppe_drv_gen_stats {
 	atomic64_t fail_unidir_rule_entry_update;	/* Failed to update unidirection rule fwd_type */
 	atomic64_t fail_unidir_rule_match;		/* Failed to find matching tuple information */
 	atomic64_t unidir_update_rule_type_invalid;	/* Invalid rule type for unidirection update */
+	atomic64_t fail_dsa_vp_config;			/* DSA VP configuration failed */
 };
 
 /*
