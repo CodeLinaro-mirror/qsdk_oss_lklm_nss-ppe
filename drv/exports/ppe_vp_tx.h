@@ -18,6 +18,7 @@ enum ppe_vp_tx_type_info {
 	PPE_VP_TX_TYPE_NONE = 0,		/**< No specific type */
 	PPE_VP_TX_TYPE_IPSEC_ENCAP,		/**< IPsec encapsulation */
 	PPE_VP_TX_TYPE_IPSEC_DECAP,		/**< IPsec decapsulation */
+	PPE_VP_TX_TYPE_IPSEC_3_TUPLE_ENCAP,		/**< IPsec encapsulation with 3-tuple lookup */
 };
 
 /*
