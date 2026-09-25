@@ -526,11 +526,32 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		}
 
 		/*
-		 * Don't update destination information and service code in EDMA.
+		 * This service code is generated for IPsec outer flows. On SPI ACL
+		 * lookup failure, bypasses updates to the following fields and
+		 * preserves the original packet contents:
+		 * - Destination information
+		 * - Service code
+		 * - MAC header update
+		 * - PPPoE header update
+		 * - TTL update
+		 * - DSCP update
+		 * - Source IP update
+		 * - Destination IP update
+		 * - L4 port update
+		 * - VLAN translation
+		 * - VLAN formatting
 		 */
-		sc_cfg.field_update_bitmap[0] = ((1 << FLD_UPDATE_DEST_INFO)
-				| (1 << FLD_UPDATE_SERVICE_CODE)
-				| (1 << FLD_UPDATE_MAC_HDR_BYPASS));
+		sc_cfg.field_update_bitmap[0] = ((1ULL << FLD_UPDATE_DEST_INFO)
+				| (1ULL << FLD_UPDATE_SERVICE_CODE)
+				| (1ULL << FLD_UPDATE_MAC_HDR_BYPASS)
+				| (1ULL << FLD_UP_PPPOE_BYPASS)
+				| (1ULL << FLD_UP_TTL_BYPASS)
+				| (1ULL << FLD_UP_DSCP_BYPASS)
+				| (1ULL << FLD_UP_SIP_BYPASS)
+				| (1ULL << FLD_UP_DIP_BYPASS)
+				| (1ULL << FLD_UP_L4_PORT_BYPASS)
+				| (1ULL << EPE_VLAN_XLT_BYPASS)
+				| (1ULL << EPE_VLAN_FMT_BYPASS));
 
 		/*
 		 * Avoid packet drop due to source port filtering for no edit service codes, in this
