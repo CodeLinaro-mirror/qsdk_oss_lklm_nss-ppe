@@ -148,6 +148,7 @@ static const char *ppe_drv_stats_conn_str[] = {
 	"fail_unidir_rule_entry_update",		/* Failed to update unidirection rule fwd_type */
 	"fail_unidir_rule_match",			/* Failed to find matching tuple information */
 	"unidir_update_rule_type_invalid",		/* Invalid rule type for unidirection update */
+	"fail_dsa_vp_config",				/* DSA VP configuration failed */
 };
 
 /*

@@ -261,6 +261,12 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 	case PPE_DRV_SC_PTP:
 		break;
 
+	case PPE_DRV_SC_DSA_VP:
+		sc_cfg.field_update_bitmap[0] = (1ULL << FLD_UP_DST_INFO_FORCE)
+						| (1ULL << EPE_PRE_HEADER_VALID);
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+
 	case PPE_DRV_SC_LOOPBACK_QOS:
 		sc_cfg.field_update_bitmap[0] = (1 << FLD_UPDATE_SRC_INFO)
 					| (1 << FLD_UPDATE_HASH_FLOW_INDEX);
@@ -1427,6 +1433,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_GEM_LOOKUP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_HOST_QOS, PPE_DRV_SC_HOST_QOS, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_SPF_BYPASS_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_DSA_VP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 
 
 	/*
