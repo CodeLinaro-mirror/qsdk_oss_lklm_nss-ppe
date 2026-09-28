@@ -44,6 +44,10 @@ bool ppe_drv_vlan_del_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_d
 	 */
 	xlt_rule.s_tagged = 0x1;				/* Accept untagged svlan */
 	xlt_rule.c_tagged = 0x1;				/* Accept untagged cvlan */
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	xlt_rule.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule.mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
+#endif
 
 	/*
 	 * Fields for action
@@ -88,6 +92,10 @@ bool ppe_drv_vlan_add_untag_ingress_rule(struct ppe_drv_port *port, struct ppe_d
 	 */
 	xlt_rule.s_tagged = 0x1;				/* Accept untagged svlan */
 	xlt_rule.c_tagged = 0x1;				/* Accept untagged cvlan */
+#ifdef NSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+	xlt_rule.dhcp_type = (PPE_DRV_VLAN_DHCP_TYPE_NON_DHCP | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V4 | PPE_DRV_VLAN_DHCP_TYPE_DHCP_V6);
+	xlt_rule.mc_type = (PPE_DRV_VLAN_MC_TYPE_NON_MC | PPE_DRV_VLAN_MC_TYPE_IP_MC | PPE_DRV_VLAN_MC_TYPE_NON_IP_MC);
+#endif
 
 	/*
 	 * Fields for action
