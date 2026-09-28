@@ -299,7 +299,15 @@ static bool ppe_dot1p_rule_info_fill(struct ppe_dot1p *dot1p, struct ppe_dot1p_r
 				return false;
 			}
 
-			port_num = ppe_drv_iface_port_idx_get(iface);
+#ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
+			if (ppe_drv_veip_is_enabled(dev)) {
+				port_num = ppe_drv_veip_get_port(iface, PPE_DRV_PORT_VIRTUAL_PON);
+			} else
+#endif
+			{
+				port_num = ppe_drv_iface_port_idx_get(iface);
+			}
+
 			if (port_num < 0) {
 				ppe_dot1p_warn("%p: failed to find PPE port for iface: %p\n",
 						r, iface);
@@ -358,7 +366,15 @@ static bool ppe_dot1p_rule_info_fill(struct ppe_dot1p *dot1p, struct ppe_dot1p_r
 				return false;
 			}
 
-			port_num = ppe_drv_iface_port_idx_get(iface);
+#ifdef NSS_PPE_VEIP_FEATURE_SUPPORT
+			if (ppe_drv_veip_is_enabled(dev)) {
+				port_num = ppe_drv_veip_get_port(iface, PPE_DRV_PORT_VIRTUAL_PON);
+			} else
+#endif
+			{
+				port_num = ppe_drv_iface_port_idx_get(iface);
+			}
+
 			if (port_num < 0) {
 				ppe_dot1p_warn("%p: failed to find PPE port for iface: %p\n",
 						r, iface);
