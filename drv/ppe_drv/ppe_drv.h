@@ -942,6 +942,19 @@ void ppe_drv_dp_pon_stats_update(struct ppe_drv *p);
 bool ppe_drv_is_pon_enable_internal(void);
 #endif
 
+#ifdef NSS_PPE_PON_SUPPORT
+/**
+ * ppe_drv_qos_pon_port_get_internal
+ *	Gets the PON port ID without taking the driver lock.
+ *
+ * Caller must hold ppe_drv_gbl->lock.
+ *
+ * @return
+ * PON port ID, or 0 when the PON interface or port is unavailable.
+ */
+uint32_t ppe_drv_qos_pon_port_get_internal(void);
+#endif
+
 #ifdef PPE_DRV_DDRQ_ENABLE
 extern uint32_t ppe_drv_ddrq_en_bitmask[PPE_DRV_DDRQ_MAX_CNT_WORD];
 #endif
