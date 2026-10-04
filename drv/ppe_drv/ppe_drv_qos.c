@@ -94,6 +94,54 @@ void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb)
 }
 EXPORT_SYMBOL(ppe_drv_qos_int_pri_callback_register);
 
+/*
+ * ppe_drv_qos_ac_ctrl_set()
+ *	Internal helper to configure AC control on the given queue object.
+ */
+static bool ppe_drv_qos_ac_ctrl_set(uint32_t qid, fal_ac_obj_t *obj, fal_ac_ctrl_t *ctrl_cfg)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	if (!ctrl_cfg || !obj) {
+		ppe_drv_warn("Invalid AC control configuration received for qid:%d\n", qid);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+	ppe_drv_trace("%px:queue flow control set for ucast_qid:%u, enable:%u", p, qid, ctrl_cfg->ac_fc_en);
+	if (fal_ac_ctrl_set(PPE_DRV_SWITCH_ID, obj, ctrl_cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue flow control set failed for ucast_qid:%u", p, qid);
+		return false;
+	}
+	spin_unlock_bh(&p->lock);
+
+	return true;
+}
+
+/*
+ * ppe_drv_qos_queue_drop_cfg_set()
+ *	API to configure drop configuration for the given queue id.
+ */
+static bool ppe_drv_qos_queue_drop_cfg_set(uint32_t qid, fal_ac_obj_t *obj, fal_ac_drop_state_t *drop_cfg)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+
+	if (!obj || !drop_cfg) {
+		ppe_drv_warn("Invalid drop configuration received for qid:%d\n", qid);
+		return false;
+	}
+
+	spin_lock_bh(&p->lock);
+	if (fal_qm_ac_drop_state_set(PPE_DRV_SWITCH_ID, obj, drop_cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue drop configuration set failed for qid:%u", p, qid);
+		return false;
+	}
+	spin_unlock_bh(&p->lock);
+
+	return true;
+}
 
 /*
  * ppe_drv_qos_queue_info_get()
@@ -937,8 +985,8 @@ ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res)
 	 * When ac_en/ac_fc_en are set to 1, the flow control will be overriden
 	 * for that queue and packets drop gets enabled.
 	 */
-	ctrl_cfg.ac_en = 1;
-	ctrl_cfg.ac_fc_en = 1;
+	ctrl_cfg.ac_en = A_TRUE;
+	ctrl_cfg.ac_fc_en = A_TRUE;
 
 	if (res->q.mcast_valid) {
 		goto config_mcast;
@@ -1197,7 +1245,6 @@ EXPORT_SYMBOL(ppe_drv_qos_port_htt_res_get);
  */
 bool ppe_drv_qos_ac_ctrl_cfg(uint32_t qid, bool ac_en, bool ac_fc_en)
 {
-	struct ppe_drv *p = ppe_drv_gbl;
 	fal_ac_obj_t obj = {0};
 	fal_ac_ctrl_t ctrl_cfg = {0};
 
@@ -1206,15 +1253,243 @@ bool ppe_drv_qos_ac_ctrl_cfg(uint32_t qid, bool ac_en, bool ac_fc_en)
 	ctrl_cfg.ac_en = ac_en ? A_TRUE : A_FALSE;
 	ctrl_cfg.ac_fc_en = ac_fc_en ? A_TRUE : A_FALSE;
 
+	return ppe_drv_qos_ac_ctrl_set(qid, &obj, &ctrl_cfg);
+}
+EXPORT_SYMBOL(ppe_drv_qos_ac_ctrl_cfg);
+
+/*
+ * ppe_drv_qos_ddrq_bypass_set()
+ *	API to configure DDRQ bypass on the given queue id
+ */
+ppe_drv_ret_t ppe_drv_qos_ddrq_bypass_set(uint32_t qid)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_ac_ctrl_t ac_ctrl_cfg = {0};
+	fal_ac_ctrl_t ac_ctrl_cfg_backup = {0};
+	fal_ac_obj_t obj = {0};
+	fal_ac_drop_state_t drop_cfg = {0};
+	ppe_drv_ret_t ret;
+	fal_ucast_queue_ddrq_en_t ddrq_en_cfg = {0};
+
 	spin_lock_bh(&p->lock);
-	ppe_drv_trace("%px:queue flow control set for ucast_qid:%u, enable:%u", p, qid, ctrl_cfg.ac_fc_en);
-	if (fal_ac_ctrl_set(PPE_DRV_SWITCH_ID, &obj, &ctrl_cfg) != SW_OK) {
+	/*
+	 * Check whether the mapped DDRQ is enabled or not
+	 */
+	if (fal_ucast_queue_ddrq_en_get(PPE_DRV_SWITCH_ID, qid, &ddrq_en_cfg) != SW_OK) {
 		spin_unlock_bh(&p->lock);
-		ppe_drv_warn("%px:queue flow control set failed for ucast_qid:%u", p, qid);
-		return false;
+		ppe_drv_warn("%p: Error in getting the DDRQ state of qid:%d\n", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (!ddrq_en_cfg.ddrq_en) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_info("%p: The mapped DDRQ is not enabled for the input qid:%d\n", p, qid);
+		return PPE_DRV_RET_SUCCESS;
+	}
+
+	obj.obj_id = qid;
+	obj.type = FAL_AC_QUEUE;
+
+	if (fal_ac_ctrl_get(PPE_DRV_SWITCH_ID, &obj, &ac_ctrl_cfg_backup) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue flow control get failed for qid:%u", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
 	}
 	spin_unlock_bh(&p->lock);
 
-	return true;
+	/*
+	 * Set AC enable and AC flow control enable configurations for the given queue id
+	 */
+	ac_ctrl_cfg.ac_en = A_TRUE;
+	ac_ctrl_cfg.ac_fc_en = A_TRUE;
+	if (!ppe_drv_qos_ac_ctrl_set(qid, &obj, &ac_ctrl_cfg)) {
+		ppe_drv_warn("Error in configuring AC control configuration for qid:%d\n", qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	/*
+	 * Disable the enqueue operation for the given queue id
+	 */
+	ret = ppe_drv_qos_queue_enqueue_ctrl(qid, false);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("Error (%d) in disabling the qid:%d enqueue operation\n", ret, qid);
+		if (!ppe_drv_qos_ac_ctrl_set(qid, &obj, &ac_ctrl_cfg_backup)) {
+			ppe_drv_warn("Error in restoring AC control configuration for qid:%d\n", qid);
+			return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+		}
+
+		return ret;
+	}
+
+	/*
+	 * Add the delay for letting the PPE consume all the pending packets in the queue
+	 *
+	 * TODO : Handle the scenarios in which the 30 msec time is not enough
+	 * for the PPE to drain the SRAM queue, like the following:
+	 * 1. SRAM queue has some lower rate shaper configuration applied over it
+	 * 2. The configured credit is not enough to drain the packets from the
+	 * PON interface.
+	 */
+	mdelay(30);
+
+	/*
+	 * Set all the drop states to 9 for the given queue id
+	 */
+	spin_lock_bh(&p->lock);
+	if (fal_qm_ac_drop_state_get(PPE_DRV_SWITCH_ID, &obj, &drop_cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue drop configuration get failed for qid:%u", p, qid);
+		ret = ppe_drv_qos_queue_enqueue_ctrl(qid, true);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("Error (%d) in restoring the qid:%d enqueue operation after drop get failure\n", ret, qid);
+		}
+
+		if (!ppe_drv_qos_ac_ctrl_set(qid, &obj, &ac_ctrl_cfg_backup)) {
+			ppe_drv_warn("Error in restoring AC control configuration for qid:%d\n", qid);
+		}
+
+		return PPE_DRV_RET_QUEUE_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	drop_cfg.green_drop = PPE_DRV_QOS_DDRQ_BYPASS_DROP_STATE;
+	drop_cfg.yel_drop = PPE_DRV_QOS_DDRQ_BYPASS_DROP_STATE;
+	drop_cfg.red_drop = PPE_DRV_QOS_DDRQ_BYPASS_DROP_STATE;
+
+	/*
+	 * TODO: For the scenario, when the SRAM queue has the shaper configuration
+	 * applied to it. We need to ideally create the backup of the applied
+	 * shaper configuration, configure the PPE to drain the packet with max
+	 * rate and then re-store the applied shaper configuration.
+	 */
+	if (!ppe_drv_qos_queue_drop_cfg_set(qid, &obj, &drop_cfg)) {
+		ppe_drv_warn("%px: Error in setting the queue drop configuration for qid:%d\n", p, qid);
+		ret = ppe_drv_qos_queue_enqueue_ctrl(qid, true);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("Error (%d) in restoring the qid:%d enqueue operation after drop set failure\n", ret, qid);
+		}
+
+		if (!ppe_drv_qos_ac_ctrl_set(qid, &obj, &ac_ctrl_cfg_backup)) {
+			ppe_drv_warn("Error in restoring AC control configuration for qid:%d\n", qid);
+		}
+
+		return PPE_DRV_RET_QUEUE_CFG_FAIL;
+	}
+
+	/*
+	 * Enable the enqueue operation for the given queue id
+	 */
+	ret = ppe_drv_qos_queue_enqueue_ctrl(qid, true);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("Error (%d) in enabling the qid:%d enqueue operation\n", ret, qid);
+		return ret;
+	}
+
+	return PPE_DRV_RET_SUCCESS;
 }
-EXPORT_SYMBOL(ppe_drv_qos_ac_ctrl_cfg);
+EXPORT_SYMBOL(ppe_drv_qos_ddrq_bypass_set);
+
+/*
+ * ppe_drv_qos_ddrq_bypass_reset()
+ *	API to reset DDRQ bypass configuration on the given queue id
+ */
+ppe_drv_ret_t ppe_drv_qos_ddrq_bypass_reset(uint32_t qid)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	fal_ac_ctrl_t ac_ctrl_cfg = {0};
+	fal_ac_obj_t obj = {0};
+	fal_ac_drop_state_t drop_cfg;
+	ppe_drv_ret_t ret;
+	fal_ucast_queue_ddrq_en_t ddrq_en_cfg = {0};
+
+	spin_lock_bh(&p->lock);
+	/*
+	 * Check whether the mapped DDRQ is enabled or not
+	 */
+	if (fal_ucast_queue_ddrq_en_get(PPE_DRV_SWITCH_ID, qid, &ddrq_en_cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%p: Error in getting the DDRQ state of qid:%d\n", p, qid);
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	if (!ddrq_en_cfg.ddrq_en) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_info("%p: The mapped DDRQ is not enabled for the input qid:%d\n", p, qid);
+		return PPE_DRV_RET_SUCCESS;
+	}
+	spin_unlock_bh(&p->lock);
+
+	/*
+	 * Disable the enqueue operation for the given queue id
+	 */
+	ret = ppe_drv_qos_queue_enqueue_ctrl(qid, false);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("Error (%d) in disabling the qid:%d enqueue operation\n", ret, qid);
+		return ret;
+	}
+
+	/*
+	 * Reset all the drop states to its default value for the given queue id
+	 */
+	spin_lock_bh(&p->lock);
+	obj.obj_id = qid;
+	obj.type = FAL_AC_QUEUE;
+	if (fal_qm_ac_drop_state_get(PPE_DRV_SWITCH_ID, &obj, &drop_cfg) != SW_OK) {
+		spin_unlock_bh(&p->lock);
+		ppe_drv_warn("%px:queue drop configuration get failed for qid:%u", p, qid);
+		ret = ppe_drv_qos_queue_enqueue_ctrl(qid, true);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("Error (%d) in restoring the qid:%d enqueue operation after drop get failure\n", ret, qid);
+		}
+
+		return PPE_DRV_RET_QUEUE_CFG_FAIL;
+	}
+	spin_unlock_bh(&p->lock);
+
+	drop_cfg.green_drop = PPE_DRV_QOS_DDRQ_BYPASS_DROP_STATE_RESET;
+	drop_cfg.yel_drop = PPE_DRV_QOS_DDRQ_BYPASS_DROP_STATE_RESET;
+	drop_cfg.red_drop = PPE_DRV_QOS_DDRQ_BYPASS_DROP_STATE_RESET;
+
+	if (!ppe_drv_qos_queue_drop_cfg_set(qid, &obj, &drop_cfg)) {
+		ppe_drv_warn("%px: Error in setting the queue drop configuration for qid:%d\n", p, qid);
+		ret = ppe_drv_qos_queue_enqueue_ctrl(qid, true);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("Error (%d) in restoring the qid:%d enqueue operation after drop set failure\n", ret, qid);
+		}
+
+		return PPE_DRV_RET_QUEUE_CFG_FAIL;
+	}
+
+	/*
+	 * Add the delay for letting the PPE consume all the pending packets in the mapped DDRQ
+	 */
+	mdelay(30);
+
+	/*
+	 * Reset AC control configurations to the default values for the given queue id
+	 */
+	ac_ctrl_cfg.ac_en = A_TRUE;
+	ac_ctrl_cfg.ac_fc_en = A_FALSE;
+	if (!ppe_drv_qos_ac_ctrl_set(qid, &obj, &ac_ctrl_cfg)) {
+		ppe_drv_warn("Error in configuring AC control configuration for qid:%d\n", qid);
+		ret = ppe_drv_qos_queue_enqueue_ctrl(qid, true);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			ppe_drv_warn("Error (%d) in restoring the qid:%d enqueue operation after AC config failure\n", ret, qid);
+			return ret;
+		}
+
+		return PPE_DRV_RET_FAILURE_INVALID_PARAM;
+	}
+
+	/*
+	 * Enable the enqueue operation for the given queue id
+	 */
+	ret = ppe_drv_qos_queue_enqueue_ctrl(qid, true);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_drv_warn("Error (%d) in enabling the qid:%d enqueue operation\n", ret, qid);
+		return ret;
+	}
+
+	return PPE_DRV_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_drv_qos_ddrq_bypass_reset);
