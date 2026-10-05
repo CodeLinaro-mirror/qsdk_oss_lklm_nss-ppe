@@ -79,8 +79,8 @@
 #define PPE_DRV_V6_VALID_FLAG_FLOW_WIFI_DS	0x00000800	/**< Wi-Fi DS flow field is valid. */
 #define PPE_DRV_V6_VALID_FLAG_RETURN_WIFI_DS	0x00001000	/**< Wi-Fi DS return field is valid. */
 #define PPE_DRV_V6_VALID_FLAG_WIFI_TAG		0x00002000	/**< Wi-Fi valid flag. */
-#define PPE_DRV_V6_VALID_FLAG_FLOW_HOST_QDISC_VALID	0x00004000  /**< Qdisc info is valid in flow direction. */
-#define PPE_DRV_V6_VALID_FLAG_RETURN_HOST_QDISC_VALID	0x00008000  /**< Qdisc info is valid in return direction. */
+#define PPE_DRV_V6_VALID_FLAG_FLOW_WLAN_HOST_QDISC_VALID	0x00004000  /**< Qdisc info is valid in flow direction. */
+#define PPE_DRV_V6_VALID_FLAG_RETURN_WLAN_HOST_QDISC_VALID	0x00008000  /**< Qdisc info is valid in return direction. */
 #define PPE_DRV_V6_VALID_FLAG_FLOW_LABEL		0x00010000	/** < IPv6 header flow label valid. */
 #define PPE_DRV_V6_VALID_FLAG_UNIDIR_RULE		0x00020000	/**< Unidirectional rule is valid. */
 #define PPE_DRV_V6_VALID_FLAG_FLOW_E2E_HOST_ASSIST_QDISC	0x00040000
