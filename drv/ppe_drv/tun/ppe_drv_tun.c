@@ -889,6 +889,15 @@ bool ppe_drv_tun_attach_mapt_v4_to_v6(struct ppe_drv_v4_conn *cn)
 		is_flow_dir = false;
 	}
 
+	/*
+	 * Bail out if the MAP-T netdev is going away; nat46_netdev_destroy() clears
+	 * IFF_UP before freeing the nat46 instance, so this prevents a NULL deref in xlate_4_to_6().
+	 */
+	if (!netdev || !(netdev->flags & IFF_UP)) {
+		ppe_drv_warn("%p: MAP-T netdev not usable for v4 to v6 attach\n", pp);
+		return false;
+	}
+
 	if (is_flow_dir) {
 		ip4.saddr = htonl(pcf->xlate_src_ip);
 		ip4.daddr = htonl(pcf->xlate_dest_ip);
@@ -997,6 +1006,15 @@ static bool ppe_drv_tun_mapt_translate_v6_to_v4(bool is_flow_dir, struct net_dev
 	struct ppe_drv_v4_conn_flow *mapt_v4_cached = NULL;
 
 	if (is_attach) {
+		/*
+		 * Bail out if the MAP-T netdev is going away; nat46_netdev_destroy() clears
+		 * IFF_UP before freeing the nat46 instance, so this prevents a NULL deref in xlate_6_to_4().
+		 */
+		if (!netdev || !(netdev->flags & IFF_UP)) {
+			ppe_drv_warn("%px: MAP-T netdev not usable for v6 to v4 attach\n", pcf_v6);
+			return false;
+		}
+
 		memset(&ip6, 0, sizeof(struct ipv6hdr));
 
 		if (is_flow_dir) {
