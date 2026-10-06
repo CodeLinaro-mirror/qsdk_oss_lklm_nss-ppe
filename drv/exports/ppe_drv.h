@@ -545,6 +545,7 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_EGRESS_VLAN_FAIL,			/**< Egress vlan configuration failed */
 	PPE_DRV_RET_INGRESS_VLAN_MAP_FAIL,		/**< Ingress vlan map configuration failed */
 	PPE_DRV_RET_EGRESS_VLAN_MAP_FAIL,		/**< Egress vlan map configuration failed */
+	PPE_DRV_RET_VLAN_DSA_SC_CONFIG_FAIL,		/**< L2_VP service code configuration failed for DSA VP */
 	PPE_DRV_RET_VLAN_INGRESS_DEL_FAIL,		/**< Ingress vlan deletion configuration failed */
 	PPE_DRV_RET_VLAN_EGRESS_DEL_FAIL,		/**< Egress vlan deletion configuration failed */
 	PPE_DRV_RET_FAILURE_INVALID_HIERARCHY,		/**< Failure due to invalid hierarchy */
