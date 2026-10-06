@@ -941,10 +941,27 @@ EXPORT_SYMBOL(ppe_tun_conf_accel);
 bool ppe_tun_deconfigure(struct net_device *dev)
 {
 	struct ppe_tun *tun = ppe_tun_get_tun_by_netdev_and_ref(dev);
+	bool configured;
 
 	if (!tun) {
 		ppe_tun_warn("%p: could not find tunnel for dev %s", ptp, dev->name);
 		return false;
+	}
+
+	spin_lock_bh(&ptp->lock);
+	configured = !!(tun->state & PPE_TUN_STATE_CONFIGURED);
+	tun->state &= ~PPE_TUN_STATE_CONFIGURED;
+	spin_unlock_bh(&ptp->lock);
+
+	/*
+	 * proceed to call deconfigure only if the tunnel was in configured state.
+	 * If tunnel is not in configured state return after releasing ref
+	 * taken while finding the tunnel instance
+	 */
+	if (!configured) {
+		ppe_tun_trace("%p: tunnel already deconfigured for dev %s", tun, dev->name);
+		ppe_tun_deref(tun);
+		return true;
 	}
 
 	if (!ppe_drv_tun_deconfigure(tun->vp_num)) {
@@ -958,7 +975,6 @@ bool ppe_tun_deconfigure(struct net_device *dev)
 	xchg(&tun->stats_excp, NULL);
 	xchg(&tun->phys_dev, NULL);
 
-	tun->state &= ~PPE_TUN_STATE_CONFIGURED;
 	ppe_tun_info("%p: Tunnel disabled for dev %s", tun, dev->name);
 	ppe_tun_deref(tun);
 	return true;
@@ -1063,10 +1079,27 @@ EXPORT_SYMBOL(ppe_tun_hybrid_ol_ctx_get);
 bool ppe_tun_free(struct net_device *dev)
 {
 	struct ppe_tun *tun = ppe_tun_get_tun_by_netdev_and_ref(dev);
+	bool configured;
 
 	if (!tun) {
 		ppe_tun_info("%p: could not find tunnel for dev %s", ptp, dev->name);
 		return false;
+	}
+
+	spin_lock_bh(&ptp->lock);
+	configured = !!(tun->state & PPE_TUN_STATE_CONFIGURED);
+	spin_unlock_bh(&ptp->lock);
+
+	/*
+	 * In case of mapt tunnel when ifdown is issued. NETDEV_DOWN event is not sent.
+	 * Only NETDEV_UNREGISTER is received as nat46 internally clears IFF_UP flag during destroy.
+	 * This leads to ref leak taken during ppe_tun_configure(). Call ppe_tun_deconfigure() here to
+	 * release that reference if the tunnel is still in configured state before freeing the tunnel.
+	 */
+	if (configured) {
+		ppe_tun_warn("%p: dev %s freed while still configured, deconfiguring tunnel with vp %u",
+				tun, dev->name, tun->vp_num);
+		ppe_tun_deconfigure(dev);
 	}
 
 	atomic_inc(&ptp->free_pending);
