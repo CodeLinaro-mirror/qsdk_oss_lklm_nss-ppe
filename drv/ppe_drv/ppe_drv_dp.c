@@ -431,10 +431,12 @@ ppe_drv_ret_t ppe_drv_dp_htt_enable(struct ppe_drv_iface *iface, bool htt_dev)
 	spin_lock_bh(&p->lock);
 
 	/*
-	 * If HTT device is set, configure iface with htt flag.
+	 * If HTT device is set, configure iface with htt flag
+	 * and record that an HTT switch is present.
 	 */
 	if (htt_dev) {
 		iface->flags |= PPE_DRV_IFACE_FLAG_HTT_SWITCH_VALID;
+		p->htt_switch_valid = true;
 	} else {
 		iface->flags &= ~PPE_DRV_IFACE_FLAG_HTT_SWITCH_VALID;
 	}
