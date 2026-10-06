@@ -155,6 +155,8 @@ uint8_t ppe_drv_port_is_tunnel_vp(struct ppe_drv_port *pp);
 
 struct net_device *ppe_drv_port_to_dev(struct ppe_drv_port *pp);
 struct ppe_drv_port *ppe_drv_port_from_dev(struct net_device *dev);
+int32_t ppe_drv_port_num_from_dev_internal(struct net_device *dev);
+struct net_device *ppe_drv_port_num_to_dev_internal(uint8_t port_num);
 struct ppe_drv_port *ppe_drv_port_from_tl_l3_if(struct ppe_drv_tun_l3_if *tl_l3_if);
 
 void ppe_drv_port_mac_addr_set(struct ppe_drv_port *pp, const uint8_t *mac_addr);

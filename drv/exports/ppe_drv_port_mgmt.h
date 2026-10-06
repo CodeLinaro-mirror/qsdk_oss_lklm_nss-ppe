@@ -263,6 +263,7 @@ ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_del(const char *dev_name);
  */
 ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_flush(void);
 
+#ifdef NSS_PPE_PON_SUPPORT
 /**
  * ppe_drv_port_mgmt_omci_port_list_show()
  *	Print the OMCI-managed port list to a seq_file (for debugfs).
@@ -270,6 +271,7 @@ ppe_drv_ret_t ppe_drv_port_mgmt_omci_port_flush(void);
  * @param[in] m		seq_file to write output to.
  */
 void ppe_drv_port_mgmt_omci_port_list_show(struct seq_file *m);
+#endif
 
 /**
  * ppe_drv_port_mgmt_isol_dump()

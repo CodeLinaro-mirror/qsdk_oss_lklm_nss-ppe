@@ -183,7 +183,7 @@ ppe_port_mgmt_ret_t ppe_port_mgmt_mac_lrn_limit_set(struct ppe_port_mac_lrn_limi
 		ppe_port_mgmt_stats_inc(&g->stats.mac_lrn_limit_dis_req);
 
 	ppe_port_mgmt_info("Mac learn limit for port %d, mac learn limit: %d\n",
-			   mac_lrn_limit->port_id, mac_lrn_limit->port_learn_limit);
+			mac_lrn_limit->port_id, mac_lrn_limit->port_learn_limit);
 
 	ppe_ret = ppe_drv_port_mgmt_mac_lrn_limit_set(&drv_mac_lrn_limit);
 	if (ppe_ret != PPE_PORT_MGMT_RET_SUCCESS) {
@@ -332,7 +332,7 @@ ppe_port_mgmt_ret_t ppe_port_mgmt_omci_port_add(struct ppe_port_omci_port *omci_
 	ret = ppe_drv_port_mgmt_omci_port_add(omci_port->port_name);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_port_mgmt_warn("Failed to add OMCI port '%s' (err=%d)\n",
-				   omci_port->port_name, ret);
+				omci_port->port_name, ret);
 		ppe_port_mgmt_stats_inc(&g->stats.omci_port_add_fail);
 		omci_port->ret = PPE_PORT_MGMT_RET_FAILURE;
 		return PPE_PORT_MGMT_RET_FAILURE;
@@ -358,7 +358,7 @@ ppe_port_mgmt_ret_t ppe_port_mgmt_omci_port_del(struct ppe_port_omci_port *omci_
 	ret = ppe_drv_port_mgmt_omci_port_del(omci_port->port_name);
 	if (ret != PPE_DRV_RET_SUCCESS) {
 		ppe_port_mgmt_warn("Failed to delete OMCI port '%s' (err=%d)\n",
-				   omci_port->port_name, ret);
+				omci_port->port_name, ret);
 		ppe_port_mgmt_stats_inc(&g->stats.omci_port_del_fail);
 		omci_port->ret = PPE_PORT_MGMT_RET_FAILURE;
 		return PPE_PORT_MGMT_RET_FAILURE;

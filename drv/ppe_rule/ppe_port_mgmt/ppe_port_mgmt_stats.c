@@ -97,10 +97,11 @@ static int ppe_port_mgmt_stats_show(struct seq_file *m, void __attribute__((unus
 
 	stats_shadow = (uint64_t *)&stats_copy;
 
-	seq_puts(m, "\n  [OMCI Port]\n");
+#ifdef NSS_PPE_PON_SUPPORT
+	seq_puts(m, "\n  [OMCI managed Ports stats]\n");
 	for (i = 0; i < 8; i++)
 		seq_printf(m, "    %-35s: %llu\n", ppe_port_mgmt_stats_str[i], stats_shadow[i]);
-
+#endif
 	seq_puts(m, "\n  [MAC Learn Limit]\n");
 	for (i = 8; i < 17; i++)
 		seq_printf(m, "    %-35s: %llu\n", ppe_port_mgmt_stats_str[i], stats_shadow[i]);
@@ -138,36 +139,37 @@ static const struct file_operations ppe_port_mgmt_stats_file_ops = {
 
 /*
  * ppe_port_mgmt_dump_show()
- *	seq_file show callback that renders the live PPE port-management hardware state.
- *
- * Section 1 - Port isolation state grouped by OMCI ID.
- * Section 2 - MAC learn-limit configuration per port.
- * Section 3 - MAC filter (blocked MAC) entries in the FDB.
+ *      Dump PPE port-management state.
  */
-static int ppe_port_mgmt_dump_show(struct seq_file *m, void __attribute__((unused)) *ptr)
+static int ppe_port_mgmt_dump_show(struct seq_file *m,
+		void __attribute__((unused)) *ptr)
 {
-	/*
-	 * Section 1: Port isolation state grouped by OMCI ID.
-	 */
 	seq_puts(m, "\n========================================\n");
-	seq_puts(m, " PPE Port Mgmt - Port Isolation\n");
+	seq_puts(m, " PPE Port Mgmt Dump\n");
 	seq_puts(m, "========================================\n");
+
+#ifdef NSS_PPE_PON_SUPPORT
+	/*
+	 * Dump OMCI-managed ports.
+	 */
+	ppe_drv_port_mgmt_omci_port_list_show(m);
+#endif
+
+#ifdef NSS_PPE_PORT_ISOL_SUPPORT
+	/*
+	 * Dump isolation for ports.
+	 */
 	ppe_drv_port_mgmt_isol_dump(m);
+#endif
 
 	/*
-	 * Section 2: MAC learn-limit configuration per port.
+	 * Dump MAC learn-limit configuration.
 	 */
-	seq_puts(m, "\n========================================\n");
-	seq_puts(m, " PPE Port Mgmt - MAC Learn Limit Config\n");
-	seq_puts(m, "========================================\n");
 	ppe_drv_port_mgmt_mac_lrn_limit_dump(m);
 
 	/*
-	 * Section 3: MAC filter (blocked MAC) entries in the FDB.
+	 * Dump MAC filter entries.
 	 */
-	seq_puts(m, "\n========================================\n");
-	seq_puts(m, " PPE Port Mgmt - MAC Filter Entries\n");
-	seq_puts(m, "========================================\n");
 	ppe_drv_port_mgmt_mac_filter_dump(m);
 
 	return 0;
