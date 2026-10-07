@@ -40,6 +40,15 @@ struct nss_ppenl_edma_ddrq_grp_config {
 };
 
 /**
+ * @brief DDRQ bypass configuration
+ */
+struct nss_ppenl_edma_ddrq_bypass_config {
+	nss_dp_ddrq_obj_id_t ddrq_obj;			/** DDRQ object */
+	bool set;					/** DDRQ bypass set configuration value */
+	int ret;					/** Return value to userspace */
+};
+
+/**
  * @brief EDMA rule
  */
 struct nss_ppenl_edma_ddrq_rule {
@@ -47,6 +56,7 @@ struct nss_ppenl_edma_ddrq_rule {
 	union {
 		struct nss_ppenl_edma_ddrq_config ddrq_cfg;		/** Per DDRQ configuration */
 		struct nss_ppenl_edma_ddrq_grp_config ddrq_grp_cfg;	/** DDRQ group configuration */
+		struct nss_ppenl_edma_ddrq_bypass_config ddrq_bypass_cfg;	/** DDRQ bypass configuration */
 	} msg;
 };
 
@@ -56,6 +66,7 @@ struct nss_ppenl_edma_ddrq_rule {
 enum nss_ppe_edma_ddrq_message_types {
 	NSS_PPE_EDMA_DDRQ_CFG_RULE_MSG,			/** EDMA DDRQ configuration message */
 	NSS_PPE_EDMA_DDRQ_GRP_CFG_RULE_MSG,		/** EDMA DDRQ group configuration message */
+	NSS_PPE_EDMA_DDRQ_BYPASS_CFG_RULE_MSG,		/** EDMA DDRQ bypass configuration message */
 	NSS_PPE_EDMA_DDRQ_MAX_MSG_TYPES,		/** Maximum message type */
 };
 
