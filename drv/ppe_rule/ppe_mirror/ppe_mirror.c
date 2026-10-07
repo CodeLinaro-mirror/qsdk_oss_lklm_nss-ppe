@@ -647,18 +647,50 @@ ppe_mirror_ret_t ppe_mirror_enable_capture_core(uint8_t core_id)
 EXPORT_SYMBOL(ppe_mirror_enable_capture_core);
 
 /*
+ * ppe_mirror_port_sc_set()
+ *      Configure L2 VP mirror service code.
+ */
+static bool ppe_mirror_port_sc_set(int32_t port_num, bool enable)
+{
+	return enable ?
+		ppe_drv_l2vp_mirror_sc_add(port_num) :
+		ppe_drv_l2vp_mirror_sc_rmv(port_num);
+}
+
+/*
+ * ppe_mirror_port_dp_set()
+ *      Configure PPE DP mirroring.
+ */
+	static bool
+ppe_mirror_port_dp_set(struct ppe_drv_iface *iface,
+		ppe_drv_dp_mirror_direction_t direction,
+		bool enable)
+{
+	ppe_drv_ret_t ret;
+
+	ret = ppe_drv_dp_set_mirror_if(iface, direction, enable);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_mirror_warn("Failed to %s DP mirror, direction: %d, ret: %d\n",
+				enable ? "enable" : "disable",
+				direction, ret);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_mirror_port_mirror_set()
- *      Configure L2 VP mirroring on a VP/physical port.
+ *      Configure ingress/egress mirroring on a port.
  */
 ppe_mirror_ret_t ppe_mirror_port_mirror_set(const char *port_name,
-                enum ppe_mirror_port_dir dir,
+		enum ppe_mirror_port_dir dir,
 		bool mirror_en)
 {
 	struct ppe_mirror *mirror_g = &gbl_ppe_mirror;
+	struct ppe_drv_iface *iface;
 	struct net_device *dev = NULL;
-	ppe_drv_dp_mirror_direction_t dp_dir;
-	ppe_mirror_ret_t ret;
-	bool mirror_success;
+	bool success = true;
 	int32_t port_num;
 
 	ppe_mirror_stats_inc(&mirror_g->stats.port_mirror_set_req);
@@ -667,71 +699,104 @@ ppe_mirror_ret_t ppe_mirror_port_mirror_set(const char *port_name,
 	if (port_num < 0) {
 		ppe_mirror_warn("Failed to get port number for %s\n",
 				port_name);
-		ppe_mirror_stats_inc(
-				&mirror_g->stats.port_mirror_set_fail);
-		return PPE_MIRROR_RET_GENERIC_FAILURE;
+		goto fail;
 	}
 
 	dev = dev_get_by_name(&init_net, port_name);
 	if (!dev) {
-		ppe_mirror_warn("Failed to get net_device for %s\n",
+		ppe_mirror_warn("Failed to get netdev for %s\n",
 				port_name);
-		ppe_mirror_stats_inc(
-				&mirror_g->stats.port_mirror_set_fail);
-		return PPE_MIRROR_RET_GENERIC_FAILURE;
+		goto fail;
 	}
 
-	/*
-	 * Map our direction enum to the DP mirror direction.
-	 */
-	dp_dir = (dir == PPE_MIRROR_PORT_DIR_INGRESS) ?
-		PPE_DRV_DP_MIRR_DI_IN :
-		PPE_DRV_DP_MIRR_DI_EG;
+	iface = ppe_drv_iface_get_by_dev(dev);
+	if (!iface) {
+		ppe_mirror_warn("Failed to get PPE iface for %s\n",
+				port_name);
+		goto fail;
+	}
 
 	spin_lock_bh(&mirror_g->lock);
 
-	/*
-	 * Configure port mirroring.
-	 */
-	mirror_success = mirror_en ?
-		ppe_drv_l2vp_mirror_sc_add(port_num) :
-		ppe_drv_l2vp_mirror_sc_rmv(port_num);
+	switch (dir) {
+		case PPE_MIRROR_PORT_DIR_INGRESS:
+			success = ppe_mirror_port_dp_set(iface,
+					PPE_DRV_DP_MIRR_DI_IN, mirror_en);
+			break;
 
-	if (!mirror_success) {
-		ppe_mirror_warn("Failed to %s L2 VP mirror SC for %s\n",
-				mirror_en ? "configure" : "reset",
-				port_name);
-		goto fail_unlock;
+		case PPE_MIRROR_PORT_DIR_EGRESS:
+			/*
+			 * Enable: SC add + DP enable.
+			 * Disable: DP disable + SC remove.
+			 */
+			success = mirror_en ?
+				(ppe_mirror_port_sc_set(port_num, true) &
+				 ppe_mirror_port_dp_set(iface,
+					 PPE_DRV_DP_MIRR_DI_EG, true)) :
+				(ppe_mirror_port_dp_set(iface,
+							PPE_DRV_DP_MIRR_DI_EG, false) &
+				 ppe_mirror_port_sc_set(port_num, false));
+			break;
+
+		default:
+			ppe_mirror_warn("Invalid mirror direction %d for %s\n",
+					dir, port_name);
+			success = false;
+			break;
 	}
 
-	/*
-	 * Program PHY mirror for egress.
-	 */
-	if (dp_dir == PPE_DRV_DP_MIRR_DI_EG) {
-		ret = mirror_en ?
-			ppe_mirror_enable_mirror_for_phy_dev(dev) :
-			ppe_mirror_disable_mirror_for_phy_dev(dev);
-
-		if (ret != PPE_MIRROR_RET_SUCCESS) {
-			ppe_mirror_warn("Failed to %s PHY mirror for %s (ret=%d)\n",
-					mirror_en ? "enable" : "disable",
-					port_name, ret);
-			goto fail_unlock;
-		}
-	}
 	spin_unlock_bh(&mirror_g->lock);
 	dev_put(dev);
 
-	return PPE_MIRROR_RET_SUCCESS;
+	if (success)
+		return PPE_MIRROR_RET_SUCCESS;
 
-fail_unlock:
+fail:
 	ppe_mirror_stats_inc(&mirror_g->stats.port_mirror_set_fail);
-	spin_unlock_bh(&mirror_g->lock);
-	dev_put(dev);
-
 	return PPE_MIRROR_RET_GENERIC_FAILURE;
 }
 EXPORT_SYMBOL(ppe_mirror_port_mirror_set);
+
+/*
+ * ppe_mirror_analyst_port_set()
+ *	Set or clear the mirror analysis port for a given direction.
+ */
+ppe_mirror_ret_t ppe_mirror_analyst_port_set(const char *port_name,
+		enum ppe_mirror_port_dir dir, bool enable, uint8_t priority)
+{
+	struct ppe_drv_iface *iface;
+	struct net_device *dev;
+	ppe_drv_dp_mirror_direction_t dp_dir;
+	ppe_drv_ret_t ret;
+
+	dev = dev_get_by_name(&init_net, port_name);
+	if (!dev) {
+		ppe_mirror_warn("Failed to get netdev for %s\n", port_name);
+		return PPE_MIRROR_RET_GENERIC_FAILURE;
+	}
+
+	iface = ppe_drv_iface_get_by_dev(dev);
+	if (!iface) {
+		ppe_mirror_warn("Failed to get PPE iface for %s\n", port_name);
+		dev_put(dev);
+		return PPE_MIRROR_RET_GENERIC_FAILURE;
+	}
+
+	dp_dir = (dir == PPE_MIRROR_PORT_DIR_INGRESS) ?
+		PPE_DRV_DP_MIRR_DI_IN : PPE_DRV_DP_MIRR_DI_EG;
+
+	ret = ppe_drv_dp_set_mirr_analysis_port(iface, dp_dir, enable, priority);
+	dev_put(dev);
+
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		ppe_mirror_warn("Failed to %s analyst port '%s' dir %d ret %d\n",
+				enable ? "set" : "clear", port_name, dir, ret);
+		return PPE_MIRROR_RET_GENERIC_FAILURE;
+	}
+
+	return PPE_MIRROR_RET_SUCCESS;
+}
+EXPORT_SYMBOL(ppe_mirror_analyst_port_set);
 
 /*
  * ppe_mirror_deinit()

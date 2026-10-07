@@ -8,20 +8,25 @@
  *	NSS Netlink port-mirror handler.
  *
  * Exposes the "nss_ppenl_pmirr" Generic Netlink family so that user-space
- * tools (ppecfg) can enable or disable L2 VP mirroring on a named physical
- * or virtual port.
+ * tools (ppecfg) can configure port mirroring on physical or virtual ports.
  *
- * For each port the handler:
- *   1. Resolves the port name to a PPE port number via
- *      ppe_drv_port_num_from_ifname().
- *   2. Obtains the opaque ppe_drv_port object via
- *      ppe_drv_port_from_port_num().
- *   3. Detects whether the port is a GEM port (ppe_drv_port_is_gem()) and
- *      selects the appropriate service code:
- *        - GEM port  → PPE_DRV_SC_DDRQ_PON_PT_MODE
- *        - ETH (phy) → PPE_DRV_SC_DDRQ_ETH_PT_MODE
- *   4. On enable  calls ppe_drv_port_l2_vp_mirror_sc_config(pp, sc, port_num).
- *      On disable calls ppe_drv_port_l2_vp_mirror_sc_reset(pp).
+ * Supported operations
+ * --------------------
+ * NSS_PPE_PORT_MIRROR_ENABLE_MSG
+ *   Enable ingress / egress L2 VP mirroring on a named port via
+ *   ppe_mirror_port_mirror_set().
+ *
+ * NSS_PPE_PORT_MIRROR_DISABLE_MSG
+ *   Disable ingress / egress L2 VP mirroring on a named port via
+ *   ppe_mirror_port_mirror_set().
+ *
+ * NSS_PPE_PORT_MIRROR_SET_ANALYST_PORT_MSG
+ *   Set the mirror analysis (capture) port for a given direction via
+ *   ppe_drv_dp_set_mirr_analysis_port().
+ *
+ * NSS_PPE_PORT_MIRROR_CLR_ANALYST_PORT_MSG
+ *   Clear (disable) the mirror analysis port for a given direction via
+ *   ppe_drv_dp_set_mirr_analysis_port() with enable=false.
  */
 
 #include <linux/kernel.h>
@@ -45,15 +50,30 @@
 /*
  * Forward declarations
  */
-static int nss_ppenl_port_mirror_ops_cfg(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_port_mirror_ops_enable(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_port_mirror_ops_disable(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_port_mirror_ops_set_analyst_port(struct sk_buff *skb, struct genl_info *info);
+static int nss_ppenl_port_mirror_ops_clr_analyst_port(struct sk_buff *skb, struct genl_info *info);
 
 /*
  * Operation table – one entry per message type.
  */
 static struct genl_ops nss_ppenl_port_mirror_ops[] = {
 	{
-		.cmd  = NSS_PPE_PORT_MIRROR_CFG_MSG,
-		.doit = nss_ppenl_port_mirror_ops_cfg,
+		.cmd  = NSS_PPE_PORT_MIRROR_ENABLE_MSG,
+		.doit = nss_ppenl_port_mirror_ops_enable,
+	},
+	{
+		.cmd  = NSS_PPE_PORT_MIRROR_DISABLE_MSG,
+		.doit = nss_ppenl_port_mirror_ops_disable,
+	},
+	{
+		.cmd  = NSS_PPE_PORT_MIRROR_SET_ANALYST_PORT_MSG,
+		.doit = nss_ppenl_port_mirror_ops_set_analyst_port,
+	},
+	{
+		.cmd  = NSS_PPE_PORT_MIRROR_CLR_ANALYST_PORT_MSG,
+		.doit = nss_ppenl_port_mirror_ops_clr_analyst_port,
 	},
 };
 
@@ -73,10 +93,11 @@ static struct genl_family nss_ppenl_port_mirror_family = {
 };
 
 /*
- * nss_ppenl_port_mirror_ops_cfg()
- *	Handle NSS_PPE_PORT_MIRROR_CFG_MSG – enable or disable L2 VP mirroring.
+ * nss_ppenl_port_mirror_ops_enable()
+ *	Handle NSS_PPE_PORT_MIRROR_ENABLE_MSG – enable ingress/egress
+ *	L2 VP mirroring on a named port.
  */
-static int nss_ppenl_port_mirror_ops_cfg(struct sk_buff *skb, struct genl_info *info)
+static int nss_ppenl_port_mirror_ops_enable(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nss_ppenl_port_mirror_rule *nl_rule;
 	struct nss_ppenl_port_mirror_cfg  *cfg;
@@ -84,13 +105,9 @@ static int nss_ppenl_port_mirror_ops_cfg(struct sk_buff *skb, struct genl_info *
 	struct sk_buff *resp;
 	ppe_mirror_ret_t ret;
 	uint32_t pid;
-	int error;
 
-	/*
-	 * Extract and validate the common message header.
-	 */
 	nl_cm = nss_ppenl_get_msg(&nss_ppenl_port_mirror_family, info,
-				  NSS_PPE_PORT_MIRROR_CFG_MSG);
+				  NSS_PPE_PORT_MIRROR_ENABLE_MSG);
 	if (!nl_cm) {
 		nss_ppenl_warn("unable to extract port-mirror cfg message\n");
 		nss_ppenl_ucast_resp(skb);
@@ -101,50 +118,183 @@ static int nss_ppenl_port_mirror_ops_cfg(struct sk_buff *skb, struct genl_info *
 	cfg     = &nl_rule->cfg;
 	pid     = nl_cm->pid;
 
-	/*
-	 * Ensure the port name is null-terminated (user may not have done so).
-	 */
 	cfg->port_name[IFNAMSIZ - 1] = '\0';
 
-	nss_ppenl_info("%s: pid %u port_name '%s' dir %u mirror_en %d\n",
-		       __func__, pid, cfg->port_name, cfg->dir, cfg->mirror_en);
+	nss_ppenl_info("%s: pid %u port '%s' dir %u enable mirror\n",
+		       __func__, pid, cfg->port_name, cfg->dir);
 
-	/*
-	 * Copy the incoming message so we can send a response.
-	 */
 	resp = nss_ppenl_copy_msg(skb);
 	if (!resp) {
 		nss_ppenl_warn("%u: unable to copy NL message for response\n", pid);
-		error = -ENOMEM;
 		nss_ppenl_ucast_resp(skb);
-		return error;
+		return -ENOMEM;
 	}
 
 	ret = ppe_mirror_port_mirror_set(cfg->port_name,
-					   (enum ppe_mirror_port_dir)cfg->dir,
-					   cfg->mirror_en);
+					 (enum ppe_mirror_port_dir)cfg->dir,
+					 true);
 	if (ret != PPE_MIRROR_RET_SUCCESS) {
-		nss_ppenl_warn("%u: ppe_mirror_port_mirror_set failed for port '%s' (ret %d)\n",
+		nss_ppenl_warn("%u: ppe_mirror_port_mirror_set failed for '%s' (ret %d)\n",
 			       pid, cfg->port_name, ret);
 		cfg->ret = -EIO;
 		goto send_resp;
 	}
 
-	nss_ppenl_info("%u: mirror dir=%u mirror_en=%d on port '%s'\n",
-		       pid, cfg->dir, cfg->mirror_en, cfg->port_name);
+	nss_ppenl_info("%u: mirror dir=%u enabled on port '%s' OK\n",
+		       pid, cfg->dir, cfg->port_name);
 	cfg->ret = 0;
 
 send_resp:
-	/*
-	 * Write the return status into the response copy and send it back.
-	 */
 	nl_rule = nss_ppenl_get_data(resp);
 	nl_rule->cfg.ret = cfg->ret;
-
-	nss_ppenl_trace("%u: sending response ret=%d for port '%s'\n",
-			pid, nl_rule->cfg.ret, cfg->port_name);
 	nss_ppenl_ucast_resp(resp);
 	return 0;
+}
+
+/*
+ * nss_ppenl_port_mirror_ops_disable()
+ *	Handle NSS_PPE_PORT_MIRROR_DISABLE_MSG – disable ingress/egress
+ *	L2 VP mirroring on a named port.
+ */
+static int nss_ppenl_port_mirror_ops_disable(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nss_ppenl_port_mirror_rule *nl_rule;
+	struct nss_ppenl_port_mirror_cfg  *cfg;
+	struct nss_ppenl_cmn *nl_cm;
+	struct sk_buff *resp;
+	ppe_mirror_ret_t ret;
+	uint32_t pid;
+
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_port_mirror_family, info,
+				  NSS_PPE_PORT_MIRROR_DISABLE_MSG);
+	if (!nl_cm) {
+		nss_ppenl_warn("unable to extract port-mirror cfg message\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	nl_rule = container_of(nl_cm, struct nss_ppenl_port_mirror_rule, cm);
+	cfg     = &nl_rule->cfg;
+	pid     = nl_cm->pid;
+
+	cfg->port_name[IFNAMSIZ - 1] = '\0';
+
+	nss_ppenl_info("%s: pid %u port '%s' dir %u disable mirror\n",
+		       __func__, pid, cfg->port_name, cfg->dir);
+
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_warn("%u: unable to copy NL message for response\n", pid);
+		nss_ppenl_ucast_resp(skb);
+		return -ENOMEM;
+	}
+
+	ret = ppe_mirror_port_mirror_set(cfg->port_name,
+					 (enum ppe_mirror_port_dir)cfg->dir,
+					 false);
+	if (ret != PPE_MIRROR_RET_SUCCESS) {
+		nss_ppenl_warn("%u: ppe_mirror_port_mirror_set failed for '%s' (ret %d)\n",
+			       pid, cfg->port_name, ret);
+		cfg->ret = -EIO;
+		goto send_resp;
+	}
+
+	nss_ppenl_info("%u: mirror dir=%u disabled on port '%s' OK\n",
+		       pid, cfg->dir, cfg->port_name);
+	cfg->ret = 0;
+
+send_resp:
+	nl_rule = nss_ppenl_get_data(resp);
+	nl_rule->cfg.ret = cfg->ret;
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
+ * nss_ppenl_port_mirror_analyst_configure()
+ *	Common helper: set or clear the mirror analysis port for a direction.
+ *
+ * @skb:    Incoming socket buffer.
+ * @info:   Generic Netlink info.
+ * @enable: true to set the analyst port, false to clear it.
+ * @cmd:    Message type (SET_ANALYST_PORT_MSG or CLR_ANALYST_PORT_MSG).
+ */
+static int nss_ppenl_port_mirror_analyst_configure(struct sk_buff *skb,
+						   struct genl_info *info,
+						   bool enable,
+						   enum nss_ppe_port_mirror_message_types cmd)
+{
+	struct nss_ppenl_port_mirror_rule    *nl_rule;
+	struct nss_ppenl_port_mirror_analyst *analyst;
+	struct nss_ppenl_cmn *nl_cm;
+	ppe_mirror_ret_t ret;
+	struct sk_buff *resp;
+	uint32_t pid;
+
+	nl_cm = nss_ppenl_get_msg(&nss_ppenl_port_mirror_family, info, cmd);
+	if (!nl_cm) {
+		nss_ppenl_warn("unable to extract port-mirror analyst message\n");
+		nss_ppenl_ucast_resp(skb);
+		return -EINVAL;
+	}
+
+	nl_rule = container_of(nl_cm, struct nss_ppenl_port_mirror_rule, cm);
+	analyst = &nl_rule->analyst;
+	pid     = nl_cm->pid;
+
+	analyst->analyst_port_name[IFNAMSIZ - 1] = '\0';
+
+	nss_ppenl_info("%s: pid %u analyst_port '%s' dir %u %s priority %u\n",
+		       __func__, pid, analyst->analyst_port_name,
+		       analyst->dir, enable ? "set" : "clear", analyst->priority);
+
+	resp = nss_ppenl_copy_msg(skb);
+	if (!resp) {
+		nss_ppenl_warn("%u: unable to copy NL message for response\n", pid);
+		nss_ppenl_ucast_resp(skb);
+		return -ENOMEM;
+	}
+
+	ret = ppe_mirror_analyst_port_set(analyst->analyst_port_name,
+					  (enum ppe_mirror_port_dir)analyst->dir,
+					  enable, analyst->priority);
+	if (ret != PPE_MIRROR_RET_SUCCESS) {
+		nss_ppenl_warn("%u: ppe_mirror_analyst_port_set failed for '%s' (ret %d)\n",
+			       pid, analyst->analyst_port_name, ret);
+		analyst->ret = -EIO;
+		goto send_resp;
+	}
+
+	nss_ppenl_info("%u: analyst port '%s' dir=%u %s OK\n",
+		       pid, analyst->analyst_port_name, analyst->dir,
+		       enable ? "set" : "cleared");
+	analyst->ret = 0;
+
+send_resp:
+	nl_rule = nss_ppenl_get_data(resp);
+	nl_rule->analyst.ret = analyst->ret;
+	nss_ppenl_ucast_resp(resp);
+	return 0;
+}
+
+/*
+ * nss_ppenl_port_mirror_ops_set_analyst_port()
+ *	Handle NSS_PPE_PORT_MIRROR_SET_ANALYST_PORT_MSG – set the analysis port.
+ */
+static int nss_ppenl_port_mirror_ops_set_analyst_port(struct sk_buff *skb, struct genl_info *info)
+{
+	return nss_ppenl_port_mirror_analyst_configure(skb, info, true,
+						       NSS_PPE_PORT_MIRROR_SET_ANALYST_PORT_MSG);
+}
+
+/*
+ * nss_ppenl_port_mirror_ops_clr_analyst_port()
+ *	Handle NSS_PPE_PORT_MIRROR_CLR_ANALYST_PORT_MSG – clear the analysis port.
+ */
+static int nss_ppenl_port_mirror_ops_clr_analyst_port(struct sk_buff *skb, struct genl_info *info)
+{
+	return nss_ppenl_port_mirror_analyst_configure(skb, info, false,
+						       NSS_PPE_PORT_MIRROR_CLR_ANALYST_PORT_MSG);
 }
 
 /*
