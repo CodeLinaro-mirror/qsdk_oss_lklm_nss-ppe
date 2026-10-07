@@ -1447,7 +1447,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_flags_set(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_PPPOE_FLOW);
 		}
 
-		if (valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_HOST_QDISC_VALID) {
+		if (valid_flags & PPE_DRV_V4_VALID_FLAG_FLOW_WLAN_HOST_QDISC_VALID) {
 			if ((!qdisc_rule->flow_netdev) ||
 					(qdisc_rule->flow_flags == PPE_DRV_HOST_QDISC_INVALID)) {
 				return PPE_DRV_RET_HOST_QDISC_CFG_FAIL;
@@ -1820,7 +1820,7 @@ ppe_drv_ret_t ppe_drv_v4_conn_fill(struct ppe_drv_v4_rule_create *create, struct
 			ppe_drv_v4_conn_flow_flags_set(pcr, PPE_DRV_V4_CONN_FLOW_FLAG_PPPOE_FLOW);
 		}
 
-		if (valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_HOST_QDISC_VALID) {
+		if (valid_flags & PPE_DRV_V4_VALID_FLAG_RETURN_WLAN_HOST_QDISC_VALID) {
 			if ((!qdisc_rule->return_netdev) ||
 					(qdisc_rule->return_flags == PPE_DRV_HOST_QDISC_INVALID)) {
 				return PPE_DRV_RET_HOST_QDISC_CFG_FAIL;

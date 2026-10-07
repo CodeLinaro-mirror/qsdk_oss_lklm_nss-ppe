@@ -64,17 +64,6 @@ enum ppe_drv_port_evp_status {
 };
 
 /**
- * ppe_port_user_type
- *	User's VP type
- */
-enum ppe_port_user_type {
-	PPE_DRV_PORT_USER_TYPE_PASSIVE_VP = 1,		/**< VP for Passive use-case */
-	PPE_DRV_PORT_USER_TYPE_ACTIVE_VP,		/**< VP for Active use-case */
-	PPE_DRV_PORT_USER_TYPE_DS,			/**< VP for Direct-Switch use-case */
-	PPE_DRV_PORT_USER_TYPE_MAX,			/**< Maximum VP User types */
-};
-
-/**
  * ppe_port_netdev_type
  *	Port's netdev type
  */

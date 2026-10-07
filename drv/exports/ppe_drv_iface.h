@@ -290,8 +290,8 @@ ppe_drv_ret_t ppe_drv_iface_ucast_queue_set(struct ppe_drv_iface *iface, uint8_t
 struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx);
 
 /**
- * ppe_drv_iface_check_if_vp_flow
- *	API to check whether PPE-VP offload is enabled or not.
+ * ppe_drv_iface_get_port_user_type
+ *	Returns the port user type for the given interface index.
  *
  * @datatypes
  * ppe_drv_iface_t
@@ -299,9 +299,10 @@ struct ppe_drv_iface *ppe_drv_iface_get_by_idx(ppe_drv_iface_t idx);
  * @param[in] rx_if  Rx interface index.
  *
  * @return
- * true or false
+ * enum ppe_drv_port_user_type, PPE_DRV_PORT_USER_TYPE_MAX
+ * if interface or port not found.
  */
-bool ppe_drv_iface_check_if_vp_flow(ppe_drv_iface_t rx_if);
+enum ppe_drv_port_user_type ppe_drv_iface_get_port_user_type(ppe_drv_iface_t rx_if);
 
 /**
  * ppe_drv_iface_check_flow_offload_enabled
