@@ -469,6 +469,12 @@ sw_l3_done:
 		/*
 		 * If not processed successfully VP receive handler would free the skb
 		 */
+		if (unlikely(!svp->src_cb)) {
+			rcu_read_unlock();
+			ppe_vp_info("%px: Rx VP:%d src_cb is NULL, dropping skb:%p\n", svp, rxi->svp, skb);
+			goto no_svp_cb_drop;
+		}
+
 		mem_debug_update_skb(skb);
 		if (unlikely(!svp->src_cb(&client_cb_info, svp->src_cb_data))) {
 			rcu_read_unlock();
@@ -486,6 +492,7 @@ sw_l3_done:
 	/*
 	 * Packet has neither source or destination VP set
 	 */
+no_svp_cb_drop:
 	atomic64_inc(&vp_base.base_stats.rx_svp_invalid);
 	mem_debug_update_skb(skb);
 	dev_kfree_skb_any(skb);
