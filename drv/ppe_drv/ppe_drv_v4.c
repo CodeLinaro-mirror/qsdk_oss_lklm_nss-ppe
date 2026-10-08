@@ -1013,7 +1013,7 @@ static bool ppe_drv_v4_is_egress_ddrq_disabled(struct ppe_drv_iface *if_rx, stru
 
 #ifdef NSS_PPE_PON_SUPPORT
 	if (if_tx->type == PPE_DRV_IFACE_TYPE_VEIP) {
-		port_num = ppe_drv_qos_pon_port_get();
+		port_num = ppe_drv_qos_pon_port_get_internal();
 	} else {
 		port_num = ppe_drv_port_num_get(pp_tx);
 	}
