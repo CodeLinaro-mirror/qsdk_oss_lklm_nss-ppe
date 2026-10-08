@@ -454,6 +454,30 @@ EXPORT_SYMBOL(ppe_drv_qos_tcont_set);
 
 #ifdef NSS_PPE_PON_SUPPORT
 /*
+ * ppe_drv_qos_pon_port_get_internal()
+ *	Gets the PON port ID with the driver lock already held.
+ */
+uint32_t ppe_drv_qos_pon_port_get_internal(void)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_iface *pon_iface = p->pon_iface;
+	struct ppe_drv_port *pon_port;
+
+	if (!pon_iface) {
+		ppe_drv_trace("%px:PON interface not present", p);
+		return 0;
+	}
+
+	pon_port = ppe_drv_iface_port_get(pon_iface);
+	if (!pon_port) {
+		ppe_drv_trace("%px:PON port not present", p);
+		return 0;
+	}
+
+	return pon_port->port;
+}
+
+/*
  * ppe_drv_qos_pon_port_alloc_callback_unregister()
  *	API to unregister PON port QoS resource allocation callback.
  */
@@ -487,24 +511,14 @@ EXPORT_SYMBOL(ppe_drv_qos_pon_port_alloc_callback_register);
  */
 uint32_t ppe_drv_qos_pon_port_get(void)
 {
-	struct ppe_drv *p __maybe_unused = ppe_drv_gbl;
-	struct ppe_drv_iface *pon_iface = NULL;
-	struct ppe_drv_port *pon_port = NULL;
+	struct ppe_drv *p = ppe_drv_gbl;
+	uint32_t port_num;
 
-	pon_iface = ppe_drv_pon_iface_get();
+	spin_lock_bh(&p->lock);
+	port_num = ppe_drv_qos_pon_port_get_internal();
+	spin_unlock_bh(&p->lock);
 
-	if (!pon_iface) {
-		ppe_drv_trace("%px:PON interface not present", p);
-		return 0;
-	}
-
-	pon_port = pon_iface->port;
-	if (!pon_port) {
-		ppe_drv_trace("%px:PON port not present", p);
-		return 0;
-	}
-
-	return pon_port->port;
+	return port_num;
 }
 EXPORT_SYMBOL(ppe_drv_qos_pon_port_get);
 #endif
