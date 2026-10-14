@@ -116,6 +116,14 @@ module_param(sixth_tuple_mode, int, 0644);
 MODULE_PARM_DESC(sixth_tuple_mode, "Sixth tuple mode");
 #endif
 
+#if defined(PPE_LOOPBACK_PORT_SUPPORT)
+/*
+ * Module parameter to control flow control configuration on the loopback port
+ */
+static int lpbk_flowctrl_en = 1;
+MODULE_PARM_DESC(lpbk_flowctrl_en, "Enable flow control on the loopback port, 0 or 1, writable at runtime (default: 1)");
+#endif
+
 uint32_t if_bm_to_offload;
 #ifdef NSS_PPE_PON_SUPPORT
 uint32_t gem_port_bitmap;
@@ -2511,7 +2519,9 @@ static int ppe_drv_probe(struct platform_device *pdev)
 	}
 
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
-	ppe_drv_port_loopback_port_get_info();
+	if (ppe_drv_port_loopback_port_get_info()) {
+		ppe_drv_port_loopback_flowctrl_set(lpbk_flowctrl_en);
+	}
 #endif
 
 	/*
@@ -5157,6 +5167,37 @@ static const struct kernel_param_ops mcast_coremask_ops = {
 };
 
 module_param_cb(mcast_coremask, &mcast_coremask_ops, &mcast_coremask, 0644);
+
+#if defined(PPE_LOOPBACK_PORT_SUPPORT)
+/*
+ * ppe_drv_lpbk_flowctrl_en_handler()
+ *	Handler function to set value of lpbk_flowctrl_en.
+ *
+ * A write after probe enables or disables flow control on the loopback port right away.
+ * A value passed at module load is only stored here, and is applied by probe.
+ */
+static int ppe_drv_lpbk_flowctrl_en_handler(const char *val, const struct kernel_param *kp)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	int res = param_set_int(val, kp);
+
+	if (res || !p || !p->loopback_port_info.enabled) {
+		return res;
+	}
+
+	ppe_drv_port_loopback_flowctrl_set(lpbk_flowctrl_en);
+	ppe_drv_trace("Loopback port flow control set to %d.\n", lpbk_flowctrl_en);
+
+	return res;
+}
+
+static const struct kernel_param_ops lpbk_flowctrl_en_ops = {
+	.set = ppe_drv_lpbk_flowctrl_en_handler,
+	.get = param_get_int,
+};
+
+module_param_cb(lpbk_flowctrl_en, &lpbk_flowctrl_en_ops, &lpbk_flowctrl_en, 0644);
+#endif
 
 /*
  * ppe_drv_module_init()

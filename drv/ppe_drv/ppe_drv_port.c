@@ -1049,6 +1049,26 @@ EXPORT_SYMBOL(ppe_drv_port_ucast_queue_get_by_port);
 
 #if defined(PPE_LOOPBACK_PORT_SUPPORT)
 /*
+ * ppe_drv_port_loopback_flowctrl_set()
+ *	Enable or disable flow control on the loopback port.
+ */
+bool ppe_drv_port_loopback_flowctrl_set(int enable)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	uint32_t port_id = p->loopback_port_info.port_id;
+	a_bool_t fc_enable = enable ? A_TRUE : A_FALSE;
+	sw_error_t err;
+
+	err = fal_port_flowctrl_set(PPE_DRV_SWITCH_ID, port_id, fc_enable);
+	if (err != SW_OK) {
+		ppe_drv_warn("failed to set flow control on loopback port %d\n", port_id);
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * ppe_drv_port_loopback_port_get_info()
  *	Get the loopback port related information.
  */
