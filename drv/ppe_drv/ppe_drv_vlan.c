@@ -2699,6 +2699,8 @@ ppe_drv_ret_t ppe_drv_vlan_hgu_rule_create(struct ppe_drv_vlan_cfg *info, struct
 	 */
 	xlt_action_in.vsi_xlt = vsi_idx;
 	xlt_action_in.vsi_xlt_enable = A_TRUE;
+	xlt_action_in.svc_code = PPE_DRV_SC_FEATURE_PON_HGU_PPTP;
+	xlt_action_in.svc_code_en = A_TRUE;
 
 	ret = fal_port_vlan_trans_adv_set(PPE_DRV_SWITCH_ID, FAL_PORT_VLAN_INGRESS, hw_id, &xlt_rule_in, &xlt_action_in);
 	if (ret != SW_OK) {
