@@ -126,7 +126,9 @@ static int ppe_red_change(struct Qdisc *sch, struct nlattr *opt,
 
 	res->q.red_en = true;
 	res->q.color_en = false;
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	res->q.q_ceiling_unit = PPE_DRV_QOS_QUEUE_CEILING_UNIT_BYTES;
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 
 	/*
 	 * PPE operates in terms of memory blocks, and each block

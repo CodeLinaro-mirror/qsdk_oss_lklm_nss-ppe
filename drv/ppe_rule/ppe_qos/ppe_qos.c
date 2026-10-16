@@ -25,7 +25,7 @@ static int ppe_qos_get_interface_id(struct ppe_qos_interface *data)
 		if (data->interface.tcont_id >= PPE_DRV_QOS_TCONT_MAX) {
 			ppe_qos_warn("%p invalid Tcont ID", data);
 			return -1;
-		}
+			}
 
 		ppe_qos_trace("%p inteface type:%d tcont_id:%d", data, data->type, data->interface.tcont_id);
 		return data->interface.tcont_id;
@@ -81,11 +81,13 @@ static struct ppe_qos_interface_res *ppe_qos_res_alloc(uint32_t id)
 		return NULL;
 	}
 
+#ifdef PPE_RULE_DDRQ_ENABLE
 	if (ppe_drv_qos_port_state_alloc(id, &res->port) != PPE_DRV_RET_SUCCESS) {
 		kfree(res);
 		ppe_qos_warn("Shaper shadow state allocation failed for interface:%u", id);
 		return NULL;
 	}
+#endif /* PPE_RULE_DDRQ_ENABLE */
 
 	res->l0sp = res->port.base[PPE_DRV_QOS_RES_TYPE_L0_SP];
 
@@ -105,6 +107,7 @@ static struct ppe_qos_interface_res *ppe_qos_res_alloc(uint32_t id)
 	return res;
 }
 
+#ifdef PPE_RULE_DDRQ_ENABLE
 /*
  * ppe_qos_disable_all_queue()
  *	Disables all queues corresponding to a port.
@@ -180,6 +183,49 @@ static void ppe_qos_disable_all_queue(struct ppe_qos_interface_res *tm_if)
 	ppe_qos_info("Interface type:%d id:%d port:%u all queues disabled",
 			tm_if->type, tm_if->id, port_id);
 }
+#else /* PPE_RULE_DDRQ_ENABLE */
+/*
+ * ppe_qos_disable_all_queue()
+ *	Disables all queues corresponding to a port.
+ */
+static void ppe_qos_disable_all_queue(struct ppe_qos_interface_res *tm_if)
+{
+	struct ppe_qos_base *g_qos = &gbl_ppe_qos;
+	uint32_t qid, offset;
+	struct ppe_drv_qos_port *port = NULL;
+	struct ppe_qos_interface_queue *queue = NULL;
+
+	port = &tm_if->port;
+	qid = port->base[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE];
+
+	/*
+	 * Disable queue enqueue, dequeue and flush the queue.
+	 * For UNI, disable all queues, for T-cont disable only assigned queues.
+	 */
+	if (tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
+		for (offset = 0; offset < port->max[PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE]; offset++) {
+			ppe_drv_qos_queue_disable(tm_if->id, qid + offset);
+		}
+
+		qid = port->base[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE];
+		for (offset = 0; offset < port->max[PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE]; offset++) {
+			ppe_drv_qos_queue_disable(tm_if->id, qid + offset);
+		}
+	} else {
+		if (!list_empty(&tm_if->q_list)) {
+			list_for_each_entry(queue, &tm_if->q_list, list) {
+				if (!queue->valid) {
+					continue;
+				}
+
+				ppe_drv_qos_queue_disable(g_qos->pon_port, qid + queue->offset);
+			}
+		}
+	}
+
+	ppe_qos_info("Interface type:%d id:%d all queues disabled", tm_if->type, tm_if->id);
+}
+#endif /* PPE_RULE_DDRQ_ENABLE */
 
 /*
  * ppe_qos_enable_all_queue()
@@ -696,9 +742,13 @@ static void ppe_qos_res_deinit(void)
 
 	if (!list_empty(&g_qos->port_list)) {
 		list_for_each_entry_safe(res, tmp, &g_qos->port_list, list) {
-			if (res->valid)
+			if (res->valid) {
 				ppe_qos_delete_interface_queues(res);
+			}
+
+#ifdef PPE_RULE_DDRQ_ENABLE
 			ppe_drv_qos_port_state_free(res->id);
+#endif /* PPE_RULE_DDRQ_ENABLE */
 
 			list_del(&res->list);
 			kfree(res);
@@ -950,8 +1000,10 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	struct ppe_drv_qos_res res = {0};
 	struct ppe_qos_interface_queue *queue = NULL;
 	struct list_head *queue_list = NULL;
+#ifdef PPE_RULE_DDRQ_ENABLE
 	struct net_device *dev = NULL;
 	uint32_t port_id;
+#endif /* PPE_RULE_DDRQ_ENABLE */
 	ppe_qos_queue_type_t queue_type;
 	uint32_t queue_base;
 	bool found = false;
@@ -1086,7 +1138,9 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	res.q.qlimit = info->ceiling / PPE_DRV_QOS_MEM_BLOCK_SIZE;
 	res.q.color_en = info->color_en;
 	res.q.red_en = info->wred_en;
+#ifdef PPE_RULE_DDRQ_ENABLE
 	res.q.q_ceiling_unit = PPE_DRV_QOS_QUEUE_CEILING_UNIT_BYTES;
+#endif /* PPE_RULE_DDRQ_ENABLE */
 
 	/*
 	 * PPE operates in terms of memory blocks, and each block
@@ -1113,6 +1167,7 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 	res.q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_YELLOW] = info->yellow_resume_off / PPE_DRV_QOS_MEM_BLOCK_SIZE;
 	res.q.resume_off[PPE_DRV_QOS_QUEUE_COLOR_RED] = info->red_resume_off / PPE_DRV_QOS_MEM_BLOCK_SIZE;
 
+#ifdef PPE_RULE_DDRQ_ENABLE
 	port_id = (uint32_t)id;
 #ifdef NSS_PPE_PON_SUPPORT
 	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_TCONT) {
@@ -1125,6 +1180,7 @@ ppe_qos_ret_t ppe_qos_set_queue_limit(struct ppe_qos_queue_limit_info *info)
 		res.port_mtu = dev->mtu;
 	}
 
+#endif /* PPE_RULE_DDRQ_ENABLE */
 	if (ppe_drv_qos_queue_limit_set(&res) != PPE_DRV_RET_SUCCESS) {
 		ppe_qos_stats_inc(failed_stats);
 		spin_unlock_bh(&g_qos->lock);
@@ -1870,10 +1926,12 @@ ppe_qos_ret_t ppe_qos_flush_interface_queues(struct ppe_qos_interface_queues_inf
 		return PPE_QOS_FLUSH_INTERFACE_QUEUES_FAIL;
 	}
 
+#ifdef PPE_RULE_DDRQ_ENABLE
 	if (tm_if->type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		ppe_drv_qos_port_state_free(tm_if->id);
 	}
 
+#endif /* PPE_RULE_DDRQ_ENABLE */
 	if (ppe_qos_delete_interface_shaper(tm_if)) {
 		ppe_qos_stats_inc(&g_qos->stats.qos_flush_interface_queues_fail);
 		spin_unlock_bh(&g_qos->lock);
@@ -2075,7 +2133,9 @@ ppe_qos_ret_t ppe_qos_create_interface_queues(struct ppe_qos_interface_queues_in
 res_free:
 	if (info->if_data.type == PPE_QOS_INTERFACE_TYPE_PHYSICAL_VP) {
 		if (!tm_if->valid) {
+#ifdef PPE_RULE_DDRQ_ENABLE
 			ppe_drv_qos_port_state_free(tm_if->id);
+#endif /* PPE_RULE_DDRQ_ENABLE */
 			list_del(&tm_if->list);
 			kfree(tm_if);
 		}

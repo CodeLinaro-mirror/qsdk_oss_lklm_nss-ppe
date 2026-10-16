@@ -414,7 +414,9 @@ void ppe_qdisc_stats_stop_polling(struct ppe_qdisc *pq)
 			       " with qos_tag %x and port_id = %d", pq, pq->qos_tag, pq->port_id);
 	}
 
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	ppe_drv_qos_ddrq_accu_stats_stop();
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	ppe_qdisc_stats_sync_many_exit(pq);
 	ppe_qdisc_info("%px stopped delayed work queue for root %x, portId= %d", pq, pq->qos_tag,
 			pq->port_id);
@@ -431,7 +433,9 @@ void ppe_qdisc_stats_start_polling(struct ppe_qdisc *pq)
 			       "with qos_tag %x, port_id =%d", pq, pq->qos_tag, pq->port_id);
 	}
 
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	ppe_drv_qos_ddrq_accu_stats_start();
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	ppe_qdisc_stats_queue_delayed_work(pq);
 	ppe_qdisc_info("%px Started delayed work queue for root %x, port_id = %d", pq, pq->qos_tag,
 			 pq->port_id);
@@ -549,4 +553,3 @@ void ppe_qdisc_stats_qdisc_detach(struct ppe_qdisc *pq)
 
 	ppe_qdisc_info("%px Node detached from list of leaf nodes under the root %px", pq, rpq);
 }
-

@@ -12,8 +12,15 @@
 #ifndef _PPE_DRV_QOS_H_
 #define _PPE_DRV_QOS_H_
 
+#if defined(PPE_DRV_DDRQ_ENABLE) || defined(PPE_QDISC_DDRQ_ENABLE) || \
+	defined(PPE_RULE_DDRQ_ENABLE) || defined(NSS_DP_DDRQ_SUPPORT)
+#define PPE_DRV_QOS_DDRQ_SUPPORT
+#endif
+
+#ifdef PPE_DRV_QOS_DDRQ_SUPPORT
 #include <linux/list.h>
 
+#endif /* PPE_DRV_QOS_DDRQ_SUPPORT */
 /**
  * @addtogroup ppe_drv_qos_subsystem
  * @{
@@ -32,9 +39,11 @@
  */
 #define PPE_DRV_QOS_MEM_BLOCK_SIZE 256
 
+#ifdef PPE_DRV_QOS_DDRQ_SUPPORT
 #define PPE_DRV_QOS_DEF_CFG_CEILING_VAL	0x960
 #define PPE_DRV_QOS_DDRQ_CFG_CEILING_VAL	0x50
 
+#endif /* PPE_DRV_QOS_DDRQ_SUPPORT */
 /**
  * Queue drop state which needs to be configured during the DDRQ bypass
  * configuration and its reset state
@@ -94,6 +103,7 @@ enum ppe_drv_qos_drr_unit {
 };
 typedef enum ppe_drv_qos_drr_unit ppe_drv_qos_drr_unit_t;
 
+#ifdef PPE_DRV_QOS_DDRQ_SUPPORT
 /**
  * ppe_drv_qos_queue_ceiling_unit
  *	Queue qdisc ceiling unit.
@@ -105,6 +115,7 @@ enum ppe_drv_qos_queue_ceiling_unit {
 };
 typedef enum ppe_drv_qos_queue_ceiling_unit ppe_drv_qos_queue_ceiling_unit_t;
 
+#endif /* PPE_DRV_QOS_DDRQ_SUPPORT */
 /**
  * ppe_drv_qos_q_stat
  *	Information for QoS queue statistics.
@@ -143,8 +154,10 @@ struct ppe_drv_qos_queue {
 	bool red_en;		/**< Enable RED algorithm. */
 	bool backpressure_en;	/**< Enable backpressure. */
 	bool mcast_valid;	/**<Multicast queue is valid. */
+#ifdef PPE_DRV_QOS_DDRQ_SUPPORT
 	ppe_drv_qos_queue_ceiling_unit_t q_ceiling_unit;
 				/**< Queue qdisc ceiling unit. */
+#endif /* PPE_DRV_QOS_DDRQ_SUPPORT */
 };
 
 /**
@@ -200,7 +213,9 @@ struct ppe_drv_qos_res {
 	struct ppe_drv_qos_scheduler scheduler;	/**< PPE HW scheduler parameters. */
 	uint32_t l0spid;			/**< Level 0 SP Id. */
 	uint32_t l1spid;			/**< Level 1 SP Id. */
+#ifdef PPE_DRV_QOS_DDRQ_SUPPORT
 	uint32_t port_mtu;			/**< MTU configured on the associated port netdev. */
+#endif /* PPE_DRV_QOS_DDRQ_SUPPORT */
 };
 
 /*
@@ -226,6 +241,7 @@ struct ppe_drv_qos_port {
 	uint32_t max_pri;		/**< Maximum priority supported. */
 };
 
+#ifdef PPE_DRV_QOS_DDRQ_SUPPORT
 /**
  * ppe_drv_qos_shaper_cfg
  *	Complete shaper configuration for shadow state.
@@ -278,6 +294,7 @@ struct ppe_drv_qos_port_state {
 						/**< Multicast queue shaper shadow array. */
 };
 
+#endif /* PPE_DRV_QOS_DDRQ_SUPPORT */
 /**
  * Callback function for getting INT-PRI value.
  *
@@ -301,6 +318,7 @@ typedef uint8_t (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32
  */
 typedef bool (*ppe_drv_qos_queue_info_callback_t)(struct net_device *dev, uint32_t handle_id, struct ppe_drv_queue_info *pq_info);
 
+#ifdef PPE_DRV_QOS_DDRQ_SUPPORT
 /**
  * Callback function type for DDRQ queue operation.
  *
@@ -355,44 +373,7 @@ struct ppe_drv_qos_ddrq_ops {
 	ppe_drv_qos_ddrq_pon_drainout_callback_t ddrq_pon_drainout;	/**< PON T-CONT drainout callback. */
 };
 
-/**
- * ppe_drv_qos_ddrq_callback_unregister
- *	API to unregister DDRQ callbacks.
- *
- * @return
- * None
- */
-void ppe_drv_qos_ddrq_callback_unregister(void);
-
-/**
- * ppe_drv_qos_ddrq_callback_register
- *	API to register DDRQ callbacks.
- *
- * @param[in] ops	Pointer to DDRQ callback operations.
- *
- * @return
- * None
- */
-void ppe_drv_qos_ddrq_callback_register(const struct ppe_drv_qos_ddrq_ops *ops);
-
-/**
- * ppe_drv_qos_ddrq_accu_stats_start
- *	API to trigger registered DDRQ accumulate statistics start callback.
- *
- * @return
- * None
- */
-void ppe_drv_qos_ddrq_accu_stats_start(void);
-
-/**
- * ppe_drv_qos_ddrq_accu_stats_stop
- *	API to trigger registered DDRQ accumulate statistics stop callback.
- *
- * @return
- * None
- */
-void ppe_drv_qos_ddrq_accu_stats_stop(void);
-
+#endif /* PPE_DRV_QOS_DDRQ_SUPPORT */
 /**
  * ppe_drv_qos_int_pri_callback_unregister
  *	API to unregister INT-PRI fetch callback.
@@ -549,26 +530,6 @@ ppe_drv_ret_t ppe_drv_qos_queue_dequeue_drop_ctrl(uint32_t qid, bool enable);
  * Status of the QoS queue disable operation.
  */
 ppe_drv_ret_t ppe_drv_qos_queue_disable(uint32_t port_id, uint32_t qid);
-
-/**
- * ppe_drv_qos_pon_drainout
- *	Drain all PON T-CONTs through the registered DDRQ callback.
- *
- * @return
- * Status of the PON drainout operation.
- */
-ppe_drv_ret_t ppe_drv_qos_pon_drainout(void);
-
-/**
- * ppe_drv_qos_port_is_pon
- *	Checks whether a port is the configured PON port.
- *
- * @param[in] port_id  Port ID of the port.
- *
- * @return
- * True when the port is the configured PON port.
- */
-bool ppe_drv_qos_port_is_pon(uint32_t port_id);
 
 /**
  * ppe_drv_qos_queue_enable
@@ -780,36 +741,6 @@ ppe_drv_ret_t ppe_drv_qos_queue_shaper_set(struct ppe_drv_qos_res *res);
 ppe_drv_ret_t ppe_drv_qos_mcast_queue_set(struct ppe_drv_qos_res *res, uint32_t port_id);
 
 /**
- * ppe_drv_qos_queue_cfg_get
- *	Gets queue dynamic threshold configuration in PPE.
- *
- * @datatypes
- * ppe_drv_qos_queue
- *
- * @param[in]  qid    Queue ID.
- * @param[out] q_cfg  Pointer to the queue configuration.
- *
- * @return
- * Status of the queue configuration get operation.
- */
-ppe_drv_ret_t ppe_drv_qos_queue_cfg_get(uint32_t qid, struct ppe_drv_qos_queue *q_cfg);
-
-/**
- * ppe_drv_qos_queue_cfg_set
- *	Sets queue dynamic threshold configuration in PPE.
- *
- * @datatypes
- * ppe_drv_qos_queue
- *
- * @param[in] qid    Queue ID.
- * @param[in] q_cfg  Pointer to the queue configuration.
- *
- * @return
- * Status of the queue configuration set operation.
- */
-ppe_drv_ret_t ppe_drv_qos_queue_cfg_set(uint32_t qid, struct ppe_drv_qos_queue *q_cfg);
-
-/**
  * ppe_drv_qos_queue_limit_set
  *	Sets queue size in PPE.
  *
@@ -822,51 +753,6 @@ ppe_drv_ret_t ppe_drv_qos_queue_cfg_set(uint32_t qid, struct ppe_drv_qos_queue *
  * Status of the QoS queue limit set operation.
  */
 ppe_drv_ret_t ppe_drv_qos_queue_limit_set(struct ppe_drv_qos_res *res);
-
-/**
- * ppe_drv_qos_port_state_alloc
- *	Allocate shaper shadow state arrays for a port.
- *
- * @param[in] port_id  Port ID of the port.
- * @param[in] port     Pointer to QoS resource information.
- *
- * @return
- * Status of the allocation operation.
- */
-ppe_drv_ret_t ppe_drv_qos_port_state_alloc(uint32_t port_id, struct ppe_drv_qos_port *port);
-
-/**
- * ppe_drv_qos_port_state_free
- *	Free shaper shadow state arrays for a port.
- *
- * @param[in] port_id  Port ID of the port.
- *
- * @return
- * None.
- */
-void ppe_drv_qos_port_state_free(uint32_t port_id);
-
-/**
- * ppe_drv_qos_port_shapers_unlimited
- *	Set all shapers for a port to unlimited rate.
- *
- * @param[in] port_id  Port ID of the port.
- *
- * @return
- * Status of the operation.
- */
-ppe_drv_ret_t ppe_drv_qos_port_shapers_unlimited(uint32_t port_id);
-
-/**
- * ppe_drv_qos_port_shapers_restore
- *	Restore all shapers for a port from shadow state.
- *
- * @param[in] port_id  Port ID of the port.
- *
- * @return
- * Status of the operation.
- */
-ppe_drv_ret_t ppe_drv_qos_port_shapers_restore(uint32_t port_id);
 
 /**
  * ppe_drv_qos_default_conf_set
@@ -964,6 +850,142 @@ void ppe_drv_qos_pon_port_alloc_callback_unregister(void);
  * Status of the resource get operation.
  */
 ppe_drv_ret_t ppe_drv_qos_port_htt_res_get(uint32_t port_id, uint8_t index, struct ppe_drv_qos_port *port);
+
+#ifdef PPE_DRV_QOS_DDRQ_SUPPORT
+/**
+ * ppe_drv_qos_ddrq_callback_unregister
+ *	API to unregister DDRQ callbacks.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_ddrq_callback_unregister(void);
+
+/**
+ * ppe_drv_qos_ddrq_callback_register
+ *	API to register DDRQ callbacks.
+ *
+ * @param[in] ops	Pointer to DDRQ callback operations.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_ddrq_callback_register(const struct ppe_drv_qos_ddrq_ops *ops);
+
+/**
+ * ppe_drv_qos_ddrq_accu_stats_start
+ *	API to trigger registered DDRQ accumulate statistics start callback.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_ddrq_accu_stats_start(void);
+
+/**
+ * ppe_drv_qos_ddrq_accu_stats_stop
+ *	API to trigger registered DDRQ accumulate statistics stop callback.
+ *
+ * @return
+ * None
+ */
+void ppe_drv_qos_ddrq_accu_stats_stop(void);
+
+/**
+ * ppe_drv_qos_pon_drainout
+ *	Drain all PON T-CONTs through the registered DDRQ callback.
+ *
+ * @return
+ * Status of the PON drainout operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_pon_drainout(void);
+
+/**
+ * ppe_drv_qos_port_is_pon
+ *	Checks whether a port is the configured PON port.
+ *
+ * @param[in] port_id  Port ID of the port.
+ *
+ * @return
+ * True when the port is the configured PON port.
+ */
+bool ppe_drv_qos_port_is_pon(uint32_t port_id);
+
+/**
+ * ppe_drv_qos_queue_cfg_get
+ *	Gets queue dynamic threshold configuration in PPE.
+ *
+ * @datatypes
+ * ppe_drv_qos_queue
+ *
+ * @param[in]  qid    Queue ID.
+ * @param[out] q_cfg  Pointer to the queue configuration.
+ *
+ * @return
+ * Status of the queue configuration get operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_cfg_get(uint32_t qid, struct ppe_drv_qos_queue *q_cfg);
+
+/**
+ * ppe_drv_qos_queue_cfg_set
+ *	Sets queue dynamic threshold configuration in PPE.
+ *
+ * @datatypes
+ * ppe_drv_qos_queue
+ *
+ * @param[in] qid    Queue ID.
+ * @param[in] q_cfg  Pointer to the queue configuration.
+ *
+ * @return
+ * Status of the queue configuration set operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_queue_cfg_set(uint32_t qid, struct ppe_drv_qos_queue *q_cfg);
+
+/**
+ * ppe_drv_qos_port_state_alloc
+ *	Allocate shaper shadow state arrays for a port.
+ *
+ * @param[in] port_id  Port ID of the port.
+ * @param[in] port     Pointer to QoS resource information.
+ *
+ * @return
+ * Status of the allocation operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_state_alloc(uint32_t port_id, struct ppe_drv_qos_port *port);
+
+/**
+ * ppe_drv_qos_port_state_free
+ *	Free shaper shadow state arrays for a port.
+ *
+ * @param[in] port_id  Port ID of the port.
+ *
+ * @return
+ * None.
+ */
+void ppe_drv_qos_port_state_free(uint32_t port_id);
+
+/**
+ * ppe_drv_qos_port_shapers_unlimited
+ *	Set all shapers for a port to unlimited rate.
+ *
+ * @param[in] port_id  Port ID of the port.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_shapers_unlimited(uint32_t port_id);
+
+/**
+ * ppe_drv_qos_port_shapers_restore
+ *	Restore all shapers for a port from shadow state.
+ *
+ * @param[in] port_id  Port ID of the port.
+ *
+ * @return
+ * Status of the operation.
+ */
+ppe_drv_ret_t ppe_drv_qos_port_shapers_restore(uint32_t port_id);
+
+#endif /* PPE_DRV_QOS_DDRQ_SUPPORT */
 
 /** @} */ /* end_addtogroup ppe_drv_qos_subsystem */
 

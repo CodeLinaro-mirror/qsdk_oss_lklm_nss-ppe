@@ -94,6 +94,7 @@ static void ppe_qdisc_port_res_attach_free(uint32_t port, struct ppe_qdisc_port_
 	return;
 }
 
+#ifdef PPE_QDISC_DDRQ_ENABLE
 /*
  * ppe_qdisc_port_res_max_get()
  *	Returns maximum number of the particular resource for a given port.
@@ -110,6 +111,24 @@ uint32_t ppe_qdisc_port_res_max_get(uint32_t port_id, ppe_drv_qos_res_type_t typ
 	ppe_qdisc_info("port:%d, type:%d, max:%d", port_id, type, max);
 	return max;
 }
+#else /* PPE_QDISC_DDRQ_ENABLE */
+/*
+ * ppe_qdisc_port_res_max_get()
+ *	Returns maximum number of the particular resource for a given port.
+ */
+uint32_t ppe_qdisc_port_res_max_get(uint32_t port_id, ppe_drv_qos_res_type_t type)
+{
+	uint32_t max = 0;
+	struct ppe_qdisc_port *ppe_port = &ppe_qdisc_port[port_id];
+
+	spin_lock_bh(&ppe_port->lock);
+	max = ppe_port->port.max[type];
+	spin_unlock_bh(&ppe_port->lock);
+
+	ppe_qdisc_info("port:%d, type:%d, max:%d", port_id, type, max);
+	return max;
+}
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 
 /*
  * ppe_qdisc_port_disable_all_queue()
@@ -120,16 +139,19 @@ void ppe_qdisc_port_disable_all_queue(uint32_t port_id)
 	uint32_t qid = ppe_qdisc_port_res_base_get(port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
 	uint32_t mcast_qid = ppe_qdisc_port_res_base_get(port_id, PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE);
 	uint32_t offset;
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	uint32_t ucast_max = ppe_qdisc_port_res_max_get(port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE);
 	uint32_t mcast_max = ppe_qdisc_port_res_max_get(port_id, PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE);
 
 	if (ppe_drv_qos_port_shapers_unlimited(port_id) != PPE_DRV_RET_SUCCESS) {
 		ppe_qdisc_warning("Port:%u shapers disable to unlimited failed", port_id);
 	}
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 
 	/*
 	 * Disable queue enqueue, dequeue and flush the queue.
 	 */
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	for (offset = 0; offset < ucast_max; offset++) {
 		if (ppe_drv_qos_queue_disable(port_id, qid + offset) != PPE_DRV_RET_SUCCESS) {
 			ppe_qdisc_warning("Port:%u ucast queue disable failed for qid:%u", port_id, qid + offset);
@@ -145,10 +167,19 @@ void ppe_qdisc_port_disable_all_queue(uint32_t port_id)
 	if (ppe_drv_qos_port_is_pon(port_id) &&
 		(ppe_drv_qos_pon_drainout() != PPE_DRV_RET_SUCCESS)) {
 		ppe_qdisc_warning("PON T-CONT drainout failed for port:%u", port_id);
+#else /* PPE_QDISC_DDRQ_ENABLE */
+	for (offset = 0; offset < ppe_qdisc_port_res_max_get(port_id, PPE_DRV_QOS_RES_TYPE_UCAST_QUEUE); offset++) {
+		ppe_drv_qos_queue_disable(port_id, qid + offset);
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	}
 
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	if (ppe_drv_qos_port_shapers_restore(port_id) != PPE_DRV_RET_SUCCESS) {
 		ppe_qdisc_warning("Port:%u shapers restore failed", port_id);
+#else /* PPE_QDISC_DDRQ_ENABLE */
+	for (offset = 0; offset < ppe_qdisc_port_res_max_get(port_id, PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE); offset++) {
+		ppe_drv_qos_queue_disable(port_id, mcast_qid + offset);
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	}
 
 	ppe_qdisc_info("Port:%d all queues disabled", port_id);
