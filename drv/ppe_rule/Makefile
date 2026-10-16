@@ -23,6 +23,7 @@ endif
 ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
 ccflags-y += -DNSS_PPE_FEATURE_EXCEPTION_EDIT
 ccflags-y += -DNSS_PPE_EXT_VLAN_FEATURE_SUPPORT
+ccflags-y += -DPPE_RULE_DDRQ_ENABLE
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq52xx))

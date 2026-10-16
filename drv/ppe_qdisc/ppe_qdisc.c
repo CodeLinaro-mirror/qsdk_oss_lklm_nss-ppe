@@ -25,6 +25,7 @@
  */
 #define PPE_QDISC_PARENT_NOT_EXISTING -1
 
+#ifdef PPE_QDISC_DDRQ_ENABLE
 /*
  * ppe_qdisc_port_mtu_get()
  *	Returns the MTU configured on the given PPE port's net device.
@@ -41,6 +42,7 @@ static uint32_t ppe_qdisc_port_mtu_get(uint8_t port_id)
 	return dev->mtu;
 }
 
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 /*
  * ppe_qdisc_def_node_int_pri_get()
  *      Returns the INT-PRI value for the default qdisc.
@@ -407,7 +409,9 @@ int ppe_qdisc_configure(struct ppe_qdisc *pq, struct ppe_qdisc *prev_pq)
 	 * Program PPE queue parameters
 	 */
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_UCAST_QUEUE_VALID)) {
+#ifdef PPE_QDISC_DDRQ_ENABLE
 		rp->port_mtu = ppe_qdisc_port_mtu_get((uint8_t)pq->port_id);
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 		if (ppe_drv_qos_queue_limit_set(&pq->res) != PPE_DRV_RET_SUCCESS) {
 			ppe_qdisc_warning("Qdisc:%px queue configuration failed", pq->qdisc);
 			goto fail;
@@ -448,7 +452,9 @@ fail:
 	}
 
 	memcpy(rp, prev_rp, sizeof(struct ppe_drv_qos_res));
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	rp->port_mtu = ppe_qdisc_port_mtu_get((uint8_t)pq->port_id);
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	ppe_drv_qos_queue_limit_set(&pq->res);
 	ppe_qdisc_res_mcast_queue_set(pq);
 
@@ -487,7 +493,9 @@ void ppe_qdisc_destroy(struct ppe_qdisc *pq)
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
 		ppe_qdisc_port_res_all_drr_map_free(pq->port_id);
 		ppe_qdisc_port_default_conf_set(pq->port_id);
+#ifdef PPE_QDISC_DDRQ_ENABLE
 		ppe_drv_qos_port_state_free(pq->port_id);
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 		ppe_qdisc_stats_stop_polling(pq);
 	}
 
@@ -507,11 +515,15 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 		struct netlink_ext_ack *extack)
 {
 	int err;
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	bool qos_state_allocated = false;
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	struct Qdisc *root;
 	u32 parent;
 	struct net_device *dev;
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	struct ppe_drv_qos_port port = {0};
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 
 	/*
 	 * Initialize locks
@@ -615,6 +627,7 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 		return -1;
 	}
 
+#ifdef PPE_QDISC_DDRQ_ENABLE
 	if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_ROOT)) {
 		if (ppe_drv_qos_port_res_get(pq->port_id, &port) != PPE_DRV_RET_SUCCESS) {
 			ppe_qdisc_warning("Qdisc %px (type %d) port resources fetch failed for port:%d",
@@ -631,10 +644,13 @@ int ppe_qdisc_init(struct Qdisc *sch, struct ppe_qdisc *pq, ppe_qdisc_node_type_
 		qos_state_allocated = true;
 	}
 
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	if (ppe_qdisc_res_init(pq) < 0) {
+#ifdef PPE_QDISC_DDRQ_ENABLE
 		if (qos_state_allocated) {
 			ppe_drv_qos_port_state_free(pq->port_id);
 		}
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 		ppe_qdisc_warning("Qdisc %px (type %d) init failed", pq->qdisc, pq->type);
 		memset(&pq->res, 0, sizeof(struct ppe_drv_qos_res));
 		return -1;
