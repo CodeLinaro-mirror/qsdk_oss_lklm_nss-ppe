@@ -215,6 +215,32 @@ void ppe_drv_sc_spl_ddrq_config(void)
 		return;
 	}
 
+	sc_cfg.bypass_bitmap[0] = 0;
+	sc_cfg.bypass_bitmap[1] = ((1ULL << IN_MIRROR_BYP)
+			| (1ULL << EG_MIRROR_BYP));
+	sc_cfg.bypass_bitmap[3] = 0;
+	sc_cfg.bypass_bitmap[2] = 0;
+	servcode = FAL_SERVCODE(FAL_SERVCODE_TYPE_PASSTHROUGH, PPE_DRV_SC_DDRQ_PT_128_192_SC3);
+
+	err = fal_servcode_config_set(PPE_DRV_SWITCH_ID, servcode, &sc_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: service code configuration failed for sc: %u", p, servcode);
+		return;
+	}
+
+	sc_cfg.bypass_bitmap[0] = 0;
+	sc_cfg.bypass_bitmap[1] = ((1ULL << IN_MIRROR_BYP)
+			| (1ULL << EG_MIRROR_BYP));
+	sc_cfg.bypass_bitmap[3] = 0;
+	sc_cfg.bypass_bitmap[2] = 0;
+	servcode = FAL_SERVCODE(FAL_SERVCODE_TYPE_PASSTHROUGH, PPE_DRV_SC_DDRQ_PT_0_SC4);
+
+	err = fal_servcode_config_set(PPE_DRV_SWITCH_ID, servcode, &sc_cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: service code configuration failed for sc: %u", p, servcode);
+		return;
+	}
+
 	ppe_drv_warn("%p: DDRQ SPL SC configurations done\n", p);
 	return;
 }
@@ -1016,7 +1042,10 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1ULL << (DROP_CPUCODE_CNT_BYP + 1))
 				| (1ULL << PCP_QOS_BYP)
 				| (1ULL << IN_MIRROR_BYP)
-				| (1ULL << EG_MIRROR_BYP));
+				| (1ULL << EG_MIRROR_BYP)
+				| (1ULL << L2_PASSTHROUGH_SERV_CODE_SEL_BIT0)
+				| (1ULL << L2_PASSTHROUGH_SERV_CODE_SEL_BIT1)
+				| (1ULL << L2_PASSTHROUGH_SERV_CODE_SEL_BIT2));
 		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
 		sc_cfg.bypass_bitmap[3] = (1 << TL_PRE_IPO_BYP);
 		sc_cfg.field_update_bitmap[0] = (1ULL << EPE_PRE_HEADER_VALID);
@@ -1040,7 +1069,10 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 				| (1ULL << DROP_CPUCODE_CNT_BYP)
 				| (1ULL << PCP_QOS_BYP)
 				| (1ULL << IN_MIRROR_BYP)
-				| (1ULL << EG_MIRROR_BYP));
+				| (1ULL << EG_MIRROR_BYP)
+				| (1ULL << L2_PASSTHROUGH_SERV_CODE_SEL_BIT0)
+				| (1ULL << L2_PASSTHROUGH_SERV_CODE_SEL_BIT1)
+				| (1ULL << L2_PASSTHROUGH_SERV_CODE_SEL_BIT2));
 		sc_cfg.bypass_bitmap[2] = (1 << RX_COUNTER_BYP);
 		sc_cfg.bypass_bitmap[3] = (1 << TL_PRE_IPO_BYP);
 		sc_cfg.field_update_bitmap[0] = (1ULL << EPE_PRE_HEADER_VALID);
