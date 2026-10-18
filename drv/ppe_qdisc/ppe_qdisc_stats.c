@@ -414,6 +414,7 @@ void ppe_qdisc_stats_stop_polling(struct ppe_qdisc *pq)
 			       " with qos_tag %x and port_id = %d", pq, pq->qos_tag, pq->port_id);
 	}
 
+	ppe_drv_qos_ddrq_accu_stats_stop();
 	ppe_qdisc_stats_sync_many_exit(pq);
 	ppe_qdisc_info("%px stopped delayed work queue for root %x, portId= %d", pq, pq->qos_tag,
 			pq->port_id);
@@ -430,6 +431,7 @@ void ppe_qdisc_stats_start_polling(struct ppe_qdisc *pq)
 			       "with qos_tag %x, port_id =%d", pq, pq->qos_tag, pq->port_id);
 	}
 
+	ppe_drv_qos_ddrq_accu_stats_start();
 	ppe_qdisc_stats_queue_delayed_work(pq);
 	ppe_qdisc_info("%px Started delayed work queue for root %x, port_id = %d", pq, pq->qos_tag,
 			 pq->port_id);
