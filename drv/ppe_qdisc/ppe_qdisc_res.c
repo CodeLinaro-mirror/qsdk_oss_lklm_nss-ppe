@@ -299,7 +299,13 @@ static int ppe_qdisc_res_mcast_queue_reset(struct ppe_qdisc *pq)
 		return 0;
 	}
 
-	ppe_drv_qos_queue_disable(pq->port_id, res->q.mcast_qid);
+	if (ppe_drv_qos_queue_disable(pq->port_id, res->q.mcast_qid) != PPE_DRV_RET_SUCCESS) {
+		ppe_qdisc_warning("Port:%d mcast queue disable failed for qid:%u", pq->port_id, res->q.mcast_qid);
+	}
+	if (ppe_drv_qos_port_is_pon(pq->port_id) &&
+		(ppe_drv_qos_pon_drainout() != PPE_DRV_RET_SUCCESS)) {
+		ppe_qdisc_warning("PON T-CONT drainout failed for port:%d", pq->port_id);
+	}
 
 	/*
 	 * In case, multicast queue is attached to a classful qdisc at
@@ -449,7 +455,21 @@ static int ppe_qdisc_res_scheduler_reset(struct ppe_qdisc *pq)
 		 * the resources allocated and we just need to enable/disable the queue.
 		 */
 		if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_UCAST_QUEUE_VALID)) {
-			ppe_drv_qos_queue_disable(pq->port_id, res->q.ucast_qid);
+			if (ppe_drv_qos_port_shapers_unlimited(pq->port_id) != PPE_DRV_RET_SUCCESS) {
+				ppe_qdisc_warning("Port:%d shapers disable to unlimited failed", pq->port_id);
+			}
+
+			if (ppe_drv_qos_queue_disable(pq->port_id, res->q.ucast_qid) != PPE_DRV_RET_SUCCESS) {
+				ppe_qdisc_warning("Port:%d ucast queue disable failed for qid:%u", pq->port_id, res->q.ucast_qid);
+			}
+			if (ppe_drv_qos_port_is_pon(pq->port_id) &&
+				(ppe_drv_qos_pon_drainout() != PPE_DRV_RET_SUCCESS)) {
+				ppe_qdisc_warning("PON T-CONT drainout failed for port:%d", pq->port_id);
+			}
+
+			if (ppe_drv_qos_port_shapers_restore(pq->port_id) != PPE_DRV_RET_SUCCESS) {
+				ppe_qdisc_warning("Port:%d shapers restore failed", pq->port_id);
+			}
 			return 0;
 		}
 	}
@@ -502,7 +522,13 @@ int ppe_qdisc_res_mcast_queue_set(struct ppe_qdisc *pq)
 	res->q.mcast_qid = ppe_qdisc_port_res_base_get(pq->port_id, PPE_DRV_QOS_RES_TYPE_MCAST_QUEUE) + mcast_q->offset;
 	ppe_qdisc_flags_set(pq, PPE_QDISC_FLAG_MCAST_QUEUE_VALID);
 
-	ppe_drv_qos_queue_disable(pq->port_id, res->q.mcast_qid);
+	if (ppe_drv_qos_queue_disable(pq->port_id, res->q.mcast_qid) != PPE_DRV_RET_SUCCESS) {
+		ppe_qdisc_warning("Port:%d mcast queue disable failed for qid:%u", pq->port_id, res->q.mcast_qid);
+	}
+	if (ppe_drv_qos_port_is_pon(pq->port_id) &&
+		(ppe_drv_qos_pon_drainout() != PPE_DRV_RET_SUCCESS)) {
+		ppe_qdisc_warning("PON T-CONT drainout failed for port:%d", pq->port_id);
+	}
 	if (ppe_drv_qos_mcast_queue_set(res, pq->port_id) != PPE_DRV_RET_SUCCESS) {
 		ppe_qdisc_warning("Qdisc:%px level0 mcast queue scheduler configuration failed", pq->qdisc);
 		goto fail;
@@ -638,7 +664,21 @@ int ppe_qdisc_res_scheduler_set(struct ppe_qdisc *pq)
 
 		if ((!ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_NODE_CONFIGURED)) && (!ppe_qdisc_type_is_queue(pq))) {
 			if (ppe_qdisc_flags_check(pq, PPE_QDISC_FLAG_UCAST_QUEUE_VALID)) {
-				ppe_drv_qos_queue_disable(pq->port_id, pq->res.q.ucast_qid);
+				if (ppe_drv_qos_port_shapers_unlimited(pq->port_id) != PPE_DRV_RET_SUCCESS) {
+					ppe_qdisc_warning("Port:%d shapers disable to unlimited failed", pq->port_id);
+				}
+
+				if (ppe_drv_qos_queue_disable(pq->port_id, pq->res.q.ucast_qid) != PPE_DRV_RET_SUCCESS) {
+					ppe_qdisc_warning("Port:%d ucast queue disable failed for qid:%u", pq->port_id, pq->res.q.ucast_qid);
+				}
+				if (ppe_drv_qos_port_is_pon(pq->port_id) &&
+					(ppe_drv_qos_pon_drainout() != PPE_DRV_RET_SUCCESS)) {
+					ppe_qdisc_warning("PON T-CONT drainout failed for port:%d", pq->port_id);
+				}
+
+				if (ppe_drv_qos_port_shapers_restore(pq->port_id) != PPE_DRV_RET_SUCCESS) {
+					ppe_qdisc_warning("Port:%d shapers restore failed", pq->port_id);
+				}
 			}
 		}
 	} else {
