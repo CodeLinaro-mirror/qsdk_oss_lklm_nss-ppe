@@ -134,6 +134,9 @@ struct ppe_qdisc {
  *	Returns the INT-PRI value for a given classid.
  */
 uint8_t ppe_qdisc_int_pri_get(struct net_device *dev, uint32_t classid);
+
+bool ppe_qdisc_int_pri_get_by_skb_mark(struct net_device *dev, struct sk_buff *skb, uint8_t *int_pri);
+
 bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t classid, struct ppe_drv_queue_info* pq_info);
 
 /*
@@ -250,21 +253,50 @@ static inline int ppe_qdisc_enqueue(struct sk_buff *skb,
 		struct Qdisc *sch,
 		struct sk_buff **to_free)
 {
-	if (!skb->priority) {
-		struct tcf_proto *tcf = NULL;
-		struct tcf_result res;
+	struct net_device *dev = qdisc_dev(sch);
+	struct Qdisc *root_qdisc;
+	struct ppe_qdisc *root_pq;
+	struct tcf_proto *tcf;
+	struct tcf_result res = {0};
+	int result;
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-		if (TC_ACT_UNSPEC != tcf_classify(skb, tcf, &res, false)) {
-#else
-		if (TC_ACT_UNSPEC != tcf_classify(skb, NULL, tcf, &res, false)) {
-#endif
-			if (!res.class) {
+	if (!skb->priority) {
+		root_qdisc = rcu_dereference_bh(dev->qdisc);
+		root_pq = qdisc_priv(root_qdisc);
+		tcf = rcu_dereference_bh(root_pq->filter_list);
+		if (tcf) {
+			result = tcf_classify(skb, root_pq->block, tcf, &res, false);
+			if (result < 0) {
+				goto skip_classify;
+			}
+
+			/*
+			 * TC_ACT_SHOT drops the packet.
+			 * TC_ACT_STOLEN, TC_ACT_QUEUED and TC_ACT_TRAP
+			 * indicate that the filter action has consumed,
+			 * redirected, trapped, or queued the packet elsewhere.
+			 * In such cases the packet must not be
+			 * enqueued by this qdisc. Release skb ownership and return
+			 * __NET_XMIT_STOLEN so the caller does not treat it as a drop.
+			 */
+			switch (result) {
+			case TC_ACT_SHOT:
+				return qdisc_drop(skb, sch, to_free);
+			case TC_ACT_STOLEN:
+			case TC_ACT_QUEUED:
+			case TC_ACT_TRAP:
+				return NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
+			default:
+				break;
+			}
+
+			if (!res.class && res.classid) {
 				skb->priority = res.classid;
 			}
 		}
 	}
 
+skip_classify:
 	/*
 	 * Set the SKB int_pri from SKB priority.
 	 * This int_pri will be used in EDMA Tx descriptor for PPE Tx queue.

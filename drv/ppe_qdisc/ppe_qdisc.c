@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <linux/if_bridge.h>
 #include "ppe_qdisc.h"
 #include "ppe_htb.h"
 #include "ppe_fifo.h"
@@ -267,6 +268,119 @@ int ppe_qdisc_is_depth_valid(struct ppe_qdisc *pq)
 	}
 
 	return true;
+}
+
+/*
+* ppe_qdisc_int_pri_get_by_skb_mark()
+*      Resolve an SKB mark through the active egress root PPE qdisc.
+*/
+bool ppe_qdisc_int_pri_get_by_skb_mark(struct net_device *dev, struct sk_buff *skb,
+                                uint8_t *int_pri)
+{
+	struct net_device *port_dev = NULL;
+	struct Qdisc *q;
+	struct ppe_qdisc *pq;
+	struct tcf_proto *tcf;
+	struct tcf_result res = {0};
+	uint32_t classid;
+	int result;
+	bool ret = false;
+
+	if (!dev || !skb || !int_pri) {
+		ppe_qdisc_info("Qdisc: Invalid arguments to function");
+		return false;
+	}
+
+	/*
+	 * PPE qdisc lives on the physical egress port, not on the bridge.
+	 * The MAC header guard is required before touching eth_hdr().
+	 */
+	if (dev->priv_flags & IFF_EBRIDGE) {
+		int mac_off;
+
+		if (!skb_mac_header_was_set(skb)) {
+			ppe_qdisc_info("Qdisc:%px mac header not set", dev);
+			return false;
+		}
+
+		mac_off = skb_mac_header(skb) - skb->data;
+		if (mac_off < 0 || mac_off > skb->len ||
+				skb->len - mac_off < ETH_HLEN ||
+				!pskb_may_pull(skb, mac_off + ETH_HLEN)) {
+			ppe_qdisc_info("Qdisc:%px Unable to get mac header offset", dev);
+			return false;
+		}
+
+		port_dev = br_port_dev_get(dev, skb->data + mac_off, skb, 0);
+		if (!port_dev) {
+			ppe_qdisc_info("Qdisc:%px Unable to get Egress port dev", dev);
+			return false;
+		}
+
+		dev = port_dev;
+	}
+
+	rcu_read_lock_bh();
+
+	q = rcu_dereference_bh(dev->qdisc);
+	if (!q || !(q->flags & TCQ_F_NSS)) {
+		rcu_read_unlock_bh();
+		ppe_qdisc_info("Qdisc: No PPE Qdisc configured for dev %s", dev->name);
+		goto done;
+	}
+
+	if (skb->priority) {
+		*int_pri = ppe_qdisc_int_pri_get(dev, skb->priority);
+		rcu_read_unlock_bh();
+		ret = true;
+		ppe_qdisc_info("Qdisc: Skb->priority(%d) is set, return int pri(%u)", skb->priority, *int_pri);
+		goto done;
+	}
+
+	pq = qdisc_priv(q);
+	tcf = rcu_dereference_bh(pq->filter_list);
+	if (!tcf) {
+		ppe_qdisc_info("Qdisc: No TC filter list found for dev %s", dev->name);
+		goto use_default_int_pri;
+	}
+
+	result = tcf_classify(skb, pq->block, tcf, &res, false);
+
+	if (result < 0 || result == TC_ACT_SHOT || result == TC_ACT_STOLEN ||
+			result == TC_ACT_QUEUED || result == TC_ACT_TRAP) {
+		ppe_qdisc_info("Qdisc:%px Invalid tx classify action(%d)", pq->qdisc, result);
+		goto use_default_int_pri;
+	}
+
+	if (!res.classid) {
+		ppe_qdisc_info("Qdisc:%px Invalid classid returned from tc filter", pq->qdisc);
+		goto use_default_int_pri;
+	}
+
+	classid = res.classid;
+
+	/*
+	 * Derive int_pri based on class_id.
+	 * If classid is not valid then default int pri is returned
+	 */
+	*int_pri = ppe_qdisc_int_pri_get(dev, classid);
+	rcu_read_unlock_bh();
+	ret = true;
+	ppe_qdisc_info("Qdisc:%px return int_pri (%u)", pq->qdisc, *int_pri);
+	goto done;
+
+use_default_int_pri:
+	*int_pri = ppe_qdisc_def_node_int_pri_get(dev);
+	rcu_read_unlock_bh();
+	ret = true;
+	ppe_qdisc_info("Qdisc:%px return default int_pri (%u)", pq->qdisc, *int_pri);
+
+done:
+	if (port_dev) {
+		dev_put(port_dev);
+	}
+
+	return ret;
 }
 
 /*
@@ -804,7 +918,7 @@ bool ppe_qdisc_queue_info_get(struct net_device *dev, uint32_t handle_id, struct
 	list_for_each_entry(cursor, &pqr->stats_wq->q_list_head, q_list_element) {
 		if (cursor != NULL) {
 			spin_lock_bh(&cursor->lock);
-			if (cursor->qos_tag != handle_id && cursor->parent->qos_tag != handle_id) {
+			if (cursor->qos_tag != handle_id && (!cursor->parent || cursor->parent->qos_tag != handle_id)) {
 				spin_unlock_bh(&cursor->lock);
 				continue;
 			}
@@ -879,6 +993,7 @@ static int __init ppe_qdisc_module_init(void)
 	}
 
 	ppe_drv_qos_int_pri_callback_register(ppe_qdisc_int_pri_get);
+	ppe_drv_qos_int_pri_by_skb_mark_callback_register(ppe_qdisc_int_pri_get_by_skb_mark);
 	ppe_drv_qos_queue_info_callback_register(ppe_qdisc_queue_info_get);
 
 	ppe_qdisc_info("ppe qdisc module initialized");
@@ -912,6 +1027,7 @@ fail1:
 static void __exit ppe_qdisc_module_exit(void)
 {
 	ppe_drv_qos_int_pri_callback_unregister();
+	ppe_drv_qos_int_pri_by_skb_mark_callback_unregister();
 	ppe_drv_qos_queue_info_callback_unregister();
 	ppe_qdisc_stats_work_queue_exit();
 

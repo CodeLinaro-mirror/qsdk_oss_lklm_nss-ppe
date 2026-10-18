@@ -307,6 +307,21 @@ struct ppe_drv_qos_port_state {
 typedef uint8_t (*ppe_drv_qos_int_pri_callback_t)(struct net_device *dev, uint32_t tag);
 
 /**
+ * Callback function for resolving an SKB to an INT-PRI value.
+ *
+ * @datatypes
+ * net_device
+ *
+ * @param[in] dev	Egress net device.
+ * @param[in] skb	Packet carrying the tc classid or fw mark.
+ * @param[out] int_pri	Resolved hardware queue priority.
+ *
+ * @return
+ * true when a qdisc class/leaf queue was resolved; false otherwise.
+ */
+typedef bool (*ppe_drv_qos_int_pri_by_skb_mark_callback_t)(struct net_device *dev, struct sk_buff *skb, uint8_t *int_pri);
+
+/**
  * Callback function for getting PPE queue information
  *
  * @datatypes
@@ -404,6 +419,19 @@ void ppe_drv_qos_queue_info_callback_unregister(void);
 void ppe_drv_qos_int_pri_callback_register(ppe_drv_qos_int_pri_callback_t cb);
 
 /**
+ * ppe_drv_qos_int_pri_by_skb_mark_callback_register
+ *	Registers the optional qdisc SKB priority resolver.
+ */
+void ppe_drv_qos_int_pri_by_skb_mark_callback_register(
+		ppe_drv_qos_int_pri_by_skb_mark_callback_t cb);
+
+/**
+ * ppe_drv_qos_int_pri_by_skb_mark_callback_unregister
+ *	Unregisters the optional qdisc SKB priority resolver.
+ */
+void ppe_drv_qos_int_pri_by_skb_mark_callback_unregister(void);
+
+/**
  * ppe_drv_qos_queue_info_callback_register
  *	API to register PPE queue info fetch callback.
  *
@@ -428,6 +456,23 @@ void ppe_drv_qos_queue_info_callback_register(ppe_drv_qos_queue_info_callback_t 
  * INT-PRI value
  */
 int ppe_drv_qos_int_pri_get(struct net_device *dev, uint32_t handle_id);
+
+/**
+ * ppe_drv_qos_int_pri_get_by_skb_mark
+ *	Resolves an SKB through the configured egress PPE qdisc.
+ *
+ * @datatypes
+ * struct net_device
+ *
+ * @param[in] dev	Pointer to the network device.
+ * @param[in] skb	Packet carrying the tc classid or fw mark.
+ * @param[out] int_pri	Resolved hardware queue priority.
+ *
+ * @return
+ * true and a resolved value in @int_pri when the qdisc filter/class/leaf
+ * lookup succeeds; false when the caller must retain its existing priority.
+ */
+bool ppe_drv_qos_int_pri_get_by_skb_mark(struct net_device *dev, struct sk_buff *skb, uint8_t *int_pri);
 
 /**
  * ppe_drv_qos_port_id_get

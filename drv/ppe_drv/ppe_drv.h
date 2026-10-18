@@ -658,6 +658,7 @@ struct ppe_drv {
 	ppe_drv_v6_sync_callback_t ipv6_stats_sync_cb;		/* Callback to call to sync ipv6 statistics */
 	void *ipv6_stats_sync_data;				/* Argument for above callback: ipv6_stats_sync_cb */
 	ppe_drv_qos_int_pri_callback_t int_pri_get_cb;		/* Callback to call to get INT-PRI value */
+	ppe_drv_qos_int_pri_by_skb_mark_callback_t __rcu int_pri_get_by_mark_cb;	/* Callback to resolve an SKB to INT-PRI */
 	ppe_drv_qos_queue_info_callback_t queue_info_get_cb;		/* Callback to call to get PPE PORT-ID */
 #ifdef PPE_DRV_DDRQ_ENABLE
 	struct ppe_drv_qos_ddrq_rcu_ops ddrq_ops;		/* RCU-protected NSS-DP DDRQ callback operations */
