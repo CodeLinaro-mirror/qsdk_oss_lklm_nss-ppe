@@ -138,10 +138,14 @@ static int ppe_fifo_change(struct Qdisc *sch, struct nlattr *opt,
 	 */
 	if (q->is_bfifo) {
 		res->q.qlimit = q->limit / PPE_DRV_QOS_MEM_BLOCK_SIZE;
+#ifdef PPE_QDISC_DDRQ_ENABLE
 		res->q.q_ceiling_unit = PPE_DRV_QOS_QUEUE_CEILING_UNIT_BYTES;
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	} else {
 		res->q.qlimit = q->limit;
+#ifdef PPE_QDISC_DDRQ_ENABLE
 		res->q.q_ceiling_unit = PPE_DRV_QOS_QUEUE_CEILING_UNIT_PACKETS;
+#endif /* PPE_QDISC_DDRQ_ENABLE */
 	}
 
 	res->q.color_en = false;

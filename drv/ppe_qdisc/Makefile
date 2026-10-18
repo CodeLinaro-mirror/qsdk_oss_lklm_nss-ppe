@@ -2,6 +2,10 @@
 
 ccflags-y += -I$(obj)/../../exports -I$(obj)/../exports
 
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DPPE_QDISC_DDRQ_ENABLE
+endif
+
 obj-m += qca-nss-ppe-qdisc.o
 qca-nss-ppe-qdisc-objs += ppe_fifo.o \
 			ppe_htb.o \
