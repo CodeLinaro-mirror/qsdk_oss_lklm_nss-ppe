@@ -15,49 +15,67 @@
  */
 
 #include "ppe_drv.h"
+#include <fal/fal_qos.h>
 
 /*
- * ppe_drv_eip_set_sc_queue_config
- *	Configure ucast queue for service code for PPE to EIP
+ * ppe_drv_eip_sc_queue_config_set()
+ *	Configure ucast queue and admission control for EIP IPsec service codes.
  */
 void ppe_drv_eip_sc_queue_config_set(void)
 {
-	int32_t queue_id = ppe_drv_port_ucast_queue_get_by_port(PPE_DRV_PORT_EIP197);
+	fal_portscheduler_resource_t cfg = {0};
+	int32_t eip_base_queue = 0;
+	int32_t eip_qid_end, q;
+	sw_error_t err;
 
-	if (queue_id < 0) {
-		ppe_drv_warn("Invalid queue id for EIP port : %u\n", PPE_DRV_PORT_EIP197);
+	err = fal_port_scheduler_resource_get(PPE_DRV_SWITCH_ID, PPE_DRV_PORT_EIP197, &cfg);
+	if (err != SW_OK) {
+		ppe_drv_warn("Error in getting port(id: %d) interface's queue information\n", PPE_DRV_PORT_EIP197);
 		return;
 	}
 
+	eip_base_queue = cfg.ucastq_start;
+	eip_qid_end = eip_base_queue + cfg.ucastq_num;
+
 	/*
-	 * Set ucast queue for decap direction
+	 * Set ucast queue for PPE-to-EIP decap direction.
 	 */
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_PPE2EIP_DECAP, queue_id,
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_PPE2EIP_DECAP, eip_base_queue,
 			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
 
 	/*
-	 * Set ucast for encap direction
+	 * Set ucast queue for PPE-to-EIP encap direction.
 	 */
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP, queue_id,
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_PPE2EIP_ENCAP, eip_base_queue,
 			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
 
 	/*
-	 * Set ucast for VP encap direction
+	 * Set ucast queue for VP-to-EIP encap direction (5-tuple lookup).
 	 */
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_ENCAP, queue_id,
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_ENCAP, eip_base_queue,
 			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
 
 	/*
-	 * set ucast queue for VP 3-tuple encap direction.
+	 * Set ucast queue for VP-to-EIP encap direction (3-tuple lookup).
 	 */
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP, queue_id,
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP, eip_base_queue,
 			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
 
 	/*
-	 * Set ucast for VP decap direction
+	 * Set ucast queue for VP-to-EIP decap direction.
 	 */
-	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_DECAP, queue_id,
+	ppe_drv_sc_ucast_queue_set(PPE_DRV_SC_IPSEC_EDMA_VP_DECAP, eip_base_queue,
 			PPE_DRV_PORT_SRC_PROFILE, PPE_DRV_REDIR_PROFILE_ID);
+
+	/*
+	 * Enable admission control on all EIP queues to prevent
+	 * buffer exhaustion under heavy IPsec traffic.
+	 */
+	for (q = eip_base_queue; q < eip_qid_end; q++) {
+		if (!ppe_drv_qos_ac_ctrl_cfg(q, true, true)) {
+			ppe_drv_warn("Failed to ac_ctrl for EIP queue %d\n", q);
+		}
+	}
 }
 EXPORT_SYMBOL(ppe_drv_eip_sc_queue_config_set);
 
