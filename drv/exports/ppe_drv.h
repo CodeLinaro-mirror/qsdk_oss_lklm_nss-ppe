@@ -674,6 +674,9 @@ typedef enum ppe_drv_ret {
 	PPE_DRV_RET_FAILURE_NON_PASSTH_ESP_SPI_FLOW,	/**< IPSEC SPI based pass through is enabled. */
 	PPE_DRV_RET_VLAN_VPN_MODE_SET_FAIL,		/**< Failure to set the vlan mode */
 	PPE_DRV_RET_ACCEL_RESUME_FAIL,			/**< Failed to resume the accel. */
+	PPE_DRV_RET_FAILURE_FLOW_COUNTER_GET_FAIL,	/**< Failure to read flow counters from hardware */
+	PPE_DRV_RET_FAILURE_POLICER_COUNTER_GET_FAIL,	/**< Failure to read policer counters from hardware */
+	PPE_DRV_RET_FAILURE_HW_STATS_ALLOC_FAIL,	/**< Failure to allocate the HW stats baseline */
 	PPE_DRV_RET_MAX,				/**< Max limit. */
 } ppe_drv_ret_t;
 

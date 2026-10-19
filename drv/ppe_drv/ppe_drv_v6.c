@@ -9,6 +9,7 @@
 #include <net/dsa.h>
 #endif
 #include <fal/fal_qos.h>
+#include <fal/fal_flow.h>
 #include "ppe_drv.h"
 #include "tun/ppe_drv_tun.h"
 #include "tun/ppe_drv_tun_v6.h"
@@ -2827,6 +2828,12 @@ static bool ppe_drv_v6_flow_del(struct ppe_drv_v6_conn_flow *pcf)
 	ppe_drv_flow_stats_clear(flow);
 
 	/*
+	 * Free the HW stats baseline, if any, along with the flow it belongs to.
+	 */
+	kfree(pcf->hw_stats_base);
+	pcf->hw_stats_base = NULL;
+
+	/*
 	 * Clear the host Qdisc information for the deleted flow
 	 */
 	ppe_drv_flow_v6_host_qdisc_info_del(pcf, flow->index);
@@ -3384,6 +3391,107 @@ ppe_drv_ret_t ppe_drv_v6_get_conn_stats(struct ppe_drv_v6_flow_conn_stats *conn_
 	return PPE_DRV_RET_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_drv_v6_get_conn_stats);
+
+/*
+ * ppe_drv_v6_conn_flow_hw_stats_get()
+ *	Read one connection flow's HW counter deltas using a private baseline.
+ */
+static ppe_drv_ret_t ppe_drv_v6_conn_flow_hw_stats_get(struct ppe_drv_v6_conn_flow *pcf,
+		uint64_t *delta_pkts, uint64_t *delta_bytes)
+{
+	struct ppe_drv_flow *pf = pcf->pf;
+	struct ppe_drv_flow_hw_stats_base *st = pcf->hw_stats_base;
+	fal_entry_counter_t flow_cntrs = {0};
+	sw_error_t err;
+
+	*delta_pkts = 0;
+	*delta_bytes = 0;
+
+	if (!pf || !(pf->flags & PPE_DRV_FLOW_VALID)) {
+		ppe_drv_warn("%p: flow not valid for HW stats", pf);
+		return PPE_DRV_RET_FAILURE_NO_MATCHING_CONN;
+	}
+
+	err = fal_flow_counter_get(PPE_DRV_SWITCH_ID, pf->index, &flow_cntrs);
+	if (err != SW_OK) {
+		ppe_drv_warn("%p: failed to get stats for flow at index: %u", pf, pf->index);
+		return PPE_DRV_RET_FAILURE_FLOW_COUNTER_GET_FAIL;
+	}
+
+	/*
+	 * Allocate on first use. A new flow's HW counters start at zero.
+	 */
+	if (!st) {
+		st = kzalloc(sizeof(*st), GFP_ATOMIC);
+		if (!st) {
+			ppe_drv_warn("%p: failed to allocate HW stats baseline", pf);
+			return PPE_DRV_RET_FAILURE_HW_STATS_ALLOC_FAIL;
+		}
+
+		pcf->hw_stats_base = st;
+	}
+
+	*delta_pkts = (flow_cntrs.matched_pkts - st->pkts + FAL_FLOW_PKT_CNT_MASK + 1) & FAL_FLOW_PKT_CNT_MASK;
+	*delta_bytes = (flow_cntrs.matched_bytes - st->bytes + FAL_FLOW_BYTE_CNT_MASK + 1) & FAL_FLOW_BYTE_CNT_MASK;
+	st->pkts = flow_cntrs.matched_pkts;
+	st->bytes = flow_cntrs.matched_bytes;
+
+	return PPE_DRV_RET_SUCCESS;
+}
+
+/*
+ * ppe_drv_v6_conn_hw_stats_get()
+ *	Read original and reply hardware counters and return deltas since the last successful call.
+ *	Each direction has a private baseline allocated on first use, independent of periodic stats sync.
+ */
+ppe_drv_ret_t ppe_drv_v6_conn_hw_stats_get(struct ppe_drv_v6_conn *conn,
+		uint64_t *orig_delta_pkts, uint64_t *orig_delta_bytes,
+		uint64_t *reply_delta_pkts, uint64_t *reply_delta_bytes)
+{
+	struct ppe_drv *p = ppe_drv_gbl;
+	struct ppe_drv_flow_hw_stats_base orig_base = {0};
+	ppe_drv_ret_t ret;
+
+	*orig_delta_pkts = 0;
+	*orig_delta_bytes = 0;
+	*reply_delta_pkts = 0;
+	*reply_delta_bytes = 0;
+
+	if (!conn) {
+		ppe_drv_warn("%p: NULL connection for HW stats", p);
+		return PPE_DRV_RET_FAILURE_NO_MATCHING_CONN;
+	}
+
+	spin_lock_bh(&p->lock);
+
+	if (conn->pcf.hw_stats_base) {
+		orig_base = *conn->pcf.hw_stats_base;
+	}
+
+	ret = ppe_drv_v6_conn_flow_hw_stats_get(&conn->pcf,
+			orig_delta_pkts, orig_delta_bytes);
+	if (ret != PPE_DRV_RET_SUCCESS) {
+		spin_unlock_bh(&p->lock);
+		return ret;
+	}
+
+	if (ppe_drv_v6_conn_flags_check(conn, PPE_DRV_V6_CONN_FLAG_RETURN_VALID)) {
+		ret = ppe_drv_v6_conn_flow_hw_stats_get(&conn->pcr,
+				reply_delta_pkts, reply_delta_bytes);
+		if (ret != PPE_DRV_RET_SUCCESS) {
+			/*
+			 * Preserve original deltas for retry if the reply read fails.
+			 */
+			*conn->pcf.hw_stats_base = orig_base;
+			*orig_delta_pkts = 0;
+			*orig_delta_bytes = 0;
+		}
+	}
+
+	spin_unlock_bh(&p->lock);
+	return ret;
+}
+EXPORT_SYMBOL(ppe_drv_v6_conn_hw_stats_get);
 
 /*
  * ppe_drv_v6_conn_sync_many()
@@ -5531,6 +5639,7 @@ ppe_drv_ret_t ppe_drv_v6_create(struct ppe_drv_v6_rule_create *create)
 	ppe_drv_ret_t ret;
 	bool is_wifi_flow = false;
 
+	create->conn_ptr = NULL;
 	comm_stats = &p->stats.comm_stats[PPE_DRV_CONN_TYPE_FLOW];
 
 	/*
@@ -5803,6 +5912,7 @@ skip_npt6:
 	ppe_drv_v6_flow_hash_add(p->hash_conn_v6, pcf);
 	ppe_drv_v6_flow_hash_add(p->hash_conn_v6, pcr);
 
+	create->conn_ptr = cn;
 	spin_unlock_bh(&p->lock);
 
 	return PPE_DRV_RET_SUCCESS;

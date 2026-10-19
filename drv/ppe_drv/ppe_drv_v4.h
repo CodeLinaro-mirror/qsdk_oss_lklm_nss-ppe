@@ -120,6 +120,7 @@
 struct ppe_drv_v4_conn_flow {
 	struct ppe_drv_v4_conn *conn;		/* Pointer to parent structure */
 	struct ppe_drv_flow *pf;		/* Flow pointer */
+	struct ppe_drv_flow_hw_stats_base *hw_stats_base;	/* HW counter baseline, allocated on first HW stats read (UDP-ST) */
 	struct hlist_node hnode;		/* Flow hash list node */
 	uint16_t xmit_interface_mtu;		/* Interface MTU */
 	uint8_t match_protocol;			/* Protocol */
