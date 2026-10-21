@@ -221,6 +221,7 @@ int mac_lrn_exception_en = true;
 uint32_t ppe_drv_jhash_rnd __read_mostly;
 int wlan_host_assist_qdisc_en = 0;
 int unknown_dst_rfs_enable = 0;
+int htt_switch_en = 1;
 
 #ifdef PPE_DRV_ESP_SPI_PASSTH_ENABLE
 int ppe_drv_ipsec_passth_en = 0;
@@ -3343,6 +3344,34 @@ static int ppe_drv_wlan_host_assist_qdisc_en_handler(struct ctl_table *table, in
 }
 
 /*
+ * ppe_drv_htt_switch_en_handler()
+ *	Handler for htt_switch_en sysctl
+ */
+static int ppe_drv_htt_switch_en_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (!write) {
+		return ret;
+	}
+
+	/*
+	 * Validate the input value (should be 0 or 1)
+	 */
+	if (htt_switch_en != 0 && htt_switch_en != 1) {
+		ppe_drv_warn("Invalid value for htt_switch_en. Must be 0 or 1\n");
+		htt_switch_en = 0;
+		return -EINVAL;
+	}
+
+	ppe_drv_info("HTT switch CoS-map configuration is set to %d\n", htt_switch_en);
+
+	return 0;
+}
+
+/*
  * ppe_drv_get_unknown_dst_rfs_enable()
  *	Get the value of unknown_dst_rfs_enable.
  */
@@ -4903,6 +4932,13 @@ static struct ctl_table ppe_drv_sub[] = {
 		.proc_handler	=	ppe_drv_wlan_host_assist_qdisc_en_handler
 	},
 
+	{
+		.procname	=	"htt_switch_en",
+		.data		=	&htt_switch_en,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	ppe_drv_htt_switch_en_handler
+	},
 	{
 		.procname	=	"unknown_dst_rfs_enable",
 		.data		=	&unknown_dst_rfs_enable,

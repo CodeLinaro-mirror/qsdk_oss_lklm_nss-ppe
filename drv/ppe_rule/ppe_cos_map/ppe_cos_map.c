@@ -196,7 +196,8 @@ static struct ppe_cos_map_rule *ppe_cos_map_rule_find_by_id(int16_t id)
  * ppe_cos_map_create_rule()
  *	Create acl CoS map
  */
-static ppe_cos_map_ret_t ppe_cos_map_create_rule(struct ppe_cos_map_create_info *info)
+static ppe_cos_map_ret_t ppe_cos_map_create_rule(struct ppe_cos_map_create_info *info,
+						struct ppe_drv_cos_map_cfg *cfg)
 {
 	struct ppe_cos_map_base *g_cos_map = &gbl_ppe_cos_map;
 	struct ppe_cos_map_rule *rule;
@@ -261,6 +262,7 @@ static ppe_cos_map_ret_t ppe_cos_map_create_rule(struct ppe_cos_map_create_info 
 	}
 
 	list_add(&rule->list, &g_cos_map->active_rules);
+	memcpy(cfg, &rule->cfg, sizeof(*cfg));
 
 	ppe_cos_map_trace("%p: CoS map rule created with rule ID: %d", g_cos_map, rule->rule_id);
 	return PPE_COS_MAP_SUCCESS;
@@ -302,6 +304,31 @@ fail:
 }
 
 /*
+ * ppe_cos_map_rule_cleanup()
+ *	Complete CoS map rule deletion after releasing g_cos_map->lock.
+ *
+ * The HTT switch is accessed over MDIO and the FAL path can sleep, so its
+ * reset cannot be done under the lock. The rule is kept alive until its
+ * reset configuration has been written to HTT, then freed here.
+ */
+static void ppe_cos_map_rule_cleanup(struct ppe_cos_map_rule *rule)
+{
+	if (ppe_drv_cos_map_htt_switch_is_enabled()) {
+		/*
+		 * Reset the actions so that the HTT entry is cleared. Keep the
+		 * group, type and value, which select the entry to reset.
+		 */
+		memset(&rule->cfg.map, 0, sizeof(rule->cfg.map));
+		if (ppe_drv_cos_map_set_htt(&rule->cfg) != PPE_DRV_RET_SUCCESS) {
+			ppe_cos_map_warn("%p: CoS map rule deletion failed on HTT switch for rule ID: %d",
+					&gbl_ppe_cos_map, rule->rule_id);
+		}
+	}
+
+	ppe_cos_map_free(rule);
+}
+
+/*
  * ppe_cos_map_destroy()
  * 	Destroy CoS map rule
  */
@@ -334,10 +361,15 @@ ppe_cos_map_ret_t ppe_cos_map_destroy(struct ppe_cos_map_destroy_info *destroy)
 	}
 
 	list_del(&rule->list);
-	ppe_cos_map_free(rule);
-
 	ppe_cos_map_stats_inc(&g_cos_map->stats.destroy_cos_map_rule_success);
 	spin_unlock_bh(&g_cos_map->lock);
+
+	/*
+	 * Switch 0 is already reset above. Reset the HTT switch (a different
+	 * switch, so this is not a repeat of the same configuration) and free
+	 * the rule outside the lock.
+	 */
+	ppe_cos_map_rule_cleanup(rule);
 	return PPE_COS_MAP_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_cos_map_destroy);
@@ -350,6 +382,9 @@ ppe_cos_map_ret_t ppe_cos_map_rule_flush(void)
 {
 	struct ppe_cos_map_base *g_cos_map = &gbl_ppe_cos_map;
 	struct ppe_cos_map_rule *rule, *tmp;
+	struct list_head deleted_rules;
+
+	INIT_LIST_HEAD(&deleted_rules);
 
 	spin_lock_bh(&g_cos_map->lock);
 	ppe_cos_map_stats_inc(&g_cos_map->stats.cos_map_rules_flush_req);
@@ -362,20 +397,27 @@ ppe_cos_map_ret_t ppe_cos_map_rule_flush(void)
 	/*
 	 * Iterating through rule list to flush all CoS map rules
 	 */
-	if (!list_empty(&g_cos_map->active_rules)) {
-		list_for_each_entry_safe(rule, tmp, &g_cos_map->active_rules, list) {
+	list_for_each_entry_safe(rule, tmp, &g_cos_map->active_rules, list) {
 
-			/*
-			 * Reset cosmap for the given rule and free rule
-			 */
-			ppe_cos_map_delete_rule(rule);
-
-			list_del(&rule->list);
-			ppe_cos_map_free(rule);
-		}
+		/*
+		 * Reset cosmap for the given rule. The rule is removed from the
+		 * active list regardless of the result, so flush always empties it.
+		 */
+		ppe_cos_map_delete_rule(rule);
+		list_move_tail(&rule->list, &deleted_rules);
 	}
 
 	spin_unlock_bh(&g_cos_map->lock);
+
+	/*
+	 * The rules are detached from active_rules but still allocated. Finish
+	 * deleting each one (HTT reset and free) now that the lock is released.
+	 */
+	list_for_each_entry_safe(rule, tmp, &deleted_rules, list) {
+		list_del(&rule->list);
+		ppe_cos_map_rule_cleanup(rule);
+	}
+
 	return PPE_COS_MAP_SUCCESS;
 }
 EXPORT_SYMBOL(ppe_cos_map_rule_flush);
@@ -387,6 +429,7 @@ EXPORT_SYMBOL(ppe_cos_map_rule_flush);
 ppe_cos_map_ret_t ppe_cos_map_create(struct ppe_cos_map_create_info *create)
 {
 	struct ppe_cos_map_base *g_cos_map = &gbl_ppe_cos_map;
+	struct ppe_drv_cos_map_cfg cfg = {0};
 
 	if (!create) {
 		ppe_cos_map_warn("%p: CoS map rule create info not valid", g_cos_map);
@@ -394,7 +437,7 @@ ppe_cos_map_ret_t ppe_cos_map_create(struct ppe_cos_map_create_info *create)
 	}
 
 	spin_lock_bh(&g_cos_map->lock);
-	if (ppe_cos_map_create_rule(create)) {
+	if (ppe_cos_map_create_rule(create, &cfg)) {
 		ppe_cos_map_stats_inc(&g_cos_map->stats.create_cos_map_rule_failed);
 		spin_unlock_bh(&g_cos_map->lock);
 		ppe_cos_map_warn("Unable to create CoS map rule\n");
@@ -403,6 +446,14 @@ ppe_cos_map_ret_t ppe_cos_map_create(struct ppe_cos_map_create_info *create)
 
 	ppe_cos_map_stats_inc(&g_cos_map->stats.create_cos_map_rule_success);
 	spin_unlock_bh(&g_cos_map->lock);
+
+	/*
+	 * Program the HTT switch outside g_cos_map->lock (lock-less; see
+	 * ppe_drv_cos_map_set_htt()).
+	 */
+	if (ppe_drv_cos_map_htt_switch_is_enabled()) {
+		ppe_drv_cos_map_set_htt(&cfg);
+	}
 
 	ppe_cos_map_trace("cos map rule creation successful for rule:%d", create->rule_id);
 	return PPE_COS_MAP_SUCCESS;

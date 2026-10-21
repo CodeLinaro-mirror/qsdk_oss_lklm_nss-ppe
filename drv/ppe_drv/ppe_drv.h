@@ -67,6 +67,7 @@ extern int mac_lrn_exception_en;
 extern uint32_t ppe_drv_jhash_rnd __read_mostly;
 extern int wlan_host_assist_qdisc_en;
 extern int unknown_dst_rfs_enable;
+extern int htt_switch_en;
 
 #ifdef PPE_DRV_DDRQ_ENABLE
 extern bool ddrq_lp_sc_set_en;
@@ -162,6 +163,7 @@ enum ppe_drv_static_dbg_level {
  * Default switch ID
  */
 #define PPE_DRV_SWITCH_ID		0
+#define PPE_DRV_HTT_SWITCH_ID		1	/* HTT (Huntington) switch ID */
 
 /*
  * Profile ID
@@ -691,6 +693,9 @@ struct ppe_drv {
 	int vxlan_gpe_dport;			/* VXLAN-GPE destination port */
 	bool fse_enable;			/* FSE enabled */
 	bool is_wifi_fse_up;			/* Wi-FI FSE ops registered with PPE */
+#ifdef NSS_PPE_DSA_QUEUE_SUPPORT
+	bool htt_switch_valid;			/* HTT switch is present */
+#endif
 
 #if defined(PPE_LOOPBACK_RING_SUPPORT)
 	struct ppe_drv_loopback_ring_info loopback_ring_info;	/* Loopback information */

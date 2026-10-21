@@ -95,6 +95,37 @@ struct ppe_drv_cos_map_cfg {
 ppe_drv_ret_t ppe_drv_cos_map_cosmap_set(struct ppe_drv_cos_map_cfg *cfg);
 
 /**
+ * ppe_drv_cos_map_set_htt
+ *	Sets internal PCP, internal priority, internal DP,
+ * and internal DSCP-based on packet DSCP/PCP, on the HTT switch.
+ *
+ * @note
+ * The caller must check ppe_drv_cos_map_htt_switch_is_enabled() first.
+ * The underlying FAL call for
+ * the HTT switch is MDIO-based and can sleep, so the caller MUST NOT hold
+ * any lock that disables preemption/softirqs across this call.
+ *
+ * @datatypes
+ * ppe_drv_cos_map_cfg
+ *
+ * @param[in] cfg       Pointer to the configuration.
+ *
+ * @return
+ * Status of the configuration set operation.
+ */
+ppe_drv_ret_t ppe_drv_cos_map_set_htt(struct ppe_drv_cos_map_cfg *cfg);
+
+/**
+ * ppe_drv_cos_map_htt_switch_is_enabled
+ *	Checks whether HTT-switch CoS-map mirroring is enabled.
+ *
+ * @return
+ * true if an HTT switch is present and the htt_switch_en sysctl is set,
+ * false otherwise.
+ */
+bool ppe_drv_cos_map_htt_switch_is_enabled(void);
+
+/**
  * ppe_drv_cos_map_port_group_set
  *	Sets port group ID for PCP, DSCP, and flow-based QOS.
  *
