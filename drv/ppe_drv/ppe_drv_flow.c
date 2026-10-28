@@ -1429,7 +1429,7 @@ bool ppe_drv_flow_v6_service_code_get(struct ppe_drv_v6_conn_flow *pcf, struct p
 	if (is_vlan_dev(port_rx->dev) && (port_rx->type == PPE_DRV_PORT_VIRTUAL) && (netif_is_bridge_port(port_rx->dev)) &&
 	    !ppe_drv_v6_conn_flow_flags_check(pcf, PPE_DRV_V6_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
 		sc = (port_rx->is_fdb_learn_enabled && pp->is_fdb_learn_enabled) ?
-			PPE_DRV_SC_VLAN_FILTER_BYPASS : PPE_DRV_SC_SPF_BYPASS;
+			PPE_DRV_SC_VLAN_FILTER_BYPASS : PPE_DRV_SC_VLAN_VP_RT;
 	}
 
 	if (sc != PPE_DRV_SC_NONE) {
@@ -3047,7 +3047,7 @@ bool ppe_drv_flow_v4_service_code_get(struct ppe_drv_v4_conn_flow *pcf, struct p
 	if (is_vlan_dev(port_rx->dev) && (port_rx->type == PPE_DRV_PORT_VIRTUAL) && (netif_is_bridge_port(port_rx->dev)) &&
 	    !ppe_drv_v4_conn_flow_flags_check(pcf, PPE_DRV_V4_CONN_FLOW_FLAG_BRIDGE_FLOW)) {
 		sc = (port_rx->is_fdb_learn_enabled && pp->is_fdb_learn_enabled) ?
-			PPE_DRV_SC_VLAN_FILTER_BYPASS : PPE_DRV_SC_SPF_BYPASS;
+			PPE_DRV_SC_VLAN_FILTER_BYPASS : PPE_DRV_SC_VLAN_VP_RT;
 	}
 
 	if (sc != PPE_DRV_SC_NONE) {

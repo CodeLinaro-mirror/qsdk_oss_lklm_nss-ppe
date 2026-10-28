@@ -110,6 +110,7 @@ typedef enum ppe_drv_sc_type {
 	PPE_DRV_SC_IPSEC_EDMA_VP_3_TUPLE_ENCAP = 74,		/* Inline IPsec redirection from VP TO EIP for encap direction using 3-tuple EIP lookup */
 	PPE_DRV_SC_DDRQ_LP_SC_BRIDGE = 77,			/* DDRQ loopback ring service code for bridged flows */
 	PPE_DRV_SC_DSA_VP = 78,                         /* Service code for flows egressing to a DSA VP */
+	PPE_DRV_SC_VLAN_VP_RT = 79,				/* Service code for routed flows from VLAN bridge-port VP, without EDMA loopback */
 	PPE_DRV_SC_FLOW_ACL_FIRST = PPE_DRV_SC_FLOW_ACL_START,
 						/* First service code for combining flow and ACL rule */
 	PPE_DRV_SC_FLOW_ACL_LAST = PPE_DRV_SC_FLOW_ACL_END,

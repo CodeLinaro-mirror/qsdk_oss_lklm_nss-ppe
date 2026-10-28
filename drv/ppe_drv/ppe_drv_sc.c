@@ -314,6 +314,20 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.dest_port_valid = A_FALSE;
 		break;
 
+	case PPE_DRV_SC_VLAN_VP_RT:
+		/*
+		 * Flows received on a VLAN bridge-port VP. Bypass the EG VLAN member check,
+		 * source port filtering, FDB based forwarding and L2 source security checks,
+		 * same as SPF bypass, but do not redirect to the CPU port, so that the packet
+		 * does not enter EDMA loopback and the flow is not counted twice.
+		 */
+		sc_cfg.bypass_bitmap[1] = ((1 << EG_VLAN_MEMBER_CHECK_BYP)
+						| (1 << SOURCE_FLTR_BYP)
+						| (1 << BRIDGING_FWD_BYP)
+						| (1 << L2_SOURCE_SEC_BYP));
+		sc_cfg.dest_port_valid = A_FALSE;
+		break;
+
 	case PPE_DRV_SC_HOST_QOS:
 		/*
 		 * Avoid packet drop due to EG VLAN member check while accelerating bridge flows
@@ -350,6 +364,15 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 		sc_cfg.bypass_bitmap[0] = ((1 << WRONG_PKT_FMT_L2_BYP)
 						| (1 << WRONG_PKT_FMT_L3_IPV4_BYP)
 						| (1 << WRONG_PKT_FMT_L3_IPV6_BYP));
+
+		/*
+		 * Do not update the flow index in the loopback pass, so that the
+		 * flow is not counted again.
+		 */
+		sc_cfg.field_update_bitmap[0] = ((1ULL << EPE_PRE_HEADER_VALID)
+						| (1ULL << FLD_UPDATE_HASH_FLOW_INDEX)
+						| (1ULL << FLD_UPDATE_FLOW_IDX));
+		sc_cfg.dest_port_valid = A_TRUE;
 #endif
 		/*
 		 * Avoid packet drop due to source port filtering and avoid FDB based forwarding for
@@ -359,8 +382,6 @@ void ppe_drv_sc_config(ppe_drv_sc_t sc, ppe_drv_sc_t next_sc, uint8_t redir_port
 						| (1 << SOURCE_FLTR_BYP)
 						| (1 << BRIDGING_FWD_BYP)
 						| (1 << L2_SOURCE_SEC_BYP));
-		sc_cfg.field_update_bitmap[0] = ((1ULL << EPE_PRE_HEADER_VALID));
-		sc_cfg.dest_port_valid = A_TRUE;
 		break;
 
 #ifdef PPE_UDP_ST_SUPPORT
@@ -1435,6 +1456,7 @@ struct ppe_drv_sc *ppe_drv_sc_entries_alloc(void)
 	ppe_drv_sc_config(PPE_DRV_SC_HOST_QOS, PPE_DRV_SC_HOST_QOS, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_SPF_BYPASS_NEXT, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
 	ppe_drv_sc_config(PPE_DRV_SC_DSA_VP, PPE_DRV_SC_NONE, PPE_DRV_PORT_CPU);
+	ppe_drv_sc_config(PPE_DRV_SC_VLAN_VP_RT, PPE_DRV_SC_VLAN_VP_RT, PPE_DRV_PORT_CPU);
 
 
 	/*
