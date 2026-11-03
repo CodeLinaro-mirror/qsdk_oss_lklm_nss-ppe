@@ -181,4 +181,19 @@ ppe_mirror_ret_t ppe_mirror_port_mirror_set(const char *port_name,
 					      enum ppe_mirror_port_dir dir,
 					      bool mirror_en);
 
+/**
+ * ppe_mirror_analyst_port_set()
+ *	Set or clear the mirror analysis (capture) port for a given direction.
+ *
+ * @param[in] port_name		Null-terminated net device name of the analyst port.
+ * @param[in] dir		Mirror direction (INGRESS / EGRESS).
+ * @param[in] enable		true to set the analyst port, false to clear it.
+ * @param[in] priority		Analysis port priority (0 = default).
+ *
+ * @return
+ * PPE_MIRROR_RET_SUCCESS or PPE_MIRROR_RET_GENERIC_FAILURE.
+ */
+ppe_mirror_ret_t ppe_mirror_analyst_port_set(const char *port_name,
+		enum ppe_mirror_port_dir dir, bool enable, uint8_t priority);
+
 #endif /* _PPE_MIRROR_H_ */
